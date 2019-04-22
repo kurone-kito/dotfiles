@@ -1,0 +1,38 @@
+[alias]
+	# Clone a repository including all submodules
+	c = clone --recursive
+	co = checkout
+	cp = cherry-pick
+[apply]
+	whitespace = fix
+[core]
+	autoCRLF = false
+	editor = vim
+	excludesfile = ~/.gitignore
+	untrackedCache = true
+[commit]
+	gpgsign = true
+[diff]
+	renames = copies
+[fetch]
+	prune = true
+[help]
+	autocorrect = 1
+[http]
+	postBuffer = 524288000
+[merge]
+	ff = false
+	log = true
+[pull]
+	ff = only
+	rebase = true
+[push]
+	followTags = true
+[user]
+	email = krone@kit.black
+	name = kurone-kito
+	signkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
+[filter "lfs"]
+	clean = git-lfs clean %f
+	smudge = git-lfs smudge %f
+	required = true
