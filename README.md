@@ -1,2 +1,1 @@
-# dotfiles
-🔴 My dotfiles
+# 🔴 My dotfiles
