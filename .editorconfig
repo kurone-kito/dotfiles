@@ -16,6 +16,3 @@ root = true
   charset = latin1
   end_of_line = crlf
   indent_size = 4
-
-[*.ps1]
-  indent_size = 4
