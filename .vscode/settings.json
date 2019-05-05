@@ -14,7 +14,8 @@
   "debug.node.autoAttach": "on",
   "docker.truncateLongRegistryPaths": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll": true
+    "source.fixAll": true,
+    "source.source.organizeImports": true
   },
   "editor.cursorBlinking": "phase",
   "editor.cursorSmoothCaretAnimation": true,
@@ -51,13 +52,12 @@
   "files.defaultLanguage": "markdown",
   "files.eol": "\n",
   "files.exclude": {
-    "**/desktop.ini": true,
-    "**/.DS_Store": true,
     "**/.git": true,
+    "**/.DS_Store": true,
+    "**/desktop.ini": true,
     "**/Thumbs.db": true
   },
   "files.insertFinalNewline": true,
-  "files.useExperimentalFileWatcher": true,
   "git.autofetch": true,
   "git.autoStash": true,
   "git.confirmSync": false,
@@ -107,6 +107,8 @@
   "typescript.preferences.importModuleSpecifier": "non-relative",
   "typescript.referencesCodeLens.enabled": true,
   "typescript.suggest.completeFunctionCalls": true,
+  "typescript.tsserver.log": "terse",
+  "typescript.tsserver.trace": "messages",
   "typescript.updateImportsOnFileMove.enabled": "always",
   "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
   "window.closeWhenEmpty": true,
@@ -123,5 +125,28 @@
   "workbench.editor.swipeToNavigate": true,
   "workbench.editor.tabSizing": "shrink",
   "workbench.useExperimentalGridLayout": true,
-  "workbench.view.alwaysShowHeaderActions": true
+  "workbench.view.alwaysShowHeaderActions": true,
+  "[bat]": {
+    "editor.tabSize": 4,
+    "files.encoding": "shiftjis",
+    "files.eol": "\r\n"
+  },
+  "[csharp]": {
+    "editor.tabSize": 4
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
