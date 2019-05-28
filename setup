@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eu
+cd $(dirname $0)
+
+deploy() {
+  NAME=$1
+  SRC=$2
+  [ $# -ge 3 ] && DST=$3 || DST=$2
+  mkdir -p "${HOME}/${DST}"
+  chmod 700 "${HOME}/${DST}"
+  find "${SRC}" -depth 1 -type f -name "${NAME}" -print0 | xargs -0 -n1 basename | xargs -I {} rm -f "${HOME}/${DST}/{}"
+  find "${SRC}" -depth 1 -type f -name "${NAME}" -print0 | xargs -0 -n1 basename | xargs -I {} ln -s "$(pwd)/${SRC}/{}" "${HOME}/${DST}/{}"
+}
+
+deploy '.*' '.'
+deploy '*' '.gnupg'
+deploy '*' '.gnupg-mac' '.gnupg'
+deploy '*' '.vscode' 'Library/Application Support/Code/User'
+
+cp -f ./templates/.gitconfig ~/
+git config --global --unset gpg.program
+gpgconf --kill gpg-agent
