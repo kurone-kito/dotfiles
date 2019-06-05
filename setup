@@ -19,5 +19,4 @@ deploy '*' '.gnupg-mac' '.gnupg'
 deploy '*' '.vscode' 'Library/Application Support/Code/User'
 
 cp -f ./templates/.gitconfig ~/
-git config --global --unset gpg.program
 gpgconf --kill gpg-agent

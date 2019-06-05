@@ -36,8 +36,5 @@ Get-ChildItem -Path .vscode -Attributes !Directory `
 
 ### Setuo Git
 $GPGPath = (Get-Command -Name gpg).Source
-$GitConfData = Get-Content -Path .\templates\.gitconfig -Raw
-$GitConfDst = Join-Path $env:USERPROFILE -ChildPath '.gitconfig'
-Remove-Item -Force $GitConfDst
-$Replaced = $GitConfData -f ($GPGPath -replace '\\', '\\')
-$Replaced | Set-Content -Path $GitConfDst -Force -Encoding UTF8
+Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
+git config --global gpg.program $GPGPath

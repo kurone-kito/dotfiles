@@ -16,8 +16,6 @@
 	renames = copies
 [fetch]
 	prune = true
-[gpg]
-	program = {0}
 [help]
 	autocorrect = 1
 [http]
