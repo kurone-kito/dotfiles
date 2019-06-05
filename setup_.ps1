@@ -28,6 +28,7 @@ Get-ChildItem -Attributes !Directory `
 $GPGHome = Join-Path $env:APPDATA -ChildPath 'gnupg'
 Get-ChildItem -Path .gnupg -Attributes !Directory `
 | ForEach-Object { $_ | Create-Link -Destination $GPGHome }
+gpgconf --kill gpg-agent
 
 ### Setup VSCode
 $CodeHome = Join-Path (Join-Path $env:APPDATA -ChildPath 'Code') -ChildPath 'User'
