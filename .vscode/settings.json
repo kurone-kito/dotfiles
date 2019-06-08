@@ -123,6 +123,8 @@
   "terminal.integrated.rendererType": "canvas",
   "terminal.integrated.scrollback": 10000,
   "terminal.integrated.windowsEnableConpty": true,
+  "terminal.integrated.shell.osx": "/usr/local/bin/zsh",
+  "terminal.integrated.shellArgs.osx": ["--login"],
   "typescript.implementationsCodeLens.enabled": true,
   "typescript.locale": "ja",
   "typescript.preferences.importModuleSpecifier": "non-relative",
