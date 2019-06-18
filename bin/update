@@ -1,0 +1,6 @@
+#!/bin/sh
+
+brew cask upgrade
+brew update
+brew upgrade
+brew cleanup -s
