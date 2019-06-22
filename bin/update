@@ -4,3 +4,15 @@ brew cask upgrade
 brew update
 brew upgrade
 brew cleanup -s
+
+upgrade_node() {
+  VER=$1
+  LATEST=$(nodenv install -l | grep -e "^\s\+\(${VER}\.\d\+\.\d\+\)" | tail -n 1 | xargs)
+  nodenv install -s "${LATEST}"
+  nodenv global "${LATEST}"
+}
+
+upgrade_node 8
+upgrade_node 10
+upgrade_node 12
+npm upgrade -g
