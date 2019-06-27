@@ -39,3 +39,9 @@ Get-ChildItem -Path .vscode -Attributes !Directory `
 $GPGPath = (Get-Command -Name gpg).Source
 Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
 git config --global gpg.program $GPGPath
+
+### Setup bin
+$BinRoot = Join-Path $env:USERPROFILE bin
+New-Item -Path $BinRoot -ItemType Directory -Force
+Get-ChildItem -Path bin `
+| ForEach-Object { $_ | Create-Link -Destination $BinRoot }
