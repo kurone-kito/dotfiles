@@ -28,6 +28,8 @@
 	rebase = true
 [push]
 	followTags = true
+[rebase]
+	autostash = true
 [user]
 	email = krone@kit.black
 	name = kurone-kito
