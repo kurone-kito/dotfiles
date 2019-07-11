@@ -1,0 +1,20 @@
+#!/bin/sh
+# vim: set ft=sh :
+
+if [ ! -e package.json ]; then
+  echo 'The updater cannot find an NPM project.' >&2
+  exit 1
+fi
+
+if [ ! -d node_modules ]; then
+  if [ -e package-lock.json ]; then
+    npm ci
+  elif [ -e yarn.lock ]; then
+    yarn install
+  else
+    npm install
+  fi
+fi
+
+cat package.json | jq -r '[.["dependencies"]|keys]|flatten|@sh' | xargs npm install -S
+cat package.json | jq -r '[.["devDependencies"]|keys]|flatten|@sh' | xargs npm install -D
