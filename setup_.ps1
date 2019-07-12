@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 
 Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-function Create-Link {
+function Add-Link {
   param(
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
     [System.IO.FileInfo]
@@ -15,33 +15,56 @@ function Create-Link {
 
   $FileName = $Source.Name
   $FullPath = $Source.FullName
-  Remove-Item -Force (Join-Path $Destination -ChildPath $FileName)
+  $Replace = Join-Path $Destination -ChildPath $FileName
+  if (Test-Path -Path $Replace) {
+    Remove-Item -Force $Replace
+  }
   New-Item -Path $Destination -ItemType SymbolicLink -Name $FileName -Value $FullPath
 }
 
 ### Link to dotfile for home dir
 Get-ChildItem -Attributes !Directory `
 | Where-Object { $_.Name -match '^\.' } `
-| ForEach-Object { $_ | Create-Link -Destination $env:USERPROFILE }
+| ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
+
+function Add-Links {
+  param(
+    [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+    [string]
+    $Source,
+
+    [Parameter(Mandatory = $true)]
+    [string]
+    $Destination
+  )
+
+  New-Item -Path $Destination -ItemType Directory -Force
+  Get-ChildItem -Path $Source -Attributes !Directory `
+  | ForEach-Object { $_ | Add-Link -Destination $Destination }
+}
 
 ### Setup GPG
-$GPGHome = Join-Path $env:APPDATA -ChildPath 'gnupg'
-Get-ChildItem -Path .gnupg -Attributes !Directory `
-| ForEach-Object { $_ | Create-Link -Destination $GPGHome }
+$GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
+Add-Links -Source .gnupg -Destination $GPGHome
 gpgconf --kill gpg-agent
 
-### Setup VSCode
-$CodeHome = Join-Path (Join-Path $env:APPDATA -ChildPath 'Code') -ChildPath 'User'
-Get-ChildItem -Path .vscode -Attributes !Directory `
-| ForEach-Object { $_ | Create-Link -Destination $CodeHome }
+### Setup PowerShell
+$Documents = [Environment]::GetFolderPath('MyDocuments');
 
-### Setuo Git
+$PSProfile = Join-Path $Documents -ChildPath PowerShell
+$WPSProfile = Join-Path $Documents -ChildPath WindowsPowerShell
+Add-Links -Source PowerShell -Destination $PSProfile
+Add-Links -Source PowerShell -Destination $WPSProfile
+
+### Setup VSCode
+$CodeHome = Join-Path (Join-Path $env:APPDATA -ChildPath Code) -ChildPath User
+Add-Links -Source .vscode -Destination $CodeHome
+
+### Setup Git
 $GPGPath = (Get-Command -Name gpg).Source
 Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
 git config --global gpg.program $GPGPath
 
 ### Setup bin
 $BinRoot = Join-Path $env:USERPROFILE bin
-New-Item -Path $BinRoot -ItemType Directory -Force
-Get-ChildItem -Path bin `
-| ForEach-Object { $_ | Create-Link -Destination $BinRoot }
+Add-Links -Source bin -Destination $BinRoot
