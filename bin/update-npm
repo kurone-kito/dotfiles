@@ -1,6 +1,8 @@
 #!/bin/sh
 # vim: set ft=sh :
 
+set -eu
+
 if [ ! -e package.json ]; then
   echo 'The updater cannot find an NPM project.' >&2
   exit 1
