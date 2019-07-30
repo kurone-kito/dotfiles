@@ -107,6 +107,7 @@
   "powermode.enabled": true,
   "powermode.enableShake": false,
   "powermode.presets": "particles",
+  "powershell.integratedConsole.showOnStartup": false,
   "powershell.powerShellDefaultVersion": "PowerShell Core 6 (x64)",
   "prettier.htmlWhitespaceSensitivity": "strict",
   "prettier.eslintIntegration": true,
