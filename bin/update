@@ -18,4 +18,7 @@ upgrade_node() {
 upgrade_node 8
 upgrade_node 10
 upgrade_node 12
+
 npm upgrade -g
+npm install -g npm
+npm install -g exp serverless yarn
