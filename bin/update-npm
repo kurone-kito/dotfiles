@@ -18,5 +18,8 @@ if [ ! -d node_modules ]; then
   fi
 fi
 
+npm upgrade -g
+npm install -g npm
+
 cat package.json | jq -r '[.["dependencies"]|keys]|flatten|@sh' | xargs npm install -S
 cat package.json | jq -r '[.["devDependencies"]|keys]|flatten|@sh' | xargs npm install -D
