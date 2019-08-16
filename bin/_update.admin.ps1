@@ -9,4 +9,4 @@ nodist global 12
 
 npm upgrade -g
 npm install -g npm
-npm install -g exp serverless windows-build-tools yarn
+npm install -g @aws-amplify/cli exp serverless windows-build-tools yarn

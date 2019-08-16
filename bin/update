@@ -21,4 +21,4 @@ upgrade_node 12
 
 npm upgrade -g
 npm install -g npm
-npm install -g exp serverless yarn
+npm install -g @aws-amplify/cli exp serverless yarn
