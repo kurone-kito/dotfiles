@@ -3,6 +3,7 @@
 	c = clone --recursive
 	co = checkout
 	cp = cherry-pick
+	sw = switch
 [apply]
 	whitespace = fix
 [core]

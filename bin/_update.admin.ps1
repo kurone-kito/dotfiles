@@ -7,6 +7,6 @@ nodist + 10
 nodist + 12
 nodist global 12
 
+npm install -g npm@latest
 npm upgrade -g
-npm install -g npm
-npm install -g @aws-amplify/cli exp serverless windows-build-tools yarn
+npm install -g @aws-amplify/cli@latest exp@latest serverless@latest windows-build-tools@latest yarn@latest
