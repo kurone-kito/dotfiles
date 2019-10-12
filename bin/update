@@ -8,6 +8,7 @@ brew update
 brew upgrade
 brew cleanup -s
 
+vagrant plugin update
 anyenv update
 
 upgrade_node() {

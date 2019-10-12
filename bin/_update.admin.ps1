@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 
 choco upgrade -y all
+vagrant plugin update
 
 nodist + 8
 nodist + 10
