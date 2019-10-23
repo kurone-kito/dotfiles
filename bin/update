@@ -8,6 +8,9 @@ brew update
 brew upgrade
 brew cleanup -s
 
+vagrant plugin update
+anyenv update
+
 upgrade_node() {
   VER=$1
   LATEST=$(nodenv install -l | grep -e "^\s\+\(${VER}\.\d\+\.\d\+\)" | tail -n 1 | xargs)

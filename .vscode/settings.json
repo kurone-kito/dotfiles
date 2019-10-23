@@ -12,6 +12,8 @@
   "css.lint.compatibleVendorPrefixes": "warning",
   "css.lint.boxModel": "warning",
   "debug.node.autoAttach": "on",
+  "diffEditor.ignoreTrimWhitespace": true,
+  "diffEditor.renderSideBySide": true,
   "docker.truncateLongRegistryPaths": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": true,
@@ -48,7 +50,7 @@
   "emmet.showSuggestionsAsSnippets": true,
   "eslint.alwaysShowStatus": true,
   "eslint.autoFixOnSave": true,
-  "eslint.provideLintTask": true,
+  "eslint.lintTask.enable": true,
   "eslint.validate": [
     {
       "language": "javascript",
@@ -86,7 +88,7 @@
   "git.enableCommitSigning": true,
   "git.enableSmartCommit": true,
   "git.fetchOnPull": true,
-  "git.promptToSaveFilesBeforeCommit": true,
+  "git.promptToSaveFilesBeforeCommit": "staged",
   "html.format.endWithNewline": true,
   "javascript.implicitProjectConfig.checkJs": true,
   "javascript.implicitProjectConfig.experimentalDecorators": true,
