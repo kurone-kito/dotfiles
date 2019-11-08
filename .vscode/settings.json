@@ -1,5 +1,6 @@
 {
   "breadcrumbs.enabled": true,
+  "breadcrumbs.symbolSortOrder": "name",
   "css.lint.zeroUnits": "warning",
   "css.lint.unknownVendorSpecificProperties": "warning",
   "css.lint.universalSelector": "warning",
@@ -50,6 +51,7 @@
   "emmet.showSuggestionsAsSnippets": true,
   "eslint.alwaysShowStatus": true,
   "eslint.autoFixOnSave": true,
+  "eslint.experimental.incrementalSync": true,
   "eslint.lintTask.enable": true,
   "eslint.validate": [
     {
@@ -89,6 +91,7 @@
   "git.enableSmartCommit": true,
   "git.fetchOnPull": true,
   "git.promptToSaveFilesBeforeCommit": "staged",
+  "git.untrackedChanges": "separate",
   "html.format.endWithNewline": true,
   "javascript.implicitProjectConfig.checkJs": true,
   "javascript.implicitProjectConfig.experimentalDecorators": true,
@@ -97,7 +100,6 @@
   "javascript.suggest.completeFunctionCalls": true,
   "jest.showCoverageOnLoad": true,
   "jest.restartJestOnSnapshotUpdate": true,
-  "markdownlint.config": {},
   "merge-conflict.autoNavigateNextConflict.enabled": true,
   "merge-conflict.diffViewPosition": "Below",
   "nasc-touchbar.addCursorBelow": false,
@@ -130,6 +132,8 @@
   "terminal.integrated.cursorBlinking": true,
   "terminal.integrated.cursorStyle": "line",
   "terminal.integrated.enableBell": true,
+  "terminal.integrated.experimentalRefreshOnResume": true,
+  "terminal.integrated.experimentalUseTitleEvent": true,
   "terminal.integrated.fontSize": 14,
   "terminal.integrated.rendererType": "canvas",
   "terminal.integrated.scrollback": 10000,
@@ -158,7 +162,7 @@
   "workbench.editor.highlightModifiedTabs": true,
   "workbench.editor.revealIfOpen": true,
   "workbench.editor.tabSizing": "shrink",
-  "workbench.useExperimentalGridLayout": true,
+  "workbench.enableExperiments": true,
   "workbench.view.alwaysShowHeaderActions": true,
   "[bat]": {
     "editor.tabSize": 4,
