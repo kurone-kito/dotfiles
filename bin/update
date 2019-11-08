@@ -13,7 +13,7 @@ anyenv update
 
 upgrade_node() {
   VER=$1
-  LATEST=$(nodenv install -l | grep -e "^\s\+\(${VER}\.\d\+\.\d\+\)" | tail -n 1 | xargs)
+  LATEST=$(nodenv install -l | grep -e "^${VER}\." | tail -n 1 | xargs)
   nodenv install -s "${LATEST}"
   nodenv global "${LATEST}"
 
