@@ -3,10 +3,10 @@ Set-StrictMode -Version Latest
 choco upgrade -y all
 vagrant plugin update
 
-nodist + 8
 nodist + 10
 nodist + 12
-nodist global 12
+nodist + 13
+nodist global 13
 
 npm install -g npm@latest
 npm upgrade -g

@@ -23,7 +23,6 @@ upgrade_node() {
   npm install -g --no-optional @aws-amplify/cli@latest
 }
 
-upgrade_node 8
 upgrade_node 10
 upgrade_node 12
 upgrade_node 13
