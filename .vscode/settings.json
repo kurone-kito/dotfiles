@@ -32,7 +32,6 @@
   "editor.find.globalFindClipboard": true,
   "editor.fontFamily": "'HackGen Console for Powerline', Menlo, Monaco, 'Courier New', monospace",
   "editor.fontSize": 14,
-  "editor.formatOnPaste": true,
   "editor.formatOnSave": true,
   "editor.formatOnType": true,
   "editor.glyphMargin": false,
@@ -116,7 +115,6 @@
   "nasc-touchbar.showReferences": true,
   "npm.enableScriptExplorer": true,
   "npm.enableTouchbar": true,
-  "plantuml.urlFormat": "svg",
   "powermode.enabled": true,
   "powermode.enableShake": false,
   "powermode.presets": "particles",
@@ -166,7 +164,6 @@
     "editor.selectionBackground": "#2cfafa80",
     "editor.selectionHighlightBorder": "#ff000080"
   },
-  "workbench.colorTheme": "Default Dark+",
   "workbench.editor.closeOnFileDelete": true,
   "workbench.editor.highlightModifiedTabs": true,
   "workbench.editor.revealIfOpen": true,
