@@ -12,8 +12,10 @@
   "css.lint.duplicateProperties": "warning",
   "css.lint.compatibleVendorPrefixes": "warning",
   "css.lint.boxModel": "warning",
+  "debug.chrome.useV3": true,
   "debug.node.autoAttach": "on",
-  "diffEditor.ignoreTrimWhitespace": true,
+  "debug.node.useV3": true,
+  "diffEditor.ignoreTrimWhitespace": false,
   "diffEditor.renderSideBySide": true,
   "discord.detailsDebugging": "𝙱𝚁𝙰𝚅𝙾 𝘾𝙃𝘼𝙍𝙇𝙄𝙀 {currentline}",
   "discord.detailsEditing": "𝙰𝙻𝙿𝙷𝙰 𝘽𝙍𝘼𝙑𝙊 {currentline}",
@@ -25,6 +27,7 @@
   "docker.truncateLongRegistryPaths": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": true,
+    "source.fixAll.eslint": true,
     "source.source.organizeImports": true
   },
   "editor.cursorBlinking": "phase",
@@ -45,6 +48,7 @@
   "editor.renderLineHighlight": "all",
   "editor.renderWhitespace": "selection",
   "editor.rulers": [75, 100, 120],
+  "editor.semanticHighlighting.enabled": true,
   "editor.smoothScrolling": true,
   "editor.snippetSuggestions": "bottom",
   "editor.suggest.localityBonus": true,
@@ -55,27 +59,7 @@
   "editor.wordWrap": "on",
   "emmet.showSuggestionsAsSnippets": true,
   "eslint.alwaysShowStatus": true,
-  "eslint.autoFixOnSave": true,
-  "eslint.experimental.incrementalSync": true,
   "eslint.lintTask.enable": true,
-  "eslint.validate": [
-    {
-      "language": "javascript",
-      "autoFix": true
-    },
-    {
-      "language": "javascriptreact",
-      "autoFix": true
-    },
-    {
-      "language": "typescript",
-      "autoFix": true
-    },
-    {
-      "language": "typescriptreact",
-      "autoFix": true
-    }
-  ],
   "explorer.confirmDelete": false,
   "explorer.openEditors.visible": 5,
   "extensions.closeExtensionDetailsOnViewChange": true,
@@ -148,6 +132,7 @@
   "terminal.integrated.shell.osx": "/usr/local/bin/zsh",
   "terminal.integrated.shell.windows": "C:\\Program Files\\PowerShell\\6\\pwsh.exe",
   "terminal.integrated.shellArgs.osx": ["--login"],
+  "timeline.showView": true,
   "typescript.implementationsCodeLens.enabled": true,
   "typescript.locale": "ja",
   "typescript.preferences.importModuleSpecifier": "non-relative",
@@ -166,6 +151,8 @@
   },
   "workbench.editor.closeOnFileDelete": true,
   "workbench.editor.highlightModifiedTabs": true,
+  "workbench.editor.limit.enabled": true,
+  "workbench.editor.limit.perEditorGroup": true,
   "workbench.editor.revealIfOpen": true,
   "workbench.editor.tabSizing": "shrink",
   "workbench.enableExperiments": true,
@@ -179,6 +166,9 @@
     "editor.tabSize": 4
   },
   "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "[json]": {
