@@ -10,6 +10,7 @@
 	autoCRLF = false
 	editor = vim
 	excludesfile = ~/.gitignore
+	longpaths = true
 	untrackedCache = true
 [commit]
 	gpgsign = true
