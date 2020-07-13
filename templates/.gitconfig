@@ -7,7 +7,7 @@
 [apply]
 	whitespace = fix
 [core]
-	autoCRLF = false
+	autoCRLF = input
 	editor = vim
 	excludesfile = ~/.gitignore
 	longpaths = true
