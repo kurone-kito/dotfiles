@@ -49,6 +49,7 @@ Add-Links -Source .gnupg -Destination $GPGHome
 gpgconf --kill gpg-agent
 
 ### Setup PowerShell
+# TDOO: This setting maybe not need. Posh-git may also generate Microsoft.PowerShell_profile.ps1.
 $Documents = [Environment]::GetFolderPath('MyDocuments');
 
 $PSProfile = Join-Path $Documents -ChildPath PowerShell
