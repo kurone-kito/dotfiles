@@ -9,6 +9,7 @@
 [core]
 	autoCRLF = input
 	editor = vim
+	eol = lf
 	excludesfile = ~/.gitignore
 	longpaths = true
 	untrackedCache = true
