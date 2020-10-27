@@ -10,4 +10,4 @@ nodist global 14
 
 npm install -g npm@latest
 npm upgrade -g
-npm install -g @aws-amplify/cli@latest exp@latest serverless@latest windows-build-tools@latest yarn@latest
+npm install -g windows-build-tools@latest yarn@latest
