@@ -3,9 +3,9 @@
 
 set -u
 
-brew cask upgrade
 brew update
 brew upgrade
+brew upgrade --cask
 brew cleanup -s
 
 vagrant plugin update
