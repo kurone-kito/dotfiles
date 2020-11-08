@@ -25,3 +25,4 @@ upgrade_node() {
 upgrade_node 10
 upgrade_node 12
 upgrade_node 14
+upgrade_node 15
