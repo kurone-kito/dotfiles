@@ -3,9 +3,9 @@
 
 set -u
 
-brew cask upgrade
 brew update
 brew upgrade
+brew upgrade --cask
 brew cleanup -s
 
 vagrant plugin update
@@ -17,12 +17,12 @@ upgrade_node() {
   nodenv install -s "${LATEST}"
   nodenv global "${LATEST}"
 
-  npm upgrade -g
   npm install -g npm@latest
-  npm install -g exp@latest serverless@latest yarn@latest
-  npm install -g --no-optional @aws-amplify/cli@latest
+  npm upgrade -g
+  npm install -g yarn@latest
 }
 
 upgrade_node 10
 upgrade_node 12
 upgrade_node 14
+upgrade_node 15
