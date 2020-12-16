@@ -89,6 +89,7 @@
   "powershell.powerShellDefaultVersion": "PowerShell Core 6 (x64)",
   "prettier.htmlWhitespaceSensitivity": "strict",
   "problems.showCurrentInStatus": true,
+  "scm.defaultViewMode": "tree",
   "search.globalFindClipboard": true,
   "search.showLineNumbers": true,
   "terminal.integrated.cursorBlinking": true,
