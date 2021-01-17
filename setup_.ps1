@@ -63,10 +63,6 @@ $WPSCurrentProfile = Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profi
 Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
 | ForEach-Object { $_ | Add-Link -Destination $PSProfile }
 
-### Setup VSCode
-$CodeHome = Join-Path (Join-Path $env:APPDATA -ChildPath Code) -ChildPath User
-Add-Links -Source .vscode -Destination $CodeHome
-
 ### Setup Git
 $GPGPath = (Get-Command -Name gpg).Source
 Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force

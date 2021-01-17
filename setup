@@ -30,7 +30,6 @@ deploy_with_chmod '.*' '.'
 deploy_with_chmod '*' '.gnupg'
 deploy_with_chmod '*' '.gnupg-mac' '.gnupg'
 deploy_with_chmod '*' 'bin'
-deploy '*' '.vscode' 'Library/Application Support/Code/User'
 
 cp -f ./templates/.gitconfig ~/
 git config --global gpg.program $(which gpg)
