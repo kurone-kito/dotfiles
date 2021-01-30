@@ -36,7 +36,7 @@
 [user]
 	email = krone@kit.black
 	name = kurone-kito
-	signkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
+	signingkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
 [filter "lfs"]
 	clean = git-lfs clean %f
 	smudge = git-lfs smudge %f
