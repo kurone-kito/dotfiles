@@ -16,6 +16,7 @@
 [commit]
 	gpgsign = true
 [diff]
+	compactionHeuristic = true
 	renames = copies
 [fetch]
 	prune = true
