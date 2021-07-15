@@ -1,18 +1,33 @@
-# # # See also: https://github.com/github/gitignore
 
-# Dropbox #################################################
+# Created by https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
+# Edit at https://www.toptal.com/developers/gitignore?templates=dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
 
+### Dropbox ###
 # Dropbox settings and caches
 .dropbox
 .dropbox.attr
 .dropbox.cache
 
-# GPG #####################################################
+### Git ###
+# Created by git for backups. To disable backups in Git:
+# $ git config --global mergetool.keepBackup false
+*.orig
 
+# Created by git when using merge tools for conflicts
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*
+*_BACKUP_*.txt
+*_BASE_*.txt
+*_LOCAL_*.txt
+*_REMOTE_*.txt
+
+### GPG ###
 secring.*
 
-# Linux ###################################################
 
+### Linux ###
 *~
 
 # temporary files which can be created if a process still has a handle open of a deleted file
@@ -27,8 +42,7 @@ secring.*
 # .nfs files are created when an open file is removed but is still being accessed
 .nfs*
 
-# macOS ###################################################
-
+### macOS ###
 # General
 .DS_Store
 .AppleDouble
@@ -36,6 +50,7 @@ secring.*
 
 # Icon must end with two \r
 Icon
+
 
 # Thumbnails
 ._*
@@ -56,32 +71,50 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# MS Office ###########################################
+### PowerShell ###
+# Exclude packaged modules
+*.zip
 
-*.tmp
+# Exclude .NET assemblies from source
+*.dll
 
-# Word temporary
-~$*.doc*
+### SublimeText ###
+# Cache files for Sublime Text
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
 
-# Word Auto Backup File
-Backup of *.doc*
+# Workspace files are user-specific
+*.sublime-workspace
 
-# Excel temporary
-~$*.xls*
+# Project files should be checked into the repository, unless a significant
+# proportion of contributors will probably not be using Sublime Text
+*.sublime-project
 
-# Excel Backup File
-*.xlk
+# SFTP configuration file
+sftp-config.json
+sftp-config-alt*.json
 
-# PowerPoint temporary
-~$*.ppt*
+# Package control specific files
+Package Control.last-run
+Package Control.ca-list
+Package Control.ca-bundle
+Package Control.system-ca-bundle
+Package Control.cache/
+Package Control.ca-certs/
+Package Control.merged-ca-bundle
+Package Control.user-ca-bundle
+oscrypto-ca-bundle.crt
+bh_unicode_properties.cache
 
-# Visio autosave temporary files
-*.~vsd*
+# Sublime-github package stores a github token in this file
+# https://packagecontrol.io/packages/sublime-github
+GitHub.sublime-settings
 
-# Vim #################################################
-
+### Vim ###
 # Swap
 [._]*.s[a-v][a-z]
+!*.svg  # comment out if you don't need vector files
 [._]*.sw[a-p]
 [._]s[a-rt-v][a-z]
 [._]ss[a-gi-z]
@@ -89,27 +122,35 @@ Backup of *.doc*
 
 # Session
 Session.vim
+Sessionx.vim
 
 # Temporary
 .netrwhist
-*~
 # Auto-generated tag files
 tags
 # Persistent undo
 [._]*.un~
 
-# Visual Studio Code ######################################
-
+### VisualStudioCode ###
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+*.code-workspace
 
-# Windows #################################################
+# Local History for Visual Studio Code
+.history/
 
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
+.ionide
+
+### Windows ###
 # Windows thumbnail cache files
 Thumbs.db
+Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
 
@@ -131,3 +172,35 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+### Zsh ###
+# Zsh compiled script + zrecompile backup
+*.zwc
+*.zwc.old
+
+# Zsh completion-optimization dumpfile
+*zcompdump*
+
+# Zsh zcalc history
+.zcalc_history
+
+# A popular plugin manager's files
+._zinit
+.zinit_lstupd
+
+# zdharma/zshelldoc tool's files
+zsdoc/data
+
+# robbyrussell/oh-my-zsh/plugins/per-directory-history plugin's files
+# (when set-up to store the history in the local directory)
+.directory_history
+
+# MichaelAquilina/zsh-autoswitch-virtualenv plugin's files
+# (for Zsh plugins using Python)
+.venv
+
+# Zunit tests' output
+/tests/_output/*
+!/tests/_output/.gitkeep
+
+# End of https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
