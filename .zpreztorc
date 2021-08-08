@@ -1,0 +1,46 @@
+# -*- mode: sh -*-
+# vim: set ft=sh :
+
+zstyle ':prezto:*:*' case-sensitive 'yes'
+zstyle ':prezto:*:*' color 'yes'
+
+zstyle ':prezto:load' pmodule-allow-overrides 'yes'
+zstyle ':prezto:load' pmodule \
+  'autosuggestions' \
+  'completion' \
+  'directory' \
+  'docker' \
+  'editor' \
+  'environment' \
+  'git' \
+  'history' \
+  'history-substring-search' \
+  'osx' \
+  'prompt' \
+  'spectrum' \
+  'syntax-highlighting' \
+  'terminal' \
+  'utility'
+
+zstyle ':prezto:module:editor' key-bindings 'vi'
+zstyle ':prezto:module:editor' dot-expansion 'yes'
+zstyle ':prezto:module:editor' ps-context 'yes'
+
+zstyle ':prezto:module:prompt' theme 'powerlevel10k'
+
+zstyle ':prezto:module:syntax-highlighting' color 'yes'
+zstyle ':prezto:module:syntax-highlighting' highlighters \
+  'brackets' \
+  'cursor' \
+  'line' \
+  'main' \
+  'pattern' \
+  'regexp' \
+  'root'
+
+zstyle ':prezto:module:terminal' auto-title 'yes'
+zstyle ':prezto:module:terminal:window-title' format '%n@%m: %s'
+zstyle ':prezto:module:terminal:tab-title' format '%m: %s'
+zstyle ':prezto:module:terminal:multiplexer-title' format '%s'
+
+zstyle ':prezto:module:utility' safe-ops 'yes'

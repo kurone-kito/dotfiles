@@ -15,10 +15,17 @@
 	untrackedCache = true
 [commit]
 	gpgsign = true
+[delta]
+    features = side-by-side line-numbers decorations
 [diff]
+	compactionHeuristic = true
 	renames = copies
 [fetch]
 	prune = true
+[filter "lfs"]
+	clean = git-lfs clean %f
+	smudge = git-lfs smudge %f
+	required = true
 [help]
 	autocorrect = 1
 [http]
@@ -37,7 +44,3 @@
 	email = krone@kit.black
 	name = kurone-kito
 	signingkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
-[filter "lfs"]
-	clean = git-lfs clean %f
-	smudge = git-lfs smudge %f
-	required = true
