@@ -40,5 +40,4 @@ echo "pinentry-program $(which pinentry-mac)" >> "${HOME}/.gnupg/${GPG_AGENT}"
 cp -f ./templates/.gitconfig ~/
 # git config --global gpg.program $(which gpg)
 gpgconf --kill gpg-agent
-git lfs install
 open schemes/Source\ Code\ X.terminal
