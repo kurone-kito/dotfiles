@@ -1,8 +1,9 @@
 #!/bin/sh
+# -*- mode: sh -*-
 # vim: set ft=sh :
 
 set -eu
-cd $(dirname $0)
+cd "$(dirname "$0")"
 
 deploy() {
   NAME=$1
@@ -13,8 +14,8 @@ deploy() {
   find "${SRC}" -depth 1 -type f -name "${NAME}" -print0 \
     | xargs -0 -n1 basename \
     | xargs -I {} ln -snf \
-      $(realpath "$(pwd)/${SRC}/{}") \
-      $(realpath "${DSTPATH}/{}")
+      "$(realpath "$(pwd)/${SRC}/{}")" \
+      "$(realpath "${DSTPATH}/{}")"
 }
 
 deploy_with_chmod() {
@@ -39,5 +40,4 @@ echo "pinentry-program $(which pinentry-mac)" >> "${HOME}/.gnupg/${GPG_AGENT}"
 cp -f ./templates/.gitconfig ~/
 # git config --global gpg.program $(which gpg)
 gpgconf --kill gpg-agent
-git lfs install
 open schemes/Source\ Code\ X.terminal

@@ -7,7 +7,7 @@
 [apply]
 	whitespace = fix
 [core]
-	autoCRLF = input
+	autoCRLF = false
 	editor = vim
 	eol = lf
 	excludesfile = ~/.gitignore
@@ -16,7 +16,7 @@
 [commit]
 	gpgsign = true
 [delta]
-    features = side-by-side line-numbers decorations
+	features = side-by-side line-numbers decorations
 [diff]
 	compactionHeuristic = true
 	renames = copies

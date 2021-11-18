@@ -1,1 +1,4 @@
+# -*- mode: properties -*-
+# vim: set ft=properties :
+
 legacy_version_file = yes

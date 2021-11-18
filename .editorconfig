@@ -19,5 +19,5 @@ root = true
 [*.cs]
   indent_size = 4
 
-[*.md]
+[*.{markdown,md,mdx}]
   trim_trailing_whitespace = false
