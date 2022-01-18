@@ -60,7 +60,11 @@
   "files.defaultLanguage": "markdown",
   "files.eol": "\n",
   "files.exclude": {
+    "**/.classpath": true,
+    "**/.factorypath": true,
     "**/.git": true,
+    "**/.project": true,
+    "**/.settings": true,
     "**/.DS_Store": true,
     "**/desktop.ini": true,
     "**/Thumbs.db": true
@@ -100,10 +104,20 @@
   "nasc-touchbar.showCommands": false,
   "nasc-touchbar.showReferences": true,
   "npm.enableTouchbar": true,
+  "omnisharp.useGlobalMono": "always",
+  "poshProTools.checkForModuleUpdates": true,
+  "poshProTools.excludeAutomaticVariables": true,
   "powermode.enabled": true,
   "powermode.enableShake": false,
   "powermode.presets": "particles",
+  "powershell.codeFormatting.preset": "Allman",
+  "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
+  "powershell.codeFormatting.useConstantStrings": true,
+  "powershell.codeFormatting.useCorrectCasing": true,
   "powershell.integratedConsole.showOnStartup": false,
+  "powershell.pester.useLegacyCodeLens": false,
+  "powershell.pester.debugOutputVerbosity": "Minimal",
+  "powershell.pester.outputVerbosity": "Minimal",
   "powershell.powerShellDefaultVersion": "PowerShell Core 6 (x64)",
   "prettier.htmlWhitespaceSensitivity": "strict",
   "problems.showCurrentInStatus": true,
@@ -113,6 +127,7 @@
   "search.showLineNumbers": true,
   "shellcheck.customArgs": ["-x"],
   "stylelint.enable": true,
+  "tailwindcss.documentColors": true,
   "terminal.integrated.cursorBlinking": true,
   "terminal.integrated.cursorStyle": "line",
   "terminal.integrated.enableBell": true,
@@ -174,28 +189,7 @@
   "[csharp]": {
     "editor.tabSize": 4
   },
-  "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[javascriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[markdown]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[yaml]": {
+  "[javascript][javascriptreact][json][jsonc][markdown][typescript][typescriptreact][yaml]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   }
 }
