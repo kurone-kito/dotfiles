@@ -121,6 +121,7 @@
   "powershell.powerShellDefaultVersion": "PowerShell Core 6 (x64)",
   "prettier.htmlWhitespaceSensitivity": "strict",
   "problems.showCurrentInStatus": true,
+  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
   "scm.alwaysShowRepositories": true,
   "scm.defaultViewMode": "tree",
   "search.globalFindClipboard": true,
@@ -128,10 +129,13 @@
   "shellcheck.customArgs": ["-x"],
   "stylelint.enable": true,
   "tailwindcss.documentColors": true,
+  "tailwindCSS.emmetCompletions": true,
+  "tailwindcss.hoverColorHint": "rgb",
   "terminal.integrated.cursorBlinking": true,
   "terminal.integrated.cursorStyle": "line",
   "terminal.integrated.enableBell": true,
   "terminal.integrated.fontFamily": "'HackGenNerd Console', 'HackGen Console', 'BIZ UDGothic', Menlo, Monaco, 'Courier New', monospace",
+  "terminal.integrated.minimumContrastRatio": 1,
   "terminal.integrated.profiles.osx": {
     "bash": {
       "path": "bash",
@@ -167,7 +171,25 @@
   "workbench.colorCustomizations": {
     "editor.selectionHighlightBackground": "#ff000030",
     "editor.selectionBackground": "#2cfafa80",
-    "editor.selectionHighlightBorder": "#ff000080"
+    "editor.selectionHighlightBorder": "#ff000080",
+    "terminal.ansiBlack": "#4E596B",
+    "terminal.ansiBlue": "#9686F5",
+    "terminal.ansiBrightBlack": "#92A1B1",
+    "terminal.ansiBrightBlue": "#53A5FB",
+    "terminal.ansiBrightCyan": "#84D2C0",
+    "terminal.ansiBrightGreen": "#AEF37D",
+    "terminal.ansiBrightMagenta": "#FC5FA3",
+    "terminal.ansiBrightRed": "#FC6A5D",
+    "terminal.ansiBrightWhite": "#92A1B1",
+    "terminal.ansiBrightYellow": "#FD8F3F",
+    "terminal.ansiCyan": "#7AC8B6",
+    "terminal.ansiGreen": "#75B492",
+    "terminal.ansiMagenta": "#FC5FA3",
+    "terminal.ansiRed": "#FC6A5D",
+    "terminal.ansiWhite": "#BFBFBF",
+    "terminal.ansiYellow": "#FD8F3F",
+    "terminal.foreground": "#BFBFBF",
+    "terminal.selectionBackground": "#314F78"
   },
   "workbench.editor.closeOnFileDelete": true,
   "workbench.editor.highlightModifiedTabs": true,
@@ -176,9 +198,6 @@
   "workbench.editor.revealIfOpen": true,
   "workbench.editor.sharedViewState": true,
   "workbench.editor.tabSizing": "shrink",
-  "workbench.editorAssociations": {
-    "*.ipynb": "jupyter.notebook.ipynb"
-  },
   "workbench.enableExperiments": true,
   "workbench.view.alwaysShowHeaderActions": true,
   "[bat]": {
