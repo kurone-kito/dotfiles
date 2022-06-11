@@ -4,20 +4,26 @@
 	co = checkout
 	cp = cherry-pick
 	sw = switch
+[add "interactive"]
+	useBuiltin = true
 [apply]
 	whitespace = fix
 [core]
 	autoCRLF = false
+	compression = 9
 	editor = vim
 	eol = lf
 	excludesfile = ~/.gitignore
+	hideDotFiles = true
 	longpaths = true
-	untrackedCache = true
+	precomposeUnicode = true
 [commit]
 	gpgsign = true
 [delta]
 	features = side-by-side line-numbers decorations
 [diff]
+	algorithm = minimal
+	colorMoved = dimmed-zebra
 	compactionHeuristic = true
 	renames = copies
 [fetch]
@@ -27,7 +33,7 @@
 	smudge = git-lfs smudge %f
 	required = true
 [help]
-	autocorrect = 1
+	autocorrect = prompt
 [http]
 	postBuffer = 524288000
 [merge]
@@ -38,8 +44,14 @@
 	rebase = true
 [push]
 	followTags = true
+	gpgsign = if-asked
 [rebase]
+	abbreviateCommands = true
 	autostash = true
+	missingCommitsCheck = warn
+[tag]
+	forceSignAnnotated = true
+	gpgsign = true
 [user]
 	email = krone@kit.black
 	name = kurone-kito
