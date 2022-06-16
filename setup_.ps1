@@ -54,11 +54,9 @@ $Documents = [Environment]::GetFolderPath('MyDocuments');
 
 $PSProfile = Join-Path $Documents -ChildPath PowerShell # PowerShell Core
 $WPSProfile = Join-Path $Documents -ChildPath WindowsPowerShell # PowerShell 5.x
-$WPSNProfile = Join-Path $Documents -ChildPath 'WindowsPowerShell (New)' # PowerShell 5.x
 
 Add-Links -Source PowerShell -Destination $PSProfile
 Add-Links -Source PowerShell -Destination $WPSProfile
-Add-Links -Source PowerShell -Destination $WPSNProfile
 $WPSCurrentProfile = Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profile.ps1
 Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
 | ForEach-Object { $_ | Add-Link -Destination $PSProfile }
