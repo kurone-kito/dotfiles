@@ -67,7 +67,3 @@ Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
 $GPGPath = (Get-Command -Name gpg).Source
 Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
 git config --global gpg.program $GPGPath
-
-### Setup bin
-$BinRoot = Join-Path $env:USERPROFILE bin
-Add-Links -Source bin -Destination $BinRoot
