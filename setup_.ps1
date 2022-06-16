@@ -1,47 +1,13 @@
 Set-StrictMode -Version Latest
+Set-Location $PSScriptRoot
+Import-Module -Name ./libs/lib.psm1
 
-Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path)
-
-function Add-Link {
-  param(
-    [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
-    [System.IO.FileInfo]
-    $Source,
-
-    [Parameter(Mandatory = $true)]
-    [string]
-    $Destination
-  )
-
-  $FileName = $Source.Name
-  $FullPath = $Source.FullName
-  $Replace = Join-Path $Destination -ChildPath $FileName
-  if (Test-Path -Path $Replace) {
-    Remove-Item -Force $Replace
-  }
-  New-Item -Path $Destination -ItemType SymbolicLink -Name $FileName -Value $FullPath
-}
+Get-ChildItem -Recurse libs/*.ps1 | Unblock-File
 
 ### Link to dotfile for home dir
 Get-ChildItem -Attributes !Directory `
 | Where-Object { $_.Name -match '^\.' } `
 | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
-
-function Add-Links {
-  param(
-    [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
-    [string]
-    $Source,
-
-    [Parameter(Mandatory = $true)]
-    [string]
-    $Destination
-  )
-
-  New-Item -Path $Destination -ItemType Directory -Force
-  Get-ChildItem -Path $Source -Attributes !Directory `
-  | ForEach-Object { $_ | Add-Link -Destination $Destination }
-}
 
 ### Setup GPG
 $GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
