@@ -1,3 +1,5 @@
+#!/usr/bin/env pwsh
+
 Set-StrictMode -Version Latest
 Set-Location $PSScriptRoot
 Import-Module -Name ./libs/lib.psm1
@@ -6,8 +8,8 @@ Get-ChildItem -Recurse libs/*.ps1 | Unblock-File
 
 ### Link to dotfile for home dir
 Get-ChildItem -Attributes !Directory `
-| Where-Object { $_.Name -match '^\.' } `
-| ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
+  | Where-Object { $_.Name -match '^\.' } `
+  | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
 
 ### Setup GPG
 $GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
