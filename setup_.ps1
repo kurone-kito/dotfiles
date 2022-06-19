@@ -22,6 +22,8 @@ Get-ChildItem -Attributes !Directory `
   | Where-Object { $_.Name -match '^\.' } `
   | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
 
+./libs/cmdrc.ps1
+
 ### Setup GPG
 $GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
 Add-Links -Source .gnupg -Destination $GPGHome
