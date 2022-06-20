@@ -23,24 +23,12 @@ Get-ChildItem -Attributes !Directory `
   | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
 
 ./libs/cmdrc.ps1
+./libs/pwshrc.ps1
 
 ### Setup GPG
 $GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
 Add-Links -Source .gnupg -Destination $GPGHome
 gpgconf --kill gpg-agent
-
-### Setup PowerShell
-# TDOO: This setting maybe not need. Posh-git may also generate Microsoft.PowerShell_profile.ps1.
-$Documents = [Environment]::GetFolderPath('MyDocuments');
-
-$PSProfile = Join-Path $Documents -ChildPath PowerShell # PowerShell Core
-$WPSProfile = Join-Path $Documents -ChildPath WindowsPowerShell # PowerShell 5.x
-
-Add-Links -Source PowerShell -Destination $PSProfile
-Add-Links -Source PowerShell -Destination $WPSProfile
-$WPSCurrentProfile = Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profile.ps1
-Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
-| ForEach-Object { $_ | Add-Link -Destination $PSProfile }
 
 ### Setup Git
 $GPGPath = (Get-Command -Name gpg).Source
