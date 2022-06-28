@@ -18,7 +18,7 @@ if (-not $args.Count) {
 Get-ChildItem -Recurse *.ps1 | Unblock-File
 
 ### Link to dotfile for home dir
-Get-ChildItem -Attributes !Directory `
+Get-ChildItem -Force -Attributes !Directory `
   | Where-Object { $_.Name -match '^\.' } `
   | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
 
