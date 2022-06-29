@@ -12,7 +12,3 @@ if (-not (Test-Path $profileDir)) {
 $profileDir `
   | Get-ChildItem -Filter '*.ps1' -Attributes !Directory `
   | ForEach-Object { . $_.FullName }
-
-if (Get-Module -ListAvailable -Name posh-git) {
-  Import-Module posh-git
-}
