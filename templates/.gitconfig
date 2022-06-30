@@ -3,6 +3,7 @@
 	c = clone --recursive
 	co = checkout
 	cp = cherry-pick
+	nuke = !git clean -fdx && git clean -fdX
 	sw = switch
 [add "interactive"]
 	useBuiltin = true
