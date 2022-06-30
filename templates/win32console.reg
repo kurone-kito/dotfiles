@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Console]
+"FaceName"="HackGenNerd Console"
+"FontFamily"=dword:00000036
+"FontWeight"=dword:00000190
+"HistoryBufferSize"=dword:000003e7
+"HistoryNoDup"=dword:00000001
+"NumberOfHistoryBuffers"=dword:000003e7
+"ScreenBufferSize"=dword:270f0078
+"WindowAlpha"=dword:000000f3
+
+[HKEY_CURRENT_USER\Console\%%Startup]
+"DelegationConsole"="{2EACA947-7F5F-4CFA-BA87-8F7FBEEFBE69}"
+"DelegationTerminal"="{E12CFF52-A866-4C77-9A90-F570A7AA2C6B}"

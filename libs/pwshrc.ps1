@@ -16,7 +16,7 @@ $WPSProfile = Join-Path $Documents -ChildPath WindowsPowerShell # PowerShell 5.x
 Add-Links -Source PowerShell -Destination $PSProfile
 Add-Links -Source PowerShell -Destination $WPSProfile
 Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profile.ps1 `
-  | Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
+  | Get-ChildItem -Attributes !Directory `
   | ForEach-Object { $_ | Add-Link -Destination $PSProfile }
 
 $dirName = '.pwsh.profile.d'

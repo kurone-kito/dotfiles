@@ -24,6 +24,7 @@ Get-ChildItem -Force -Attributes !Directory `
 
 ./libs/cmdrc.ps1
 ./libs/pwshrc.ps1
+./libs/terminal.ps1
 
 ### Setup GPG
 $GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
