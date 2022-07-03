@@ -18,4 +18,8 @@ echo "pinentry-program $(which pinentry-mac)" >> "${HOME}/.gnupg/${GPG_AGENT}"
 cp -f ./templates/.gitconfig ~/
 # git config --global gpg.program $(which gpg)
 gpgconf --kill gpg-agent
-open schemes/Source\ Code\ X.terminal
+TERMINAL_PROFILE='Source Code X'
+open "schemes/${TERMINAL_PROFILE}.terminal"
+defaults write com.apple.Terminal 'Default Window Settings' -string "${TERMINAL_PROFILE}"
+defaults write com.apple.Terminal 'Startup Window Settings' -string "${TERMINAL_PROFILE}"
+# ! NOTE: DO NOT KILLALL! setup.macos may terminate during the process.
