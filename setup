@@ -10,6 +10,8 @@ cd "$(dirname "$0")"
 deploy_with_chmod '.*' '.'
 deploy_with_chmod '*' '.gnupg'
 
+ln -snf "$(pwd)/husky/macos.huskyrc" "${HOME}/.huskyrc"
+
 GPG_AGENT="gpg-agent.conf"
 rm -rf "${HOME}/.gnupg/${GPG_AGENT}"
 cp ".gnupg-mac/${GPG_AGENT}" "${HOME}/.gnupg/"
