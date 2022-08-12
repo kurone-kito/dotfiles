@@ -1,15 +1,12 @@
 {
-  "bookmarks.label.suggestion": "suggestWhenSelected",
-  "bookmarks.sideBar.expanded": true,
   "breadcrumbs.enabled": true,
   "breadcrumbs.symbolSortOrder": "name",
   "cSpell.allowCompoundWords": true,
   "cSpell.experimental.enableRegexpView": true,
-  "cSpell.language": "en,es,ja",
+  "cSpell.language": "en,eo,ja",
   "cSpell.showAutocompleteSuggestions": true,
   "cSpell.usePnP": true,
   "css.validate": false,
-  "diffEditor.renderSideBySide": true,
   "discord.detailsDebugging": "𝙱𝚁𝙰𝚅𝙾 𝘾𝙃𝘼𝙍𝙇𝙄𝙀 {current_line}",
   "discord.detailsEditing": "𝙰𝙻𝙿𝙷𝙰 𝘽𝙍𝘼𝙑𝙊 {current_line}",
   "discord.detailsIdling": "𝙰𝙻𝙿𝙷𝙰 𝘾𝙃𝘼𝙍𝙇𝙄𝙀",
@@ -20,8 +17,7 @@
   "editor.bracketPairColorization.enabled": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": true,
-    "source.fixAll.eslint": true,
-    "source.source.organizeImports": true
+    "source.fixAll.eslint": true
   },
   "editor.cursorBlinking": "phase",
   "editor.cursorSmoothCaretAnimation": true,
@@ -54,7 +50,9 @@
   "editor.wordWrap": "on",
   "emmet.showSuggestionsAsSnippets": true,
   "eslint.alwaysShowStatus": true,
+  "eslint.format.enable": true,
   "eslint.lintTask.enable": true,
+  "eslint.useESLintClass": true,
   "explorer.confirmDelete": false,
   "explorer.openEditors.visible": 5,
   "extensions.closeExtensionDetailsOnViewChange": true,
@@ -90,7 +88,6 @@
     "plaintext": true,
     "markdown": true
   },
-  "html.format.endWithNewline": true,
   "japanese-proofreading.textlint.全角文字と半角文字の間": false,
   "japanese-proofreading.textlint.外来語カタカナ表記": false,
   "japanese-proofreading.textlint.丸かっこ（）": false,
@@ -109,8 +106,6 @@
   "nasc-touchbar.gitSync": true,
   "nasc-touchbar.showCommands": false,
   "nasc-touchbar.showReferences": true,
-  "npm.enableTouchbar": true,
-  "omnisharp.useGlobalMono": "always",
   "poshProTools.checkForModuleUpdates": true,
   "poshProTools.excludeAutomaticVariables": true,
   "powermode.enabled": true,
@@ -127,7 +122,7 @@
   "powershell.powerShellDefaultVersion": "PowerShell Core 6 (x64)",
   "prettier.htmlWhitespaceSensitivity": "strict",
   "problems.showCurrentInStatus": true,
-  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
+  "redhat.telemetry.enabled": true,
   "scm.alwaysShowRepositories": true,
   "scm.defaultViewMode": "tree",
   "search.globalFindClipboard": true,
@@ -165,16 +160,14 @@
   },
   "terminal.integrated.scrollback": 10000,
   "terminal.integrated.windowsEnableConpty": true,
-  "timeline.showView": true,
   "typescript.implementationsCodeLens.enabled": true,
   "typescript.locale": "ja",
   "typescript.referencesCodeLens.enabled": true,
   "typescript.suggest.completeFunctionCalls": true,
   "typescript.tsserver.experimental.enableProjectDiagnostics": true,
   "typescript.updateImportsOnFileMove.enabled": "always",
-  "vscode-edge-devtools.mirrorEdits": true,
   "window.closeWhenEmpty": true,
-  "window.nativeTabs": true,
+  "window.commandCenter": true,
   "workbench.colorCustomizations": {
     "editor.selectionHighlightBackground": "#ff000030",
     "editor.selectionBackground": "#2cfafa80",
@@ -213,6 +206,7 @@
     "files.eol": "\r\n"
   },
   "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
     "editor.tabSize": 4
   },
   "[javascript][javascriptreact][json][jsonc][markdown][typescript][typescriptreact][yaml]": {

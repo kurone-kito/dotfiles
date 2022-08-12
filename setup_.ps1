@@ -1,73 +1,29 @@
+#!/usr/bin/env pwsh
+
 Set-StrictMode -Version Latest
+Set-Location $PSScriptRoot
+Import-Module -Name ./libs/lib.psm1
 
-Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path)
+Get-ChildItem -Recurse libs/*.ps1 | Unblock-File
 
-function Add-Link {
-  param(
-    [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
-    [System.IO.FileInfo]
-    $Source,
-
-    [Parameter(Mandatory = $true)]
-    [string]
-    $Destination
-  )
-
-  $FileName = $Source.Name
-  $FullPath = $Source.FullName
-  $Replace = Join-Path $Destination -ChildPath $FileName
-  if (Test-Path -Path $Replace) {
-    Remove-Item -Force $Replace
-  }
-  New-Item -Path $Destination -ItemType SymbolicLink -Name $FileName -Value $FullPath
+if (Invoke-SelfWithPrivileges) {
+  exit
 }
+
+if (-not $args.Count) {
+  Invoke-Self
+  exit
+}
+
+Get-ChildItem -Recurse *.ps1 | Unblock-File
 
 ### Link to dotfile for home dir
-Get-ChildItem -Attributes !Directory `
-| Where-Object { $_.Name -match '^\.' } `
-| ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
+Get-ChildItem -Force -Attributes !Directory `
+  | Where-Object { $_.Name -match '^\.' } `
+  | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
 
-function Add-Links {
-  param(
-    [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
-    [string]
-    $Source,
-
-    [Parameter(Mandatory = $true)]
-    [string]
-    $Destination
-  )
-
-  New-Item -Path $Destination -ItemType Directory -Force
-  Get-ChildItem -Path $Source -Attributes !Directory `
-  | ForEach-Object { $_ | Add-Link -Destination $Destination }
-}
-
-### Setup GPG
-$GPGHome = Join-Path $env:APPDATA -ChildPath gnupg
-Add-Links -Source .gnupg -Destination $GPGHome
-gpgconf --kill gpg-agent
-
-### Setup PowerShell
-# TDOO: This setting maybe not need. Posh-git may also generate Microsoft.PowerShell_profile.ps1.
-$Documents = [Environment]::GetFolderPath('MyDocuments');
-
-$PSProfile = Join-Path $Documents -ChildPath PowerShell # PowerShell Core
-$WPSProfile = Join-Path $Documents -ChildPath WindowsPowerShell # PowerShell 5.x
-$WPSNProfile = Join-Path $Documents -ChildPath 'WindowsPowerShell (New)' # PowerShell 5.x
-
-Add-Links -Source PowerShell -Destination $PSProfile
-Add-Links -Source PowerShell -Destination $WPSProfile
-Add-Links -Source PowerShell -Destination $WPSNProfile
-$WPSCurrentProfile = Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profile.ps1
-Get-ChildItem -Path $WPSCurrentProfile -Attributes !Directory `
-| ForEach-Object { $_ | Add-Link -Destination $PSProfile }
-
-### Setup Git
-$GPGPath = (Get-Command -Name gpg).Source
-Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
-git config --global gpg.program $GPGPath
-
-### Setup bin
-$BinRoot = Join-Path $env:USERPROFILE bin
-Add-Links -Source bin -Destination $BinRoot
+./libs/cmdrc.ps1
+./libs/pwshrc.ps1
+./libs/terminal.ps1
+./libs/gpg.ps1
+./libs/git.ps1
