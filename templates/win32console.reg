@@ -1,7 +1,7 @@
 Windows Registry Editor Version 5.00
 
 [HKEY_CURRENT_USER\Console]
-"FaceName"="HackGenNerd Console"
+"FaceName"="HackGen Console NFJ"
 "FontFamily"=dword:00000036
 "FontWeight"=dword:00000190
 "HistoryBufferSize"=dword:000003e7
