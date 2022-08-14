@@ -12,6 +12,6 @@ if (Test-Path $poshGitPath) {
   Import-Module $poshGitPath
 }
 
-if (Get-Module -ListAvailable -Name posh-git) {
+if (Get-Module -ListAvailable -Name posh-git -ErrorAction SilentlyContinue) {
   Import-Module posh-git
 }
