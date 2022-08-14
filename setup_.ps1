@@ -2,9 +2,9 @@
 
 Set-StrictMode -Version Latest
 Set-Location $PSScriptRoot
-Import-Module -Name ./libs/lib.psm1
 
-Get-ChildItem -Recurse libs/*.ps1 | Unblock-File
+Get-ChildItem -Recurse *.ps1 | Unblock-File
+Import-Module -Name ./libs/lib.psm1
 
 if (Invoke-SelfWithPrivileges) {
   exit
@@ -14,8 +14,6 @@ if (-not $args.Count) {
   Invoke-Self
   exit
 }
-
-Get-ChildItem -Recurse *.ps1 | Unblock-File
 
 ### Link to dotfile for home dir
 Get-ChildItem -Force -Attributes !Directory `
