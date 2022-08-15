@@ -15,11 +15,7 @@ if (-not $args.Count) {
   exit
 }
 
-### Link to dotfile for home dir
-Get-ChildItem -Force -Attributes !Directory `
-  | Where-Object { $_.Name -match '^\.' } `
-  | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
-
+./libs/link.ps1
 ./libs/cmdrc.ps1
 ./libs/pwshrc.ps1
 ./libs/terminal.ps1
