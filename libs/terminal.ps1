@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $PSScriptRoot
+Push-Location $PSScriptRoot
 Import-Module -Name ./lib.psm1
 
 Write-Output 'Setup the Windows Terminal configurations'
@@ -30,3 +30,5 @@ if ((Get-Command jq) -and (Get-Command wt)) {
 Write-Output 'Setup the Win32 Console configurations'
 
 reg import templates/win32Console.reg
+
+Pop-Location

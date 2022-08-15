@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $PSScriptRoot
+Push-Location $PSScriptRoot
 
 Get-ChildItem -Recurse *.ps1 | Unblock-File
 Import-Module -Name ./libs/lib.psm1
@@ -21,3 +21,5 @@ if (-not $args.Count) {
 ./libs/terminal.ps1
 ./libs/gpg.ps1
 ./libs/git.ps1
+
+Pop-Location

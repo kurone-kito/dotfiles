@@ -1,7 +1,6 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $env:USERPROFILE
 
 $profileDir = Join-Path $env:USERPROFILE '.pwsh.profile.d'
 
