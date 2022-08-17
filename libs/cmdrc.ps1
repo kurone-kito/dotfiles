@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $PSScriptRoot
+Push-Location $PSScriptRoot
 Import-Module -Name ./lib.psm1
 
 Write-Output 'Install the profiles system for cmd.exe'
@@ -16,3 +16,5 @@ New-ItemProperty $cmdRegKey AutoRun -PropertyType String -Value $callCmdRc -Forc
 
 $dirName = '.cmdrc.d'
 Join-Path $env:USERPROFILE $dirName | Add-Links -Source $dirName
+
+Pop-Location

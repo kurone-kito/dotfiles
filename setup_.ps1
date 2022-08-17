@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $PSScriptRoot
-Import-Module -Name ./libs/lib.psm1
+Push-Location $PSScriptRoot
 
-Get-ChildItem -Recurse libs/*.ps1 | Unblock-File
+Get-ChildItem -Recurse *.ps1 | Unblock-File
+Import-Module -Name ./libs/lib.psm1
 
 if (Invoke-SelfWithPrivileges) {
   exit
@@ -15,15 +15,11 @@ if (-not $args.Count) {
   exit
 }
 
-Get-ChildItem -Recurse *.ps1 | Unblock-File
-
-### Link to dotfile for home dir
-Get-ChildItem -Force -Attributes !Directory `
-  | Where-Object { $_.Name -match '^\.' } `
-  | ForEach-Object { $_ | Add-Link -Destination $env:USERPROFILE }
-
+./libs/link.ps1
 ./libs/cmdrc.ps1
 ./libs/pwshrc.ps1
 ./libs/terminal.ps1
 ./libs/gpg.ps1
 ./libs/git.ps1
+
+Pop-Location

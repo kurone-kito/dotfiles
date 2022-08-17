@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 
 Set-StrictMode -Version Latest
-Set-Location $PSScriptRoot
+Push-Location $PSScriptRoot
 Import-Module -Name ./lib.psm1
 
 Write-Output 'Install the profiles system for pwsh.exe'
@@ -21,3 +21,5 @@ Join-Path $WPSProfile -ChildPath Microsoft.PowerShell_profile.ps1 `
 
 $dirName = '.pwsh.profile.d'
 Join-Path $env:USERPROFILE $dirName | Add-Links -Source $dirName
+
+Pop-Location
