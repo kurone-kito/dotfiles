@@ -74,6 +74,17 @@
     "**/Thumbs.db": true
   },
   "files.insertFinalNewline": true,
+  "files.watcherExclude": {
+    "**/.eslintcache": true,
+    "**/.pnp.*": true,
+    "**/.vagrant/**": true,
+    "**/.yarn/cache/**": true,
+    "**/.yarn/unplugged/**": true,
+    "**/packages/**/.tsconfig.*.tsbuildinfo": true,
+    "**/packages/**/.tsconfig.tsbuildinfo": true,
+    "**/packages/**/coverage/**": true,
+    "**/packages/**/dist/**": true
+  },
   "git.autofetch": true,
   "git.autoStash": true,
   "git.confirmSync": false,
