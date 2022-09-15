@@ -1,5 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
-# Edit at https://www.toptal.com/developers/gitignore?templates=dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
+# Created by https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
+# Edit at https://www.toptal.com/developers/gitignore?templates=dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
 
 ### Dropbox ###
 # Dropbox settings and caches
@@ -73,13 +73,6 @@ Temporary Items
 ### macOS Patch ###
 # iCloud generated files
 *.icloud
-
-### PowerShell ###
-# Exclude packaged modules
-*.zip
-
-# Exclude .NET assemblies from source
-*.dll
 
 ### SublimeText ###
 # Cache files for Sublime Text
@@ -215,4 +208,4 @@ zsdoc/data
 /tests/_output/*
 !/tests/_output/.gitkeep
 
-# End of https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,powershell,sublimetext,vim,visualstudiocode,windows,zsh
+# End of https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
