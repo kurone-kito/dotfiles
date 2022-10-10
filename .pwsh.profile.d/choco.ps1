@@ -8,8 +8,8 @@ Set-StrictMode -Version Latest
 # for `choco` will not function.
 # See https://ch0.co/tab-completion for details.
 $ChocolateyProfile = $env:ChocolateyInstall `
-  | Join-Path -ChildPath helpers `
-  | Join-Path -ChildPath chocolateyProfile.psm1
+| Join-Path -ChildPath helpers `
+| Join-Path -ChildPath chocolateyProfile.psm1
 
 if (Test-Path $ChocolateyProfile) {
   Import-Module $ChocolateyProfile

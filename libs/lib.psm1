@@ -34,7 +34,7 @@ function Add-Links {
   New-Item -Path $Destination -ItemType Directory -Force
   if (Test-Path $Source) {
     Get-ChildItem -Path $Source -Attributes !Directory `
-      | ForEach-Object { $_ | Add-Link -Destination $Destination }
+    | ForEach-Object { $_ | Add-Link -Destination $Destination }
   }
   <#
   .SYNOPSIS
