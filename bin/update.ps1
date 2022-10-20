@@ -74,16 +74,16 @@ if (Get-Command vagrant -ErrorAction SilentlyContinue) {
 
 if (Get-Command docker -ErrorAction SilentlyContinue) {
   docker images `
-    | Select-Object -Skip 1 `
-    | Select-String -Pattern '^(?<Name>[^\s]+)\s+(?<Tag>[^\s]+)'
-    | Select-Object -ExpandProperty Matches
-    | ForEach-Object {
-      $Name = $_.Groups['Name'] | Select-Object -ExpandProperty Value
-      $Tag = $_.Groups['Tag'] | Select-Object -ExpandProperty Value
-      docker pull ('{0}:{1}' -f $Name, $Tag)
-    }
+  | Select-Object -Skip 1 `
+  | Select-String -Pattern '^(?<Name>[^\s]+)\s+(?<Tag>[^\s]+)'
+  | Select-Object -ExpandProperty Matches
+  | ForEach-Object {
+    $Name = $_.Groups['Name'] | Select-Object -ExpandProperty Value
+    $Tag = $_.Groups['Tag'] | Select-Object -ExpandProperty Value
+    docker pull ('{0}:{1}' -f $Name, $Tag)
+  }
   docker images --filter 'dangling=true' -q --no-trunc `
-    | ForEach-Object { docker rmi -f $_ }
+  | ForEach-Object { docker rmi -f $_ }
   docker builder prune -f
 }
 
@@ -91,8 +91,8 @@ $sage = @(
   Get-ChildItem `
     -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\ `
     -Recurse `
-    | Select-Object -ExpandProperty Property `
-    | Where-Object { $_ -eq 'StateFlags0001' }
+  | Select-Object -ExpandProperty Property `
+  | Where-Object { $_ -eq 'StateFlags0001' }
 )
 if ($sage.Length -gt 0) {
   cleanmgr /dc /sagerun:1
