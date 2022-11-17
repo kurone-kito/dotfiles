@@ -7,10 +7,13 @@ function Add-Link {
     $Source,
 
     [Parameter(Mandatory)][string]
-    $Destination
-  )
+    $Destination,
 
-  New-Item $Destination -Name $Source.Name -ItemType SymbolicLink `
+    [string]
+    $DestFileName = $null
+  )
+  $dstName = if ($DestFileName) { $DestFileName } else { $Source.Name }
+  New-Item $Destination -Name $dstName -ItemType SymbolicLink `
     -Value $Source.FullName -Force
   <#
   .SYNOPSIS
@@ -19,6 +22,8 @@ function Add-Link {
   The source file.
   .PARAMETER Destination
   The destination directory.
+  .PARAMETER DestFileName
+  The name of the link. If not specified, the name of the source file is used.
   #>
 }
 
