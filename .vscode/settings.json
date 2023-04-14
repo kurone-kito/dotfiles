@@ -22,7 +22,7 @@
     "source.fixAll.eslint": true
   },
   "editor.cursorBlinking": "phase",
-  "editor.cursorSmoothCaretAnimation": true,
+  "editor.cursorSmoothCaretAnimation": "on",
   "editor.find.globalFindClipboard": true,
   "editor.fontFamily": "HackGen, 'HackGen Console', 'HackGen Console NF', 'BIZ UDGothic', Menlo, Monaco, 'Courier New', monospace",
   "editor.fontSize": 13,
