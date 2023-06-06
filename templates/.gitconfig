@@ -3,6 +3,7 @@
 	c = clone --recursive
 	co = checkout
 	cp = cherry-pick
+	delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)' | xargs git branch -d; }; f"
 	nuke = !git clean -fdx && git clean -fdX
 	sw = switch
 [add "interactive"]
@@ -38,6 +39,7 @@
 [http]
 	postBuffer = 524288000
 [merge]
+	autostash = true
 	ff = false
 	log = true
 [pull]
@@ -49,7 +51,7 @@
 [rebase]
 	abbreviateCommands = true
 	autostash = true
-	missingCommitsCheck = warn
+	missingCommitsCheck = error
 [tag]
 	forceSignAnnotated = true
 	gpgsign = true
