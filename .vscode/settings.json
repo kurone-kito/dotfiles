@@ -17,6 +17,8 @@
   "discord.lowerDetailsDebugging": "𝙴𝙲𝙷𝙾 𝘿𝙀𝙇𝙏𝘼 {total_lines}",
   "discord.lowerDetailsEditing": "𝙲𝙷𝙰𝚁𝙻𝙸𝙴 𝘿𝙀𝙇𝙏𝘼 {total_lines}",
   "discord.lowerDetailsIdling": "𝙳𝙴𝙻𝚃𝙰 𝙀𝘾𝙃𝙊 🐱",
+  "discord.removeRemoteRepository": true,
+  "discord.removeTimestamp": true,
   "docker.truncateLongRegistryPaths": true,
   "editor.bracketPairColorization.enabled": true,
   "editor.codeActionsOnSave": {
@@ -53,7 +55,6 @@
   "editor.tabSize": 2,
   "editor.wordWrap": "on",
   "emmet.showSuggestionsAsSnippets": true,
-  "eslint.alwaysShowStatus": true,
   "eslint.format.enable": true,
   "eslint.lintTask.enable": true,
   "eslint.useESLintClass": true,
@@ -101,8 +102,6 @@
     "plaintext": true,
     "markdown": true
   },
-  "github.copilot-labs.showBrushesLenses": true,
-  "github.copilot-labs.showTestGenerationLenses": true,
   "githubPullRequests.pullBranch": "never",
   "japanese-proofreading.textlint.全角文字と半角文字の間": false,
   "japanese-proofreading.textlint.外来語カタカナ表記": false,
@@ -190,7 +189,6 @@
   "typescript.suggest.completeFunctionCalls": true,
   "typescript.tsserver.experimental.enableProjectDiagnostics": true,
   "typescript.updateImportsOnFileMove.enabled": "always",
-  "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
   "window.closeWhenEmpty": true,
   "window.commandCenter": true,
   "window.title": "${rootName}${separator}${appName}",
