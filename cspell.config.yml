@@ -1,0 +1,25 @@
+dictionaries:
+  - cpp
+  - fonts
+  - powershell
+enableGlobDot: true
+language: en,eo,ja
+languageSettings:
+  - allowCompoundWords: true
+    caseSensitive: false
+    enabled: true
+    languageId: '*'
+    locale: en,eo,ja
+ignorePaths:
+  - .*ignore
+  - .git
+  - .github/CODE_OF_CONDUCT.*
+  - .vscode/extensions.json
+  - cspell.config.yml
+ignoreWords:
+  - lysyi3m
+  - kito
+  - kurone
+  - Kuroné
+useGitignore: true
+version: '0.2'

@@ -10,6 +10,8 @@ set fileformats=unix,dos,mac
 set gdefault
 set incsearch
 set hlsearch
+set modeline
+set modelines=4
 set nocompatible
 set number
 set ruler
