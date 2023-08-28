@@ -36,7 +36,7 @@ function Install-NodeJSViaFNM() {
   npm install -g --silent 'agentkeepalive@latest'
   npm install -g --silent "npm@${NPMVersion}"
   npm upgrade -g --silent
-  npm install -g --silent 'yarn@berry'
+  corepack enable
   <#
   .SYNOPSIS
   Install the Node.js and some global packages.
@@ -64,7 +64,6 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
   fnm env --use-on-cd | Out-String | Invoke-Expression
   Install-NodeJSViaFNM -NodeVersion 16 -NPMVersion 8
   Install-NodeJSViaFNM -NodeVersion 18
-  Install-NodeJSViaFNM -NodeVersion 19
   Install-NodeJSViaFNM -NodeVersion 20
 }
 
