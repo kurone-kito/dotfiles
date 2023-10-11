@@ -10,11 +10,9 @@
   "cSpell.language": "en,eo,ja",
   "cSpell.logLevel": "Warning",
   "cSpell.showAutocompleteSuggestions": true,
-  "cSpell.usePnP": true,
   "css.validate": false,
   "diffEditor.diffAlgorithm": "advanced",
-  "diffEditor.experimental.collapseUnchangedRegions": true,
-  "diffEditor.experimental.useVersion2": true,
+  "diffEditor.hideUnchangedRegions.enabled": true,
   "diffEditor.ignoreTrimWhitespace": false,
   "discord.detailsDebugging": "𝙱𝚁𝙰𝚅𝙾 𝘾𝙃𝘼𝙍𝙇𝙄𝙀 {current_line}",
   "discord.detailsEditing": "𝙰𝙻𝙿𝙷𝙰 𝘽𝙍𝘼𝙑𝙊 {current_line}",
@@ -138,7 +136,6 @@
   "omnisharp.enableAsyncCompletion": true,
   "omnisharp.enableDecompilationSupport": true,
   "omnisharp.enableMsBuildLoadProjectsOnDemand": true,
-  "omnisharp.enableRoslynAnalyzers": true,
   "omnisharp.organizeImportsOnFormat": true,
   "omnisharp.monoPath": "C:\\Program Files\\Mono\\bin",
   "omnisharp.useModernNet": false,
@@ -234,6 +231,7 @@
   "workbench.editor.highlightModifiedTabs": true,
   "workbench.editor.limit.enabled": true,
   "workbench.editor.limit.perEditorGroup": true,
+  "workbench.editor.pinnedTabsOnSeparateRow": true,
   "workbench.editor.revealIfOpen": true,
   "workbench.editor.sharedViewState": true,
   "workbench.editor.splitSizing": "auto",
@@ -283,5 +281,8 @@
   },
   "[javascript][javascriptreact][json][jsonc][markdown][typescript][typescriptreact][yaml]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
   }
 }
