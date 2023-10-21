@@ -62,9 +62,9 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
 
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
   fnm env --use-on-cd | Out-String | Invoke-Expression
-  Install-NodeJSViaFNM -NodeVersion 16 -NPMVersion 8
-  Install-NodeJSViaFNM -NodeVersion 18
+  Install-NodeJSViaFNM -NodeVersion 18 -NPMVersion 9
   Install-NodeJSViaFNM -NodeVersion 20
+  Install-NodeJSViaFNM -NodeVersion 21
 }
 
 if (Get-Command vagrant -ErrorAction SilentlyContinue) {
