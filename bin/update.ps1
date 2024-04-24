@@ -25,17 +25,11 @@ function Install-NodeJSViaFNM() {
   param(
     [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
     [string]
-    $NodeVersion,
-    [string]
-    $NPMVersion = 'latest'
+    $NodeVersion
   )
   fnm install $NodeVersion
   fnm default $NodeVersion
 
-  # https://qiita.com/Qoo_Rus/items/afb52517e0e17b720990
-  npm install -g --silent 'agentkeepalive@latest'
-  npm install -g --silent "npm@${NPMVersion}"
-  npm upgrade -g --silent
   corepack enable
   <#
   .SYNOPSIS
@@ -62,7 +56,7 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
 
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
   fnm env --use-on-cd | Out-String | Invoke-Expression
-  Install-NodeJSViaFNM -NodeVersion 18 -NPMVersion 9
+  Install-NodeJSViaFNM -NodeVersion 18
   Install-NodeJSViaFNM -NodeVersion 20
   Install-NodeJSViaFNM -NodeVersion 21
 }
