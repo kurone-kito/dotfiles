@@ -1,4 +1,7 @@
 {
+  "accessibility.signals.terminalBell": {
+    "sound": "on"
+  },
   "bookmarks.experimental.enableNewStickyEngine": true,
   "bookmarks.label.suggestion": "suggestWhenSelected",
   "bookmarks.sideBar.expanded": true,
@@ -26,8 +29,8 @@
   "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
   "editor.bracketPairColorization.enabled": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll": true,
-    "source.fixAll.eslint": true
+    "source.fixAll": "always",
+    "source.fixAll.eslint": "always"
   },
   "editor.cursorBlinking": "phase",
   "editor.cursorSmoothCaretAnimation": "on",
@@ -45,6 +48,7 @@
   "editor.lineNumbers": "on",
   "editor.minimap.maxColumn": 70,
   "editor.mouseWheelZoom": false,
+  "editor.occurrencesHighlight": "multiFile",
   "editor.pasteAs.enabled": true,
   "editor.quickSuggestions": {
     "comments": true
@@ -120,7 +124,6 @@
   "javascript.referencesCodeLens.enabled": true,
   "javascript.suggest.completeFunctionCalls": true,
   "javascript.updateImportsOnFileMove.enabled": "always",
-  "jest.showCoverageOnLoad": true,
   "js/ts.implicitProjectConfig.checkJs": true,
   "js/ts.implicitProjectConfig.experimentalDecorators": true,
   "js/ts.implicitProjectConfig.strictNullChecks": true,
@@ -137,9 +140,7 @@
   "omnisharp.enableDecompilationSupport": true,
   "omnisharp.enableMsBuildLoadProjectsOnDemand": true,
   "omnisharp.organizeImportsOnFormat": true,
-  "omnisharp.monoPath": "C:\\Program Files\\Mono\\bin",
   "omnisharp.useModernNet": false,
-  "openapi.securityAuditToken": "CiD4FfVbQBvtxyETGhWoE+EskC9aqrej+PfO4GV8+dqvlBIY5AWsjeS/MFfkERT+5gILMRQyz4ZqFN3HGnAwWc403CZztCRehacsWUA4rSOd09DXsRl0QI11/GXMeTH4PZvYqDppEduT59ZgZIxJ6Stl+HC6ljNrVy5F2j6LzBx03qtq446x6jXWOdPUVaniFOPZAkmQ2FI6bfKKPAZv4nDd5GGxWE/IrhnPkddf",
   "poshProTools.checkForModuleUpdates": true,
   "poshProTools.excludeAutomaticVariables": true,
   "powershell.codeFormatting.autoCorrectAliases": true,
@@ -168,7 +169,7 @@
   "tailwindcss.hoverColorHint": "rgb",
   "terminal.integrated.cursorBlinking": true,
   "terminal.integrated.cursorStyle": "line",
-  "terminal.integrated.enableBell": true,
+  "terminal.integrated.enableVisualBell": true,
   "terminal.integrated.fontFamily": "'HackGen Console NF', 'HackGen Console', HackGen, 'BIZ UDGothic', Menlo, Monaco, 'Courier New', monospace, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'",
   "terminal.integrated.minimumContrastRatio": 1,
   "terminal.integrated.profiles.osx": {
@@ -194,6 +195,7 @@
   },
   "terminal.integrated.scrollback": 10000,
   "terminal.integrated.smoothScrolling": true,
+  "terminal.integrated.stickyScroll.enabled": true,
   "terminal.integrated.windowsEnableConpty": true,
   "typescript.implementationsCodeLens.enabled": true,
   "typescript.locale": "ja",
