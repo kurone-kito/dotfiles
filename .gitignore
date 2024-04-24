@@ -1,11 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
-# Edit at https://www.toptal.com/developers/gitignore?templates=dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
-
-### Dropbox ###
-# Dropbox settings and caches
-.dropbox
-.dropbox.attr
-.dropbox.cache
+# Created by https://www.toptal.com/developers/gitignore/api/git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
+# Edit at https://www.toptal.com/developers/gitignore?templates=git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
 
 ### Git ###
 # Created by git for backups. To disable backups in Git:
@@ -208,4 +202,4 @@ zsdoc/data
 /tests/_output/*
 !/tests/_output/.gitkeep
 
-# End of https://www.toptal.com/developers/gitignore/api/dropbox,git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
+# End of https://www.toptal.com/developers/gitignore/api/git,gpg,linux,macos,sublimetext,vim,visualstudiocode,windows,zsh
