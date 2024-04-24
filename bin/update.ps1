@@ -59,6 +59,7 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
   Install-NodeJSViaFNM -NodeVersion 18
   Install-NodeJSViaFNM -NodeVersion 20
   Install-NodeJSViaFNM -NodeVersion 21
+  Install-NodeJSViaFNM -NodeVersion 22
 }
 
 if (Get-Command vagrant -ErrorAction SilentlyContinue) {
