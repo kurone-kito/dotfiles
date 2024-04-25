@@ -22,6 +22,11 @@ The script works with the latest macOS and Windows.
 - [kurone-kito/setup.macos](https://github.com/kurone-kito/setup.macos)
 - [kurone-kito/setup.windows](https://github.com/kurone-kito/setup.windows)
 
+## Contributing
+
+Welcome to contribute to this repository! For more details,
+please refer to [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+
 ## License
 
 MIT
