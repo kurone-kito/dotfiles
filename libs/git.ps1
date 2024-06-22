@@ -7,7 +7,8 @@ Import-Module -Name ./lib.psm1
 ### Setup Git
 Set-Location ..
 $GPGPath = (Get-Command -Name gpg).Source
-Copy-Item -Path .\templates\.gitconfig -Destination $env:USERPROFILE -Force
-git config --global gpg.program $GPGPath
+$GitLocal = Join-Path $env:USERPROFILE .gitconfig.local
+New-Item $GitLocal | Out-Null
+git config --file $GitLocal gpg.program $GPGPath
 
 Pop-Location

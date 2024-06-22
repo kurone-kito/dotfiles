@@ -17,8 +17,9 @@ rm -rf "${HOME}/.gnupg/${GPG_AGENT}"
 cp ".gnupg-mac/${GPG_AGENT}" "${HOME}/.gnupg/"
 echo "pinentry-program $(which pinentry-mac)" >> "${HOME}/.gnupg/${GPG_AGENT}"
 
-cp -f ./templates/.gitconfig ~/
-# git config --global gpg.program $(which gpg)
+GIT_LOCAL="${HOME}/.gitconfig.local"
+touch "${GIT_LOCAL}"
+# git config --file "${GIT_LOCAL}" gpg.program "$(which gpg)"
 gpgconf --kill gpg-agent
 TERMINAL_PROFILE='Source Code X'
 open "schemes/${TERMINAL_PROFILE}.terminal"
