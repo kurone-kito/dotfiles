@@ -13,7 +13,6 @@
   "cSpell.language": "en,eo,ja",
   "cSpell.logLevel": "Warning",
   "cSpell.showAutocompleteSuggestions": true,
-  "css.validate": false,
   "diffEditor.diffAlgorithm": "advanced",
   "diffEditor.hideUnchangedRegions.enabled": true,
   "diffEditor.ignoreTrimWhitespace": false,
@@ -110,6 +109,7 @@
   "git.promptToSaveFilesBeforeCommit": "staged",
   "git.supportCancellation": true,
   "git.untrackedChanges": "separate",
+  "github.copilot.editor.enableAutoCompletions": true,
   "github.copilot.enable": {
     "*": true,
     "yaml": true,
@@ -197,6 +197,7 @@
   "terminal.integrated.smoothScrolling": true,
   "terminal.integrated.stickyScroll.enabled": true,
   "terminal.integrated.windowsEnableConpty": true,
+  "testing.automaticallyOpenPeekView": "failureInVisibleDocument",
   "typescript.implementationsCodeLens.enabled": true,
   "typescript.locale": "ja",
   "typescript.referencesCodeLens.enabled": true,
