@@ -54,6 +54,14 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
   choco upgrade -y all
 }
 
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+  winget upgrade --all
+}
+
+if (Get-Command scoop -ErrorAction SilentlyContinue) {
+  scoop update *
+}
+
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
   fnm env --use-on-cd | Out-String | Invoke-Expression
   Install-NodeJSViaFNM -NodeVersion 18
