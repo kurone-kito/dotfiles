@@ -66,7 +66,6 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
   fnm env --use-on-cd | Out-String | Invoke-Expression
   Install-NodeJSViaFNM -NodeVersion 18
   Install-NodeJSViaFNM -NodeVersion 20
-  Install-NodeJSViaFNM -NodeVersion 21
   Install-NodeJSViaFNM -NodeVersion 22
 }
 
