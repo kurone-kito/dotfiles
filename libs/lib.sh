@@ -8,6 +8,18 @@ link_to() {
 
 export -f link_to
 
+log_info() {
+  printf '\033[2;36m%s\033[m\n' "$@"
+}
+
+log_notice() {
+  printf '\033[1;36m%s\033[m\n' "$@"
+}
+
+log_warn() {
+  printf '\033[1;33m%s\033[m\n' "$@"
+}
+
 deploy() {
   NAME=$1
   SRC=$2

@@ -7,6 +7,8 @@ cd "$(cd "$(dirname "$0")"; pwd)"
 
 . libs/lib.sh
 
+libs/defaults.sh
+
 deploy_with_chmod '.*' '.'
 deploy_with_chmod '*' '.gnupg'
 
