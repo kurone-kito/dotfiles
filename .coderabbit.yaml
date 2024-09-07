@@ -1,4 +1,3 @@
-$schema: "https://coderabbit.ai/integrations/coderabbit-overrides.v2.json"
 chat:
   auto_reply: true
 early_access: true
