@@ -14,4 +14,10 @@ Get-ChildItem -Force -Attributes !Directory `
 $BinHome = Join-Path $HOME bin
 Add-Links -Source bin -Destination $BinHome
 
+$ConfigHome = Join-Path $HOME .config
+New-Item -Path $ConfigHome -ItemType Directory -Force
+$HuskyHome = Join-Path $ConfigHome husky
+$HuskySrc = Join-Path .config husky
+Add-Links -Source $HuskySrc -Destination $HuskyHome
+
 Pop-Location

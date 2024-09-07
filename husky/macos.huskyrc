@@ -1,8 +1,0 @@
-# -*- mode: sh -*-
-# vim: set ft=sh :
-# shellcheck disable=SC2148
-
-ASDF_SH="${HOME}/.zsh.d/z-asdf"
-
-# shellcheck disable=SC1090
-[ -f "${ASDF_SH}" ] && . "${ASDF_SH}"

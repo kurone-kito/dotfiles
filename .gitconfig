@@ -4,11 +4,12 @@
 	count = "!git logb | wc -l | sed 's/^ *//;s/ *$//'"
 	cp = cherry-pick
 	delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)' | xargs git branch -d; }; f"
-	first-commit = "!git log --pretty=format:\"%h\" --abbrev=40 \"$(git main)\"..HEAD | tail -1"
-	gc = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
-	logb = "!git log --oneline \"$(git main)\"..HEAD"
-	main = !LC_ALL=C git remote show origin | grep 'HEAD branch' | cut -d' ' -f5
+	first-commit = !git log --pretty=format:\"%h\" --abbrev=40 "$(git main)"..HEAD | tail -1
+	gc-full = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
+	logb = !git log --oneline "$(git main)"..HEAD
+	main = symbolic-ref --short refs/remotes/origin/HEAD
 	nuke = !git clean -fdx && git clean -fdX
+	pull = pull --recurse-submodules
 	pushf = push --force-with-lease
 	ra = rebase --abort
 	rc = rebase --continue
@@ -20,6 +21,8 @@
 	useBuiltin = true
 [apply]
 	whitespace = fix
+[commit]
+	gpgsign = true
 [core]
 	autoCRLF = false
 	compression = 9
@@ -29,8 +32,6 @@
 	hideDotFiles = true
 	longpaths = true
 	precomposeUnicode = true
-[commit]
-	gpgsign = true
 [delta]
 	features = side-by-side line-numbers decorations
 [diff]
@@ -43,6 +44,10 @@
 [filter "lfs"]
 	clean = git-lfs clean %f
 	smudge = git-lfs smudge %f
+	required = true
+[filter "vrc"]
+	clean = git vrc clean --file %f
+	smudge = git vrc smudge --file %f
 	required = true
 [help]
 	autocorrect = prompt
@@ -58,12 +63,15 @@
 	ff = only
 	rebase = true
 [push]
+	autoSetupRemote = true
 	followTags = true
 	gpgsign = if-asked
 [rebase]
 	abbreviateCommands = true
 	autostash = true
 	missingCommitsCheck = error
+[rerere]
+	enable = true
 [tag]
 	forceSignAnnotated = true
 	gpgsign = true

@@ -7,10 +7,14 @@ cd "$(cd "$(dirname "$0")"; pwd)"
 
 . libs/lib.sh
 
+libs/defaults.sh
+
 deploy_with_chmod '.*' '.'
 deploy_with_chmod '*' '.gnupg'
 
-ln -snf "$(pwd)/husky/macos.huskyrc" "${HOME}/.huskyrc"
+mkdir -p "${HOME}/.config"
+deploy_with_chmod '*' '.config/husky'
+rm -rf "${HOME}/.huskyrc"
 
 GPG_AGENT="gpg-agent.conf"
 rm -rf "${HOME}/.gnupg/${GPG_AGENT}"
