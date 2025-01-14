@@ -5,7 +5,7 @@
 ZSHRC="${ZDOTDIR:-$HOME}/.zprezto/runcoms/zshrc"
 [[ -s "${ZSHRC}" ]] && source "${ZSHRC}"
 
-# load zsh flagments
+# load zsh fragments
 ZSH_D="${ZDOTDIR:-$HOME}/.zsh.d"
 mkdir -p "${ZSH_D}"
 for f in "${ZSH_D}/"*
