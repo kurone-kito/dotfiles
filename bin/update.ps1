@@ -55,7 +55,7 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
 }
 
 if (Get-Command winget -ErrorAction SilentlyContinue) {
-  winget upgrade --all
+  winget upgrade --all --accept-package-agreements --accept-source-agreements
 }
 
 if (Get-Command scoop -ErrorAction SilentlyContinue) {
