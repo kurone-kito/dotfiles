@@ -10,5 +10,6 @@ $GPGPath = (Get-Command -Name gpg).Source
 $GitLocal = Join-Path $env:USERPROFILE .gitconfig.local
 New-Item $GitLocal | Out-Null
 git config --file $GitLocal gpg.program $GPGPath
+git config --file $GitLocal http.sslBackend schannel
 
 Pop-Location

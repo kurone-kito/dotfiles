@@ -20,6 +20,5 @@ language: en,eo,ja
 useGitignore: true
 version: '0.2'
 words:
-  - lysyi3m
   - kito
   - Kuroné

@@ -55,7 +55,7 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
 }
 
 if (Get-Command winget -ErrorAction SilentlyContinue) {
-  winget upgrade --all
+  winget upgrade --all --accept-package-agreements --accept-source-agreements
 }
 
 if (Get-Command scoop -ErrorAction SilentlyContinue) {
@@ -67,6 +67,7 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
   Install-NodeJSViaFNM -NodeVersion 18
   Install-NodeJSViaFNM -NodeVersion 20
   Install-NodeJSViaFNM -NodeVersion 22
+  Install-NodeJSViaFNM -NodeVersion 23
 }
 
 if (Get-Command vagrant -ErrorAction SilentlyContinue) {

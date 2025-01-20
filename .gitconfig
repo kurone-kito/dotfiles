@@ -3,7 +3,7 @@
 	co = checkout
 	count = "!git logb | wc -l | sed 's/^ *//;s/ *$//'"
 	cp = cherry-pick
-	delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)' | xargs git branch -d; }; f"
+	delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)$' | xargs git branch -d; }; f"
 	first-commit = !git log --pretty=format:\"%h\" --abbrev=40 "$(git main)"..HEAD | tail -1
 	gc-full = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
 	logb = !git log --oneline "$(git main)"..HEAD
