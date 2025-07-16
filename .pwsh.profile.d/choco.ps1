@@ -7,10 +7,12 @@ Set-StrictMode -Version Latest
 # Be aware that if you are missing these lines from your profile, tab completion
 # for `choco` will not function.
 # See https://ch0.co/tab-completion for details.
-$ChocolateyProfile = $env:ChocolateyInstall `
-| Join-Path -ChildPath helpers `
-| Join-Path -ChildPath chocolateyProfile.psm1
+if ($env:ChocolateyInstall) {
+  $ChocolateyProfile = $env:ChocolateyInstall `
+  | Join-Path -ChildPath helpers `
+  | Join-Path -ChildPath chocolateyProfile.psm1
 
-if (Test-Path $ChocolateyProfile) {
-  Import-Module $ChocolateyProfile
+  if (Test-Path $ChocolateyProfile) {
+    Import-Module $ChocolateyProfile
+  }
 }
