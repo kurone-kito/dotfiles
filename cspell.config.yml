@@ -1,13 +1,17 @@
 allowCompoundWords: true
 dictionaries:
   - cpp
+  - en-freq
   - en_US
   - en-gb
   - fonts
   - git
+  - golang
   - markdown
   - misc
+  - node
   - powershell
+  - shell
   - softwareTerms
 enableGlobDot: true
 features:
@@ -18,12 +22,40 @@ ignorePaths:
   - .git
   - .github/CODE_OF_CONDUCT.*
   - .vscode/extensions.json
+  - .p10k.zsh
+  - .vscode/settings.json
+  - .zpreztorc
   - cspell.config.yml
+ignoreRandomStrings: true
+ignoreRegExpList:
+  - WindowsTerminal_\w{13}
 language: en,eo,ja
 useGitignore: true
 version: '0.2'
 words:
+  - cfprefsd
+  - choco
+  - clmv
+  - cmdrc
+  - exrc
+  - gdefault
+  - gpgconf
+  - hkcu
+  - hklm
+  - hlsearch
+  - huskyrc
   - imgbotconfig
   - kito
+  - kotoeri
   - kuron
   - kuroné
+  - mozil
+  - mozillail
+  - osascript
+  - pushf
+  - pwshrc
+  - rdate
+  - rerere
+  - siri
+  - tsdmoviecompatibilityoptimizeforiosoninsert
+  - zprezto
