@@ -170,3 +170,8 @@ zsdoc/data
 !/tests/_output/.gitkeep
 
 # End of https://www.toptal.com/developers/gitignore/api/git,gpg,linux,macos,vim,visualstudiocode,windows,zsh
+
+### THE PROJECT SPECIFIES #################################################
+
+### GPG ###
+pubring.*
