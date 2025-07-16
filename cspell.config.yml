@@ -3,9 +3,12 @@ dictionaries:
   - cpp
   - en_US
   - en-gb
-  - eo
   - fonts
+  - git
+  - markdown
+  - misc
   - powershell
+  - softwareTerms
 enableGlobDot: true
 features:
   weighted-suggestions: true
@@ -20,5 +23,7 @@ language: en,eo,ja
 useGitignore: true
 version: '0.2'
 words:
+  - imgbotconfig
   - kito
-  - Kuroné
+  - kuron
+  - kuroné

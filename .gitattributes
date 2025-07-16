@@ -1,5 +1,4 @@
-* text=auto
-
 .coderabbit.yaml export-ignore
-.github/** export-ignore
 .git* export-ignore
+.github/** export-ignore
+.imgbotconfig export-ignore
