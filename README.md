@@ -16,7 +16,8 @@ The script works with the latest macOS and Windows.
 
 - [holman/dotfiles](https://github.com/holman/dotfiles): It was helpful.
 - <!-- cspell:disable-next-line -->
-  [lysyi3m/macos-terminal-themes](https://github.com/lysyi3m/macos-terminal-themes): Included the terminal's color scheme settings. (customized)
+  [lysyi3m/macos-terminal-themes](https://github.com/lysyi3m/macos-terminal-themes):
+  Included the terminal's color scheme settings. (customized)
 
 ## See also (Dependents)
 
@@ -30,4 +31,4 @@ please refer to [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## License
 
-MIT
+[MIT](./LICENSE)
