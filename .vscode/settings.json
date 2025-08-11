@@ -6,6 +6,8 @@
   "bookmarks.sideBar.expanded": true,
   "bookmarks.useWorkaroundForFormatters": true,
   "breadcrumbs.symbolSortOrder": "name",
+  "chat.math.enabled": true,
+  "chat.todoListTool.enabled": true,
   "csharp.debug.symbolOptions.searchMicrosoftSymbolServer": true,
   "csharp.debug.symbolOptions.searchNuGetOrgSymbolServer": true,
   "csharp.experimental.debug.hotReload": true,
@@ -26,6 +28,7 @@
   "discord.removeTimestamp": true,
   "dotnet.formatting.organizeImportsOnFormat": true,
   "dotnet.server.useOmnisharp": true,
+  "editor.aiStats.enabled": true,
   "editor.codeActionsOnSave": {
     "source.fixAll": "always",
     "source.fixAll.eslint": "always"

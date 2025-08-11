@@ -2,6 +2,7 @@
   "recommendations": [
     "davidanson.vscode-markdownlint",
     "editorconfig.editorconfig",
+    "PKief.material-icon-theme",
     "redhat.vscode-yaml",
     "streetsidesoftware.code-spell-checker"
   ]
