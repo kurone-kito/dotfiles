@@ -2,7 +2,7 @@
 # vim: set ft=sh :
 # shellcheck disable=SC2148
 
-case "${OSTYPE}" in
+case "${OSTYPE:-}" in
   darwin*)
     # See: https://github.com/kurone-kito/setup.macos/tree/master/.zsh.d
     EXPORTS_SH="${HOME}/.zsh.d/exports"
