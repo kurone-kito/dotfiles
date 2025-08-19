@@ -29,7 +29,7 @@ ignorePaths:
 ignoreRandomStrings: true
 ignoreRegExpList:
   - WindowsTerminal_\w{13}
-language: en,eo,ja
+language: en,ja
 useGitignore: true
 version: '0.2'
 words:

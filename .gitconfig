@@ -14,6 +14,7 @@
 	ra = rebase --abort
 	rc = rebase --continue
 	rdate = !git rebase "$(git first-commit)"~ --committer-date-is-author-date
+	re = rebase --edit-todo
 	ri = !git rebase -i --autosquash "$(git first-commit)"~
 	rs = rebase --skip
 	sw = switch
