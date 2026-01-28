@@ -1,6 +1,9 @@
 # Guidelines for AI Agents
 
-This project is a generic project template.
+This project is my dotfiles repository, which contains configuration files
+for various environments.
+
+When contributing to this repository, follow these guidelines:
 
 - Please write comments in English.
 - If you have further considerations, uncertainties, or better suggestions,
