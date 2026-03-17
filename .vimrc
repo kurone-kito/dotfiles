@@ -1,8 +1,10 @@
+" -*- mode:vim -*-
+" vim: set ft=vim :
+
 set background=dark
 set backspace=indent,eol,start
 set clipboard=unnamed
 set cursorline
-hi clear CursorLine
 set encoding=utf-8 nobomb
 set exrc
 set fileencodings=utf-8,sjis,cp932,euc-jp,iso-2022-jp
