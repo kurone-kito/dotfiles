@@ -1,6 +1,6 @@
 allowCompoundWords: true
 dictionaries:
-  - cpp
+  - cpp-compound-words
   - en-freq
   - en_US
   - en-gb
