@@ -1,5 +1,6 @@
 allowCompoundWords: true
 dictionaries:
+  - bash
   - cpp-compound-words
   - en-freq
   - en_US
@@ -56,4 +57,5 @@ words:
   - rerere
   - siri
   - tsdmoviecompatibilityoptimizeforiosoninsert
+  - zdiff
   - zprezto

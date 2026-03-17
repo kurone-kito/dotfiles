@@ -1,82 +1,101 @@
+# -*- mode: properties -*-
+# vim: set ft=properties :
 [alias]
-	c = clone --recursive
-	co = checkout
-	count = "!git logb | wc -l | sed 's/^ *//;s/ *$//'"
-	cp = cherry-pick
-	delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)$' | xargs git branch -d; }; f"
-	first-commit = !git log --pretty=format:\"%h\" --abbrev=40 "$(git main)"..HEAD | tail -1
-	gc-full = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
-	logb = !git log --oneline "$(git main)"..HEAD
-	main = symbolic-ref --short refs/remotes/origin/HEAD
-	nuke = !git clean -fdx && git clean -fdX
-	pull = pull --recurse-submodules
-	pushf = push --force-with-lease
-	ra = rebase --abort
-	rc = rebase --continue
-	rdate = !git rebase "$(git first-commit)"~ --committer-date-is-author-date
-	re = rebase --edit-todo
-	ri = !git rebase -i --autosquash "$(git first-commit)"~
-	rs = rebase --skip
-	sw = switch
+  c = clone --recursive
+  co = checkout
+  count = "!git logb | wc -l | sed 's/^ *//;s/ *$//'"
+  cb = !git rev-parse --abbrev-ref HEAD
+  cp = cherry-pick
+  delete-merged-branch = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)$' | xargs git branch -d; }; f"
+  first-commit = !git log --pretty=format:\"%h\" --abbrev=40 "$(git main)"..HEAD | tail -1
+  gc-full = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
+  logb = !git log --oneline "$(git main)"..HEAD
+  main = symbolic-ref --short refs/remotes/origin/HEAD
+  nuke = !git clean -fdx && git clean -fdX
+  plf = pull-f
+  psf = push-f
+  pull = pull --recurse-submodules
+  pull-f = !git fetch && git reset --hard origin/$(git cb)
+  push-f = push --force-with-lease
+  ra = rebase --abort
+  rc = rebase --continue
+  rd = !git rebase "$(git first-commit)"~ --committer-date-is-author-date -S
+  re = rebase --edit-todo
+  ri = !git rebase -i "$(git first-commit)"~
+  rs = rebase --skip
+  sw = switch
 [add "interactive"]
-	useBuiltin = true
+  useBuiltin = true
 [apply]
-	whitespace = fix
+  whitespace = fix
+[column]
+  ui = auto
 [commit]
-	gpgsign = true
+  gpgsign = true
 [core]
-	autoCRLF = false
-	compression = 9
-	editor = vim
-	eol = lf
-	excludesfile = ~/.gitignore
-	hideDotFiles = true
-	longpaths = true
-	precomposeUnicode = true
+  autoCRLF = false
+  compression = 9
+  editor = nvim
+  eol = lf
+  excludesfile = ~/.gitignore
+  longpaths = true
+  precomposeUnicode = true
 [delta]
-	features = side-by-side line-numbers decorations
+  features = side-by-side line-numbers decorations
 [diff]
-	algorithm = minimal
-	colorMoved = dimmed-zebra
-	compactionHeuristic = true
-	renames = copies
+  algorithm = minimal
+  colorMoved = dimmed-zebra
+  compactionHeuristic = true
+  renames = copies
 [fetch]
-	prune = true
+  all = true
+  fsckobjects = true
+  prune = true
 [filter "lfs"]
-	clean = git-lfs clean %f
-	smudge = git-lfs smudge %f
-	required = true
+  clean = git-lfs clean %f
+  smudge = git-lfs smudge %f
+  required = true
 [filter "vrc"]
-	clean = git vrc clean --file %f
-	smudge = git vrc smudge --file %f
-	required = true
+  clean = git vrc clean --file %f
+  smudge = git vrc smudge --file %f
+  required = true
 [help]
-	autocorrect = prompt
-[http]
-	postBuffer = 524288000
+  autocorrect = prompt
 [include]
-	path = ~/.gitconfig.local
+  path = ~/.gitconfig.local
+[init]
+  defaultBranch = main
 [merge]
-	autostash = true
-	ff = false
-	log = true
+  autostash = true
+  conflictStyle = zdiff3
+  ff = false
+  log = true
 [pull]
-	ff = only
-	rebase = true
+  ff = only
+  rebase = true
 [push]
-	autoSetupRemote = true
-	followTags = true
-	gpgsign = if-asked
+  autoSetupRemote = true
+  default = current
+  followTags = true
+  gpgsign = if-asked
 [rebase]
-	abbreviateCommands = true
-	autostash = true
-	missingCommitsCheck = error
+  abbreviateCommands = true
+  autoSquash = true
+  autostash = true
+  missingCommitsCheck = error
+  updateRefs = true
+[receive]
+  fsckobjects = true
 [rerere]
-	enable = true
+  enable = true
 [tag]
-	forceSignAnnotated = true
-	gpgsign = true
+  forceSignAnnotated = true
+  gpgsign = true
+[transfer]
+  fsckobjects = true
+[trim]
+  bases = main,master,gh-pages
 [user]
-	email = krone@kit.black
-	name = kurone-kito
-	signingkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
+  email = krone@kit.black
+  name = kurone-kito
+  signingkey = DFC46A0ADEE2FC635163CD5431D6D754C1D839D1
