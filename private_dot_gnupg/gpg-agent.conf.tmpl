@@ -1,0 +1,9 @@
+{{- /* GPG agent configuration - platform-specific */ -}}
+default-cache-ttl 86400
+max-cache-ttl 86400
+{{- if eq .chezmoi.os "darwin" }}
+{{- $pinentry := lookPath "pinentry-mac" }}
+{{- if $pinentry }}
+pinentry-program {{ $pinentry }}
+{{- end }}
+{{- end }}

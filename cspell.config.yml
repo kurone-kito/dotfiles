@@ -23,8 +23,10 @@ ignorePaths:
   - .github/CODE_OF_CONDUCT.*
   - .vscode/extensions.json
   - .p10k.zsh
+  - dot_p10k.zsh
   - .vscode/settings.json
   - .zpreztorc
+  - dot_zpreztorc
   - cspell.config.yml
 ignoreRandomStrings: true
 ignoreRegExpList:
@@ -33,7 +35,12 @@ language: en,ja
 useGitignore: true
 version: '0.2'
 words:
+  - bitwardenattachment
   - cfprefsd
+  - chezmoi
+  - chezmoiignore
+  - chezmoiscripts
+  - chezmoitemplates
   - choco
   - clmv
   - cmdrc
@@ -45,17 +52,23 @@ words:
   - hlsearch
   - huskyrc
   - imgbotconfig
+  - keepassxc
+  - keepassxcattribute
   - kito
   - kotoeri
   - kuron
   - kuroné
   - mozil
   - mozillail
+  - onepassword
+  - onepassworddocument
+  - onepasswordread
   - osascript
   - pushf
   - pwshrc
   - rdate
   - rerere
   - siri
+  - tmpl
   - tsdmoviecompatibilityoptimizeforiosoninsert
   - zprezto

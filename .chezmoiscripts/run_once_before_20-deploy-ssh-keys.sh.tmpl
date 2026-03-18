@@ -1,0 +1,86 @@
+#!/bin/sh
+# Deploy SSH keys from the configured secret manager.
+# This script runs once before chezmoi applies the dotfiles.
+
+set -eu
+
+SSH_DIR="${HOME}/.ssh"
+mkdir -p "${SSH_DIR}"
+chmod 700 "${SSH_DIR}"
+
+{{ if ne .secret_manager "none" -}}
+
+echo "Deploying SSH keys from {{ .secret_manager }}..."
+
+{{ if eq .secret_manager "bitwarden" -}}
+{{ if and (hasKey . "bitwarden") .bitwarden.ssh_key_ids -}}
+{{ range .bitwarden.ssh_key_ids -}}
+{{ if . -}}
+echo "Retrieving SSH key from Bitwarden item: {{ . }}"
+ITEM_JSON=$(bw get item "{{ . }}")
+KEY_NAME=$(echo "${ITEM_JSON}" | jq -r '.name')
+PRIVATE_KEY=$(echo "${ITEM_JSON}" | jq -r '.notes // empty')
+if [ -n "${PRIVATE_KEY}" ]; then
+  KEY_FILE="${SSH_DIR}/${KEY_NAME}"
+  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
+  chmod 600 "${KEY_FILE}"
+  # Generate public key from private key if ssh-keygen is available
+  if command -v ssh-keygen >/dev/null 2>&1; then
+    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+    chmod 644 "${KEY_FILE}.pub"
+  fi
+  echo "  Deployed: ${KEY_FILE}"
+fi
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+{{ if eq .secret_manager "onepassword" -}}
+{{ if and (hasKey . "onepassword") .onepassword.ssh_key_items -}}
+{{ range .onepassword.ssh_key_items -}}
+{{ if . -}}
+echo "Retrieving SSH key from 1Password item: {{ . }}"
+PRIVATE_KEY=$(op read "{{ . }}/private key" 2>/dev/null || op read "{{ . }}/notes" 2>/dev/null || true)
+KEY_NAME=$(op read "{{ . }}/title" 2>/dev/null || echo "{{ . }}")
+if [ -n "${PRIVATE_KEY}" ]; then
+  KEY_FILE="${SSH_DIR}/${KEY_NAME}"
+  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
+  chmod 600 "${KEY_FILE}"
+  if command -v ssh-keygen >/dev/null 2>&1; then
+    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+    chmod 644 "${KEY_FILE}.pub"
+  fi
+  echo "  Deployed: ${KEY_FILE}"
+fi
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+{{ if eq .secret_manager "keepassxc" -}}
+{{ if and (hasKey . "keepassxc") .keepassxc.ssh_key_entries -}}
+{{ range .keepassxc.ssh_key_entries -}}
+{{ if . -}}
+echo "Retrieving SSH key from KeePassXC entry: {{ . }}"
+PRIVATE_KEY=$(keepassxc-cli show -sa notes "{{ $.keepassxc.database }}" "{{ . }}" 2>/dev/null || true)
+if [ -n "${PRIVATE_KEY}" ]; then
+  KEY_FILE="${SSH_DIR}/{{ . }}"
+  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
+  chmod 600 "${KEY_FILE}"
+  if command -v ssh-keygen >/dev/null 2>&1; then
+    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+    chmod 644 "${KEY_FILE}.pub"
+  fi
+  echo "  Deployed: ${KEY_FILE}"
+fi
+{{ end -}}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+echo "SSH key deployment completed."
+
+{{ else -}}
+echo "Skipping SSH key deployment: no secret manager configured."
+{{ end -}}
