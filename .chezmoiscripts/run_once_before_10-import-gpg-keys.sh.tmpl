@@ -11,36 +11,48 @@ echo "Importing GPG keys from {{ .secret_manager }}..."
 {{ if eq .secret_manager "bitwarden" -}}
 {{ if and (hasKey . "bitwarden") .bitwarden.gpg_public_key_id -}}
 echo "Importing GPG public key..."
-bw get notes "{{ .bitwarden.gpg_public_key_id }}" | gpg --import 2>/dev/null || true
+if ! bw get notes "{{ .bitwarden.gpg_public_key_id }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG public key" >&2
+fi
 {{ end -}}
 
 {{ if and (hasKey . "bitwarden") .bitwarden.gpg_private_key_id -}}
 echo "Importing GPG private key..."
-bw get notes "{{ .bitwarden.gpg_private_key_id }}" | gpg --import 2>/dev/null || true
+if ! bw get notes "{{ .bitwarden.gpg_private_key_id }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG private key" >&2
+fi
 {{ end -}}
 {{ end -}}
 
 {{ if eq .secret_manager "onepassword" -}}
 {{ if and (hasKey . "onepassword") .onepassword.gpg_public_key_item -}}
 echo "Importing GPG public key..."
-op read "{{ .onepassword.gpg_public_key_item }}" | gpg --import 2>/dev/null || true
+if ! op read "{{ .onepassword.gpg_public_key_item }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG public key" >&2
+fi
 {{ end -}}
 
 {{ if and (hasKey . "onepassword") .onepassword.gpg_private_key_item -}}
 echo "Importing GPG private key..."
-op read "{{ .onepassword.gpg_private_key_item }}" | gpg --import 2>/dev/null || true
+if ! op read "{{ .onepassword.gpg_private_key_item }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG private key" >&2
+fi
 {{ end -}}
 {{ end -}}
 
 {{ if eq .secret_manager "keepassxc" -}}
 {{ if and (hasKey . "keepassxc") .keepassxc.gpg_public_key_entry -}}
 echo "Importing GPG public key..."
-keepassxc-cli show -sa notes "{{ .keepassxc.database }}" "{{ .keepassxc.gpg_public_key_entry }}" | gpg --import 2>/dev/null || true
+if ! keepassxc-cli show -sa notes "{{ .keepassxc.database }}" "{{ .keepassxc.gpg_public_key_entry }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG public key" >&2
+fi
 {{ end -}}
 
 {{ if and (hasKey . "keepassxc") .keepassxc.gpg_private_key_entry -}}
 echo "Importing GPG private key..."
-keepassxc-cli show -sa notes "{{ .keepassxc.database }}" "{{ .keepassxc.gpg_private_key_entry }}" | gpg --import 2>/dev/null || true
+if ! keepassxc-cli show -sa notes "{{ .keepassxc.database }}" "{{ .keepassxc.gpg_private_key_entry }}" | gpg --import 2>&1; then
+  echo "Warning: Failed to import GPG private key" >&2
+fi
 {{ end -}}
 {{ end -}}
 

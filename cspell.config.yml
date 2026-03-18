@@ -60,6 +60,8 @@ words:
   - kuroné
   - mozil
   - mozillail
+  - nocompatible
+  - nvim
   - onepassword
   - onepassworddocument
   - onepasswordread
@@ -68,7 +70,9 @@ words:
   - pwshrc
   - rdate
   - rerere
+  - runcoms
   - siri
   - tmpl
   - tsdmoviecompatibilityoptimizeforiosoninsert
+  - zdiff
   - zprezto

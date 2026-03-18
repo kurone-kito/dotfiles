@@ -17,20 +17,15 @@ echo "Deploying SSH keys from {{ .secret_manager }}..."
 {{ range .bitwarden.ssh_key_ids -}}
 {{ if . -}}
 echo "Retrieving SSH key from Bitwarden item: {{ . }}"
-ITEM_JSON=$(bw get item "{{ . }}")
-KEY_NAME=$(echo "${ITEM_JSON}" | jq -r '.name')
-PRIVATE_KEY=$(echo "${ITEM_JSON}" | jq -r '.notes // empty')
-if [ -n "${PRIVATE_KEY}" ]; then
-  KEY_FILE="${SSH_DIR}/${KEY_NAME}"
-  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
-  chmod 600 "${KEY_FILE}"
-  # Generate public key from private key if ssh-keygen is available
-  if command -v ssh-keygen >/dev/null 2>&1; then
-    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
-    chmod 644 "${KEY_FILE}.pub"
-  fi
-  echo "  Deployed: ${KEY_FILE}"
+KEY_NAME=$(bw get item "{{ . }}" | jq -r '.name')
+KEY_FILE="${SSH_DIR}/${KEY_NAME}"
+bw get notes "{{ . }}" > "${KEY_FILE}"
+chmod 600 "${KEY_FILE}"
+if command -v ssh-keygen >/dev/null 2>&1; then
+  ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+  chmod 644 "${KEY_FILE}.pub"
 fi
+echo "  Deployed: ${KEY_FILE}"
 {{ end -}}
 {{ end -}}
 {{ end -}}
@@ -41,18 +36,16 @@ fi
 {{ range .onepassword.ssh_key_items -}}
 {{ if . -}}
 echo "Retrieving SSH key from 1Password item: {{ . }}"
-PRIVATE_KEY=$(op read "{{ . }}/private key" 2>/dev/null || op read "{{ . }}/notes" 2>/dev/null || true)
-KEY_NAME=$(op read "{{ . }}/title" 2>/dev/null || echo "{{ . }}")
-if [ -n "${PRIVATE_KEY}" ]; then
-  KEY_FILE="${SSH_DIR}/${KEY_NAME}"
-  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
-  chmod 600 "${KEY_FILE}"
-  if command -v ssh-keygen >/dev/null 2>&1; then
-    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
-    chmod 644 "${KEY_FILE}.pub"
-  fi
-  echo "  Deployed: ${KEY_FILE}"
+KEY_NAME=$(op item get "{{ . }}" --fields label=title 2>/dev/null || echo "{{ . }}")
+KEY_FILE="${SSH_DIR}/${KEY_NAME}"
+op read "{{ . }}/private key" > "${KEY_FILE}" 2>/dev/null \
+  || op read "{{ . }}/notes" > "${KEY_FILE}"
+chmod 600 "${KEY_FILE}"
+if command -v ssh-keygen >/dev/null 2>&1; then
+  ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+  chmod 644 "${KEY_FILE}.pub"
 fi
+echo "  Deployed: ${KEY_FILE}"
 {{ end -}}
 {{ end -}}
 {{ end -}}
@@ -63,17 +56,14 @@ fi
 {{ range .keepassxc.ssh_key_entries -}}
 {{ if . -}}
 echo "Retrieving SSH key from KeePassXC entry: {{ . }}"
-PRIVATE_KEY=$(keepassxc-cli show -sa notes "{{ $.keepassxc.database }}" "{{ . }}" 2>/dev/null || true)
-if [ -n "${PRIVATE_KEY}" ]; then
-  KEY_FILE="${SSH_DIR}/{{ . }}"
-  printf '%s\n' "${PRIVATE_KEY}" > "${KEY_FILE}"
-  chmod 600 "${KEY_FILE}"
-  if command -v ssh-keygen >/dev/null 2>&1; then
-    ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
-    chmod 644 "${KEY_FILE}.pub"
-  fi
-  echo "  Deployed: ${KEY_FILE}"
+KEY_FILE="${SSH_DIR}/{{ . }}"
+keepassxc-cli show -sa notes "{{ $.keepassxc.database }}" "{{ . }}" > "${KEY_FILE}"
+chmod 600 "${KEY_FILE}"
+if command -v ssh-keygen >/dev/null 2>&1; then
+  ssh-keygen -y -f "${KEY_FILE}" > "${KEY_FILE}.pub" 2>/dev/null || true
+  chmod 644 "${KEY_FILE}.pub"
 fi
+echo "  Deployed: ${KEY_FILE}"
 {{ end -}}
 {{ end -}}
 {{ end -}}
