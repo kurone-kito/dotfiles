@@ -1,0 +1,45 @@
+# SSH client configuration
+# Managed by chezmoi - DO NOT EDIT MANUALLY
+
+{{ if ne .secret_manager "none" -}}
+
+{{ if eq .secret_manager "bitwarden" -}}
+{{ if and (hasKey . "bitwarden") .bitwarden.ssh_config_id -}}
+{{ if .bitwarden.ssh_config_id -}}
+{{ bitwarden "item" .bitwarden.ssh_config_id | dig "notes" "" }}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+{{ if eq .secret_manager "onepassword" -}}
+{{ if and (hasKey . "onepassword") .onepassword.ssh_config_item -}}
+{{ if .onepassword.ssh_config_item -}}
+{{ onepasswordRead .onepassword.ssh_config_item }}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+{{ if eq .secret_manager "keepassxc" -}}
+{{ if and (hasKey . "keepassxc") .keepassxc.ssh_config_entry -}}
+{{ if .keepassxc.ssh_config_entry -}}
+{{ keepassxcAttribute .keepassxc.ssh_config_entry "notes" .keepassxc.database }}
+{{ end -}}
+{{ end -}}
+{{ end -}}
+
+{{ else -}}
+# No secret manager configured.
+# To use SSH config from a secret manager, run:
+#   chezmoi init --reconfigure
+# and select a secret manager.
+#
+# You can also manually add SSH config entries below:
+{{ end -}}
+
+# Common SSH settings
+Host *
+  AddKeysToAgent yes
+  IdentitiesOnly yes
+{{- if eq .chezmoi.os "darwin" }}
+  UseKeychain yes
+{{- end }}

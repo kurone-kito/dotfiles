@@ -1,0 +1,49 @@
+{{- /* chezmoi configuration template */ -}}
+{{- /* This file is used by `chezmoi init` to generate ~/.config/chezmoi/chezmoi.toml */ -}}
+
+{{- $name := "kurone-kito" -}}
+{{- $email := "krone@kit.black" -}}
+{{- $gpgKeyId := "DFC46A0ADEE2FC635163CD5431D6D754C1D839D1" -}}
+{{- $secretManager := "none" -}}
+
+{{- if stdinIsATTY -}}
+{{-   $name = promptStringOnce . "name" "Git user name" $name -}}
+{{-   $email = promptStringOnce . "email" "Git email address" $email -}}
+{{-   $gpgKeyId = promptStringOnce . "gpg_key_id" "GPG signing key ID (empty to disable)" $gpgKeyId -}}
+{{-   $secretManager = promptChoiceOnce . "secret_manager" "Secret manager" (list "none" "bitwarden" "onepassword" "keepassxc") $secretManager -}}
+{{- end -}}
+
+[data]
+  name = {{ $name | quote }}
+  email = {{ $email | quote }}
+  gpg_key_id = {{ $gpgKeyId | quote }}
+  secret_manager = {{ $secretManager | quote }}
+
+{{- if eq $secretManager "bitwarden" }}
+
+[data.bitwarden]
+  gpg_private_key_id = ""
+  gpg_public_key_id = ""
+{{-   $sshKeyIds := promptStringOnce . "bitwarden.ssh_key_ids" "Bitwarden item IDs for SSH keys (comma-separated)" "" }}
+  ssh_key_ids = {{ splitList "," $sshKeyIds | toJson }}
+  ssh_config_id = ""
+{{- end }}
+
+{{- if eq $secretManager "onepassword" }}
+
+[data.onepassword]
+  gpg_private_key_item = ""
+  gpg_public_key_item = ""
+  ssh_key_items = []
+  ssh_config_item = ""
+{{- end }}
+
+{{- if eq $secretManager "keepassxc" }}
+
+[data.keepassxc]
+  database = ""
+  gpg_private_key_entry = ""
+  gpg_public_key_entry = ""
+  ssh_key_entries = []
+  ssh_config_entry = ""
+{{- end }}

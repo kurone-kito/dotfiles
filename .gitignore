@@ -175,3 +175,7 @@ zsdoc/data
 
 ### GPG ###
 pubring.*
+
+### chezmoi ###
+# chezmoi state database (managed locally)
+.chezmoistate.boltdb

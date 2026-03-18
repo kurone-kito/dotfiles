@@ -1,0 +1,48 @@
+# Repository metadata and documentation
+LICENSE
+README.md
+SECURITY.md
+
+# GitHub configuration
+.github/
+
+# Old setup scripts (replaced by chezmoi)
+setup
+setup.cmd
+setup_.ps1
+libs/
+
+# Old macOS-specific GPG config (merged into template)
+.gnupg-mac/
+
+# macOS terminal color scheme (applied via chezmoi script)
+schemes/
+
+# Windows-specific templates (applied via chezmoi script)
+templates/
+
+# Linting and CI configuration
+.coderabbit.yaml
+.imgbotconfig
+.markdownlint.yml
+.markdownlint-cli2.yaml
+cspell.config.yml
+
+# Editor and IDE configuration for the repository
+.editorconfig
+.vscode/
+
+# Git repository metadata
+.gitattributes
+.gitignore
+
+# OS-specific ignores
+{{- if ne .chezmoi.os "windows" }}
+.cmdrc.cmd
+.cmdrc.d/**
+Documents/**
+{{- end }}
+
+{{- if eq .chezmoi.os "windows" }}
+.tmux.conf
+{{- end }}
