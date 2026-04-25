@@ -7,6 +7,7 @@ dictionaries:
   - git
   - markdown
   - misc
+  - node
   - shellscript
   - softwareTerms
 enableGlobDot: true
@@ -24,5 +25,6 @@ language: en,ja
 useGitignore: true
 version: '0.2'
 words:
+  - curlrc
   - kito
   - wgetrc
