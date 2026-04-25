@@ -98,6 +98,7 @@ with a new label.
 | [Bitwarden](https://bitwarden.com/) | `bw`            | `bitwarden`, `bitwardenFields`, `bitwardenAttachmentByRef` |
 | [1Password](https://1password.com/) | `op`            | `onepasswordRead`, `onepasswordDocument`                   |
 | [KeePassXC](https://keepassxc.org/) | `keepassxc-cli` | `keepassxc`, `keepassxcAttribute`                          |
+| Local files                         |                 | `output` (reads via `cat` / `Get-Content`)                 |
 
 ## Prerequisites
 
@@ -384,6 +385,119 @@ chezmoi apply
 Set `manager = "none"` to skip all secret retrieval. You can
 manually place GPG keys and SSH files, then run `chezmoi apply`
 for the remaining configuration.
+
+## Local file storage
+
+Set `manager = "local"` to read secrets from a local directory
+instead of an external secret manager. This is useful for
+air-gapped machines or environments where cloud storage is
+prohibited.
+
+### Directory structure
+
+Secrets are organized as `<local_dir>/<item>/<param>`, where
+`<item>` matches the `item` field in `chezmoi.toml` and `<param>`
+is determined by the template being called:
+
+```txt
+~/.config/chezmoi/secrets/         # default local_dir
+├── gpg-personal/
+│   └── private.asc                # GPG private key (armored)
+├── ssh-personal/
+│   ├── private                    # SSH private key (PEM/OpenSSH)
+│   └── public                     # SSH public key
+├── github-pat/
+│   └── password                   # GitHub PAT (single value)
+└── myapp-env/
+    └── .env                       # .env file content
+```
+
+**Mapping rules:**
+
+| Template                | Parameter                          | File read                        |
+| ----------------------- | ---------------------------------- | -------------------------------- |
+| `get-secret`            | `field` (e.g., `"password"`)       | `<local_dir>/<item>/password`    |
+| `get-secret-attachment` | `filename` (e.g., `"private.asc"`) | `<local_dir>/<item>/private.asc` |
+| `get-ssh-key`           | `type` (`"private"` or `"public"`) | `<local_dir>/<item>/private`     |
+
+### Configuration
+
+```toml
+[data.secret]
+manager = "local"
+local_dir = "~/.config/chezmoi/secrets"  # optional; this is the default
+
+# Item names are subdirectory names within local_dir
+[data.secret.gpg.personal]
+item = "gpg-personal"
+
+[data.secret.ssh.keys.personal]
+item = "ssh-personal"
+filename = "id_ed25519_personal"
+
+[data.secret.ssh.hosts.github-personal]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_personal"
+
+[data.ghq.clone.personal]
+owner = "alice"
+token_item = "github-pat"
+```
+
+### Setup steps
+
+1. Create the secrets directory:
+
+   ```bash
+   mkdir -p ~/.config/chezmoi/secrets
+   chmod 700 ~/.config/chezmoi/secrets
+   ```
+
+2. Populate with your secrets:
+
+   ```bash
+   # GPG key
+   mkdir -p ~/.config/chezmoi/secrets/gpg-personal
+   gpg --export-secret-keys --armor KEY_ID \
+     > ~/.config/chezmoi/secrets/gpg-personal/private.asc
+
+   # SSH key pair
+   mkdir -p ~/.config/chezmoi/secrets/ssh-personal
+   cp ~/.ssh/id_ed25519 ~/.config/chezmoi/secrets/ssh-personal/private
+   cp ~/.ssh/id_ed25519.pub ~/.config/chezmoi/secrets/ssh-personal/public
+
+   # GitHub PAT
+   mkdir -p ~/.config/chezmoi/secrets/github-pat
+   echo -n 'ghp_xxxxxxxxxxxx' > ~/.config/chezmoi/secrets/github-pat/password
+   ```
+
+3. Set restrictive permissions:
+
+   ```bash
+   chmod -R go-rwx ~/.config/chezmoi/secrets
+   ```
+
+   On Windows (PowerShell, no admin required):
+
+   ```powershell
+   $dir = "$env:USERPROFILE\.config\chezmoi\secrets"
+   icacls $dir /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" | Out-Null
+   ```
+
+4. Run `chezmoi apply` as normal.
+
+### Security recommendations
+
+- The local secrets directory contains **plaintext files**. Encryption
+  is your responsibility.
+- Consider placing secrets on an encrypted partition (LUKS, FileVault,
+  BitLocker, VeraCrypt).
+- Ensure `local_dir` is excluded from backups and version control.
+- Add `secrets/` to your global gitignore if `local_dir` is under
+  `~/.config/chezmoi/`.
+- If a configured file is missing, `chezmoi apply` fails immediately
+  with a clear error — no partial or empty secrets are deployed.
 
 ## Deploying .env files to projects
 

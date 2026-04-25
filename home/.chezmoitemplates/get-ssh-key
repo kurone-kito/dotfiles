@@ -1,17 +1,20 @@
 {{- /* get-ssh-key: Retrieve an SSH key from the configured secret manager.
      Usage: {{ template "get-ssh-key" dict "item" "Item Name" "type" "private" "ctx" . }}
      - item: The item name or identifier in the secret manager
+            (for local: subdirectory name within local_dir)
      - type: "private" or "public"
+            (for local: filename within item dir)
      - ctx:  The top-level chezmoi template data (pass . from caller)
 
-     Supported managers: bitwarden, onepassword, keepassxc
+     Supported managers: bitwarden, onepassword, keepassxc, local
      Returns empty string when manager is "none" or unrecognized.
 
      Notes:
      - Bitwarden: uses native SSH Key item type (type 5) with
        sshKey.privateKey and sshKey.publicKey structured fields
      - 1Password: uses SSH Key item fields via op:// URI
-     - KeePassXC: uses named attributes "privateKey" / "publicKey" */ -}}
+     - KeePassXC: uses named attributes "privateKey" / "publicKey"
+     - Local: reads file at local_dir/<item>/private or /public */ -}}
 {{- $manager := dig "secret" "manager" "none" .ctx -}}
 {{- if eq $manager "bitwarden" -}}
 {{-   if eq .type "private" -}}
@@ -31,4 +34,6 @@
 {{-   else -}}
 {{-     keepassxcAttribute .item "publicKey" -}}
 {{-   end -}}
+{{- else if eq $manager "local" -}}
+{{-   template "read-local-file" dict "item" .item "filename" .type "ctx" .ctx -}}
 {{- end -}}

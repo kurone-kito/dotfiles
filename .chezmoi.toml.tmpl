@@ -1,7 +1,7 @@
 {{- $gitName := promptStringOnce . "git.name" "Git user name" -}}
 {{- $gitEmail := promptStringOnce . "git.email" "Git email address" -}}
 {{- $gitSigningKey := promptStringOnce . "git.signingkey" "GPG signing key fingerprint (leave empty to disable signing)" -}}
-{{- $secretManager := promptStringOnce . "secret.manager" "Secret manager (bitwarden, onepassword, keepassxc, none)" -}}
+{{- $secretManager := promptStringOnce . "secret.manager" "Secret manager (bitwarden, onepassword, keepassxc, local, none)" -}}
 
 [data.git]
 name = {{ $gitName | quote }}
@@ -21,6 +21,9 @@ sshhost = {{ dig "sshhost" "" $profile | quote }}
 
 [data.secret]
 manager = {{ $secretManager | quote }}
+{{- if (dig "secret" "local_dir" "" .) }}
+local_dir = {{ dig "secret" "local_dir" "" . | quote }}
+{{- end }}
 {{- range $key, $gpg := (dig "secret" "gpg" dict .) }}
 
 [data.secret.gpg."{{ $key }}"]
@@ -131,3 +134,25 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # Store the .env content as an attachment on the secret manager item.
 # The script deploys with mode 600 and warns if .gitignore is missing
 # the target filename. Multiple entries for the same repo are supported.
+#
+# Local file storage (manager = "local"):
+#
+# Instead of an external secret manager, secrets can be read from a
+# local directory. Set manager = "local" and optionally configure
+# local_dir (defaults to ~/.config/chezmoi/secrets):
+#
+#   [data.secret]
+#   manager   = "local"
+#   local_dir = "~/.config/chezmoi/secrets"  # optional
+#
+# Organize files as: <local_dir>/<item>/<param>
+# The "item" field becomes a subdirectory name, and the template
+# parameter (field, filename, or key type) becomes the filename:
+#
+#   <local_dir>/gpg-personal/private.asc   # GPG key attachment
+#   <local_dir>/ssh-work/private           # SSH private key
+#   <local_dir>/ssh-work/public            # SSH public key
+#   <local_dir>/github-pat/password        # PAT for ghq clone
+#   <local_dir>/myapp-env/.env             # .env file attachment
+#
+# See docs/secret-manager-setup.md for details.

@@ -37,6 +37,7 @@ words:
   - inputrc
   - keepassxc
   - kito
+  - luks
   - psmux
   - rerere
   - taskrc
