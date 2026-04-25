@@ -16,6 +16,7 @@
      - KeePassXC: uses named attributes "privateKey" / "publicKey"
      - Local: reads file at local_dir/<item>/private or /public */ -}}
 {{- $manager := dig "secret" "manager" "none" .ctx -}}
+{{- warnf "get-ssh-key: manager=%s item=%q type=%q" $manager .item .type -}}
 {{- if eq $manager "bitwarden" -}}
 {{-   if eq .type "private" -}}
 {{-     (bitwarden "item" .item).sshKey.privateKey -}}
