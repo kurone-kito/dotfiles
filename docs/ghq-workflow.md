@@ -204,6 +204,78 @@ Generated:
 If the hostname is not found in `gitdir`, no `insteadOf` rules
 are generated (the profile still works for `includeIf`).
 
+## Bulk clone repositories
+
+You can configure chezmoi to automatically clone all non-archived,
+non-fork repositories for specific GitHub users or organizations.
+This runs as a `run_onchange_after` script during `chezmoi apply`.
+
+### Prerequisites
+
+- A GitHub Personal Access Token (PAT) with `repo` scope
+- The PAT stored in your secret manager
+
+### Configuration
+
+Add the following to `~/.config/chezmoi/chezmoi.toml`:
+
+```toml
+[data.ghq.clone."personal"]
+owner = "alice"
+token_item = "GitHub PAT - Personal"
+# hostname = "github.com"  # optional; defaults to github.com
+```
+
+| Field        | Required | Description                                                 |
+| ------------ | -------- | ----------------------------------------------------------- |
+| `owner`      | Yes      | GitHub username or organization                             |
+| `token_item` | Yes      | Secret manager item containing the PAT (stored as password) |
+| `hostname`   | No       | GitHub host (default: `github.com`; set for GHE instances)  |
+
+### How it works
+
+1. Retrieves the PAT from your secret manager via `get-secret`
+2. Uses `gh repo list <owner> --no-archived --source` to enumerate
+   visible repositories (including private ones)
+3. For each repository:
+   - **Skip** if the target directory already has `.git` (already cloned)
+   - **Remove and re-clone** if the directory exists without `.git`
+   - **Clone** via `ghq get` (respects `url.insteadOf` routing)
+
+### Creating the PAT
+
+1. Go to **GitHub → Settings → Developer settings → Personal access
+   tokens → Tokens (classic)**
+2. Create a token with `repo` scope (full access to private repos)
+3. Store it in your secret manager:
+   - **Bitwarden**: Create a Login item, paste the token as the
+     password
+   - **1Password**: Create a Login item with the token as password
+   - **KeePassXC**: Create an entry with the token as password
+
+### Multiple accounts
+
+```toml
+[data.ghq.clone."personal"]
+owner = "alice"
+token_item = "GitHub PAT - Personal"
+
+[data.ghq.clone."work"]
+owner = "acme-corp"
+token_item = "GitHub PAT - Work"
+```
+
+Each account uses its own PAT, so this works even for multiple
+accounts on the same GitHub host. Combined with `sshhost` profiles,
+cloned repositories automatically use the correct SSH key and
+git identity.
+
+### Execution order
+
+The bulk clone script (`60-clone-ghq-repos`) runs after the mise
+tool installation script (`50-install-mise-tools`), which ensures
+that `ghq` and `gh` are available via mise before cloning begins.
+
 ## Troubleshooting
 
 ### Wrong identity on commits

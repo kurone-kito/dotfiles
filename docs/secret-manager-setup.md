@@ -40,6 +40,11 @@ configuring secrets correctly.
 │ data.secret.ssh.hosts.<alias>               │                   │
 │   hostname, user, port (optional)           │                   │
 │   identity ─── must match a filename above ─┘                   │
+├─────────────────────────────────────────────────────────────────┤
+│ data.ghq.clone.<label>  (optional — bulk clone)                 │
+│   owner ─── GitHub user/org to clone from                       │
+│   token_item ─── secret manager item for GitHub PAT             │
+│   hostname ─── GitHub host (default: github.com)                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -355,6 +360,11 @@ chezmoi apply
 4. **`run_onchange_after_generate-authorized-keys`** — concatenates
    deployed `.pub` files into `~/.ssh/authorized_keys` (re-runs
    automatically when SSH key configuration changes)
+5. **`run_onchange_after_50-install-mise-tools`** — runs `mise install`
+   to install declared tools (re-runs when mise config changes)
+6. **`run_onchange_after_60-clone-ghq-repos`** — bulk-clones
+   repositories for configured GitHub accounts via ghq (re-runs
+   when ghq clone configuration changes; see [ghq-workflow.md](./ghq-workflow.md))
 
 ### Re-running import scripts
 
