@@ -40,27 +40,32 @@ identity = {{ $host.identity | quote }}
 # To add a directory-specific profile, append the following to
 # ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
 #
-#   [data.git.profiles.<key>]
+#   [data.git.profiles.<label>]     # <label> is any user-chosen name
 #   name       = "Display Name"
 #   email      = "user@example.com"
 #   signingkey = ""         # leave empty to disable signing for this profile
 #   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
 #
 # To configure secret manager integration, see docs/secret-manager-setup.md
+#
+# Section keys (e.g., "personal", "work") are user-defined labels.
+# Use consistent labels across gpg, ssh.keys, and ssh.hosts for
+# traceability. You may add as many entries as needed.
+#
 # Example Bitwarden GPG key:
 #
-#   [data.secret.gpg.personal]
+#   [data.secret.gpg.<label>]       # <label> matches a signingkey identity
 #   item = "GPG Key - Personal"
 #
-# Example SSH key:
+# Example SSH key (Bitwarden SSH Key item type):
 #
-#   [data.secret.ssh.keys.personal]
+#   [data.secret.ssh.keys.<label>]
 #   item     = "SSH Key - Personal"
-#   filename = "id_ed25519_personal"
+#   filename = "id_ed25519_personal" # target file under ~/.ssh/
 #
 # Example SSH host:
 #
-#   [data.secret.ssh.hosts.github]
+#   [data.secret.ssh.hosts.<service>-<label>]
 #   hostname = "github.com"
 #   user     = "git"
-#   identity = "id_ed25519_personal"
+#   identity = "id_ed25519_personal" # must match a filename above

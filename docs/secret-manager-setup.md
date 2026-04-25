@@ -3,6 +3,68 @@
 This guide explains how to configure chezmoi to retrieve GPG keys,
 SSH keys, and SSH host configuration from an external secret manager.
 
+## Identity model
+
+This dotfiles setup supports **multiple identities** (e.g., personal,
+work, open source). Understanding how the pieces connect is key to
+configuring secrets correctly.
+
+### How identities map across sections
+
+```txt
+┌─────────────────────────────────────────────────────────────────┐
+│ data.git.*  (PRIMARY identity — used globally by default)       │
+│   name, email, signingkey ──────┐                               │
+│                                 │ GPG fingerprint               │
+│ data.git.profiles.<key>         │ matches the key               │
+│   (directory-scoped overrides)  │ imported from:                │
+│   name, email, signingkey ──┐   │                               │
+│                             │   │                               │
+├─────────────────────────────┼───┼───────────────────────────────┤
+│ data.secret.gpg.<label>     │   │                               │
+│   item ─── secret manager ──┼───┘  imports private key whose    │
+│            item name        │      fingerprint matches          │
+│                             │      a signingkey above           │
+├─────────────────────────────┼───────────────────────────────────┤
+│ data.secret.ssh.keys.<label>│                                   │
+│   item ─── secret manager item name                             │
+│   filename ─── target file under ~/.ssh/  ──┐                   │
+│                                             │ referenced by     │
+│ data.secret.ssh.hosts.<alias>               │                   │
+│   hostname, user                            │                   │
+│   identity ─── must match a filename above ─┘                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- **`data.git.*`** is the **primary** identity. It applies to all
+  repositories unless overridden by a profile.
+- **`data.git.profiles.*`** are **directory-scoped overrides**.
+  Repositories under the specified `gitdir` path use the profile's
+  name, email, and signing key instead.
+- **`data.secret.gpg.*`** lists GPG key items to import. Each
+  corresponds to a `signingkey` fingerprint in git config.
+- **`data.secret.ssh.keys.*`** lists SSH key pairs to deploy. The
+  `filename` determines the file written under `~/.ssh/`.
+- **`data.secret.ssh.hosts.*`** maps host aliases to SSH keys via
+  the `identity` field, which must match a `filename` above.
+
+### Naming conventions
+
+The `<label>` in each TOML section (e.g., `gpg.personal`,
+`ssh.keys.work`) is a **user-chosen identifier**. It:
+
+- Has no effect on the secret manager or deployed files
+- Must be a valid TOML bare key (lowercase, hyphens, underscores)
+- Should be **consistent across sections** for traceability
+  (e.g., use `work` for `gpg.work`, `ssh.keys.work`,
+  and `ssh.hosts.github-work`)
+
+For SSH hosts serving multiple identities, use the pattern
+`<service>-<identity>` (e.g., `github-personal`, `gitlab-work`).
+
+You can add as many identities as needed — just repeat the pattern
+with a new label.
+
 ## Supported secret managers
 
 | Manager                             | CLI tool        | chezmoi functions                                          |
@@ -78,11 +140,15 @@ Edit `~/.config/chezmoi/chezmoi.toml`:
 [data.secret]
 manager = "bitwarden"
 
+# Label is user-defined; add as many as needed
 [data.secret.gpg.personal]
 item = "GPG Key - Personal"
 
 [data.secret.gpg.work]
 item = "GPG Key - Work"
+
+[data.secret.gpg.oss]
+item = "GPG Key - OSS"
 ```
 
 The `item` value must match the **exact item name** in your Bitwarden
@@ -91,6 +157,7 @@ vault.
 ### Adding SSH keys
 
 ```toml
+# Label is user-defined; filename is the target file under ~/.ssh/
 [data.secret.ssh.keys.personal]
 item = "SSH Key - Personal"
 filename = "id_ed25519_personal"
@@ -98,23 +165,33 @@ filename = "id_ed25519_personal"
 [data.secret.ssh.keys.work]
 item = "SSH Key - Work"
 filename = "id_ed25519_work"
+
+[data.secret.ssh.keys.oss]
+item = "SSH Key - OSS"
+filename = "id_ed25519_oss"
 ```
 
-- `item` — Bitwarden item name containing the key attachments
+- `item` — Bitwarden SSH Key item name (native SSH key type)
 - `filename` — target filename under `~/.ssh/` (without path)
 
 ### Adding SSH hosts
 
 ```toml
+# Alias is user-defined; identity must match a filename above
 [data.secret.ssh.hosts.github-personal]
 hostname = "github.com"
 user = "git"
 identity = "id_ed25519_personal"
 
-[data.secret.ssh.hosts.work-gitlab]
+[data.secret.ssh.hosts.gitlab-work]
 hostname = "gitlab.example.com"
 user = "git"
 identity = "id_ed25519_work"
+
+[data.secret.ssh.hosts.github-oss]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_oss"
 ```
 
 - `hostname` — remote host address
@@ -129,6 +206,76 @@ Host github-personal
   HostName github.com
   User git
   IdentityFile ~/.ssh/id_ed25519_personal
+```
+
+### Complete multi-identity example
+
+Below is a full `chezmoi.toml` configuration with three identities.
+The **primary** identity (`data.git.*`) is used globally; the others
+override it in specific directories.
+
+```toml
+# Primary (default) git identity
+[data.git]
+name = "Alice"
+email = "alice@personal.dev"
+signingkey = "AAAA1111BBBB2222"  # GPG fingerprint
+
+# Work identity — overrides in ~/work/ repositories
+[data.git.profiles.work]
+name = "Alice Corporate"
+email = "alice@example.com"
+signingkey = "CCCC3333DDDD4444"
+gitdir = "~/work/"
+
+# OSS identity — overrides in ~/oss/ repositories
+[data.git.profiles.oss]
+name = "alice-dev"
+email = "alice-dev@users.noreply.github.com"
+signingkey = "EEEE5555FFFF6666"
+gitdir = "~/oss/"
+
+# GPG keys — one per signingkey fingerprint
+[data.secret]
+manager = "bitwarden"
+
+[data.secret.gpg.personal]
+item = "GPG Key - Personal"      # imports key AAAA1111BBBB2222
+
+[data.secret.gpg.work]
+item = "GPG Key - Work"          # imports key CCCC3333DDDD4444
+
+[data.secret.gpg.oss]
+item = "GPG Key - OSS"           # imports key EEEE5555FFFF6666
+
+# SSH keys — filename is the target file under ~/.ssh/
+[data.secret.ssh.keys.personal]
+item = "SSH Key - Personal"
+filename = "id_ed25519_personal"
+
+[data.secret.ssh.keys.work]
+item = "SSH Key - Work"
+filename = "id_ed25519_work"
+
+[data.secret.ssh.keys.oss]
+item = "SSH Key - OSS"
+filename = "id_ed25519_oss"
+
+# SSH hosts — identity references a filename above
+[data.secret.ssh.hosts.github-personal]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_personal"
+
+[data.secret.ssh.hosts.gitlab-work]
+hostname = "gitlab.example.com"
+user = "git"
+identity = "id_ed25519_work"
+
+[data.secret.ssh.hosts.github-oss]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_oss"
 ```
 
 ## Applying
