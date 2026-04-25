@@ -1,6 +1,7 @@
 [tools]
 dotnet = "latest"
 node = "latest"
+pnpm = "latest"
 
 "npm:@anthropic-ai/claude-code" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
