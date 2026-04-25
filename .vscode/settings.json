@@ -11,6 +11,7 @@
     ".gitmessage": "git-commit",
     ".imgbotconfig": "json",
     "dot_curlrc": "shellscript",
+    "dot_inputrc": "shellscript",
     "dot_wgetrc": "shellscript",
     "LICENSE": "plaintext"
   },
