@@ -10,6 +10,7 @@
   "files.associations": {
     ".gitmessage": "git-commit",
     ".imgbotconfig": "json",
+    "dot_wgetrc": "shellscript",
     "LICENSE": "plaintext"
   },
   "git.branchProtection": ["main"],
