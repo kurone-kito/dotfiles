@@ -9,7 +9,7 @@ email = {{ $gitEmail | quote }}
 signingkey = {{ $gitSigningKey | quote }}
 {{- range $key, $profile := (dig "git" "profiles" dict .) }}
 
-[data.git.profiles.{{ $key }}]
+[data.git.profiles."{{ $key }}"]
 name = {{ $profile.name | quote }}
 email = {{ $profile.email | quote }}
 signingkey = {{ dig "signingkey" "" $profile | quote }}
@@ -20,18 +20,18 @@ gitdir = {{ $profile.gitdir | quote }}
 manager = {{ $secretManager | quote }}
 {{- range $key, $gpg := (dig "secret" "gpg" dict .) }}
 
-[data.secret.gpg.{{ $key }}]
+[data.secret.gpg."{{ $key }}"]
 item = {{ $gpg.item | quote }}
 {{- end }}
 {{- range $key, $sshKey := (dig "secret" "ssh" "keys" dict .) }}
 
-[data.secret.ssh.keys.{{ $key }}]
+[data.secret.ssh.keys."{{ $key }}"]
 item = {{ $sshKey.item | quote }}
 filename = {{ $sshKey.filename | quote }}
 {{- end }}
 {{- range $key, $host := (dig "secret" "ssh" "hosts" dict .) }}
 
-[data.secret.ssh.hosts.{{ $key }}]
+[data.secret.ssh.hosts."{{ $key }}"]
 hostname = {{ $host.hostname | quote }}
 user = {{ dig "user" "git" $host | quote }}
 identity = {{ $host.identity | quote }}
@@ -69,3 +69,11 @@ identity = {{ $host.identity | quote }}
 #   hostname = "github.com"
 #   user     = "git"
 #   identity = "id_ed25519_personal" # must match a filename above
+#
+# To override the default connection for a domain (e.g., github.com),
+# quote the key to prevent TOML from splitting on the dot:
+#
+#   [data.secret.ssh.hosts."github.com"]
+#   hostname = "github.com"
+#   user     = "git"
+#   identity = "id_ed25519_personal"

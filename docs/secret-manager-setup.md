@@ -65,6 +65,18 @@ For SSH hosts serving multiple identities, use the pattern
 You can add as many identities as needed — just repeat the pattern
 with a new label.
 
+> **TOML key quoting:** If a key contains **dots** (e.g., a domain
+> name like `github.com`), you must **quote** it in the TOML section
+> header. Otherwise TOML interprets dots as nested table delimiters.
+>
+> ```toml
+> # ✗ Wrong — TOML parses this as hosts → github → com
+> [data.secret.ssh.hosts.github.com]
+>
+> # ✓ Correct — quoted key preserves the literal dot
+> [data.secret.ssh.hosts."github.com"]
+> ```
+
 ## Supported secret managers
 
 | Manager                             | CLI tool        | chezmoi functions                                          |
@@ -198,6 +210,32 @@ identity = "id_ed25519_oss"
 - `user` — SSH user (defaults to `git` if omitted)
 - `identity` — filename of the SSH key (must match a `filename` in
   `ssh.keys`)
+
+To **override the default connection** for a domain (e.g., use a
+specific key for all `github.com` access), quote the domain name
+as the alias:
+
+```toml
+# Overrides the default SSH connection to github.com
+[data.secret.ssh.hosts."github.com"]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_personal"
+```
+
+This generates:
+
+```text
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_personal
+```
+
+> **Note:** When overriding a real hostname, you can only bind **one
+> key** to that host. If you need multiple identities for the same
+> service (e.g., two GitHub accounts), use distinct aliases like
+> `github-personal` and `github-work` instead.
 
 This generates `~/.ssh/config` entries like:
 
