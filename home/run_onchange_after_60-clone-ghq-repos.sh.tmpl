@@ -1,0 +1,43 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Clone repositories via ghq for
+# configured GitHub accounts. Re-runs when ghq clone config changes.
+# Skipped when no clone targets are configured or tools are missing.
+set -euo pipefail
+
+{{ $clones := dig "ghq" "clone" dict . -}}
+{{ if not $clones -}}
+echo "No ghq clone targets configured; skipping."
+exit 0
+{{ end -}}
+
+command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
+GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
+GH="$(mise which gh 2>/dev/null)" || { echo "gh not found via mise; skipping."; exit 0; }
+GHQ_ROOT="$("${GHQ}" root)"
+
+{{ range $key, $clone := $clones -}}
+{{ $hostname := dig "hostname" "github.com" $clone -}}
+echo "==> {{ $clone.owner }}@{{ $hostname }}"
+TOKEN='{{ template "get-secret" dict "item" $clone.token_item "field" "password" "ctx" $ }}'
+if [ -z "${TOKEN}" ]; then
+  echo "  skip: no token available for {{ $key }}"
+else
+  GH_TOKEN="${TOKEN}" GH_HOST="{{ $hostname }}" "${GH}" repo list '{{ $clone.owner }}' \
+    --no-archived --source --limit 1000 \
+    --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
+  while IFS= read -r repo; do
+    target="${GHQ_ROOT}/{{ $hostname }}/${repo}"
+    if [ -d "${target}/.git" ]; then
+      echo "  skip: ${repo}"
+      continue
+    fi
+    if [ -d "${target}" ]; then
+      rm -rf "${target}"
+    fi
+    echo "  clone: ${repo}"
+    "${GHQ}" get "{{ $hostname }}/${repo}" 2>&1 || true
+  done
+fi
+
+{{ end -}}
+echo "ghq clone complete."

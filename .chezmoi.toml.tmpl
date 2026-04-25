@@ -42,6 +42,15 @@ identity = {{ $host.identity | quote }}
 port = {{ dig "port" 0 $host }}
 {{- end }}
 {{- end }}
+{{- range $key, $clone := (dig "ghq" "clone" dict .) }}
+
+[data.ghq.clone."{{ $key }}"]
+owner = {{ $clone.owner | quote }}
+token_item = {{ $clone.token_item | quote }}
+{{- if (dig "hostname" "" $clone) }}
+hostname = {{ dig "hostname" "" $clone | quote }}
+{{- end }}
+{{- end }}
 
 # To add a directory-specific profile, append the following to
 # ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
@@ -85,3 +94,12 @@ port = {{ dig "port" 0 $host }}
 #   hostname = "github.com"
 #   user     = "git"
 #   identity = "id_ed25519_personal"
+#
+# To bulk-clone repositories for a GitHub user/org, add:
+#
+#   [data.ghq.clone.<label>]
+#   owner      = "your-github-username"
+#   token_item = "GitHub PAT"  # secret manager item (repo scope)
+#   hostname   = "github.com"  # optional; defaults to github.com
+#
+# See docs/ghq-workflow.md for details.

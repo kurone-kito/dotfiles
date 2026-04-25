@@ -1,0 +1,62 @@
+#!/usr/bin/env pwsh
+# chezmoi run_onchange_after script: Clone repositories via ghq for
+# configured GitHub accounts. Re-runs when ghq clone config changes.
+# Skipped when no clone targets are configured or tools are missing.
+$ErrorActionPreference = 'Stop'
+
+{{ $clones := dig "ghq" "clone" dict . -}}
+{{ if not $clones -}}
+Write-Host 'No ghq clone targets configured; skipping.'
+exit 0
+{{ end -}}
+
+if (!(Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping.'
+  exit 0
+}
+$ghqBin = mise which ghq 2>$null
+if (!$ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
+$ghBin = mise which gh 2>$null
+if (!$ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
+$ghqRoot = & $ghqBin root
+
+{{ range $key, $clone := $clones -}}
+{{ $hostname := dig "hostname" "github.com" $clone -}}
+Write-Host '==> {{ $clone.owner }}@{{ $hostname }}'
+$token = '{{ template "get-secret" dict "item" $clone.token_item "field" "password" "ctx" $ }}'
+if ([string]::IsNullOrEmpty($token)) {
+  Write-Host '  skip: no token available for {{ $key }}'
+} else {
+  $env:GH_TOKEN = $token
+  $env:GH_HOST = '{{ $hostname }}'
+  try {
+    $repos = & $ghBin repo list '{{ $clone.owner }}' `
+      --no-archived --source --limit 1000 `
+      --json nameWithOwner -q '.[].nameWithOwner' 2>$null
+  } catch {
+    Write-Host "  error listing repos: $_"
+    $repos = @()
+  } finally {
+    Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue
+  }
+  foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
+    $target = Join-Path $ghqRoot (Join-Path '{{ $hostname }}' $repo)
+    if (Test-Path (Join-Path $target '.git')) {
+      Write-Host "  skip: $repo"
+      continue
+    }
+    if (Test-Path $target) {
+      Remove-Item -Path $target -Recurse -Force
+    }
+    Write-Host "  clone: $repo"
+    try {
+      & $ghqBin get "{{ $hostname }}/$repo" 2>&1
+    } catch {
+      Write-Host "  error: $_"
+    }
+  }
+}
+
+{{ end -}}
+Write-Host 'ghq clone complete.'
