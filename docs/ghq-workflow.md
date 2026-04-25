@@ -226,6 +226,9 @@ token_item = "GitHub PAT - Personal"
 # hostname = "github.com"  # optional; defaults to github.com
 ```
 
+The table key (`"personal"`, `"work"`, etc.) is an arbitrary unique
+label — it only appears in log messages and does not affect behaviour.
+
 | Field        | Required | Description                                                 |
 | ------------ | -------- | ----------------------------------------------------------- |
 | `owner`      | Yes      | GitHub username or organization                             |
