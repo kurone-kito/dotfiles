@@ -15,6 +15,7 @@ node = "latest"
 "github:x-motemen/ghq" = "latest"
 "github:d-kuro/gwq" = "latest"
 "github:cli/cli" = "latest"
+"github:anatawa12/git-vrc" = "latest"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node", "python"]
