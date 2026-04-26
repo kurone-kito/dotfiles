@@ -4,6 +4,7 @@
     "editorconfig.editorconfig",
     "redhat.vscode-yaml",
     "streetsidesoftware.code-spell-checker",
+    "tamasfe.even-better-toml",
     "XadillaX.viml"
   ]
 }
