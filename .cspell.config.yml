@@ -23,6 +23,7 @@ ignorePaths:
   - .github/CODE_OF_CONDUCT.*
   - .vscode/extensions.json
   - home/dot_config/git/ignore
+  - tests/bash/helpers
 ignoreRegExpList:
   - 'github:[a-zA-Z0-9_-]+/'
   - kuroné?

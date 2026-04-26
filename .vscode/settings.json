@@ -3,7 +3,7 @@
   "explorer.fileNesting.expand": false,
   "explorer.fileNesting.patterns": {
     "*.md": "${capture}.*.md",
-    ".gitattributes": ".gitignore, .gitmessage",
+    ".gitattributes": ".gitignore, .gitmessage, .gitmodules",
     ".markdownlint.*": ".markdownlint-cli2.*",
     "AGENTS.md": "CLAUDE.md, GEMINI.md"
   },
