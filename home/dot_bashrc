@@ -16,12 +16,23 @@ for f in "$HOME/.config/bash/conf.d/"*.bash; do
 done
 
 # Worktrunk shell integration — must be in .bashrc for detection
-# Support both wt (default) and git-wt (Windows Terminal workaround)
+# Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
+__wt_path=
 if type -P git-wt >/dev/null 2>&1; then
   eval "$(command git-wt config shell init bash)"
 elif type -P wt >/dev/null 2>&1; then
-  eval "$(command wt config shell init bash)"
+  __wt_path="$(type -P wt 2>/dev/null || true)"
+  case "$__wt_path" in
+    *WindowsApps*/wt|*WindowsApps*/wt.exe|*WindowsApps*\\wt|*WindowsApps*\\wt.exe|\
+    *Microsoft.WindowsTerminal*/wt|*Microsoft.WindowsTerminal*/wt.exe|\
+    *Microsoft.WindowsTerminal*\\wt|*Microsoft.WindowsTerminal*\\wt.exe)
+      ;;
+    *)
+      eval "$(command wt config shell init bash)"
+      ;;
+  esac
 fi
+unset __wt_path
 
 # Plugin manager
 if command -v sheldon >/dev/null 2>&1; then

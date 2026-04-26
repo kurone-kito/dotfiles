@@ -40,6 +40,7 @@ extract_zsh_worktrunk_block() {
 }
 
 make_worktrunk_mock() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin/$(dirname "$1")"
   cat > "$BATS_TEST_TMPDIR/bin/$1" << MOCK
 #!/bin/sh
 if [ "\$1" = "config" ] && [ "\$2" = "shell" ] && [ "\$3" = "init" ] && [ "\$4" = "$2" ]; then
@@ -95,6 +96,15 @@ MOCK
   assert_equal "$WORKTRUNK_TEST" "wt"
 }
 
+@test "skips wt shell init when wt resolves to Windows Terminal path" {
+  make_worktrunk_mock WindowsApps/wt bash wt
+  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps:$PATH"
+
+  eval "$(extract_bash_worktrunk_block)"
+
+  assert_equal "${WORKTRUNK_TEST:-}" ""
+}
+
 @test "prefers git-wt shell init when both git-wt and wt are available" {
   make_worktrunk_mock git-wt bash git-wt
   make_worktrunk_mock wt bash wt
@@ -121,6 +131,15 @@ MOCK
   run zsh -fc "$(extract_zsh_worktrunk_block); print -r -- \${WORKTRUNK_TEST:-}"
   assert_success
   assert_output "wt"
+}
+
+@test "zsh skips wt shell init when wt resolves to Windows Terminal path" {
+  make_worktrunk_mock WindowsApps/wt zsh wt
+  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps:$PATH"
+
+  run zsh -fc "$(extract_zsh_worktrunk_block); print -r -- \${WORKTRUNK_TEST:-}"
+  assert_success
+  assert_output ""
 }
 
 @test "skips without error when neither wt nor git-wt is in PATH" {
