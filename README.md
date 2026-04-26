@@ -39,6 +39,8 @@ A collection of configuration files that we use.
 
 - [GNU Readline](https://tiswww.cwru.edu/php/chet/readline/rltop.html) —
 input line editing
+- [psmux](https://github.com/psmux/psmux) — Windows-native tmux-compatible
+  multiplexer
 - [tmux](https://github.com/tmux/tmux) — terminal multiplexer
 - [Vim](https://www.vim.org/) — editor configuration
 
@@ -117,6 +119,16 @@ package bin directory:
 - `%USERPROFILE%\.local\bin`
 
 Custom `MISE_INSTALL_PATH` values are still not auto-detected today.
+
+### Windows note for psmux
+
+This repository deploys a dedicated `~/.psmux.conf` on Windows. `psmux`
+checks that file before `~/.tmux.conf`, so the wrapper sources the shared
+`~/.tmux.conf` first and then enables `set -g allow-predictions on`.
+
+That keeps PSReadLine inline predictions available inside `psmux` panes
+without putting the psmux-only `allow-predictions` option in the shared
+`~/.tmux.conf`, which standard tmux does not understand.
 
 ## Git user/profile management
 
