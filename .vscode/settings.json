@@ -18,6 +18,7 @@
     "dot_tmux.conf": "properties",
     "dot_vimrc": "viml",
     "dot_wgetrc": "shellscript",
+    "pstoprc": "properties",
     "taskrc": "properties",
     "LICENSE": "plaintext"
   },
