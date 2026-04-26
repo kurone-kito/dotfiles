@@ -1,6 +1,7 @@
 {{- $gitName := promptStringOnce . "git.name" "Git user name" -}}
 {{- $gitEmail := promptStringOnce . "git.email" "Git email address" -}}
 {{- $gitSigningKey := promptStringOnce . "git.signingkey" "GPG signing key fingerprint (leave empty to disable signing)" -}}
+{{- $secretManager := promptStringOnce . "secret.manager" "Secret manager (bitwarden, onepassword, keepassxc, none)" -}}
 
 [data.git]
 name = {{ $gitName | quote }}
@@ -15,6 +16,27 @@ signingkey = {{ dig "signingkey" "" $profile | quote }}
 gitdir = {{ $profile.gitdir | quote }}
 {{- end }}
 
+[data.secret]
+manager = {{ $secretManager | quote }}
+{{- range $key, $gpg := (dig "secret" "gpg" dict .) }}
+
+[data.secret.gpg.{{ $key }}]
+item = {{ $gpg.item | quote }}
+{{- end }}
+{{- range $key, $sshKey := (dig "secret" "ssh" "keys" dict .) }}
+
+[data.secret.ssh.keys.{{ $key }}]
+item = {{ $sshKey.item | quote }}
+filename = {{ $sshKey.filename | quote }}
+{{- end }}
+{{- range $key, $host := (dig "secret" "ssh" "hosts" dict .) }}
+
+[data.secret.ssh.hosts.{{ $key }}]
+hostname = {{ $host.hostname | quote }}
+user = {{ dig "user" "git" $host | quote }}
+identity = {{ $host.identity | quote }}
+{{- end }}
+
 # To add a directory-specific profile, append the following to
 # ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
 #
@@ -23,3 +45,22 @@ gitdir = {{ $profile.gitdir | quote }}
 #   email      = "user@example.com"
 #   signingkey = ""         # leave empty to disable signing for this profile
 #   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
+#
+# To configure secret manager integration, see docs/secret-manager-setup.md
+# Example Bitwarden GPG key:
+#
+#   [data.secret.gpg.personal]
+#   item = "GPG Key - Personal"
+#
+# Example SSH key:
+#
+#   [data.secret.ssh.keys.personal]
+#   item     = "SSH Key - Personal"
+#   filename = "id_ed25519_personal"
+#
+# Example SSH host:
+#
+#   [data.secret.ssh.hosts.github]
+#   hostname = "github.com"
+#   user     = "git"
+#   identity = "id_ed25519_personal"
