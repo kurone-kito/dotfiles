@@ -6,5 +6,14 @@ if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) { return }
 
 if (Get-Module -ListAvailable PSFzf) {
   Import-Module PSFzf
-  Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+  # PSReadLine chord bindings require a fully initialized PSReadLine.
+  # In non-standard hosts (psmux, VS Code background terminals, etc.)
+  # PSReadLine may not be ready, causing GetHistoryItems null errors.
+  if (Get-Module PSReadLine) {
+    try {
+      Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    } catch {
+      # PSReadLine not fully initialized; skip chord bindings
+    }
+  }
 }
