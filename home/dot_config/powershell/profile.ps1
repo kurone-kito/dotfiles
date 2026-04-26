@@ -42,3 +42,9 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
     try { Enable-TransientPrompt } catch {}
   }
 }
+
+# zoxide must init AFTER Starship — Starship replaces $function:prompt
+# entirely, which would destroy zoxide's prompt hook if loaded earlier.
+if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+  (& zoxide init powershell 2>$null) | Out-String | Invoke-Expression
+}
