@@ -1,0 +1,14 @@
+#!/usr/bin/env pwsh
+# chezmoi run_onchange_after script: Install tools declared in mise config.
+# Re-runs when mise config changes. Skipped if mise is not installed.
+# mise config hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
+$ErrorActionPreference = 'Stop'
+
+if (!(Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping.'
+  exit 0
+}
+
+Write-Host 'Installing mise tools...'
+mise install --yes 2>&1
+Write-Host 'mise tool installation complete.'

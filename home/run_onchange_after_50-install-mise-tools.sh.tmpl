@@ -1,0 +1,11 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Install tools declared in mise config.
+# Re-runs when mise config changes. Skipped if mise is not installed.
+# mise config hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
+set -euo pipefail
+
+command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
+
+echo "Installing mise tools..."
+mise install --yes 2>&1
+echo "mise tool installation complete."
