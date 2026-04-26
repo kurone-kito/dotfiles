@@ -1,0 +1,26 @@
+#!/bin/bash
+# ~/.bashrc — Interactive bash configuration
+# Sources shared POSIX conf.d, bash-specific conf.d, then tools.
+
+# Abort if not running interactively
+[[ $- != *i* ]] && return
+
+# Source shared POSIX conf.d (bash + zsh common)
+for f in "$HOME/.config/shell/conf.d/"*.sh; do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Source bash-specific conf.d
+for f in "$HOME/.config/bash/conf.d/"*.bash; do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Plugin manager
+if command -v sheldon >/dev/null 2>&1; then
+  eval "$(sheldon source)"
+fi
+
+# Prompt
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init bash)"
+fi

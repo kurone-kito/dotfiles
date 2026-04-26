@@ -1,26 +1,9 @@
 #!/bin/sh
+# ~/.profile — Login shell environment (shared POSIX layer)
+# Sourced by bash (via .bash_profile) and zsh (via .zprofile).
+# Delegates to conf.d for modularity; only login-time setup here.
 
-find_brew() {
-  if command -v brew >/dev/null 2>&1
-  then
-    command -v brew
-    return 0
-  fi
-  for p in \
-    /home/linuxbrew/.linuxbrew/bin/brew \
-    /opt/homebrew/bin/brew \
-    /usr/local/bin/brew
-  do
-    [ -x "$p" ] && {
-      echo "$p"
-      return 0
-    }
-  done
-  return 1
-}
-
-BREW=$(find_brew)
-if [ -x "$BREW" ]
-then
-  eval "$("$BREW" shellenv)"
-fi
+# Source shared conf.d if available
+for f in "$HOME/.config/shell/conf.d/"*.sh; do
+  [ -r "$f" ] && . "$f"
+done

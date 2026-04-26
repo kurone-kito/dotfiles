@@ -1,0 +1,23 @@
+#!/bin/zsh
+# ~/.config/zsh/.zshrc — Interactive zsh configuration
+# Sources shared POSIX conf.d, zsh-specific conf.d, then tools.
+
+# Source shared POSIX conf.d (bash + zsh common)
+for f in "$HOME/.config/shell/conf.d/"*.sh(N); do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Source zsh-specific conf.d
+for f in "${ZDOTDIR:-$HOME/.config/zsh}/conf.d/"*.zsh(N); do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Plugin manager
+if (( $+commands[sheldon] )); then
+  eval "$(sheldon source)"
+fi
+
+# Prompt
+if (( $+commands[starship] )); then
+  eval "$(starship init zsh)"
+fi

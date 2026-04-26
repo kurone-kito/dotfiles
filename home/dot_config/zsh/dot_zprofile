@@ -1,0 +1,6 @@
+#!/bin/zsh
+# ~/.config/zsh/.zprofile — Login shell environment for zsh
+# Sources ~/.profile for shared POSIX login setup (PATH, Homebrew, etc.)
+
+# shellcheck source=/dev/null
+[[ -r "$HOME/.profile" ]] && . "$HOME/.profile"

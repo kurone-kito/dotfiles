@@ -1,7 +1,16 @@
 {{- if eq .chezmoi.os "windows" }}
 .gnupg/**
 generate-git-profiles.sh
+.bashrc
+.bash_profile
+.zshenv
+.profile
+.config/shell/**
+.config/bash/**
+.config/zsh/**
+.config/sheldon/**
 {{- else }}
 AppData
 generate-git-profiles.ps1
+link-powershell-profile.ps1
 {{- end }}
