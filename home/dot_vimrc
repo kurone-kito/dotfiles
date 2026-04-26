@@ -1,12 +1,26 @@
 " -*- mode:vim -*-
 " vim: set ft=vim :
 
+" -------------------------------------------------------------------
+" vim-plug auto-bootstrap
+" -------------------------------------------------------------------
+let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
+if empty(glob(data_dir . '/autoload/plug.vim'))
+  silent execute '!curl -fLo '.data_dir.'/autoload/plug.vim --create-dirs'
+    \ .' https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+  autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
+endif
+
+" -------------------------------------------------------------------
+" General settings
+" -------------------------------------------------------------------
 set background=dark
 set backspace=indent,eol,start
 set clipboard=unnamed
 set cursorline
 set encoding=utf-8 nobomb
 set exrc
+set expandtab
 set fileencodings=utf-8,sjis,cp932,euc-jp,iso-2022-jp
 set fileformats=unix,dos,mac
 set gdefault
@@ -18,7 +32,7 @@ set nocompatible
 set number
 set ruler
 set secure
-set shiftwidth=4
+set shiftwidth=2
 set showcmd
 set showmatch
 set showmode
@@ -28,3 +42,57 @@ set ttyfast
 set wildmenu
 syntax enable
 colorscheme desert
+
+let mapleader = " "
+
+" -------------------------------------------------------------------
+" Plugins
+" -------------------------------------------------------------------
+call plug#begin()
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
+Plug 'sheerun/vim-polyglot'
+Plug 'dense-analysis/ale'
+Plug 'tpope/vim-fugitive'
+Plug 'tpope/vim-commentary'
+Plug 'tpope/vim-surround'
+Plug 'tpope/vim-repeat'
+Plug 'github/copilot.vim'
+call plug#end()
+
+" -------------------------------------------------------------------
+" ALE configuration
+" -------------------------------------------------------------------
+let g:ale_fix_on_save = 1
+let g:ale_linters_explicit = 1
+let g:ale_linters = {
+\   'javascript': ['eslint'],
+\   'typescript': ['eslint'],
+\   'typescriptreact': ['eslint'],
+\   'javascriptreact': ['eslint'],
+\   'css': ['stylelint'],
+\   'html': [],
+\   'json': [],
+\}
+let g:ale_fixers = {
+\   '*': ['remove_trailing_lines', 'trim_whitespace'],
+\   'javascript': ['prettier', 'eslint'],
+\   'typescript': ['prettier', 'eslint'],
+\   'typescriptreact': ['prettier', 'eslint'],
+\   'javascriptreact': ['prettier', 'eslint'],
+\   'css': ['prettier'],
+\   'html': ['prettier'],
+\   'json': ['prettier'],
+\   'yaml': ['prettier'],
+\   'markdown': ['prettier'],
+\}
+let g:ale_sign_error = '✘'
+let g:ale_sign_warning = '▲'
+
+" -------------------------------------------------------------------
+" Keybindings
+" -------------------------------------------------------------------
+nnoremap <leader>ff :Files<CR>
+nnoremap <leader>fg :Rg<CR>
+nnoremap <leader>fb :Buffers<CR>
+nnoremap <Esc> :nohlsearch<CR>
