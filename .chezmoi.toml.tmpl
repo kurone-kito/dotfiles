@@ -14,6 +14,9 @@ name = {{ $profile.name | quote }}
 email = {{ $profile.email | quote }}
 signingkey = {{ dig "signingkey" "" $profile | quote }}
 gitdir = {{ $profile.gitdir | quote }}
+{{- if (dig "sshhost" "" $profile) }}
+sshhost = {{ dig "sshhost" "" $profile | quote }}
+{{- end }}
 {{- end }}
 
 [data.secret]
@@ -48,6 +51,7 @@ port = {{ dig "port" 0 $host }}
 #   email      = "user@example.com"
 #   signingkey = ""         # leave empty to disable signing for this profile
 #   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
+#   sshhost    = ""         # optional SSH host alias for url.insteadOf
 #
 # To configure secret manager integration, see docs/secret-manager-setup.md
 #

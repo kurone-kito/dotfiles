@@ -124,7 +124,21 @@
   signingkey = {{ $gitSigningKey | quote }}
 {{- end }}
 {{- end }}
+{{- $sshHosts := dig "secret" "ssh" "hosts" dict . }}
 {{- range $key, $profile := (dig "git" "profiles" dict .) }}
 [includeIf "gitdir:{{ $profile.gitdir }}"]
   path = ~/.config/git/profiles/{{ $key }}
+{{- $sshhost := dig "sshhost" "" $profile }}
+{{- if $sshhost }}
+{{- $host := dig $sshhost dict $sshHosts }}
+{{- $hostname := dig "hostname" "" $host }}
+{{- if and $hostname (contains $hostname $profile.gitdir) }}
+{{- $orgPath := index (splitList $hostname $profile.gitdir) 1 | trimPrefix "/" | trimSuffix "/" }}
+{{- if $orgPath }}
+[url "git@{{ $sshhost }}:{{ $orgPath }}/"]
+  insteadOf = https://{{ $hostname }}/{{ $orgPath }}/
+  insteadOf = git@{{ $hostname }}:{{ $orgPath }}/
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
