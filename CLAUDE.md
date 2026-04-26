@@ -25,6 +25,10 @@ immediately, without depending on a redirect.
 - **Final newline**: always present
 - **File naming**: lowercase with hyphens unless a platform convention
   requires otherwise
+- **PowerShell profile**: `conf.d/*.ps1` scripts are cross-platform
+  (Windows + Unix pwsh) and PS5/PS7 dual-target. Use OS guards, use
+  `[IO.Path]::PathSeparator`, and nest `Join-Path` for PS5. See
+  the full rules in `.github/copilot-instructions.md`.
 
 ## Commit rules
 

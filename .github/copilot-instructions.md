@@ -173,6 +173,35 @@ feat: add auth system and refactor database layer and update docs
 - **File naming**: lowercase with hyphens (e.g., `feature-request.yml`)
   unless constrained by a platform convention (e.g., `CONTRIBUTING.md`)
 
+### PowerShell profile
+
+Scripts under `home/dot_config/powershell/conf.d/` are deployed on
+**all platforms** (Windows, Linux, macOS) and loaded by both
+**PowerShell 5 (Desktop)** and **PowerShell 7+ (Core)** through the
+profile loader shim. Follow these rules when adding or modifying
+conf.d scripts:
+
+- **Cross-platform by default** — every conf.d script must either
+  work portably or include an OS guard. Windows-only env vars
+  (`$env:LOCALAPPDATA`, `$env:ProgramFiles`,
+  `${env:ProgramFiles(x86)}`) are `$null` on Unix; test or guard
+  before use.
+- **OS guard pattern (PS5-safe)** — use `$IsWindows -eq $false`
+  (not `-not $IsWindows`). In PS5 `$IsWindows` is `$null`;
+  `$null -eq $false` evaluates to `$false`, so the guard correctly
+  allows PS5 (which is always Windows) to continue.
+- **Path-list separators** — use `[IO.Path]::PathSeparator` instead
+  of a hardcoded `;` or `:` when splitting or joining path-list
+  environment variables (e.g., `PATH`, `MISE_TRUSTED_CONFIG_PATHS`).
+- **PS5 compatibility traps**:
+  - `Join-Path` accepts only **2 arguments** — use nested calls
+  - PSReadLine is v2.0 — `PredictionSource` requires a version
+    guard (`(Get-Module PSReadLine).Version -ge '2.2.0'`)
+  - `$IsWindows` / `$IsLinux` / `$IsMacOS` do **not exist** in PS5
+- **Reference patterns**: `60-venv.ps1` (cross-platform path
+  search), `00-env.ps1` (PSReadLine version guard), `01-path.ps1`
+  (OS guard + portable separator)
+
 ## Testing
 
 This project uses platform-specific test frameworks for the chezmoi
