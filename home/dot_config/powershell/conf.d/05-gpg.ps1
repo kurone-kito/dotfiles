@@ -1,6 +1,7 @@
 # GPG helper: prime the passphrase cache from SSH/terminal sessions.
-# After running Invoke-GpgCachePassphrase, the 24-hour cache allows
-# background tools (e.g., VS Code git) to sign without a pinentry prompt.
+# After running Invoke-GpgCachePassphrase (alias: gpg-cache), the
+# 24-hour cache allows background tools (e.g., VS Code git) to sign
+# without a pinentry prompt.
 
 function Invoke-GpgCachePassphrase {
   if (-not (Get-Command gpg -ErrorAction SilentlyContinue)) {
@@ -15,3 +16,5 @@ function Invoke-GpgCachePassphrase {
     Write-Warning 'GPG passphrase caching failed.'
   }
 }
+
+Set-Alias -Name gpg-cache -Value Invoke-GpgCachePassphrase
