@@ -26,6 +26,10 @@ if (Test-Path $pubFile) {
 }
 {{ end -}}
 
+if ($lines.Count -eq 0) {
+  Write-Warning 'No public keys were found; authorized_keys will be empty.'
+}
+
 $lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 
 # Restrict to current user only (icacls works without elevation)

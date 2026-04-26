@@ -28,5 +28,9 @@ else
 fi
 {{ end -}}
 
+if [ ! -s "${authorized}" ]; then
+  echo "  WARNING: no public keys were found; authorized_keys is empty."
+fi
+
 chmod 600 "${authorized}"
 echo "authorized_keys generated."
