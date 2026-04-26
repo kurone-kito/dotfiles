@@ -26,7 +26,8 @@ else
   export GIT_CONFIG_COUNT=1
   export GIT_CONFIG_KEY_0="credential.https://{{ $hostname }}.helper"
   export GIT_CONFIG_VALUE_0="!${GH} auth git-credential"
-  GH_HOST="{{ $hostname }}" "${GH}" repo list '{{ $clone.owner }}' \
+  export GH_HOST="{{ $hostname }}"
+  "${GH}" repo list '{{ $clone.owner }}' \
     --no-archived --source --limit 1000 \
     --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
   while IFS= read -r repo; do
@@ -41,7 +42,7 @@ else
     echo "  clone: ${repo}"
     "${GHQ}" get -p "{{ $hostname }}/${repo}" 2>&1 || true
   done
-  unset GH_TOKEN GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+  unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 fi
 
 {{ end -}}
