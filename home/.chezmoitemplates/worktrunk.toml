@@ -1,0 +1,98 @@
+worktree-path = '{{ "{{" }} repo_path {{ "}}" }}/../{{ "{{" }} repo {{ "}}" }}.{{ "{{" }} branch | sanitize {{ "}}" }}'
+
+[commit.generation]
+  command = "copilot -p \"$(cat)\" -s --model gpt-5-mini --no-ask-user --no-custom-instructions --deny-tool='memory,shell,write,read,url'"
+  template = """
+<task>Write a commit message for the staged changes below.</task>
+
+<format>
+- Use Conventional Commits: <type>[optional scope]: <description>
+- Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
+- Use lower-case for type, optional scope, subject, and body text
+- Write the subject in imperative mood
+- Prefer the subject under 50 characters; it must not exceed 70 characters
+- Do not end the subject with a period
+- For non-trivial changes, add a blank line and a body
+- Prefer body lines under 72 characters; they must not exceed 90 characters
+- Output only the commit message
+</format>
+
+<style>
+- Match this repository's recent commit style
+- Keep the message focused on one logical change
+- When a body is needed, explain why, context, and what changed
+- Do not add trailers or footers unless the diff clearly requires them
+- Do not add Co-authored-by lines
+</style>
+
+<diffstat>
+{{ "{{" }} git_diff_stat {{ "}}" }}
+</diffstat>
+
+<diff>
+{{ "{{" }} git_diff {{ "}}" }}
+</diff>
+
+<context>
+repo: {{ "{{" }} repo {{ "}}" }}
+branch: {{ "{{" }} branch {{ "}}" }}
+{% if recent_commits %}<recent_commits>
+{% for commit in recent_commits %}- {{ "{{" }} commit {{ "}}" }}
+{% endfor %}</recent_commits>{% endif %}
+</context>
+"""
+
+  squash-template = """
+<task>Write one commit message for the combined effect of these changes.</task>
+
+<format>
+- Use Conventional Commits: <type>[optional scope]: <description>
+- Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
+- Use lower-case for type, optional scope, subject, and body text
+- Write the subject in imperative mood
+- Prefer the subject under 50 characters; it must not exceed 70 characters
+- Do not end the subject with a period
+- For non-trivial combined changes, add a blank line and a body
+- Prefer body lines under 72 characters; they must not exceed 90 characters
+- Output only the commit message
+</format>
+
+<style>
+- Match this repository's recent commit style
+- Focus on the combined change, not each tiny step
+- When a body is needed, explain why, context, and what changed
+- Do not add trailers or footers unless the diff clearly requires them
+- Do not add Co-authored-by lines
+</style>
+
+<commits branch="{{ "{{" }} branch {{ "}}" }}" target="{{ "{{" }} target_branch {{ "}}" }}">
+{% for commit in commits %}- {{ "{{" }} commit {{ "}}" }}
+{% endfor %}
+</commits>
+
+<diffstat>
+{{ "{{" }} git_diff_stat {{ "}}" }}
+</diffstat>
+
+<diff>
+{{ "{{" }} git_diff {{ "}}" }}
+</diff>
+
+<context>
+repo: {{ "{{" }} repo {{ "}}" }}
+branch: {{ "{{" }} branch {{ "}}" }}
+{% if recent_commits %}<recent_commits>
+{% for commit in recent_commits %}- {{ "{{" }} commit {{ "}}" }}
+{% endfor %}</recent_commits>{% endif %}
+</context>
+"""
+
+[merge]
+squash = false
+commit = true
+rebase = true
+remove = true
+verify = true
+
+[switch.picker]
+  pager = "delta --paging=never"
