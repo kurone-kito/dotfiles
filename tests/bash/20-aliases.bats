@@ -23,6 +23,14 @@ make_mock_command() {
   /bin/chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+make_mock_command_at() {
+  if [ "${1%/*}" != "$1" ]; then
+    /bin/mkdir -p "$BATS_TEST_TMPDIR/bin/${1%/*}"
+  fi
+  printf '#!/bin/sh\nexit 0\n' > "$BATS_TEST_TMPDIR/bin/$1"
+  /bin/chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
 @test "creates wt alias when git-wt exists and wt is missing" {
   make_mock_command git-wt
 
@@ -51,6 +59,16 @@ make_mock_command() {
   run alias git-wt
   assert_success
   assert_output "alias git-wt='wt'"
+}
+
+@test "skips git-wt alias when wt resolves to Windows Terminal" {
+  make_mock_command_at 'WindowsApps/wt'
+  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps"
+
+  . "$ALIASES_PATH"
+
+  run alias git-wt
+  assert_failure
 }
 
 @test "creates batcat alias when bat exists and batcat is missing" {
