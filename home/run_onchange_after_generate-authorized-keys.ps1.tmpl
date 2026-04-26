@@ -1,0 +1,34 @@
+#!/usr/bin/env pwsh
+# chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
+# from deployed public key files. Re-runs when SSH key config changes.
+$ErrorActionPreference = 'Stop'
+
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ if not $sshKeys -}}
+Write-Host 'No SSH keys configured; skipping authorized_keys generation.'
+exit 0
+{{ end -}}
+
+$sshDir = Join-Path $HOME '.ssh'
+$authorized = Join-Path $sshDir 'authorized_keys'
+
+New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+
+$lines = @()
+
+{{ range $key, $sshKey := $sshKeys -}}
+$pubFile = Join-Path $sshDir '{{ $sshKey.filename }}.pub'
+if (Test-Path $pubFile) {
+  $lines += (Get-Content -Path $pubFile -Raw).TrimEnd()
+  Write-Host '  Added {{ $sshKey.filename }}.pub'
+} else {
+  Write-Host '  Skipped {{ $sshKey.filename }}.pub (not found)'
+}
+{{ end -}}
+
+$lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+
+# Restrict to current user only (icacls works without elevation)
+icacls $authorized /inheritance:r /grant:r "${env:USERNAME}:(F)" | Out-Null
+
+Write-Host 'authorized_keys generated.'

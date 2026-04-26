@@ -342,6 +342,9 @@ chezmoi apply
 2. **`run_once_before_20-deploy-ssh-keys`** — writes SSH key files
    to `~/.ssh/` with correct permissions (skips if files exist)
 3. **`~/.ssh/config`** — generated from host entries in chezmoi.toml
+4. **`run_onchange_after_generate-authorized-keys`** — concatenates
+   deployed `.pub` files into `~/.ssh/authorized_keys` (re-runs
+   automatically when SSH key configuration changes)
 
 ### Re-running import scripts
 
