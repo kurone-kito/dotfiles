@@ -4,6 +4,7 @@
 
 BeforeAll {
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+  $script:ChezmoiConfigTemplate = Join-Path $repoRoot '.chezmoi.toml.tmpl'
   $script:ZellijTemplate = Join-Path $repoRoot 'home\.chezmoitemplates\zellij.kdl'
   $script:IgnoreTemplate = Join-Path $repoRoot 'home\.chezmoiignore.tmpl'
   $script:UnixWrapper = Join-Path $repoRoot 'home\dot_local\bin\executable_ensure-zellij-web'
@@ -34,6 +35,21 @@ Describe 'zellij web assets' {
     }
   }
 
+  It 'keeps certificate and key comment blocks on their own template lines' {
+    $content = Get-Content $script:ZellijTemplate -Raw
+
+    $content | Should -Match '\{\{ if \$zellijWebCert \}\}\r?\nweb_server_cert \{\{ \$zellijWebCert \| quote \}\}\r?\n\{\{ else \}\}\r?\n// web_server_cert "/path/to/cert\.pem"\r?\n\{\{ end \}\}\r?\n// A path to a key file'
+    $content | Should -Match '\{\{ if \$zellijWebKey \}\}\r?\nweb_server_key \{\{ \$zellijWebKey \| quote \}\}\r?\n\{\{ else \}\}\r?\n// web_server_key "/path/to/key\.pem"\r?\n\{\{ end \}\}\r?\n/// Whether to enforce https connections to the web server'
+  }
+
+  It 'documents tailscale publication knobs in the chezmoi config template' {
+    $lines = Get-Content $script:ChezmoiConfigTemplate
+
+    $lines | Should -Contain '#   [data.zellij.web.tailscale]'
+    $lines | Should -Contain '#   enabled = true                   # optional; publish through tailscale serve'
+    $lines | Should -Contain '#   https_port = 443                 # optional tailnet HTTPS port'
+  }
+
   It 'ignores platform-specific zellij artifacts on unsupported platforms' {
     $lines = Get-Content $script:IgnoreTemplate
 
@@ -47,7 +63,9 @@ Describe 'zellij web assets' {
 
     $lines | Should -Contain '  --foreground)'
     $lines | Should -Contain '    start_zellij_web "$(get_zellij_command)" "$@"'
-    $lines | Should -Contain '  "$zellij_command" web --start --daemonize >/dev/null 2>&1'
+    $lines | Should -Contain '    "$zellij_command" web --start --daemonize >/dev/null 2>&1'
+    $lines | Should -Contain '  if [ "$DOTFILES_ZELLIJ_WEB_TAILSCALE_ENABLED" != "true" ]; then'
+    $lines | Should -Contain '    "$tailscale_command" serve --bg --yes --https "$DOTFILES_ZELLIJ_WEB_TAILSCALE_HTTPS_PORT" "$serve_target" >/dev/null'
   }
 
   It 'defines a Linux systemd user service for zellij web' {

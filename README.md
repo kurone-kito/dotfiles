@@ -133,8 +133,11 @@ without putting the psmux-only `allow-predictions` option in the shared
 ### Zellij Web
 
 The shared Zellij config enables the built-in web server and session sharing
-by default. To customize bind/port/TLS and opt into Windows logon autostart,
-add the following to `~/.config/chezmoi/chezmoi.toml`:
+by default. For tailnet-only access from phones or other remote devices,
+prefer keeping Zellij itself on `127.0.0.1` and publishing it through
+`tailscale serve`.
+
+Add the following to `~/.config/chezmoi/chezmoi.toml`:
 
 ```toml
 [data.zellij.web]
@@ -142,10 +145,12 @@ server = true
 sharing = "on"
 bind = "127.0.0.1"
 port = 8082
-cert = ""
-key = ""
 base_url = ""
 enforce_https_on_localhost = false
+
+[data.zellij.web.tailscale]
+enabled = true
+https_port = 443
 
 [data.zellij.web.windows]
 autostart = "onlogon"
@@ -158,9 +163,11 @@ chezmoi apply
 ```
 
 On Windows, `autostart = "onlogon"` registers a per-user Scheduled Task that
-calls `~/.local/bin/ensure-zellij-web.ps1` after logon. The same script can be
-used manually over Microsoft OpenSSH after a reboot to restore the server
-without requiring a separate Windows service:
+calls `~/.local/bin/ensure-zellij-web.ps1` after logon. When
+`[data.zellij.web.tailscale].enabled = true`, the same wrapper also reconciles
+`tailscale serve` so the tailnet route keeps pointing at the local Zellij
+listener. The wrapper can also be used manually over Microsoft OpenSSH after a
+reboot without requiring a separate Windows service:
 
 ```powershell
 pwsh ~/.local/bin/ensure-zellij-web.ps1
@@ -198,7 +205,18 @@ Create a login token with:
 zellij web --create-token
 ```
 
-If you bind beyond `127.0.0.1`, configure `cert` and `key`. For smartphone
+Verify the published tailnet endpoint with:
+
+```bash
+tailscale serve status
+```
+
+If `base_url` is set, the wrapper publishes the same subpath via
+`tailscale serve --set-path`, so a config such as `base_url = "/zellij"`
+becomes `https://<machine>.ts.net/zellij`.
+
+If you intentionally bind beyond `127.0.0.1`, configure `cert` and `key`
+instead and treat that as a separate direct-LAN/TLS setup. For smartphone
 access, prefer a private network such as Tailscale over direct Internet
 exposure.
 

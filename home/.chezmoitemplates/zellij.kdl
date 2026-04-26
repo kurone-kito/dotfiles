@@ -325,19 +325,19 @@ web_sharing {{ $zellijWebSharing | quote }}
 // A path to a certificate file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
-{{ if $zellijWebCert -}}
+{{ if $zellijWebCert }}
 web_server_cert {{ $zellijWebCert | quote }}
-{{ else -}}
+{{ else }}
 // web_server_cert "/path/to/cert.pem"
-{{ end -}}
+{{ end }}
 // A path to a key file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
-{{ if $zellijWebKey -}}
+{{ if $zellijWebKey }}
 web_server_key {{ $zellijWebKey | quote }}
-{{ else -}}
+{{ else }}
 // web_server_key "/path/to/key.pem"
-{{ end -}}
+{{ end }}
 /// Whether to enforce https connections to the web server when it is bound to localhost
 /// (127.0.0.0/8)
 ///
