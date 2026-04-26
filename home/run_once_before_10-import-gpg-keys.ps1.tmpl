@@ -1,0 +1,25 @@
+#!/usr/bin/env pwsh
+# chezmoi run_once_before script: Import GPG key pairs from secret manager.
+# Skipped when secret.manager is "none" or no GPG keys are configured.
+$ErrorActionPreference = 'Stop'
+
+{{ $manager := dig "secret" "manager" "none" . -}}
+{{ if eq $manager "none" -}}
+Write-Host 'Secret manager not configured; skipping GPG key import.'
+exit 0
+{{ end -}}
+
+{{ $gpgKeys := dig "secret" "gpg" dict . -}}
+{{ if not $gpgKeys -}}
+Write-Host 'No GPG keys configured; skipping.'
+exit 0
+{{ end -}}
+
+{{ range $key, $gpg := $gpgKeys -}}
+Write-Host 'Importing GPG key: {{ $key }}...'
+@'
+{{ template "get-secret-attachment" dict "item" $gpg.item "filename" "private.asc" "ctx" $ }}
+'@ | gpg --batch --import
+{{ end -}}
+
+Write-Host 'GPG key import complete.'

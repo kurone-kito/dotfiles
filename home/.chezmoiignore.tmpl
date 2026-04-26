@@ -1,6 +1,7 @@
 {{- if eq .chezmoi.os "windows" }}
 .gnupg/**
 generate-git-profiles.sh
+10-import-gpg-keys.sh
 .bashrc
 .bash_profile
 .zshenv
@@ -12,5 +13,6 @@ generate-git-profiles.sh
 {{- else }}
 AppData
 generate-git-profiles.ps1
+10-import-gpg-keys.ps1
 link-powershell-profile.ps1
 {{- end }}

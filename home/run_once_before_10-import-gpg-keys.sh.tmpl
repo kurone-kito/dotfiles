@@ -1,0 +1,25 @@
+#!/bin/bash
+# chezmoi run_once_before script: Import GPG key pairs from secret manager.
+# Skipped when secret.manager is "none" or no GPG keys are configured.
+set -euo pipefail
+
+{{ $manager := dig "secret" "manager" "none" . -}}
+{{ if eq $manager "none" -}}
+echo "Secret manager not configured; skipping GPG key import."
+exit 0
+{{ end -}}
+
+{{ $gpgKeys := dig "secret" "gpg" dict . -}}
+{{ if not $gpgKeys -}}
+echo "No GPG keys configured; skipping."
+exit 0
+{{ end -}}
+
+{{ range $key, $gpg := $gpgKeys -}}
+echo "Importing GPG key: {{ $key }}..."
+gpg --batch --import << 'GPG_KEY_EOF'
+{{ template "get-secret-attachment" dict "item" $gpg.item "filename" "private.asc" "ctx" $ }}
+GPG_KEY_EOF
+{{ end -}}
+
+echo "GPG key import complete."
