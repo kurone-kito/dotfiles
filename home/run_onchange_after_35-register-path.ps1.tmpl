@@ -1,0 +1,44 @@
+# chezmoi:template:left-delimiter=<% right-delimiter=%>
+<%- if eq .chezmoi.os "windows" %>
+# Register tool directories in User PATH (Windows registry).
+# Re-runs when the managed-paths list changes (hash below).
+#
+# hash: <% include "dot_config/powershell/conf.d/01-path.ps1" | sha256sum %>
+
+# Directories this dotfiles project manages in User PATH.
+# Keep in sync with conf.d/01-path.ps1 $extraPaths.
+$managedDirs = @(
+  (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+  (Join-Path $env:LOCALAPPDATA 'Zellij')
+  (Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin')
+)
+
+$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+$entries = @($userPath -split ';' | Where-Object { $_ -ne '' })
+$changed = $false
+
+foreach ($dir in $managedDirs) {
+  $exists = Test-Path $dir
+  $inPath = $entries -contains $dir
+
+  if ($exists -and -not $inPath) {
+    # Directory exists but not in PATH — add it
+    $entries = @($dir) + $entries
+    $changed = $true
+    Write-Host "PATH +: $dir"
+  } elseif (-not $exists -and $inPath) {
+    # Directory no longer exists — remove stale entry
+    $entries = @($entries | Where-Object { $_ -ne $dir })
+    $changed = $true
+    Write-Host "PATH -: $dir (removed, directory no longer exists)"
+  }
+}
+
+if ($changed) {
+  $newPath = $entries -join ';'
+  [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+  Write-Host 'User PATH updated in registry.'
+} else {
+  Write-Host 'User PATH already up to date.'
+}
+<% end -%>
