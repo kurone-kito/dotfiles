@@ -17,6 +17,7 @@
     "dot_tmux.conf": "properties",
     "dot_vimrc": "viml",
     "dot_wgetrc": "shellscript",
+    "taskrc": "properties",
     "LICENSE": "plaintext"
   },
   "git.branchProtection": ["main"],
