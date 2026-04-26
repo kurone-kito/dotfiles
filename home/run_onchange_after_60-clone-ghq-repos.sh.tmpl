@@ -22,7 +22,11 @@ TOKEN='{{ template "get-secret" dict "item" $clone.token_item "field" "password"
 if [ -z "${TOKEN}" ]; then
   echo "  skip: no token available for {{ $key }}"
 else
-  GH_TOKEN="${TOKEN}" GH_HOST="{{ $hostname }}" "${GH}" repo list '{{ $clone.owner }}' \
+  export GH_TOKEN="${TOKEN}"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0="credential.https://{{ $hostname }}.helper"
+  export GIT_CONFIG_VALUE_0="!${GH} auth git-credential"
+  GH_HOST="{{ $hostname }}" "${GH}" repo list '{{ $clone.owner }}' \
     --no-archived --source --limit 1000 \
     --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
   while IFS= read -r repo; do
@@ -35,8 +39,9 @@ else
       rm -rf "${target}"
     fi
     echo "  clone: ${repo}"
-    "${GHQ}" get "{{ $hostname }}/${repo}" 2>&1 || true
+    "${GHQ}" get -p "{{ $hostname }}/${repo}" 2>&1 || true
   done
+  unset GH_TOKEN GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 fi
 
 {{ end -}}

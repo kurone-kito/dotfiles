@@ -27,33 +27,40 @@ $token = '{{ template "get-secret" dict "item" $clone.token_item "field" "passwo
 if ([string]::IsNullOrEmpty($token)) {
   Write-Host '  skip: no token available for {{ $key }}'
 } else {
+  $ghUnixPath = $ghBin -replace '\\', '/'
   $env:GH_TOKEN = $token
   $env:GH_HOST = '{{ $hostname }}'
+  $env:GIT_CONFIG_COUNT = '1'
+  $env:GIT_CONFIG_KEY_0 = "credential.https://{{ $hostname }}.helper"
+  $env:GIT_CONFIG_VALUE_0 = "!$ghUnixPath auth git-credential"
   try {
-    $repos = & $ghBin repo list '{{ $clone.owner }}' `
-      --no-archived --source --limit 1000 `
-      --json nameWithOwner -q '.[].nameWithOwner' 2>$null
-  } catch {
-    Write-Host "  error listing repos: $_"
-    $repos = @()
-  } finally {
-    Remove-Item Env:\GH_TOKEN -ErrorAction SilentlyContinue
-    Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue
-  }
-  foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
-    $target = Join-Path $ghqRoot (Join-Path '{{ $hostname }}' $repo)
-    if (Test-Path (Join-Path $target '.git')) {
-      Write-Host "  skip: $repo"
-      continue
-    }
-    if (Test-Path $target) {
-      Remove-Item -Path $target -Recurse -Force
-    }
-    Write-Host "  clone: $repo"
     try {
-      & $ghqBin get "{{ $hostname }}/$repo" 2>&1
+      $repos = & $ghBin repo list '{{ $clone.owner }}' `
+        --no-archived --source --limit 1000 `
+        --json nameWithOwner -q '.[].nameWithOwner' 2>$null
     } catch {
-      Write-Host "  error: $_"
+      Write-Host "  error listing repos: $_"
+      $repos = @()
+    }
+    foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
+      $target = Join-Path $ghqRoot (Join-Path '{{ $hostname }}' $repo)
+      if (Test-Path (Join-Path $target '.git')) {
+        Write-Host "  skip: $repo"
+        continue
+      }
+      if (Test-Path $target) {
+        Remove-Item -Path $target -Recurse -Force
+      }
+      Write-Host "  clone: $repo"
+      try {
+        & $ghqBin get -p "{{ $hostname }}/$repo" 2>&1
+      } catch {
+        Write-Host "  error: $_"
+      }
+    }
+  } finally {
+    foreach ($v in @('GH_TOKEN', 'GH_HOST', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0')) {
+      Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
     }
   }
 }
