@@ -1,0 +1,14 @@
+approval_policy = "on-request"
+approvals_reviewer = "guardian_subagent"
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+personality = "pragmatic"
+sandbox_mode = "workspace-write"
+
+[windows]
+sandbox = "unelevated"
+
+[features]
+guardian_approval = true
+js_repl = true
+prevent_idle_sleep = true
