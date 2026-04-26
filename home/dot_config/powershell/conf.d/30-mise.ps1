@@ -1,7 +1,25 @@
 # mise (polyglot runtime manager) initialization
 # https://mise.jdx.dev/
 
-if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { return }
+$miseCommand = & {
+  $command = Get-Command mise -ErrorAction SilentlyContinue
+  if ($null -ne $command) {
+    return $command
+  }
+
+  if ($IsWindows -eq $false) {
+    return $null
+  }
+
+  $fallback = Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe'
+  if (Test-Path $fallback) {
+    return Get-Command $fallback -ErrorAction SilentlyContinue
+  }
+
+  return $null
+}
+
+if (-not $miseCommand) { return }
 
 # Build trusted config paths so hooks never show trust errors
 $miseTrusted = @(
@@ -31,7 +49,8 @@ foreach ($cfg in @(
   (Join-Path (Join-Path $HOME '.mise') 'config.toml'),
   (Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'config.toml')
 )) {
-  if (Test-Path $cfg) { mise trust $cfg 2>$null }
+  if (Test-Path $cfg) { & $miseCommand trust $cfg 2>$null }
 }
 
-(& mise activate pwsh --quiet 2>$null) | Out-String | Invoke-Expression
+(& $miseCommand activate pwsh --quiet 2>$null) | Out-String | Invoke-Expression
+Remove-Variable miseCommand -ErrorAction SilentlyContinue
