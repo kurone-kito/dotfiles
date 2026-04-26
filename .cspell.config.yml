@@ -37,6 +37,7 @@ words:
   - inputrc
   - keepassxc
   - kito
+  - psmux
   - rerere
   - taskrc
   - wgetrc
