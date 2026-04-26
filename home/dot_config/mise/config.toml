@@ -1,0 +1,21 @@
+[tools]
+dotnet = "latest"
+node = "latest"
+
+"npm:@anthropic-ai/claude-code" = "latest"
+"npm:@executeautomation/playwright-mcp-server" = "latest"
+"npm:@github/copilot" = "latest"
+"npm:@google/gemini-cli" = "latest"
+"npm:@microsoft/inshellisense" = "latest"
+"npm:@openai/codex" = "latest"
+"npm:@playwright/cli" = "latest"
+"npm:bash-language-server" = "latest"
+"npm:fast-cli" = "latest"
+
+"github:x-motemen/ghq" = "latest"
+"github:d-kuro/gwq" = "latest"
+"github:cli/cli" = "latest"
+
+[settings]
+idiomatic_version_file_enable_tools = ["node", "python"]
+not_found_auto_install = false

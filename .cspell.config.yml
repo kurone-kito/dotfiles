@@ -23,6 +23,7 @@ ignorePaths:
   - .vscode/extensions.json
   - home/dot_config/git/ignore
 ignoreRegExpList:
+  - 'github:[a-zA-Z0-9_-]+/'
   - kuroné?
 language: en,ja
 useGitignore: true
