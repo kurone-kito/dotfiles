@@ -1,0 +1,85 @@
+# Starship prompt configuration
+# Inspired by the oh-my-posh if_tea theme
+# https://github.com/JanDeDobbeleer/oh-my-posh/blob/main/themes/if_tea.omp.json
+
+format = """
+$os$shell$memory_usage$hostname$cmd_duration$fill\u0008\u0008\u0008\u0008$git_branch$git_status
+$directory$fill\u0008\u0008\u0008\u0008$dotnet $nodejs
+[╰┈](fg:#2343e2)$character"""
+
+right_format = ""
+
+[character]
+error_symbol = "[  ](bold #C5003F)"
+success_symbol = "[  ](bold #77B60A)"
+
+[cmd_duration]
+format = " [](fg:#2343e2)[󰄉 $duration]($style)[](fg:#2343e2)"
+min_time = 0
+style = "fg:#ffffff bg:#2343e2"
+
+[directory]
+fish_style_pwd_dir_length = 2
+format = "[](fg:#2343e2)[](bg:#6a4fc0 fg:#2343e2)[](bg:#6a4fc0 fg:#b15b9d)[\uE0D4](bg:#b15b9d fg:#f8677b)[ 󰉋 $path ]($style)[\uE0D2](bg:#b15b9d fg:#f8677b)[](bg:#6a4fc0 fg:#b15b9d)[](bg:#2343e2 fg:#6a4fc0)[\uE0BC](fg:#2343e2)"
+style = "bold fg:#333333 bg:#f8677b"
+truncate_to_repo = false
+truncation_length = 2
+
+[dotnet]
+format = "[$symbol]($style)"
+symbol = " "
+
+[fill]
+symbol = " "
+
+[hostname]
+format = "[$symbol$hostname]($style)"
+
+[git_branch]
+format = "[](fg:#bfbfbf)[$symbol](bg:#bfbfbf fg:#333333)[](bg:#91f2ff fg:#bfbfbf)[$branch(:$remote_branch)]($style)[](bg:#00c7fc fg:#91f2ff)"
+style = "bold fg:#333333 bg:#91f2ff"
+truncation_length = 20
+
+[git_status]
+ahead = ' 󰶣${count}'
+behind = ' 󰶡${count}'
+diverged = ' 󰶣${ahead_count} 󰶡${behind_count}'
+format = "[$all_status$ahead_behind ]($style)[\uE0C6](fg:#00c7fc)"
+style = "bg:#00c7fc fg:#333333"
+
+[memory_usage]
+disabled = false
+format = "[ $symbol$ram ]($style)[\uE0C6](bg:#00647e fg:#00c7fc)[\uE0C8](fg:#00647e)"
+style = "bg:#00c7fc fg:#333333"
+symbol = " "
+threshold = 0
+
+[nodejs]
+format = "[$symbol($version )]($style)"
+
+[os]
+disabled = false
+format = "[](fg:#bfbfbf)[$symbol]($style)[](bg:#91f2ff fg:#bfbfbf)"
+style = "bg:#bfbfbf fg:#333333"
+
+[os.symbols]
+Alpine = " "
+Arch = " "
+Debian = " "
+Fedora = " "
+Linux = " "
+Macos = " "
+Manjaro = " "
+Mint = "󰣭 "
+openSUSE = " "
+Raspbian = " "
+Ubuntu = "󰕈 "
+Windows = " "
+
+[shell]
+bash_indicator = "b "
+disabled = false
+format = "[$indicator]($style)[](bg:#00c7fc fg:#91f2ff)"
+powershell_indicator = "󰨊 "
+style = "bold fg:#333333 bg:#91f2ff"
+zsh_indicator = "z "
