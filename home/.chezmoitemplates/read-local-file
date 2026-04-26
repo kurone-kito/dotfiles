@@ -17,7 +17,7 @@
 {{- end -}}
 {{- $path := joinPath $localDir .item .filename -}}
 {{- if eq .ctx.chezmoi.os "windows" -}}
-{{-   output "powershell.exe" "-NoProfile" "-Command" (printf "Get-Content -Raw -LiteralPath '%s'" $path) -}}
+{{-   output "powershell.exe" "-NoProfile" "-Command" (printf "Get-Content -Raw -LiteralPath '%s'" ($path | replace "'" "''")) -}}
 {{- else -}}
 {{-   output "cat" $path -}}
 {{- end -}}
