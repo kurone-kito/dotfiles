@@ -1,0 +1,25 @@
+{{- $gitName := promptStringOnce . "git.name" "Git user name" -}}
+{{- $gitEmail := promptStringOnce . "git.email" "Git email address" -}}
+{{- $gitSigningKey := promptStringOnce . "git.signingkey" "GPG signing key fingerprint (leave empty to disable signing)" -}}
+
+[data.git]
+name = {{ $gitName | quote }}
+email = {{ $gitEmail | quote }}
+signingkey = {{ $gitSigningKey | quote }}
+{{- range $key, $profile := (dig "git" "profiles" dict .) }}
+
+[data.git.profiles.{{ $key }}]
+name = {{ $profile.name | quote }}
+email = {{ $profile.email | quote }}
+signingkey = {{ dig "signingkey" "" $profile | quote }}
+gitdir = {{ $profile.gitdir | quote }}
+{{- end }}
+
+# To add a directory-specific profile, append the following to
+# ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
+#
+#   [data.git.profiles.<key>]
+#   name       = "Display Name"
+#   email      = "user@example.com"
+#   signingkey = ""         # leave empty to disable signing for this profile
+#   gitdir     = "~/ghq/github.com/<org>/"  # must end with /

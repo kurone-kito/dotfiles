@@ -1,5 +1,10 @@
 # -*- mode: properties -*-
 # vim: set ft=properties :
+
+{{ $git := dig "git" dict . -}}
+{{ $gitName := dig "name" "" $git -}}
+{{ $gitEmail := dig "email" "" $git -}}
+{{ $gitSigningKey := dig "signingkey" "" $git -}}
 [alias]
   c = clone --recursive
   cb = !git rev-parse --abbrev-ref HEAD
@@ -16,6 +21,8 @@
   logb = !git log --oneline "$(git main)"..HEAD
   main = symbolic-ref --short refs/remotes/origin/HEAD
   nuke = !git clean -fdx && git clean -fdX
+  plf = pull-f
+  psf = push-f
   pull = pull --recurse-submodules
   pull-f = !git fetch && git reset --hard origin/$(git cb)
   push-f = push --force-with-lease
@@ -32,8 +39,10 @@
   whitespace = fix
 [column]
   ui = auto
+{{- if $gitSigningKey }}
 [commit]
   gpgsign = true
+{{- end }}
 [core]
   autoCRLF = input
   compression = 9
@@ -81,7 +90,9 @@
   autoSetupRemote = true
   default = current
   followTags = true
+{{- if $gitSigningKey }}
   gpgsign = if-asked
+{{- end }}
 [rebase]
   abbreviateCommands = true
   autoSquash = true
@@ -92,10 +103,28 @@
   fsckobjects = true
 [rerere]
   enable = true
+{{- if $gitSigningKey }}
 [tag]
   forceSignAnnotated = true
   gpgsign = true
+{{- end }}
 [transfer]
   fsckobjects = true
 [trim]
   bases = main,master,gh-pages
+{{- if or $gitName $gitEmail $gitSigningKey }}
+[user]
+{{- if $gitEmail }}
+  email = {{ $gitEmail | quote }}
+{{- end }}
+{{- if $gitName }}
+  name = {{ $gitName | quote }}
+{{- end }}
+{{- if $gitSigningKey }}
+  signingkey = {{ $gitSigningKey | quote }}
+{{- end }}
+{{- end }}
+{{- range $key, $profile := (dig "git" "profiles" dict .) }}
+[includeIf "gitdir:{{ $profile.gitdir }}"]
+  path = ~/.config/git/profiles/{{ $key }}
+{{- end }}

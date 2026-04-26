@@ -24,6 +24,55 @@ Initialize from this repository and apply once:
 chezmoi init kurone-kito/dotfiles --apply
 ```
 
+During init, chezmoi generates `~/.config/chezmoi/chezmoi.toml` from
+`.chezmoi.toml.tmpl` and prompts for:
+
+- `git.name`
+- `git.email`
+- `git.signingkey` (optional, can be empty)
+
+After initialization, apply updates with:
+
+```bash
+chezmoi apply
+```
+
+## Git user/profile management
+
+This repository manages `~/.config/git/config` via
+`home/dot_config/git/config.tmpl`.
+
+- `[user]` is rendered from `data.git` in `~/.config/chezmoi/chezmoi.toml`
+- GPG signing settings are enabled only when `signingkey` is non-empty
+- Directory-based identities are handled with `includeIf`
+
+### Add directory-specific Git profiles
+
+Edit `~/.config/chezmoi/chezmoi.toml` and add one or more profiles:
+
+```toml
+[data.git.profiles.work]
+name = "Work Name"
+email = "work@example.com"
+signingkey = "" # optional
+gitdir = "~/ghq/github.com/your-org/" # must end with /
+```
+
+Then run:
+
+```bash
+chezmoi apply
+```
+
+Generated profile files:
+
+- `~/.config/git/profiles/<profile-name>`
+
+Script selection is OS-aware:
+
+- Windows uses `run_onchange_after_generate-git-profiles.ps1.tmpl`
+- Linux/macOS/WSL uses `run_onchange_after_generate-git-profiles.sh.tmpl`
+
 ## Troubleshooting
 
 If `chezmoi apply` uses unexpected or outdated templates, verify the active
