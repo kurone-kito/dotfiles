@@ -6,6 +6,69 @@
 
 A collection of configuration files that we use.
 
+## What's included
+
+### Shell environments
+
+- [bash](https://www.gnu.org/software/bash/) — interactive options,
+  history, globbing
+- [PowerShell](https://learn.microsoft.com/powershell/) — PSReadLine,
+  profile shims for PS5/PS7/VS Code
+- [zsh](https://www.zsh.org/) — completion, keybindings, XDG-compliant
+  `ZDOTDIR`
+
+### Shell plugins & prompt
+
+- [sheldon](https://sheldon.cli.rs/) — zsh plugin manager
+- [starship](https://starship.rs/) — cross-shell prompt theme
+
+### Development tools
+
+- [fzf](https://junegunn.github.io/fzf/) — fuzzy finder with key bindings
+- [Homebrew](https://brew.sh/) — package manager PATH setup
+- [mise](https://mise.jdx.dev/) — polyglot runtime manager
+- [thefuck](https://github.com/nvbn/thefuck) — command correction
+- Python venv — auto-activation helper
+
+### Git
+
+- [Git](https://git-scm.com/) — aliases, delta, LFS, GPG signing,
+  multi-profile
+
+### Editors & terminal
+
+- [GNU Readline](https://tiswww.cwru.edu/php/chet/readline/rltop.html) —
+input line editing
+- [tmux](https://github.com/tmux/tmux) — terminal multiplexer
+- [Vim](https://www.vim.org/) — editor configuration
+
+### Network tools
+
+- [curl](https://curl.se/) — transfer defaults
+- [Wget](https://www.gnu.org/software/wget/) — download defaults
+
+### Security
+
+- [GnuPG](https://gnupg.org/) — agent and pinentry configuration
+- [OpenSSH](https://www.openssh.com/) — host and identity configuration
+
+### Containers
+
+- [Docker](https://www.docker.com/) — daemon settings
+
+### Productivity (via mise)
+
+- [ghq](https://github.com/x-motemen/ghq) — remote repository management
+- [GitHub CLI](https://cli.github.com/) — GitHub from the terminal
+- [gwq](https://github.com/d-kuro/gwq) — Git worktree manager
+- [Taskwarrior](https://taskwarrior.org/) — task management
+
+### AI coding assistants (via mise)
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/)
+- [OpenAI Codex CLI](https://github.com/openai/codex)
+
 ## Requirements
 
 - [chezmoi](https://www.chezmoi.io/)
