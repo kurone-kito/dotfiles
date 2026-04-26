@@ -1,0 +1,48 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Deploy .env files from the secret
+# manager into project directories. Re-runs when env deploy config or
+# secret content changes. Skipped when no targets are configured.
+set -euo pipefail
+
+{{ $deploys := dig "env" "deploy" dict . -}}
+{{ if not $deploys -}}
+echo "No env deploy targets configured; skipping."
+exit 0
+{{ end -}}
+
+command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
+GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
+GHQ_ROOT="$("${GHQ}" root)"
+
+{{ range $key, $entry := $deploys -}}
+{{ $filename := dig "filename" ".env" $entry -}}
+{{ $subpath := dig "subpath" "" $entry -}}
+{{ $attachment := dig "attachment" $filename $entry -}}
+echo "==> {{ $key }}: {{ $entry.repo }}/{{ $subpath }}{{ $filename }}"
+
+target_dir="${GHQ_ROOT}/{{ $entry.repo }}{{ if $subpath }}/{{ $subpath }}{{ end }}"
+target_path="${target_dir}/{{ $filename }}"
+
+if [ ! -d "${target_dir}" ]; then
+  echo "  skip: directory not found"
+else
+  # Warn if .gitignore does not list the target filename
+  gitignore="${GHQ_ROOT}/{{ $entry.repo }}/.gitignore"
+  if [ -f "${gitignore}" ]; then
+    if ! grep -qF '{{ $filename }}' "${gitignore}" 2>/dev/null; then
+      echo "  warn: {{ $filename }} not found in .gitignore"
+    fi
+  else
+    echo "  warn: .gitignore not found in {{ $entry.repo }}"
+  fi
+
+  cat > "${target_path}" << 'CHEZMOI_ENV_EOF'
+{{ template "get-secret-attachment" dict "item" $entry.item "filename" $attachment "ctx" $ -}}
+CHEZMOI_ENV_EOF
+
+  chmod 600 "${target_path}"
+  echo "  done: deployed (mode 600)"
+fi
+
+{{ end -}}
+echo "env deploy complete."

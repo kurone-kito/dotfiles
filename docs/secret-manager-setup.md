@@ -365,6 +365,9 @@ chezmoi apply
 6. **`run_onchange_after_60-clone-ghq-repos`** — bulk-clones
    repositories for configured GitHub accounts via ghq (re-runs
    when ghq clone configuration changes; see [ghq-workflow.md](./ghq-workflow.md))
+7. **`run_onchange_after_70-deploy-env-files`** — deploys `.env`
+   files from the secret manager into cloned project directories
+   (re-runs when env deploy configuration or secret content changes)
 
 ### Re-running import scripts
 
@@ -381,6 +384,74 @@ chezmoi apply
 Set `manager = "none"` to skip all secret retrieval. You can
 manually place GPG keys and SSH files, then run `chezmoi apply`
 for the remaining configuration.
+
+## Deploying .env files to projects
+
+You can deploy `.env` files from the secret manager into cloned
+project directories. Store each `.env` file as an **attachment** on
+a secret manager item. The deployment script runs after ghq clone
+and writes the file with restrictive permissions (mode `600`).
+
+### Storing .env files in Bitwarden
+
+1. Create a **Secure Note** (or any item type) in Bitwarden
+2. Name it descriptively (e.g., `MyApp - .env`)
+3. Add the `.env` file as an **attachment**
+4. The attachment filename should match the target (e.g., `.env`)
+
+### Configuring .env deployment
+
+Edit `~/.config/chezmoi/chezmoi.toml`:
+
+```toml
+# Label is user-defined; repo is the ghq-style path
+[data.env.deploy.myapp-env]
+repo = "github.com/your-user/myapp"
+item = "MyApp - .env"
+
+# Deploy a second .env to the same project
+[data.env.deploy.myapp-env-local]
+repo = "github.com/your-user/myapp"
+item = "MyApp - .env.local"
+filename = ".env.local"
+
+# Deploy to a subdirectory
+[data.env.deploy.myapp-api-env]
+repo = "github.com/your-user/myapp"
+item = "MyApp API - .env"
+subpath = "packages/api"
+```
+
+**Fields:**
+
+| Field        | Required | Default            | Description                                           |
+| ------------ | -------- | ------------------ | ----------------------------------------------------- |
+| `repo`       | yes      |                    | ghq-style repo path (e.g., `github.com/user/project`) |
+| `item`       | yes      |                    | Secret manager item name                              |
+| `filename`   | no       | `.env`             | Target filename                                       |
+| `subpath`    | no       | *(root)*           | Subdirectory within the repo                          |
+| `attachment` | no       | same as `filename` | Attachment name override in the secret manager        |
+
+### Security notes
+
+- Files are deployed with **mode 600** (Linux/macOS) or **user-only
+  ACL** (Windows) — no admin elevation required
+- The script warns if `.gitignore` in the target project does not
+  list the target filename; verify before committing
+- Secret content is never logged; only filenames and status are shown
+- The script is a `run_onchange_after` template — it re-runs
+  automatically when secret content or configuration changes
+
+### Re-deploying .env files
+
+The `run_onchange_after` script re-runs when the **rendered script
+content** changes (i.e., when secret data or config changes). To
+force re-deployment:
+
+```bash
+chezmoi state delete-bucket --bucket=scriptState
+chezmoi apply
+```
 
 ## 1Password configuration
 

@@ -51,6 +51,21 @@ token_item = {{ $clone.token_item | quote }}
 hostname = {{ dig "hostname" "" $clone | quote }}
 {{- end }}
 {{- end }}
+{{- range $key, $entry := (dig "env" "deploy" dict .) }}
+
+[data.env.deploy."{{ $key }}"]
+repo = {{ $entry.repo | quote }}
+item = {{ $entry.item | quote }}
+{{- if (dig "filename" "" $entry) }}
+filename = {{ dig "filename" "" $entry | quote }}
+{{- end }}
+{{- if (dig "subpath" "" $entry) }}
+subpath = {{ dig "subpath" "" $entry | quote }}
+{{- end }}
+{{- if (dig "attachment" "" $entry) }}
+attachment = {{ dig "attachment" "" $entry | quote }}
+{{- end }}
+{{- end }}
 
 # To add a directory-specific profile, append the following to
 # ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
@@ -103,3 +118,16 @@ hostname = {{ dig "hostname" "" $clone | quote }}
 #   hostname   = "github.com"  # optional; defaults to github.com
 #
 # See docs/ghq-workflow.md for details.
+#
+# To deploy .env files from the secret manager into cloned projects:
+#
+#   [data.env.deploy.<label>]        # <label> is any unique name
+#   repo       = "github.com/you/project"  # ghq-style repo path
+#   item       = "Project .env"      # secret manager item with .env attached
+#   filename   = ".env"              # optional; defaults to ".env"
+#   subpath    = ""                  # optional subdirectory within the repo
+#   attachment = ""                  # optional; attachment name override
+#
+# Store the .env content as an attachment on the secret manager item.
+# The script deploys with mode 600 and warns if .gitignore is missing
+# the target filename. Multiple entries for the same repo are supported.
