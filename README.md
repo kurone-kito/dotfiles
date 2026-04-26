@@ -1,33 +1,58 @@
-# 🔴 My dotfiles
+# 📄 Generic repository template
 
-A collection of configuration files that we use.  
-私が使用している設定ファイル集です。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Linting](https://github.com/kurone-kito/template/actions/workflows/lint.yml/badge.svg)](https://github.com/kurone-kito/template/actions/workflows/lint.yml)
+[![CodeRabbit](https://img.shields.io/badge/review-CodeRabbit-green?logo=coderabbit)](https://www.coderabbit.ai/)
 
-## Deploying
+A language-agnostic project template designed as the root of a hierarchy
+of derived templates.
 
-```sh
-./setup
-```
+## Features
 
-The script works with the latest macOS and Windows.  
-最新の macOS と Windows で動作確認しています。
+- AI agent guidance with a Copilot-first compatibility layout
+  ([GitHub Copilot canonical guide](.github/copilot-instructions.md),
+  [OpenAI Codex adapter](AGENTS.md),
+  [Claude Code adapter](CLAUDE.md),
+  [strategy notes](docs/ai-strategy.md))
+- CI/CD
+  - [CodeRabbit](https://www.coderabbit.ai/)
+  - [ImgBot](https://imgbot.net/)
+  - Linting on GitHub Actions
+  - Stale issues and pull requests management on GitHub Actions
+- [Conventional Commits](https://www.conventionalcommits.org/)
+- Documents for GitHub
+- Git attributes
+- Linters
+  - [CSpell](https://cspell.org/)
+  - [EditorConfig](https://editorconfig.org/)
+  - [MarkdownLint](https://github.com/DavidAnson/markdownlint)
 
-## Thanks
+### Recommended NeoVim / Vim plugins
 
-- [holman/dotfiles](https://github.com/holman/dotfiles): It was helpful.
-- <!-- cspell:disable-next-line -->
-  [lysyi3m/macos-terminal-themes](https://github.com/lysyi3m/macos-terminal-themes):
-  Included the terminal's color scheme settings. (customized)
+- [editorconfig-vim](https://github.com/editorconfig/editorconfig-vim) —
+  EditorConfig support
+- [cspell.nvim](https://github.com/davidmh/cspell.nvim) — CSpell
+  integration for NeoVim (via null-ls / none-ls)
 
-## See also (Dependents)
+## Using this template
 
-- [kurone-kito/setup.macos](https://github.com/kurone-kito/setup.macos)
-- [kurone-kito/setup.windows](https://github.com/kurone-kito/setup.windows)
-
-## Contributing
-
-Welcome to contribute to this repository! For more details,
-please refer to [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+1. Click "Use this template" on GitHub to create your repository.
+2. Replace the LICENSE file if you prefer a different license.
+3. Review workflows under `.github/workflows` and adjust them to your needs.
+4. Customize the configuration files:
+   - `.editorconfig` sets editor rules.
+   - `.gitattributes` manages line ending normalization and export rules.
+   - `.imgbotconfig` controls image optimization.
+   - `.markdownlint.yml` and `.markdownlint-cli2.yaml` define Markdown
+     lint rules.
+   - `.cspell.config.yml` configures spell checking.
+   - `.coderabbit.yaml` contains CodeRabbit settings.
+   - `.vscode/` provides recommended settings for VS Code.
+5. Update documents in `.github/` such as CONTRIBUTING.md to match your
+   policies.
+6. Review `docs/ai-strategy.md`, then update `AGENTS.md`,
+   `CLAUDE.md`, and `.github/copilot-instructions.md` to reflect your
+   project specifics and preferred tooling order.
 
 ## License
 

@@ -1,0 +1,27 @@
+allowCompoundWords: true
+dictionaries:
+  - cpp
+  - en_US
+  - en-gb
+  - fullstack
+  - git
+  - markdown
+  - misc
+  - shellscript
+  - softwareTerms
+enableGlobDot: true
+features:
+  weighted-suggestions: true
+globRoot: ${cwd}
+ignorePaths:
+  - .*ignore
+  - .git
+  - .github/CODE_OF_CONDUCT.*
+  - .vscode/extensions.json
+ignoreRegExpList:
+  - kuroné?
+language: en,ja
+useGitignore: true
+version: '0.2'
+words:
+  - kito

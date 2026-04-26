@@ -1,6 +1,12 @@
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
 name: Linting workflow
 on:
   push:
+    branches:
+      - '**'
+      - '!main'
   pull_request:
 permissions:
   contents: read
