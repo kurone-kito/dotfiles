@@ -256,14 +256,14 @@ plugins {
 load_plugins {
   zellij:link
 }
-{{- $zellijWebServer := dig "zellij" "web" "server" true . -}}
-{{- $zellijWebSharing := dig "zellij" "web" "sharing" "on" . -}}
-{{- $zellijWebBind := dig "zellij" "web" "bind" "127.0.0.1" . -}}
-{{- $zellijWebPort := dig "zellij" "web" "port" 8082 . -}}
-{{- $zellijWebCert := dig "zellij" "web" "cert" "" . -}}
-{{- $zellijWebKey := dig "zellij" "web" "key" "" . -}}
-{{- $zellijWebBaseUrl := dig "zellij" "web" "base_url" "" . -}}
-{{- $zellijWebEnforceHttpsLocalhost := dig "zellij" "web" "enforce_https_on_localhost" false . -}}
+{{ $zellijWebServer := dig "zellij" "web" "server" true . -}}
+{{ $zellijWebSharing := dig "zellij" "web" "sharing" "on" . -}}
+{{ $zellijWebBind := dig "zellij" "web" "bind" "127.0.0.1" . -}}
+{{ $zellijWebPort := dig "zellij" "web" "port" 8082 . -}}
+{{ $zellijWebCert := dig "zellij" "web" "cert" "" . -}}
+{{ $zellijWebKey := dig "zellij" "web" "key" "" . -}}
+{{ $zellijWebBaseUrl := dig "zellij" "web" "base_url" "" . -}}
+{{ $zellijWebEnforceHttpsLocalhost := dig "zellij" "web" "enforce_https_on_localhost" false . -}}
 web_client {
   font "monospace"
 {{ if $zellijWebBaseUrl -}}

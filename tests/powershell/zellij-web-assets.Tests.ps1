@@ -23,6 +23,17 @@ Describe 'zellij web assets' {
     $lines | Should -Contain 'enforce_https_on_localhost {{ if $zellijWebEnforceHttpsLocalhost }}true{{ else }}false{{ end }}'
   }
 
+  It 'preserves a newline between load_plugins and web_client template sections' {
+    $lines = Get-Content $script:ZellijTemplate
+    $webClientIndex = [Array]::IndexOf($lines, 'web_client {')
+    $assignmentLines = $lines[($webClientIndex - 8)..($webClientIndex - 1)]
+
+    foreach ($line in $assignmentLines) {
+      $line | Should -Match '^\{\{ \$zellijWeb'
+      $line | Should -Not -Match '^\{\{-'
+    }
+  }
+
   It 'ignores platform-specific zellij artifacts on unsupported platforms' {
     $lines = Get-Content $script:IgnoreTemplate
 
