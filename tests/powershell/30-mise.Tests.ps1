@@ -1,5 +1,5 @@
 # Tests for the PowerShell mise bootstrap script.
-# Exercises: PATH-first resolution and the Windows ~/.local/bin fallback.
+# Exercises: PATH-first resolution and Windows fallback discovery.
 
 BeforeAll {
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -38,6 +38,27 @@ BeforeAll {
     New-Item -ItemType File -Path (Join-Path $miseDir 'config.toml') -Force | Out-Null
     New-Item -ItemType File -Path (Join-Path $configDir 'config.toml') -Force | Out-Null
   }
+
+  function Get-TestWingetPackagesRoot {
+    Join-Path (
+      (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet')
+    ) 'Packages'
+  }
+
+  function New-TestWingetMisePackage {
+    param(
+      [Parameter(Mandatory)]
+      [string] $PackageName
+    )
+
+    $packageRoot = Join-Path (Get-TestWingetPackagesRoot) $PackageName
+    $misePath = Join-Path (Join-Path (Join-Path $packageRoot 'mise') 'bin') 'mise.exe'
+
+    New-Item -ItemType Directory -Path (Split-Path $misePath) -Force | Out-Null
+    New-Item -ItemType File -Path $misePath -Force | Out-Null
+
+    return $misePath
+  }
 }
 
 Describe '30-mise' {
@@ -46,18 +67,27 @@ Describe '30-mise' {
     $script:OriginalHome = $HOME
     $script:OriginalTrusted = $env:MISE_TRUSTED_CONFIG_PATHS
     $script:OriginalWarning = $env:MISE_PWSH_CHPWD_WARNING
+    $script:OriginalLocalAppData = $env:LOCALAPPDATA
     $script:MiseCalls = @()
     $script:FallbackPath = $null
 
-    Set-Variable -Name HOME -Value 'TestDrive:\home' -Scope Global -Force
+    $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
+    $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
+
+    Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
+    $env:LOCALAPPDATA = $localAppDataRoot
   }
 
   AfterEach {
     Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
     $env:MISE_TRUSTED_CONFIG_PATHS = $script:OriginalTrusted
     $env:MISE_PWSH_CHPWD_WARNING = $script:OriginalWarning
+    $env:LOCALAPPDATA = $script:OriginalLocalAppData
     Remove-Item Function:\PathMise -ErrorAction SilentlyContinue
     Remove-Item Function:\FallbackMise -ErrorAction SilentlyContinue
+    Remove-Item Function:\WingetMise -ErrorAction SilentlyContinue
+    Remove-Item Function:\WingetMiseA -ErrorAction SilentlyContinue
+    Remove-Item Function:\WingetMiseB -ErrorAction SilentlyContinue
   }
 
   It 'prefers the PATH command before the Windows fallback' {
@@ -98,11 +128,13 @@ Describe '30-mise' {
     }).Count | Should -Be 1
   }
 
-  It 'uses the Windows fallback executable when mise is not on PATH' {
+  It 'uses the official Windows fallback before winget package bins' {
     New-TestMiseConfigs
 
     $fallbackCommand = New-TestMiseCommand -Name 'FallbackMise'
+    $wingetCommand = New-TestMiseCommand -Name 'WingetMise'
     $script:FallbackPath = Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe'
+    $script:WingetPath = New-TestWingetMisePackage -PackageName 'jdx.mise_2025.1.0_x64__test'
 
     New-Item -ItemType Directory -Path (Split-Path $script:FallbackPath) -Force | Out-Null
     New-Item -ItemType File -Path $script:FallbackPath -Force | Out-Null
@@ -111,6 +143,9 @@ Describe '30-mise' {
     Mock Get-Command { $fallbackCommand } -ParameterFilter {
       $Name -eq $script:FallbackPath
     }
+    Mock Get-Command { $wingetCommand } -ParameterFilter {
+      $Name -eq $script:WingetPath
+    }
 
     . $script:Subject
 
@@ -118,6 +153,9 @@ Describe '30-mise' {
     Assert-MockCalled Get-Command -ParameterFilter {
       $Name -eq $script:FallbackPath
     } -Times 1
+    Assert-MockCalled Get-Command -ParameterFilter {
+      $Name -eq $script:WingetPath
+    } -Times 0
 
     $usedCommands = @(
       $script:MiseCalls |
@@ -126,6 +164,124 @@ Describe '30-mise' {
     )
     $usedCommands | Should -HaveCount 1
     $usedCommands[0] | Should -Be 'FallbackMise'
+    ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
+      Should -Be 2
+    ($script:MiseCalls | Where-Object {
+      $_.Arguments[0] -eq 'activate' -and
+      $_.Arguments[1] -eq 'pwsh' -and
+      $_.Arguments[2] -eq '--quiet'
+    }).Count | Should -Be 1
+  }
+
+  It 'uses the winget package-bin executable when other Windows paths are unavailable' {
+    New-TestMiseConfigs
+
+    $wingetCommand = New-TestMiseCommand -Name 'WingetMise'
+    $script:FallbackPath = Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe'
+    $packagesRoot = Get-TestWingetPackagesRoot
+    $packageRoot = Join-Path $packagesRoot 'jdx.mise_2025.1.0_x64__test'
+    $script:WingetPath = Join-Path (Join-Path (Join-Path $packageRoot 'mise') 'bin') 'mise.exe'
+
+    Mock Get-ChildItem {
+      @([pscustomobject]@{ FullName = $packageRoot })
+    } -ParameterFilter {
+      $LiteralPath -eq $packagesRoot -and
+      $Directory
+    }
+    Mock Resolve-Path {
+      [pscustomobject]@{ ProviderPath = $script:WingetPath }
+    } -ParameterFilter {
+      $LiteralPath -eq $script:WingetPath
+    }
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $null }
+      if ($Name -eq $script:FallbackPath) { return $null }
+      if ($Name -eq $script:WingetPath) { return $wingetCommand }
+      throw "Unexpected Get-Command lookup: $Name"
+    }
+
+    . $script:Subject
+
+    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Assert-MockCalled Get-Command -ParameterFilter {
+      $Name -eq $script:FallbackPath
+    } -Times 1
+    Assert-MockCalled Get-Command -ParameterFilter {
+      $Name -eq $script:WingetPath
+    } -Times 1
+
+    $usedCommands = @(
+      $script:MiseCalls |
+        Select-Object -ExpandProperty Command |
+        Sort-Object -Unique
+    )
+    $usedCommands | Should -HaveCount 1
+    $usedCommands[0] | Should -Be 'WingetMise'
+    ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
+      Should -Be 2
+    ($script:MiseCalls | Where-Object {
+      $_.Arguments[0] -eq 'activate' -and
+      $_.Arguments[1] -eq 'pwsh' -and
+      $_.Arguments[2] -eq '--quiet'
+    }).Count | Should -Be 1
+  }
+
+  It 'de-duplicates winget package-bin candidates that resolve to one executable' {
+    New-TestMiseConfigs
+
+    $packagesRoot = Get-TestWingetPackagesRoot
+    $packageA = Join-Path $packagesRoot 'jdx.mise_2025.1.0_x64__test-a'
+    $packageB = Join-Path $packagesRoot 'jdx.mise_2025.1.0_x64__test-b'
+    $script:WingetPathA = Join-Path (Join-Path (Join-Path $packageA 'mise') 'bin') 'mise.exe'
+    $script:WingetPathB = Join-Path (Join-Path (Join-Path $packageB 'mise') 'bin') 'mise.exe'
+    $canonicalWingetPath = 'TestDrive:\canonical\mise.exe'
+    $wingetCommandA = New-TestMiseCommand -Name 'WingetMiseA'
+    $wingetCommandB = New-TestMiseCommand -Name 'WingetMiseB'
+
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $null }
+      if ($Name -eq (Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe')) { return $null }
+      if ($Name -eq $script:WingetPathA) { return $wingetCommandA }
+      if ($Name -eq $script:WingetPathB) { return $wingetCommandB }
+      throw "Unexpected Get-Command lookup: $Name"
+    }
+    Mock Get-ChildItem {
+      @(
+        [pscustomobject]@{ FullName = $packageA }
+        [pscustomobject]@{ FullName = $packageB }
+      )
+    } -ParameterFilter {
+      $LiteralPath -eq $packagesRoot -and
+      $Directory
+    }
+    Mock Resolve-Path {
+      [pscustomobject]@{ ProviderPath = $canonicalWingetPath }
+    } -ParameterFilter {
+      $LiteralPath -eq $script:WingetPathA
+    }
+    Mock Resolve-Path {
+      [pscustomobject]@{ ProviderPath = $canonicalWingetPath }
+    } -ParameterFilter {
+      $LiteralPath -eq $script:WingetPathB
+    }
+
+    . $script:Subject
+
+    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Assert-MockCalled Get-Command -ParameterFilter {
+      $Name -eq $script:WingetPathA
+    } -Times 1
+    Assert-MockCalled Get-Command -ParameterFilter {
+      $Name -eq $script:WingetPathB
+    } -Times 0
+
+    $usedCommands = @(
+      $script:MiseCalls |
+        Select-Object -ExpandProperty Command |
+        Sort-Object -Unique
+    )
+    $usedCommands | Should -HaveCount 1
+    $usedCommands[0] | Should -Be 'WingetMiseA'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
     ($script:MiseCalls | Where-Object {

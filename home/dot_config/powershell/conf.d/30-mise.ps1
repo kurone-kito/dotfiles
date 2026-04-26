@@ -2,6 +2,40 @@
 # https://mise.jdx.dev/
 
 $miseCommand = & {
+  function Resolve-MiseCommand {
+    param(
+      [string[]] $Candidates
+    )
+
+    $resolvedPaths = @{}
+
+    foreach ($candidate in $Candidates) {
+      if ([string]::IsNullOrWhiteSpace($candidate)) {
+        continue
+      }
+
+      $resolvedCandidate = Resolve-Path -LiteralPath $candidate -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+      if ($null -eq $resolvedCandidate) {
+        continue
+      }
+
+      $resolvedPath = $resolvedCandidate.ProviderPath
+      if ($resolvedPaths.ContainsKey($resolvedPath)) {
+        continue
+      }
+
+      $resolvedPaths[$resolvedPath] = $true
+
+      $command = Get-Command $candidate -ErrorAction SilentlyContinue
+      if ($null -ne $command) {
+        return $command
+      }
+    }
+
+    return $null
+  }
+
   $command = Get-Command mise -ErrorAction SilentlyContinue
   if ($null -ne $command) {
     return $command
@@ -11,12 +45,24 @@ $miseCommand = & {
     return $null
   }
 
-  $fallback = Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe'
-  if (Test-Path $fallback) {
-    return Get-Command $fallback -ErrorAction SilentlyContinue
+  $fallbacks = @(
+    (Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'mise.exe')
+  )
+
+  if (-not [string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
+    $wingetPackagesRoot = Join-Path (
+      (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet')
+    ) 'Packages'
+
+    foreach ($package in @(
+      Get-ChildItem -LiteralPath $wingetPackagesRoot -Directory -Filter 'jdx.mise_*' `
+        -ErrorAction SilentlyContinue
+    )) {
+      $fallbacks += Join-Path (Join-Path (Join-Path $package.FullName 'mise') 'bin') 'mise.exe'
+    }
   }
 
-  return $null
+  return Resolve-MiseCommand -Candidates $fallbacks
 }
 
 if (-not $miseCommand) { return }
