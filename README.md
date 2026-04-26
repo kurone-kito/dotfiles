@@ -100,6 +100,21 @@ After initialization, apply updates with:
 chezmoi apply
 ```
 
+### Windows note for mise
+
+This repository owns the PowerShell profile through generated loader
+shims. On Windows, `chezmoi apply` rewrites the standard profile files
+to load `~/.config/powershell/profile.ps1`, so installer-added lines in
+those files are replaced by design.
+
+For `mise`, use a Windows install path that is already supported by this
+repository before the first apply:
+
+- `%LOCALAPPDATA%\Microsoft\WinGet\Links`
+- `%USERPROFILE%\.local\bin`
+
+Custom `MISE_INSTALL_PATH` values are not auto-detected today.
+
 ## Git user/profile management
 
 This repository manages `~/.config/git/config` via
