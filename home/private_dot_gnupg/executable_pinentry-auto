@@ -30,4 +30,9 @@ for p in pinentry-curses pinentry-tty; do
 done
 
 # Last resort: system default pinentry
-exec pinentry "$@"
+if command -v pinentry >/dev/null 2>&1; then
+  exec pinentry "$@"
+fi
+
+echo "pinentry-auto: no pinentry program found" >&2
+exit 1
