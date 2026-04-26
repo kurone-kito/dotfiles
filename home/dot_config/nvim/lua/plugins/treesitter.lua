@@ -59,10 +59,10 @@ return {
     config = function(_, opts)
       local ok, configs = pcall(require, "nvim-treesitter.configs")
       if ok then
-        -- Legacy API (nvim-treesitter < 1.0)
         configs.setup(opts)
       else
-        -- New API (nvim-treesitter >= 1.0): opts handled by lazy.nvim
+        -- TODO: nvim-treesitter 1.0 uses a different opts schema;
+        -- this fallback will need a full rewrite when 1.0 ships.
         require("nvim-treesitter").setup(opts)
       end
     end,
