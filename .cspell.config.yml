@@ -1,6 +1,7 @@
 allowCompoundWords: true
 dictionaries:
   - cpp-compound-words
+  - dotnet
   - en_US
   - en-gb
   - fullstack

@@ -1,0 +1,5 @@
+{{- if eq .chezmoi.os "windows" }}
+.gnupg/**
+{{- else }}
+AppData
+{{- end }}

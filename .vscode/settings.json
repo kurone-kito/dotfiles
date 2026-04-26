@@ -9,6 +9,7 @@
   },
   "files.associations": {
     "**/*git/config": "properties",
+    "*.tmpl": "go-template",
     "*ignore": "ignore",
     ".gitmessage": "git-commit",
     ".imgbotconfig": "json",
@@ -22,6 +23,7 @@
   },
   "git.branchProtection": ["main"],
   "material-icon-theme.files.associations": {
+    "*.tmpl": "template",
     ".imgbotconfig": "robots"
   },
   "yaml.schemas": {
