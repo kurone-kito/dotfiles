@@ -303,6 +303,41 @@ The bulk clone script (`60-clone-ghq-repos`) runs after the mise
 tool installation script (`50-install-mise-tools`), which ensures
 that `ghq` and `gh` are available via mise before cloning begins.
 
+### Standalone script
+
+The clone logic is available as a standalone script at
+`~/.local/bin/ghq-clone-user` (POSIX) /
+`~/.local/bin/ghq-clone-user.ps1` (PowerShell).
+You can re-run it outside `chezmoi apply` at any time:
+
+```bash
+# Clone all repos for a user via SSH (default)
+ghq-clone-user alice
+
+# Clone via HTTPS
+ghq-clone-user alice --https
+
+# Clone from a GitHub Enterprise instance
+ghq-clone-user internal-team --hostname github.example.com
+
+# Limit the number of repos listed
+ghq-clone-user alice --limit 500
+```
+
+PowerShell equivalent:
+
+```powershell
+ghq-clone-user.ps1 -Owner alice
+ghq-clone-user.ps1 -Owner alice -Https
+ghq-clone-user.ps1 -Owner internal-team -Hostname github.example.com
+```
+
+**Prerequisites:** `gh` and `ghq` in PATH (or via mise shims), plus
+`gh auth login` or `GH_TOKEN` for authentication.
+
+The chezmoi `run_onchange_after` templates handle secret extraction
+and environment setup, then delegate to these standalone scripts.
+
 ## Troubleshooting
 
 ### Wrong identity on commits
