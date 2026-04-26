@@ -15,7 +15,9 @@ for f in "$HOME/.config/bash/conf.d/"*.bash; do
   [[ -r "$f" ]] && . "$f"
 done
 
-# Worktrunk (git-wt) shell integration — must be in .bashrc for detection
+# Worktrunk shell integration — must be in .bashrc for detection
+# Support both wt (default) and git-wt (Windows Terminal workaround)
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init bash)"; fi
 if command -v git-wt >/dev/null 2>&1; then eval "$(command git-wt config shell init bash)"; fi
 
 # Plugin manager

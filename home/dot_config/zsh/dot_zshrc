@@ -12,7 +12,9 @@ for f in "${ZDOTDIR:-$HOME/.config/zsh}/conf.d/"*.zsh(N); do
   [[ -r "$f" ]] && . "$f"
 done
 
-# Worktrunk (git-wt) shell integration — must be in .zshrc for detection
+# Worktrunk shell integration — must be in .zshrc for detection
+# Support both wt (default) and git-wt (Windows Terminal workaround)
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
 if command -v git-wt >/dev/null 2>&1; then eval "$(command git-wt config shell init zsh)"; fi
 
 # Plugin manager
