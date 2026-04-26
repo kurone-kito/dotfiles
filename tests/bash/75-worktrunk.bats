@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Tests for the worktrunk shell integration in RC files.
 # Validates: detection patterns for both wt and git-wt binary names
-# in dot_bashrc and dot_zshrc, correct shell args, eval behavior,
+# in dot_bashrc and dot_zshrc, correct shell args, fallback behavior,
 # and graceful skip when neither binary is available.
 
 bats_require_minimum_version 1.5.0
@@ -15,10 +15,38 @@ setup() {
   BASHRC_PATH="$BATS_TEST_DIRNAME/../../home/dot_bashrc"
   ZSHRC_PATH="$BATS_TEST_DIRNAME/../../home/dot_config/zsh/dot_zshrc"
   _ORIG_PATH="$PATH"
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
 }
 
 teardown() {
   export PATH="$_ORIG_PATH"
+}
+
+extract_bash_worktrunk_block() {
+  awk '
+    /^# Worktrunk shell integration/ { in_block = 1 }
+    in_block && /^# Plugin manager/ { exit }
+    in_block { print }
+  ' "$BASHRC_PATH"
+}
+
+extract_zsh_worktrunk_block() {
+  awk '
+    /^# Worktrunk shell integration/ { in_block = 1 }
+    in_block && /^# Plugin manager/ { exit }
+    in_block { print }
+  ' "$ZSHRC_PATH"
+}
+
+make_worktrunk_mock() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << MOCK
+#!/bin/sh
+if [ "\$1" = "config" ] && [ "\$2" = "shell" ] && [ "\$3" = "init" ] && [ "\$4" = "$2" ]; then
+  echo 'export WORKTRUNK_TEST=$3'
+fi
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -26,41 +54,21 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "dot_bashrc contains wt config shell init for default binary detection" {
-  run grep -E '^if command -v wt ' "$BASHRC_PATH"
-  assert_success
-}
-
-@test "dot_bashrc contains git-wt config shell init for Windows binary detection" {
-  run grep -E '^if command -v git-wt ' "$BASHRC_PATH"
-  assert_success
-}
-
-@test "dot_bashrc uses 'bash' as the shell argument for wt" {
   run grep -E 'wt config shell init bash' "$BASHRC_PATH"
   assert_success
 }
 
-@test "dot_bashrc uses 'bash' as the shell argument for git-wt" {
+@test "dot_bashrc contains git-wt config shell init for Windows binary detection" {
   run grep -E 'git-wt config shell init bash' "$BASHRC_PATH"
   assert_success
 }
 
 @test "dot_zshrc contains wt config shell init for default binary detection" {
-  run grep -E '^if command -v wt ' "$ZSHRC_PATH"
-  assert_success
-}
-
-@test "dot_zshrc contains git-wt config shell init for Windows binary detection" {
-  run grep -E '^if command -v git-wt ' "$ZSHRC_PATH"
-  assert_success
-}
-
-@test "dot_zshrc uses 'zsh' as the shell argument for wt" {
   run grep -E 'wt config shell init zsh' "$ZSHRC_PATH"
   assert_success
 }
 
-@test "dot_zshrc uses 'zsh' as the shell argument for git-wt" {
+@test "dot_zshrc contains git-wt config shell init for Windows binary detection" {
   run grep -E 'git-wt config shell init zsh' "$ZSHRC_PATH"
   assert_success
 }
@@ -69,41 +77,53 @@ teardown() {
 # Functional — extract and eval the init lines (bash)
 # ---------------------------------------------------------------------------
 
-@test "evaluates wt shell init output when wt is available" {
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cat > "$BATS_TEST_TMPDIR/bin/wt" << 'MOCK'
-#!/bin/sh
-if [ "$1" = "config" ] && [ "$2" = "shell" ] && [ "$3" = "init" ] && [ "$4" = "bash" ]; then
-  echo 'export WORKTRUNK_TEST=loaded_wt'
-fi
-MOCK
-  chmod +x "$BATS_TEST_TMPDIR/bin/wt"
+@test "evaluates git-wt shell init output when git-wt is available" {
+  make_worktrunk_mock git-wt bash git-wt
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
 
-  eval "$(grep '^if command -v wt ' "$BASHRC_PATH")"
+  eval "$(extract_bash_worktrunk_block)"
 
-  assert_equal "$WORKTRUNK_TEST" "loaded_wt"
+  assert_equal "$WORKTRUNK_TEST" "git-wt"
 }
 
-@test "evaluates git-wt shell init output when git-wt is available" {
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cat > "$BATS_TEST_TMPDIR/bin/git-wt" << 'MOCK'
-#!/bin/sh
-if [ "$1" = "config" ] && [ "$2" = "shell" ] && [ "$3" = "init" ] && [ "$4" = "bash" ]; then
-  echo 'export WORKTRUNK_TEST=loaded_gitwt'
-fi
-MOCK
-  chmod +x "$BATS_TEST_TMPDIR/bin/git-wt"
+@test "evaluates wt shell init output when wt is available" {
+  make_worktrunk_mock wt bash wt
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
 
-  eval "$(grep '^if command -v git-wt ' "$BASHRC_PATH")"
+  eval "$(extract_bash_worktrunk_block)"
 
-  assert_equal "$WORKTRUNK_TEST" "loaded_gitwt"
+  assert_equal "$WORKTRUNK_TEST" "wt"
+}
+
+@test "prefers git-wt shell init when both git-wt and wt are available" {
+  make_worktrunk_mock git-wt bash git-wt
+  make_worktrunk_mock wt bash wt
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+
+  eval "$(extract_bash_worktrunk_block)"
+
+  assert_equal "$WORKTRUNK_TEST" "git-wt"
+}
+
+@test "falls back to wt shell init when git-wt is not in PATH" {
+  make_worktrunk_mock wt bash wt
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+
+  eval "$(extract_bash_worktrunk_block)"
+
+  assert_equal "$WORKTRUNK_TEST" "wt"
+}
+
+@test "zsh falls back to wt shell init when git-wt is not in PATH" {
+  make_worktrunk_mock wt zsh wt
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+
+  run zsh -fc "$(extract_zsh_worktrunk_block); print -r -- \${WORKTRUNK_TEST:-}"
+  assert_success
+  assert_output "wt"
 }
 
 @test "skips without error when neither wt nor git-wt is in PATH" {
-  eval "$(grep '^if command -v wt ' "$BASHRC_PATH")"
-  eval "$(grep '^if command -v git-wt ' "$BASHRC_PATH")"
+  eval "$(extract_bash_worktrunk_block)"
   assert_equal "${WORKTRUNK_TEST:-}" ""
 }
-
