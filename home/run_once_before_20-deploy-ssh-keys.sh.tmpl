@@ -1,0 +1,48 @@
+#!/bin/bash
+# chezmoi run_once_before script: Deploy SSH key pairs from secret manager.
+# Skipped when secret.manager is "none" or no SSH keys are configured.
+set -euo pipefail
+
+{{ $manager := dig "secret" "manager" "none" . -}}
+{{ if eq $manager "none" -}}
+echo "Secret manager not configured; skipping SSH key deployment."
+exit 0
+{{ end -}}
+
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ if not $sshKeys -}}
+echo "No SSH keys configured; skipping."
+exit 0
+{{ end -}}
+
+ssh_dir="${HOME}/.ssh"
+mkdir -p "${ssh_dir}"
+chmod 700 "${ssh_dir}"
+
+{{ range $key, $sshKey := $sshKeys -}}
+echo "Deploying SSH key: {{ $key }} ({{ $sshKey.filename }})..."
+private_key="${ssh_dir}/{{ $sshKey.filename }}"
+public_key="${ssh_dir}/{{ $sshKey.filename }}.pub"
+
+if [ ! -f "${private_key}" ]; then
+  cat > "${private_key}" << 'SSH_PRIVATE_KEY_EOF'
+{{ template "get-secret-attachment" dict "item" $sshKey.item "filename" $sshKey.filename "ctx" $ }}
+SSH_PRIVATE_KEY_EOF
+  chmod 600 "${private_key}"
+  echo "  Private key written."
+else
+  echo "  Private key already exists; skipping."
+fi
+
+if [ ! -f "${public_key}" ]; then
+  cat > "${public_key}" << 'SSH_PUBLIC_KEY_EOF'
+{{ template "get-secret-attachment" dict "item" $sshKey.item "filename" (printf "%s.pub" $sshKey.filename) "ctx" $ }}
+SSH_PUBLIC_KEY_EOF
+  chmod 644 "${public_key}"
+  echo "  Public key written."
+else
+  echo "  Public key already exists; skipping."
+fi
+{{ end -}}
+
+echo "SSH key deployment complete."
