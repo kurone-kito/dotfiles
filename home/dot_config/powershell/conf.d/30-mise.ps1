@@ -22,7 +22,7 @@ if (Test-Path /proc/version -ErrorAction SilentlyContinue) {
   }
 }
 
-$env:MISE_TRUSTED_CONFIG_PATHS = $miseTrusted -join ':'
+$env:MISE_TRUSTED_CONFIG_PATHS = $miseTrusted -join [IO.Path]::PathSeparator
 $env:MISE_PWSH_CHPWD_WARNING = '0'
 Remove-Variable miseTrusted -ErrorAction SilentlyContinue
 
