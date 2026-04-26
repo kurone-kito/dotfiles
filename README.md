@@ -73,6 +73,13 @@ Script selection is OS-aware:
 - Windows uses `run_onchange_after_generate-git-profiles.ps1.tmpl`
 - Linux/macOS/WSL uses `run_onchange_after_generate-git-profiles.sh.tmpl`
 
+## Secret management
+
+GPG keys, SSH keys, and SSH host configuration can be automatically
+deployed from an external secret manager (Bitwarden, 1Password, or
+KeePassXC). See [docs/secret-manager-setup.md](docs/secret-manager-setup.md)
+for detailed setup instructions.
+
 ## Troubleshooting
 
 If `chezmoi apply` uses unexpected or outdated templates, verify the active

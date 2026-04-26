@@ -35,6 +35,7 @@ words:
   - exrc
   - gdefault
   - inputrc
+  - keepassxc
   - kito
   - rerere
   - taskrc
