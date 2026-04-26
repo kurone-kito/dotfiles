@@ -5,41 +5,157 @@
 #
 # hash: <% include "dot_config/powershell/conf.d/01-path.ps1" | sha256sum %>
 
-# Directories this dotfiles project manages in User PATH.
-# Keep in sync with conf.d/01-path.ps1 $extraPaths.
-$managedDirs = @(
-  (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
-  (Join-Path $env:LOCALAPPDATA 'Zellij')
-  (Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin')
-  (Join-Path $HOME '.local\bin')
-)
+# Reconcile the repo-managed subset of User PATH. Keep this
+# equivalent to conf.d/01-path.ps1 so managed entries stay
+# deduplicated, stale discovered mise paths are removed, and
+# unrelated entries are preserved.
 
-$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-$entries = @($userPath -split ';' | Where-Object { $_ -ne '' })
-$changed = $false
+$sep = [IO.Path]::PathSeparator
 
-foreach ($dir in $managedDirs) {
-  $exists = Test-Path $dir
-  $inPath = $entries -contains $dir
+function Split-PathEntries {
+  param([AllowNull()][string]$PathValue)
 
-  if ($exists -and -not $inPath) {
-    # Directory exists but not in PATH — add it
-    $entries = @($dir) + $entries
-    $changed = $true
-    Write-Host "PATH +: $dir"
-  } elseif (-not $exists -and $inPath) {
-    # Directory no longer exists — remove stale entry
-    $entries = @($entries | Where-Object { $_ -ne $dir })
-    $changed = $true
-    Write-Host "PATH -: $dir (removed, directory no longer exists)"
+  if ([string]::IsNullOrEmpty($PathValue)) {
+    return @()
+  }
+
+  return @(
+    $PathValue.Split(
+      [char[]]([IO.Path]::PathSeparator),
+      [System.StringSplitOptions]::None
+    )
+  )
+}
+
+function Normalize-PathEntry {
+  param([AllowNull()][string]$PathEntry)
+
+  if ($null -eq $PathEntry) {
+    return ''
+  }
+
+  $normalized = $PathEntry -replace '/', '\'
+  while ($normalized.Length -gt 3 -and $normalized.EndsWith('\')) {
+    $normalized = $normalized.Substring(0, $normalized.Length - 1)
+  }
+
+  return $normalized.ToLowerInvariant()
+}
+
+function Get-StaticManagedPaths {
+  $paths = @()
+
+  if (-not [string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
+    $paths += (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+    $paths += (Join-Path $env:LOCALAPPDATA 'Zellij')
+  }
+
+  if (-not [string]::IsNullOrEmpty(${env:ProgramFiles(x86)})) {
+    $paths += (Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin')
+  }
+
+  if (-not [string]::IsNullOrEmpty($HOME)) {
+    $paths += (Join-Path $HOME '.local\bin')
+  }
+
+  return $paths
+}
+
+function Get-MisePackagesRoot {
+  if ([string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
+    return $null
+  }
+
+  return Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet') 'Packages'
+}
+
+function Get-MiseManagedPaths {
+  $packagesRoot = Get-MisePackagesRoot
+  if ([string]::IsNullOrEmpty($packagesRoot)) {
+    return @()
+  }
+
+  if (-not (Test-Path -LiteralPath $packagesRoot -PathType Container)) {
+    return @()
+  }
+
+  $paths = @()
+  foreach ($packageDir in @(
+    Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -like 'jdx.mise_*' } |
+      Sort-Object -Property FullName
+  )) {
+    $binDir = Join-Path (Join-Path $packageDir.FullName 'mise') 'bin'
+    if (Test-Path -LiteralPath $binDir -PathType Container) {
+      $paths += $binDir
+    }
+  }
+
+  return $paths
+}
+
+$staticManagedPaths = @(Get-StaticManagedPaths)
+$managedLookup = @{}
+foreach ($dir in $staticManagedPaths) {
+  $managedLookup[(Normalize-PathEntry $dir)] = $true
+}
+
+$misePackagesRoot = Get-MisePackagesRoot
+$misePackagePattern = $null
+if (-not [string]::IsNullOrEmpty($misePackagesRoot)) {
+  $misePackagePattern = '^' +
+    [regex]::Escape((Normalize-PathEntry $misePackagesRoot)) +
+    '\\jdx\.mise_[^\\]+\\mise\\bin$'
+}
+
+function Test-IsManagedPath {
+  param([AllowNull()][string]$PathEntry)
+
+  $normalized = Normalize-PathEntry $PathEntry
+  if ($managedLookup.ContainsKey($normalized)) {
+    return $true
+  }
+
+  if ($null -ne $misePackagePattern -and $normalized -match $misePackagePattern) {
+    return $true
+  }
+
+  return $false
+}
+
+$desiredManagedPaths = @()
+$desiredLookup = @{}
+foreach ($dir in @((@(Get-MiseManagedPaths)) + $staticManagedPaths)) {
+  if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
+    continue
+  }
+
+  $normalized = Normalize-PathEntry $dir
+  if ($desiredLookup.ContainsKey($normalized)) {
+    continue
+  }
+
+  $desiredManagedPaths += $dir
+  $desiredLookup[$normalized] = $true
+}
+
+$currentEntries = @(Split-PathEntries ([Environment]::GetEnvironmentVariable('PATH', 'User')))
+$remainingEntries = @()
+foreach ($entry in $currentEntries) {
+  if (-not (Test-IsManagedPath $entry)) {
+    $remainingEntries += $entry
   }
 }
 
-if ($changed) {
-  $newPath = $entries -join ';'
+$newEntries = @($desiredManagedPaths + $remainingEntries)
+$currentNormalized = @($currentEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
+$newNormalized = @($newEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
+
+if ($currentNormalized -ceq $newNormalized) {
+  Write-Host 'User PATH already up to date.'
+} else {
+  $newPath = $newEntries -join $sep
   [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
   Write-Host 'User PATH updated in registry.'
-} else {
-  Write-Host 'User PATH already up to date.'
 }
 <% end -%>
