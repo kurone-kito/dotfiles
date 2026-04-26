@@ -1,6 +1,6 @@
 # Tests for the PowerShell worktrunk initialization script.
-# Exercises: early exit, init evaluation with both git-wt and wt,
-# trailing-zero stripping, cleanup.
+# Exercises: early exit, command fallback, init evaluation, trailing-zero
+# stripping, and cleanup.
 
 BeforeAll {
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -15,59 +15,27 @@ Describe '45-worktrunk' {
     Remove-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
+
+    Mock Get-Command { $null } -ParameterFilter { $Name -in @('git-wt', 'wt') }
   }
 
   AfterEach {
     Remove-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
     Remove-Item Function:\git-wt -ErrorAction SilentlyContinue
     Remove-Item Function:\wt -ErrorAction SilentlyContinue
   }
 
-  It 'returns early without error when neither binary is available' {
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'git-wt' }
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'wt' }
-
+  It 'returns early without error when neither git-wt nor wt is available' {
     { . $script:Subject } | Should -Not -Throw
-  }
-
-  It 'prefers git-wt when both binaries are available' {
-    function git-wt {
-      '$script:WorktrunkInitialized = "git-wt"'
-    }
-    function wt {
-      '$script:WorktrunkInitialized = "wt"'
-    }
-    Mock Get-Command {
-      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
-    } -ParameterFilter { $Name -eq 'git-wt' }
-    Mock Get-Command {
-      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
-    } -ParameterFilter { $Name -eq 'wt' }
-
-    . $script:Subject
-
-    $script:WorktrunkInitialized | Should -Be 'git-wt'
-  }
-
-  It 'falls back to wt when git-wt is not available' {
-    function wt {
-      '$script:WorktrunkInitialized = "wt"'
-    }
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'git-wt' }
-    Mock Get-Command {
-      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
-    } -ParameterFilter { $Name -eq 'wt' }
-
-    . $script:Subject
-
-    $script:WorktrunkInitialized | Should -Be 'wt'
   }
 
   It 'evaluates init output when git-wt is available' {
     function git-wt {
-      '$script:WorktrunkInitialized = $true'
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "git-wt"')
     }
     Mock Get-Command {
       [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
@@ -76,6 +44,41 @@ Describe '45-worktrunk' {
     . $script:Subject
 
     $script:WorktrunkInitialized | Should -BeTrue
+    $script:WorktrunkCommand | Should -Be 'git-wt'
+  }
+
+  It 'falls back to wt when git-wt is not available' {
+    function wt {
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "wt"')
+    }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeTrue
+    $script:WorktrunkCommand | Should -Be 'wt'
+  }
+
+  It 'prefers git-wt when both git-wt and wt are available' {
+    function git-wt {
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "git-wt"')
+    }
+    function wt {
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "wt"')
+    }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
+    } -ParameterFilter { $Name -eq 'git-wt' }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeTrue
+    $script:WorktrunkCommand | Should -Be 'git-wt'
   }
 
   It 'strips trailing zero lines from init output before evaluation' {
