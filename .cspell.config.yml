@@ -1,6 +1,6 @@
 allowCompoundWords: true
 dictionaries:
-  - cpp
+  - cpp-compound-words
   - en_US
   - en-gb
   - fullstack
@@ -10,6 +10,7 @@ dictionaries:
   - node
   - shellscript
   - softwareTerms
+  - vim
 enableGlobDot: true
 features:
   weighted-suggestions: true
@@ -26,6 +27,9 @@ useGitignore: true
 version: '0.2'
 words:
   - curlrc
+  - exrc
+  - gdefault
   - inputrc
   - kito
   - wgetrc
+  - viml
