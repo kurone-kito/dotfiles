@@ -1,6 +1,6 @@
 # Guidelines for AI Agents
 
-This project is a language-independent generic project template.
+A collection of configuration files that we use.
 It is currently optimized for GitHub Copilot tooling, but `AGENTS.md`
 exists so Codex can still receive the minimum project rules
 immediately, without depending on a redirect.

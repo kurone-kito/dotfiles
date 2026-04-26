@@ -1,6 +1,6 @@
 # Guidelines for AI Agents
 
-This project is a language-independent generic project template.
+A collection of configuration files that we use.
 
 When contributing to this repository using AI agents, adhere to the
 following guidelines to ensure high-quality contributions that align with
@@ -177,9 +177,3 @@ feat: add auth system and refactor database layer and update docs
 
 - **Do not** modify community documents (CODE_OF_CONDUCT, CONTRIBUTING)
   without explicit approval
-
-## Onboarding
-
-This project template is generic and language-independent.
-If you plan to implement a language-specific project based on this one,
-**submit a proposal to customize this documentation first**.
