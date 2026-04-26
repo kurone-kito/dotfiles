@@ -31,7 +31,7 @@ configuring secrets correctly.
 │   filename ─── target file under ~/.ssh/  ──┐                   │
 │                                             │ referenced by     │
 │ data.secret.ssh.hosts.<alias>               │                   │
-│   hostname, user                            │                   │
+│   hostname, user, port (optional)           │                   │
 │   identity ─── must match a filename above ─┘                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -199,6 +199,7 @@ identity = "id_ed25519_personal"
 hostname = "gitlab.example.com"
 user = "git"
 identity = "id_ed25519_work"
+port = 2222
 
 [data.secret.ssh.hosts.github-oss]
 hostname = "github.com"
@@ -210,6 +211,7 @@ identity = "id_ed25519_oss"
 - `user` — SSH user (defaults to `git` if omitted)
 - `identity` — filename of the SSH key (must match a `filename` in
   `ssh.keys`)
+- `port` — SSH port number (optional; omit for default 22)
 
 To **override the default connection** for a domain (e.g., use a
 specific key for all `github.com` access), quote the domain name
@@ -244,6 +246,12 @@ Host github-personal
   HostName github.com
   User git
   IdentityFile ~/.ssh/id_ed25519_personal
+
+Host gitlab-work
+  HostName gitlab.example.com
+  Port 2222
+  User git
+  IdentityFile ~/.ssh/id_ed25519_work
 ```
 
 ### Complete multi-identity example
@@ -309,6 +317,7 @@ identity = "id_ed25519_personal"
 hostname = "gitlab.example.com"
 user = "git"
 identity = "id_ed25519_work"
+port = 2222
 
 [data.secret.ssh.hosts.github-oss]
 hostname = "github.com"

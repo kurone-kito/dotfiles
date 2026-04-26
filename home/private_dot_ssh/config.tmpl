@@ -14,6 +14,9 @@ Host *
 {{ range $alias, $host := (dig "secret" "ssh" "hosts" dict .) -}}
 Host {{ $alias }}
   HostName {{ $host.hostname }}
+{{- if (dig "port" 0 $host) }}
+  Port {{ dig "port" 0 $host }}
+{{- end }}
   User {{ dig "user" "git" $host }}
   IdentityFile ~/.ssh/{{ $host.identity }}
 

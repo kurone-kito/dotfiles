@@ -35,6 +35,9 @@ filename = {{ $sshKey.filename | quote }}
 hostname = {{ $host.hostname | quote }}
 user = {{ dig "user" "git" $host | quote }}
 identity = {{ $host.identity | quote }}
+{{- if (dig "port" 0 $host) }}
+port = {{ dig "port" 0 $host }}
+{{- end }}
 {{- end }}
 
 # To add a directory-specific profile, append the following to
@@ -69,6 +72,7 @@ identity = {{ $host.identity | quote }}
 #   hostname = "github.com"
 #   user     = "git"
 #   identity = "id_ed25519_personal" # must match a filename above
+#   port     = 2222                  # optional; omit for default (22)
 #
 # To override the default connection for a domain (e.g., github.com),
 # quote the key to prevent TOML from splitting on the dot:
