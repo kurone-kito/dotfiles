@@ -49,12 +49,16 @@ For each GPG identity, create a Bitwarden item:
 
 ### SSH keys
 
-For each SSH key pair, create a Bitwarden item:
+For each SSH key pair, create a Bitwarden **SSH key** item
+(not a regular item with attachments):
 
-- **Item name:** `SSH Key - Personal` (or `SSH Key - Work`, etc.)
-- **Attachments:**
-  - `id_ed25519` (or your key filename) — SSH private key
-  - `id_ed25519.pub` — SSH public key
+1. In Bitwarden, select **New** → **SSH key**
+2. Import or paste your private key (OpenSSH or PKCS#8 format)
+3. Bitwarden automatically derives the public key and fingerprint
+4. Name the item descriptively (e.g., `SSH Key - Personal`)
+
+The deploy script retrieves the structured `sshKey.privateKey` and
+`sshKey.publicKey` fields directly — no attachments needed.
 
 ## Configuring chezmoi
 
@@ -173,9 +177,13 @@ manager = "onepassword"
 item = "op://Private/GPG Key - Personal"
 
 [data.secret.ssh.keys.personal]
-item = "SSH Key - Personal"
+item = "Private/SSH Key - Personal"
 filename = "id_ed25519_personal"
 ```
+
+For SSH keys, create a **SSH Key** item in 1Password. The deploy
+script reads the `private key` and `public key` fields via
+`op://` URIs automatically.
 
 Authenticate with `eval $(op signin)` before `chezmoi apply`.
 
@@ -195,6 +203,9 @@ item = "/Keys/SSH Key - Personal"
 filename = "id_ed25519_personal"
 ```
 
-> **Note:** For KeePassXC file attachments, store the key content
-> as a named attribute (base64-encoded if binary). The attribute
-> name must match the `filename` parameter.
+For SSH keys, store the private and public key content as named
+attributes `privateKey` and `publicKey` on the KeePassXC entry.
+
+> **Note:** For KeePassXC GPG key attachments, store the key
+> content as a named attribute (base64-encoded if binary). The
+> attribute name must match the `filename` parameter.
