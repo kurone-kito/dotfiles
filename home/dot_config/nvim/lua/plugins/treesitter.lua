@@ -57,7 +57,14 @@ return {
       },
     },
     config = function(_, opts)
-      require("nvim-treesitter.configs").setup(opts)
+      local ok, configs = pcall(require, "nvim-treesitter.configs")
+      if ok then
+        -- Legacy API (nvim-treesitter < 1.0)
+        configs.setup(opts)
+      else
+        -- New API (nvim-treesitter >= 1.0): opts handled by lazy.nvim
+        require("nvim-treesitter").setup(opts)
+      end
     end,
   },
 }
