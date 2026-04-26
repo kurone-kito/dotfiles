@@ -26,7 +26,7 @@ public_key="${ssh_dir}/{{ $sshKey.filename }}.pub"
 
 if [ ! -f "${private_key}" ]; then
   cat > "${private_key}" << 'SSH_PRIVATE_KEY_EOF'
-{{ template "get-secret-attachment" dict "item" $sshKey.item "filename" $sshKey.filename "ctx" $ }}
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
 SSH_PRIVATE_KEY_EOF
   chmod 600 "${private_key}"
   echo "  Private key written."
@@ -36,7 +36,7 @@ fi
 
 if [ ! -f "${public_key}" ]; then
   cat > "${public_key}" << 'SSH_PUBLIC_KEY_EOF'
-{{ template "get-secret-attachment" dict "item" $sshKey.item "filename" (printf "%s.pub" $sshKey.filename) "ctx" $ }}
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "public" "ctx" $ }}
 SSH_PUBLIC_KEY_EOF
   chmod 644 "${public_key}"
   echo "  Public key written."

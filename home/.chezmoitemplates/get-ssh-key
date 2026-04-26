@@ -1,0 +1,34 @@
+{{- /* get-ssh-key: Retrieve an SSH key from the configured secret manager.
+     Usage: {{ template "get-ssh-key" dict "item" "Item Name" "type" "private" "ctx" . }}
+     - item: The item name or identifier in the secret manager
+     - type: "private" or "public"
+     - ctx:  The top-level chezmoi template data (pass . from caller)
+
+     Supported managers: bitwarden, onepassword, keepassxc
+     Returns empty string when manager is "none" or unrecognized.
+
+     Notes:
+     - Bitwarden: uses native SSH Key item type (type 5) with
+       sshKey.privateKey and sshKey.publicKey structured fields
+     - 1Password: uses SSH Key item fields via op:// URI
+     - KeePassXC: uses named attributes "privateKey" / "publicKey" */ -}}
+{{- $manager := dig "secret" "manager" "none" .ctx -}}
+{{- if eq $manager "bitwarden" -}}
+{{-   if eq .type "private" -}}
+{{-     (bitwarden "item" .item).sshKey.privateKey -}}
+{{-   else -}}
+{{-     (bitwarden "item" .item).sshKey.publicKey -}}
+{{-   end -}}
+{{- else if eq $manager "onepassword" -}}
+{{-   if eq .type "private" -}}
+{{-     onepasswordRead (printf "op://%s/private key" .item) -}}
+{{-   else -}}
+{{-     onepasswordRead (printf "op://%s/public key" .item) -}}
+{{-   end -}}
+{{- else if eq $manager "keepassxc" -}}
+{{-   if eq .type "private" -}}
+{{-     keepassxcAttribute .item "privateKey" -}}
+{{-   else -}}
+{{-     keepassxcAttribute .item "publicKey" -}}
+{{-   end -}}
+{{- end -}}
