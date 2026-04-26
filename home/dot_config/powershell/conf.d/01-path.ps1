@@ -5,7 +5,7 @@
 # between chezmoi runs and SSH sessions where registry PATH may
 # not be fully propagated.
 
-# Windows-only: these directories do not exist on Unix.
+# Windows-only: manage user-scoped tool directories here.
 if ($IsWindows -eq $false) { return }
 
 $sep = [IO.Path]::PathSeparator
@@ -13,6 +13,7 @@ $extraPaths = @(
   (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
   (Join-Path $env:LOCALAPPDATA 'Zellij')
   (Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin')
+  (Join-Path $HOME '.local\bin')
 )
 
 foreach ($dir in $extraPaths) {

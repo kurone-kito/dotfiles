@@ -11,6 +11,7 @@ $managedDirs = @(
   (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
   (Join-Path $env:LOCALAPPDATA 'Zellij')
   (Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin')
+  (Join-Path $HOME '.local\bin')
 )
 
 $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
