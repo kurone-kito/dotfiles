@@ -19,7 +19,14 @@ configuring secrets correctly.
 │ data.git.profiles.<key>         │ matches the key               │
 │   (directory-scoped overrides)  │ imported from:                │
 │   name, email, signingkey ──┐   │                               │
-│                             │   │                               │
+│   sshhost (optional) ──┐    │   │                               │
+│                        │    │   │                               │
+├────────────────────────┼────┼───┼───────────────────────────────┤
+│ url.insteadOf          │    │   │                               │
+│   (auto-generated when │    │   │                               │
+│   sshhost is set;      │    │   │                               │
+│   routes ghq clones    │    │   │                               │
+│   through SSH alias) ──┘    │   │                               │
 ├─────────────────────────────┼───┼───────────────────────────────┤
 │ data.secret.gpg.<label>     │   │                               │
 │   item ─── secret manager ──┼───┘  imports private key whose    │
@@ -40,7 +47,9 @@ configuring secrets correctly.
   repositories unless overridden by a profile.
 - **`data.git.profiles.*`** are **directory-scoped overrides**.
   Repositories under the specified `gitdir` path use the profile's
-  name, email, and signing key instead.
+  name, email, and signing key instead. When `sshhost` is set, ghq
+  clones are automatically routed through the matching SSH alias
+  (see [ghq-workflow.md](./ghq-workflow.md)).
 - **`data.secret.gpg.*`** lists GPG key items to import. Each
   corresponds to a `signingkey` fingerprint in git config.
 - **`data.secret.ssh.keys.*`** lists SSH key pairs to deploy. The
@@ -273,6 +282,7 @@ name = "Alice Corporate"
 email = "alice@example.com"
 signingkey = "CCCC3333DDDD4444"
 gitdir = "~/work/"
+sshhost = "github-work"   # optional — routes ghq clones via this SSH alias
 
 # OSS identity — overrides in ~/oss/ repositories
 [data.git.profiles.oss]
