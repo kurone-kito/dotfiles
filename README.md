@@ -108,12 +108,15 @@ to load `~/.config/powershell/profile.ps1`, so installer-added lines in
 those files are replaced by design.
 
 For `mise`, use a Windows install path that is already supported by this
-repository before the first apply:
+repository before the first apply. `WinGet\Links` may be missing even
+when `jdx.mise` is installed, so this repo also falls back to the actual
+package bin directory:
 
 - `%LOCALAPPDATA%\Microsoft\WinGet\Links`
+- `%LOCALAPPDATA%\Microsoft\WinGet\Packages\jdx.mise_*\mise\bin`
 - `%USERPROFILE%\.local\bin`
 
-Custom `MISE_INSTALL_PATH` values are not auto-detected today.
+Custom `MISE_INSTALL_PATH` values are still not auto-detected today.
 
 ## Git user/profile management
 
