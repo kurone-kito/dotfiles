@@ -8,6 +8,7 @@ dictionaries:
   - markdown
   - misc
   - node
+  - redis
   - shellscript
   - softwareTerms
   - vim
@@ -20,6 +21,7 @@ ignorePaths:
   - .git
   - .github/CODE_OF_CONDUCT.*
   - .vscode/extensions.json
+  - home/dot_config/git/ignore
 ignoreRegExpList:
   - kuroné?
 language: en,ja
@@ -31,5 +33,6 @@ words:
   - gdefault
   - inputrc
   - kito
+  - rerere
   - wgetrc
   - viml

@@ -8,6 +8,8 @@
     "AGENTS.md": "CLAUDE.md, GEMINI.md"
   },
   "files.associations": {
+    "**/*git/config": "properties",
+    "*ignore": "ignore",
     ".gitmessage": "git-commit",
     ".imgbotconfig": "json",
     "dot_curlrc": "shellscript",
