@@ -1,8 +1,7 @@
 return {
   {
     "saghen/blink.cmp",
-    version = "2.*",
-    build = "cargo build --release",
+    version = "1.*",
     event = "InsertEnter",
     dependencies = {
       "rafamadriz/friendly-snippets",
@@ -22,6 +21,7 @@ return {
         list = { selection = { preselect = true, auto_insert = false } },
       },
       signature = { enabled = true },
+      fuzzy = { implementation = "prefer_rust_with_warning" },
     },
   },
 }
