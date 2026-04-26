@@ -23,3 +23,6 @@ Language: [🇬🇧](./CONTRIBUTING.md) | **🇯🇵** | [🇨🇳](./CONTRIBUTI
    含めてください）。リポジトリルートに `.gitmessage` テンプレートがあります。詳細は
    [copilot-instructions.md](./copilot-instructions.md#commit-rules)
    を参照してください。
+6. スクリプトに関わる変更の場合、**提出前にテストスイートを実行**してください。
+   コマンドと前提条件は
+   [README のテストセクション](../README.md#testing)を参照してください。

@@ -34,6 +34,18 @@ A `.gitmessage` template is available at the repository root.
 Write user-facing, lowercase subjects, keep them under 72 characters,
 and split unrelated changes into separate atomic commits.
 
+## Testing
+
+Run tests after modifying any script in `home/`:
+
+- **Bash** (Linux/macOS/WSL):
+  `tests/bash/helpers/bats-core/bin/bats tests/bash/`
+- **PowerShell** (Windows):
+  `Invoke-Pester tests/powershell/ -Output Detailed`
+
+Ensure submodules are initialized first:
+`git submodule update --init --recursive`
+
 ## Canonical reference
 
 The full, Copilot-first project guidance lives in

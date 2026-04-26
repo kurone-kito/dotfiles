@@ -88,6 +88,42 @@ If it is not this repository, re-initialize source and apply again:
 chezmoi init <your-repo-or-local-path> --apply
 ```
 
+## Testing
+
+Platform-specific unit tests verify the profile generation scripts.
+
+### Prerequisites
+
+Bash tests use [bats-core](https://github.com/bats-core/bats-core)
+installed as git submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+PowerShell tests use [Pester 5+](https://pester.dev/). Install it if
+it is not already available:
+
+```powershell
+Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
+```
+
+### Running tests
+
+**Bash** (Linux/macOS/WSL):
+
+```bash
+tests/bash/helpers/bats-core/bin/bats tests/bash/
+```
+
+**PowerShell** (Windows):
+
+```powershell
+Invoke-Pester tests/powershell/ -Output Detailed
+```
+
+CI runs both suites automatically on every push and pull request.
+
 ## Contributing
 
 Welcome to contribute to this repository! For more details,

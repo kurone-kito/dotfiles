@@ -21,3 +21,6 @@ Language: **🇬🇧** | [🇯🇵](./CONTRIBUTING.ja.md) | [🇨🇳](./CONTRIB
    A suggested `.gitmessage` template is available at the repository root.
    See [copilot-instructions.md](./copilot-instructions.md#commit-rules)
    for examples and full details.
+6. If your change involves scripts, **run the test suite before
+   submitting**. See the [Testing section in the README](../README.md#testing)
+   for commands and prerequisites.

@@ -173,6 +173,54 @@ feat: add auth system and refactor database layer and update docs
 - **File naming**: lowercase with hyphens (e.g., `feature-request.yml`)
   unless constrained by a platform convention (e.g., `CONTRIBUTING.md`)
 
+## Testing
+
+This project uses platform-specific test frameworks for the chezmoi
+scripts:
+
+- **Bash**: [bats-core](https://github.com/bats-core/bats-core) with
+  bats-support, bats-assert, and bats-file (git submodules under
+  `tests/bash/helpers/`)
+- **PowerShell**: [Pester 5+](https://pester.dev/)
+
+### Running tests
+
+Bash (Linux/macOS/WSL):
+
+```bash
+git submodule update --init --recursive
+tests/bash/helpers/bats-core/bin/bats tests/bash/
+```
+
+PowerShell (Windows):
+
+```powershell
+Invoke-Pester tests/powershell/ -Output Detailed
+```
+
+### When to run
+
+- **After modifying** any script template in `home/` (especially
+  `run_onchange_after_*.tmpl` files)
+- **Before committing** script changes — verify that existing tests
+  still pass
+- **After adding** a new script — add corresponding tests and fixtures
+
+### Test strategy
+
+Tests use **pre-rendered fixtures** (hardcoded test data) rather than
+chezmoi template rendering. Fixtures live in:
+
+- `tests/bash/fixtures/`
+- `tests/powershell/fixtures/`
+
+Each fixture mirrors the final rendered script with sample profile data.
+This isolates tests from chezmoi's template engine and
+`chezmoi.toml` configuration.
+
+CI runs both suites on every push and pull request
+(`.github/workflows/test.yml`).
+
 ## Guardrails
 
 - **Do not** modify community documents (CODE_OF_CONDUCT, CONTRIBUTING)
