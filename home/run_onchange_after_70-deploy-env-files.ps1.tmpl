@@ -46,8 +46,7 @@ if (-not (Test-Path $targetDir)) {
 '@ | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
 
   # Restrict to current user only (no admin elevation required)
-  $username = [System.Environment]::UserName
-  & icacls $targetPath /inheritance:r /grant:r "${username}:(R,W)" | Out-Null
+  & icacls $targetPath /inheritance:r /grant:r "${env:USERNAME}:(R,W)" | Out-Null
   Write-Host "  done: deployed (user-only access)"
 }
 
