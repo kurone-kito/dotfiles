@@ -53,6 +53,9 @@ token_item = {{ $clone.token_item | quote }}
 {{- if (dig "hostname" "" $clone) }}
 hostname = {{ dig "hostname" "" $clone | quote }}
 {{- end }}
+{{- if ne (dig "ssh" true $clone) true }}
+ssh = {{ dig "ssh" true $clone }}
+{{- end }}
 {{- end }}
 {{- range $key, $entry := (dig "env" "deploy" dict .) }}
 
@@ -119,6 +122,7 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   owner      = "your-github-username"
 #   token_item = "GitHub PAT"  # secret manager item (repo scope)
 #   hostname   = "github.com"  # optional; defaults to github.com
+#   ssh        = true          # optional; false to use HTTPS instead of SSH
 #
 # See docs/ghq-workflow.md for details.
 #

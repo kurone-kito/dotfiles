@@ -224,16 +224,18 @@ Add the following to `~/.config/chezmoi/chezmoi.toml`:
 owner = "alice"
 token_item = "GitHub PAT - Personal"
 # hostname = "github.com"  # optional; defaults to github.com
+# ssh      = true          # optional; false to use HTTPS instead of SSH
 ```
 
 The table key (`"personal"`, `"work"`, etc.) is an arbitrary unique
 label — it only appears in log messages and does not affect behaviour.
 
-| Field        | Required | Description                                                 |
-| ------------ | -------- | ----------------------------------------------------------- |
-| `owner`      | Yes      | GitHub username or organization                             |
-| `token_item` | Yes      | Secret manager item containing the PAT (stored as password) |
-| `hostname`   | No       | GitHub host (default: `github.com`; set for GHE instances)  |
+| Field        | Required | Description                                                    |
+| ------------ | -------- | -------------------------------------------------------------- |
+| `owner`      | Yes      | GitHub username or organization                                |
+| `token_item` | Yes      | Secret manager item containing the PAT (stored as password)    |
+| `hostname`   | No       | GitHub host (default: `github.com`; set for GHE instances)     |
+| `ssh`        | No       | Clone via SSH (default: `true`); set `false` for HTTPS cloning |
 
 ### How it works
 
@@ -272,6 +274,28 @@ Each account uses its own PAT, so this works even for multiple
 accounts on the same GitHub host. Combined with `sshhost` profiles,
 cloned repositories automatically use the correct SSH key and
 git identity.
+
+### SSH vs HTTPS cloning
+
+By default, repositories are cloned over SSH (`ghq get -p`). This
+works well with the `url.insteadOf` and `sshhost` configuration
+described above.
+
+To clone via HTTPS instead (for example, on a GHE instance that
+requires HTTPS-only access), set `ssh = false` on the clone target:
+
+```toml
+[data.ghq.clone."ghe"]
+owner = "internal-team"
+token_item = "GHE PAT"
+hostname = "github.example.com"
+ssh = false
+```
+
+When `ssh` is `false`, `ghq get` runs without the `-p` flag,
+using the HTTPS URL that `gh` provides. The credential helper
+(configured via `GIT_CONFIG_*` environment variables in the script)
+authenticates the HTTPS connection automatically.
 
 ### Execution order
 

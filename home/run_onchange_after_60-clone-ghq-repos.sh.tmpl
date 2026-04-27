@@ -41,7 +41,7 @@ else
       rm -rf "${target}"
     fi
     echo "  clone: ${repo}"
-    "${GHQ}" get -p "{{ $hostname }}/${repo}" 2>&1 || true
+    "${GHQ}" get {{ if (dig "ssh" true $clone) }}-p {{ end }}"{{ $hostname }}/${repo}" 2>&1 || true
   done
   unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 fi

@@ -53,7 +53,7 @@ if ([string]::IsNullOrEmpty($token)) {
       }
       Write-Host "  clone: $repo"
       try {
-        & $ghqBin get -p "{{ $hostname }}/$repo" 2>&1
+        & $ghqBin get {{ if (dig "ssh" true $clone) }}-p {{ end }}"{{ $hostname }}/$repo" 2>&1
       } catch {
         Write-Host "  error: $_"
       }
