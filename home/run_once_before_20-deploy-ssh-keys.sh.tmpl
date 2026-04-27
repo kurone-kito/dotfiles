@@ -25,10 +25,10 @@ private_key="${ssh_dir}/{{ $sshKey.filename }}"
 public_key="${ssh_dir}/{{ $sshKey.filename }}.pub"
 
 if [ ! -f "${private_key}" ]; then
-  cat > "${private_key}" << 'SSH_PRIVATE_KEY_EOF'
+  (umask 077 && cat > "${private_key}" << 'SSH_PRIVATE_KEY_EOF'
 {{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
 SSH_PRIVATE_KEY_EOF
-  chmod 600 "${private_key}"
+  )
   echo "  Private key written."
 else
   echo "  Private key already exists; skipping."
