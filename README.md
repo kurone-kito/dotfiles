@@ -227,6 +227,8 @@ This repository manages `~/.config/git/config` via
 
 - `[user]` is rendered from `data.git` in `~/.config/chezmoi/chezmoi.toml`
 - GPG signing settings are enabled only when `signingkey` is non-empty
+- Run `gpg-cache` once per session when you want to warm `gpg-agent`
+  before long signing-heavy workflows
 - Directory-based identities are handled with `includeIf`
 
 ### Add directory-specific Git profiles
@@ -246,6 +248,16 @@ Then run:
 ```bash
 chezmoi apply
 ```
+
+If you use GPG commit signing and want to avoid repeated prompts during
+an extended session, warm the agent cache once up front:
+
+```bash
+gpg-cache
+```
+
+This performs a throwaway signature to unlock the key cache without
+creating a real Git object.
 
 Generated profile files:
 
