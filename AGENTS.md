@@ -52,6 +52,10 @@ Run tests after modifying any script in `home/`:
 - **PowerShell** (Windows):
   `Invoke-Pester tests/powershell/ -Output Detailed`
 
+On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
+authoritative full PowerShell run remains Windows local execution and
+Windows CI.
+
 Ensure submodules are initialized first:
 `git submodule update --init --recursive`
 

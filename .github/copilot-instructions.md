@@ -243,6 +243,10 @@ PowerShell (Windows):
 Invoke-Pester tests/powershell/ -Output Detailed
 ```
 
+On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
+authoritative full PowerShell run remains Windows local execution and
+Windows CI.
+
 ### When to run
 
 - **After modifying** any script template in `home/` (especially

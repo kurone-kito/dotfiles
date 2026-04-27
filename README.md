@@ -324,6 +324,10 @@ tests/bash/helpers/bats-core/bin/bats tests/bash/
 Invoke-Pester tests/powershell/ -Output Detailed
 ```
 
+On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
+authoritative full PowerShell run remains Windows local execution and
+Windows CI.
+
 CI runs both suites automatically on every push and pull request.
 
 ## Contributing
