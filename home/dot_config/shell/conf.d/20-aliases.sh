@@ -14,11 +14,11 @@ alias egrep='egrep --color=auto'
 _wt_path=''
 _wt_is_windows_terminal=false
 if command -v wt >/dev/null 2>&1; then
-  _wt_path=$(command -v wt 2>/dev/null || true)
+  _wt_path=$(command -v wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
   case "$_wt_path" in
-    *WindowsApps*/wt|*WindowsApps*/wt.exe|*WindowsApps*\\wt|*WindowsApps*\\wt.exe|\
-    *Microsoft.WindowsTerminal*/wt|*Microsoft.WindowsTerminal*/wt.exe|\
-    *Microsoft.WindowsTerminal*\\wt|*Microsoft.WindowsTerminal*\\wt.exe)
+    *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
+    *microsoft.windowsterminal*/wt|*microsoft.windowsterminal*/wt.exe|\
+    *microsoft.windowsterminal*\\wt|*microsoft.windowsterminal*\\wt.exe)
       _wt_is_windows_terminal=true
       ;;
   esac

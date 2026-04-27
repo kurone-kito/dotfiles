@@ -11,6 +11,8 @@ setup() {
   ALIASES_PATH="$BATS_TEST_DIRNAME/../../home/dot_config/shell/conf.d/20-aliases.sh"
   _ORIG_PATH="$PATH"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
+  # Symlink tr so case-insensitive path matching works under restricted PATH
+  ln -sf "$(command -v tr)" "$BATS_TEST_TMPDIR/bin/tr"
   export PATH="$BATS_TEST_TMPDIR/bin"
 }
 
@@ -63,7 +65,27 @@ make_mock_command_at() {
 
 @test "skips git-wt alias when wt resolves to Windows Terminal" {
   make_mock_command_at 'WindowsApps/wt'
-  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps"
+  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps:$BATS_TEST_TMPDIR/bin"
+
+  . "$ALIASES_PATH"
+
+  run alias git-wt
+  assert_failure
+}
+
+@test "skips git-wt alias when wt resolves to lowercase windowsapps" {
+  make_mock_command_at 'windowsapps/wt'
+  export PATH="$BATS_TEST_TMPDIR/bin/windowsapps:$BATS_TEST_TMPDIR/bin"
+
+  . "$ALIASES_PATH"
+
+  run alias git-wt
+  assert_failure
+}
+
+@test "skips git-wt alias when wt resolves to Microsoft.WindowsTerminal path" {
+  make_mock_command_at 'Microsoft.WindowsTerminal_8wekyb3d8bbwe/wt'
+  export PATH="$BATS_TEST_TMPDIR/bin/Microsoft.WindowsTerminal_8wekyb3d8bbwe:$BATS_TEST_TMPDIR/bin"
 
   . "$ALIASES_PATH"
 
