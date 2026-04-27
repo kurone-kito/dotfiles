@@ -102,7 +102,7 @@ verify = true
 [switch.picker]
   pager = "delta --paging=never"
 
-[post-create]
+[pre-start]
   env = """
 main_wt=$(git worktree list --porcelain | awk 'NR==1{print $2}')
 for f in "$main_wt"/.env*; do
