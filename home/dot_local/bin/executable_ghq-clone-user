@@ -23,12 +23,18 @@ USE_SSH=true
 HOSTNAME="github.com"
 LIMIT=1000
 
+require_arg() {
+  if [ "$#" -lt 3 ] || [ -z "$3" ]; then
+    echo "Error: $1 requires a value." >&2; usage >&2; exit 1
+  fi
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --ssh)      USE_SSH=true;  shift ;;
     --https)    USE_SSH=false; shift ;;
-    --hostname) HOSTNAME="$2"; shift 2 ;;
-    --limit)    LIMIT="$2";    shift 2 ;;
+    --hostname) require_arg "$1" "$@"; HOSTNAME="$2"; shift 2 ;;
+    --limit)    require_arg "$1" "$@"; LIMIT="$2";    shift 2 ;;
     -h|--help)  usage; exit 0 ;;
     -*)         echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     *)          OWNER="$1";    shift ;;
@@ -40,6 +46,11 @@ if [ -z "${OWNER}" ]; then
   usage >&2
   exit 1
 fi
+
+# Validate hostname — reject path separators and traversal sequences
+case "$HOSTNAME" in
+  */* | *\\* | *..*) echo "Error: invalid hostname '${HOSTNAME}'." >&2; exit 1 ;;
+esac
 
 # Locate gh and ghq — check PATH first, then mise shims
 find_tool() {
@@ -54,16 +65,22 @@ GHQ_ROOT="$("${GHQ}" root)"
 
 echo "==> Cloning repos for ${OWNER}@${HOSTNAME}"
 
-"${GH}" repo list "${OWNER}" \
+repos="$(GH_HOST="${HOSTNAME}" "${GH}" repo list "${OWNER}" \
   --no-archived --source --limit "${LIMIT}" \
-  --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
+  --json nameWithOwner -q '.[].nameWithOwner' 2>&1)" || {
+  echo "Error: failed to list repos for ${OWNER}: ${repos}" >&2
+  exit 1
+}
+
+echo "${repos}" |
 while IFS= read -r repo; do
+  [ -z "${repo}" ] && continue
   target="${GHQ_ROOT}/${HOSTNAME}/${repo}"
-  if [ -d "${target}/.git" ]; then
+  if [ -e "${target}/.git" ]; then
     echo "  skip: ${repo}"
     continue
   fi
-  if [ -d "${target}" ]; then
+  if [ -e "${target}" ]; then
     rm -rf "${target}"
   fi
   echo "  clone: ${repo}"

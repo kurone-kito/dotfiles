@@ -34,6 +34,12 @@ if ($Ssh -and $Https) {
   return
 }
 
+# Validate hostname — reject path separators and traversal sequences
+if ($Hostname -match '[/\\]' -or $Hostname -match '\.\.') {
+  Write-Error "Invalid hostname '$Hostname'."
+  return
+}
+
 # Locate gh and ghq — check PATH first, then mise shims
 function Find-Tool {
   param([string]$Name)
@@ -54,13 +60,21 @@ $ghqRoot = & $ghqBin root
 
 Write-Host "==> Cloning repos for ${Owner}@${Hostname}"
 
+$prevGhHost = $env:GH_HOST
 try {
+  $env:GH_HOST = $Hostname
   $repos = & $ghBin repo list $Owner `
     --no-archived --source --limit $Limit `
-    --json nameWithOwner -q '.[].nameWithOwner' 2>$null
+    --json nameWithOwner -q '.[].nameWithOwner' 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "Failed to list repos for ${Owner}: $repos"
+    return
+  }
 } catch {
-  Write-Host "  error listing repos: $_"
-  $repos = @()
+  Write-Error "Failed to list repos for ${Owner}: $_"
+  return
+} finally {
+  if ($prevGhHost) { $env:GH_HOST = $prevGhHost } else { Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue }
 }
 
 foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
