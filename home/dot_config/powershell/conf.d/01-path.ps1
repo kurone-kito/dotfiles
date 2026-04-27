@@ -137,6 +137,14 @@ foreach ($dir in @((@(Get-MiseManagedPaths)) + $staticManagedPaths)) {
   $desiredLookup[$normalized] = $true
 }
 
+function Get-RegistryUserPath {
+  if ($null -ne $env:DOTFILES_TEST_REGISTRY_USER_PATH) {
+    return $env:DOTFILES_TEST_REGISTRY_USER_PATH
+  }
+
+  [Environment]::GetEnvironmentVariable('PATH', 'User')
+}
+
 $currentEntries = @(Split-PathEntries $env:PATH)
 $remainingEntries = @()
 foreach ($entry in $currentEntries) {
@@ -146,6 +154,33 @@ foreach ($entry in $currentEntries) {
 }
 
 $newEntries = @($desiredManagedPaths + $remainingEntries)
+
+# Sync missing User PATH entries from the Windows registry.
+# GUI-launched processes like VS Code inherit the PATH from their
+# parent process, which may be stale if tools were installed after
+# the parent started. Windows Terminal reads the registry for each
+# new tab, but VS Code does not.
+$registryUserPath = Get-RegistryUserPath
+if (-not [string]::IsNullOrEmpty($registryUserPath)) {
+  $newLookup = @{}
+  foreach ($entry in $newEntries) {
+    $norm = Normalize-PathEntry $entry
+    if ($norm -ne '') {
+      $newLookup[$norm] = $true
+    }
+  }
+
+  foreach ($entry in (Split-PathEntries $registryUserPath)) {
+    $norm = Normalize-PathEntry $entry
+    if ($norm -ne '' -and -not $newLookup.ContainsKey($norm)) {
+      if (Test-Path -LiteralPath $entry -PathType Container) {
+        $newEntries += $entry
+        $newLookup[$norm] = $true
+      }
+    }
+  }
+}
+
 $currentNormalized = @($currentEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
 $newNormalized = @($newEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
 

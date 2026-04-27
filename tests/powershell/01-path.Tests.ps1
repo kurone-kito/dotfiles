@@ -55,6 +55,10 @@ Describe '01-path' {
 
     $script:Paths = New-ManagedPathLayout
 
+    # Disable registry sync by default so existing tests are not
+    # affected by the real Windows User PATH.
+    $env:DOTFILES_TEST_REGISTRY_USER_PATH = ''
+
     $env:PATH = @(
       $script:Paths.UnrelatedA
       $script:Paths.StaleMiseBin
@@ -76,6 +80,8 @@ Describe '01-path' {
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
+    $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -100,5 +106,61 @@ Describe '01-path' {
     $secondPath = $env:PATH
 
     $secondPath | Should -Be $firstPath
+  }
+
+  Context 'registry User PATH sync' {
+
+    It 'appends missing registry entries to the process PATH' {
+      $registryOnly = 'TestDrive:\registry-only'
+      New-Item -ItemType Directory -Path $registryOnly -Force | Out-Null
+
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.WinGetLinks
+        $registryOnly
+      ) -join ';'
+
+      . $script:Subject
+
+      $entries = $env:PATH -split ';'
+      $entries | Should -Contain $registryOnly
+    }
+
+    It 'does not duplicate entries already present in PATH' {
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      . $script:Subject
+
+      $entries = $env:PATH -split ';'
+      $dupes = ($entries | Where-Object {
+        $_ -eq $script:Paths.UnrelatedA
+      }).Count
+      $dupes | Should -Be 1
+    }
+
+    It 'skips registry entries whose directories do not exist' {
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = 'TestDrive:\nonexistent-dir'
+
+      . $script:Subject
+
+      $env:PATH | Should -Not -Match 'nonexistent-dir'
+    }
+
+    It 'is idempotent with registry sync enabled' {
+      $registryOnly = 'TestDrive:\registry-stable'
+      New-Item -ItemType Directory -Path $registryOnly -Force | Out-Null
+
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = $registryOnly
+
+      . $script:Subject
+      $firstPath = $env:PATH
+
+      . $script:Subject
+      $secondPath = $env:PATH
+
+      $secondPath | Should -Be $firstPath
+    }
   }
 }
