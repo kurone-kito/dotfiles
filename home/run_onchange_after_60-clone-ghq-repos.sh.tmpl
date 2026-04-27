@@ -13,7 +13,8 @@ exit 0
 command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
 GH="$(mise which gh 2>/dev/null)" || { echo "gh not found via mise; skipping."; exit 0; }
-GHQ_ROOT="$("${GHQ}" root)"
+CLONE_SCRIPT="${HOME}/.local/bin/ghq-clone-user"
+[ -x "${CLONE_SCRIPT}" ] || { echo "ghq-clone-user not found; skipping."; exit 0; }
 trap 'unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0' EXIT
 
 {{ range $key, $clone := $clones -}}
@@ -28,21 +29,7 @@ else
   export GIT_CONFIG_KEY_0="credential.https://{{ $hostname }}.helper"
   export GIT_CONFIG_VALUE_0="!${GH} auth git-credential"
   export GH_HOST="{{ $hostname }}"
-  "${GH}" repo list '{{ $clone.owner }}' \
-    --no-archived --source --limit 1000 \
-    --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
-  while IFS= read -r repo; do
-    target="${GHQ_ROOT}/{{ $hostname }}/${repo}"
-    if [ -d "${target}/.git" ]; then
-      echo "  skip: ${repo}"
-      continue
-    fi
-    if [ -d "${target}" ]; then
-      rm -rf "${target}"
-    fi
-    echo "  clone: ${repo}"
-    "${GHQ}" get {{ if (dig "ssh" true $clone) }}-p {{ end }}"{{ $hostname }}/${repo}" 2>&1 || true
-  done
+  "${CLONE_SCRIPT}" '{{ $clone.owner }}' {{ if not (dig "ssh" true $clone) }}--https {{ end }}--hostname '{{ $hostname }}'
   unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 fi
 

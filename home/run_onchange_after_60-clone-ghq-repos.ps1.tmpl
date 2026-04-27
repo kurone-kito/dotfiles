@@ -18,7 +18,11 @@ $ghqBin = mise which ghq 2>$null
 if (-not $ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
 $ghBin = mise which gh 2>$null
 if (-not $ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
-$ghqRoot = & $ghqBin root
+$cloneScript = Join-Path $HOME (Join-Path '.local' (Join-Path 'bin' 'ghq-clone-user.ps1'))
+if (-not (Test-Path $cloneScript)) {
+  Write-Host 'ghq-clone-user.ps1 not found; skipping.'
+  exit 0
+}
 
 {{ range $key, $clone := $clones -}}
 {{ $hostname := dig "hostname" "github.com" $clone -}}
@@ -34,30 +38,7 @@ if ([string]::IsNullOrEmpty($token)) {
   $env:GIT_CONFIG_KEY_0 = "credential.https://{{ $hostname }}.helper"
   $env:GIT_CONFIG_VALUE_0 = "!$ghUnixPath auth git-credential"
   try {
-    try {
-      $repos = & $ghBin repo list '{{ $clone.owner }}' `
-        --no-archived --source --limit 1000 `
-        --json nameWithOwner -q '.[].nameWithOwner' 2>$null
-    } catch {
-      Write-Host "  error listing repos: $_"
-      $repos = @()
-    }
-    foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
-      $target = Join-Path $ghqRoot (Join-Path '{{ $hostname }}' $repo)
-      if (Test-Path (Join-Path $target '.git')) {
-        Write-Host "  skip: $repo"
-        continue
-      }
-      if (Test-Path $target) {
-        Remove-Item -Path $target -Recurse -Force
-      }
-      Write-Host "  clone: $repo"
-      try {
-        & $ghqBin get {{ if (dig "ssh" true $clone) }}-p {{ end }}"{{ $hostname }}/$repo" 2>&1
-      } catch {
-        Write-Host "  error: $_"
-      }
-    }
+    & $cloneScript -Owner '{{ $clone.owner }}' {{ if not (dig "ssh" true $clone) }}-Https {{ end }}-Hostname '{{ $hostname }}'
   } finally {
     foreach ($v in @('GH_TOKEN', 'GH_HOST', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0')) {
       Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
