@@ -74,6 +74,13 @@
   clean = git vrc clean --file %f
   smudge = git vrc smudge --file %f
   required = true
+{{- if $gitSigningKey }}
+{{-   $gpgPath := lookPath "gpg" }}
+{{-   if $gpgPath }}
+[gpg]
+  program = {{ $gpgPath | quote }}
+{{-   end }}
+{{- end }}
 [help]
   autocorrect = prompt
 [init]
