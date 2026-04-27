@@ -1,0 +1,77 @@
+#!/bin/bash
+# Clone all non-archived, non-fork repositories for a GitHub user or
+# organization into the local ghq root. Skips repositories that are
+# already cloned. Requires gh (GitHub CLI) and ghq.
+#
+# Usage:
+#   ghq-clone-user <owner> [options]
+#
+# Options:
+#   --ssh           Clone via SSH (default)
+#   --https         Clone via HTTPS
+#   --hostname H    GitHub hostname (default: github.com)
+#   --limit N       Maximum repositories to list (default: 1000)
+#   -h, --help      Show this help
+set -euo pipefail
+
+usage() {
+  sed -n '2,/^[^#]/{ /^#/s/^# \?//p; }' "$0"
+}
+
+OWNER=""
+USE_SSH=true
+HOSTNAME="github.com"
+LIMIT=1000
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ssh)      USE_SSH=true;  shift ;;
+    --https)    USE_SSH=false; shift ;;
+    --hostname) HOSTNAME="$2"; shift 2 ;;
+    --limit)    LIMIT="$2";    shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    *)          OWNER="$1";    shift ;;
+  esac
+done
+
+if [ -z "${OWNER}" ]; then
+  echo "Error: <owner> is required." >&2
+  usage >&2
+  exit 1
+fi
+
+# Locate gh and ghq — check PATH first, then mise shims
+find_tool() {
+  command -v "$1" 2>/dev/null && return 0
+  command -v mise >/dev/null 2>&1 && mise which "$1" 2>/dev/null && return 0
+  return 1
+}
+
+GHQ="$(find_tool ghq)" || { echo "Error: ghq not found." >&2; exit 1; }
+GH="$(find_tool gh)"   || { echo "Error: gh not found." >&2; exit 1; }
+GHQ_ROOT="$("${GHQ}" root)"
+
+echo "==> Cloning repos for ${OWNER}@${HOSTNAME}"
+
+"${GH}" repo list "${OWNER}" \
+  --no-archived --source --limit "${LIMIT}" \
+  --json nameWithOwner -q '.[].nameWithOwner' 2>/dev/null |
+while IFS= read -r repo; do
+  target="${GHQ_ROOT}/${HOSTNAME}/${repo}"
+  if [ -d "${target}/.git" ]; then
+    echo "  skip: ${repo}"
+    continue
+  fi
+  if [ -d "${target}" ]; then
+    rm -rf "${target}"
+  fi
+  echo "  clone: ${repo}"
+  if ${USE_SSH}; then
+    "${GHQ}" get -p "${HOSTNAME}/${repo}" 2>&1 || true
+  else
+    "${GHQ}" get "${HOSTNAME}/${repo}" 2>&1 || true
+  fi
+done
+
+echo "==> Done."
