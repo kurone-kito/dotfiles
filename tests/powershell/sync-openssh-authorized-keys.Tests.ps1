@@ -5,9 +5,10 @@
 BeforeAll {
   $script:Subject = Join-Path $PSScriptRoot `
     '../../home/dot_local/bin/executable_sync-openssh-authorized-keys.ps1'
+  $script:IsWindowsTestHost = $IsWindows -ne $false
 }
 
-Describe 'sync-openssh-authorized-keys' {
+Describe 'sync-openssh-authorized-keys' -Skip:(-not $script:IsWindowsTestHost) {
 
   BeforeEach {
     $script:OriginalSkip = $env:DOTFILES_TEST_OPENSSH_AUTHORIZED_KEYS_SKIP_MAIN

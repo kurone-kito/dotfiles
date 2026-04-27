@@ -3,6 +3,7 @@ BeforeAll {
   $script:Template = Join-Path $PSScriptRoot '..' '..' 'home' `
     'run_onchange_after_25-deploy-secret-files.ps1.tmpl'
   $script:TemplateContent = Get-Content -Raw $script:Template
+  $script:IsWindowsTestHost = $IsWindows -ne $false
 }
 
 Describe '25-deploy-secret-files template' {
@@ -28,7 +29,7 @@ Describe '25-deploy-secret-files template' {
     }
   }
 
-  Context 'fixture deployment' {
+  Context 'fixture deployment' -Skip:(-not $script:IsWindowsTestHost) {
     BeforeEach {
       $env:DOTFILES_TEST_HOME = Join-Path $TestDrive 'home'
       New-Item -ItemType Directory -Path $env:DOTFILES_TEST_HOME -Force | Out-Null
