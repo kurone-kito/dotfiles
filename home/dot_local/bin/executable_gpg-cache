@@ -1,0 +1,31 @@
+#!/bin/sh
+# Prime the gpg-agent cache for the current session with a throwaway signature.
+set -eu
+
+update_gpg_session() {
+  if gpg_tty="$(tty 2>/dev/null)"; then
+    GPG_TTY="$gpg_tty"
+    export GPG_TTY
+  fi
+
+  if command -v gpg-connect-agent >/dev/null 2>&1; then
+    gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1 || true
+  fi
+
+  unset gpg_tty
+}
+
+if ! command -v gpg >/dev/null 2>&1; then
+  echo "gpg not found in PATH" >&2
+  exit 1
+fi
+
+update_gpg_session
+
+echo "Prompting GPG passphrase (loopback mode)..."
+if printf '' | gpg --pinentry-mode loopback --clearsign --batch --yes >/dev/null 2>&1; then
+  echo "Passphrase cached successfully (24h TTL)."
+else
+  echo "GPG passphrase caching failed." >&2
+  exit 1
+fi
