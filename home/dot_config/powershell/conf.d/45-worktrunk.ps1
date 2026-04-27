@@ -23,8 +23,10 @@ if (-not $__wtCmd) {
 }
 
 # worktrunk's shell init script ends with a bare "0" that leaks to stdout;
-# strip it before evaluating.
+# strip only the final trailing zero line before evaluating.
 $__wtInit = (& $__wtCmd config shell init powershell 2>$null) | Out-String
-$__wtInit = $__wtInit -replace '(?m)^0\s*$', ''
-if ($__wtInit.Trim()) { Invoke-Expression $__wtInit }
+if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
+  $__wtInit = $__wtInit -replace '(?s)(\r?\n)0\s*$', ''
+  if ($__wtInit.Trim()) { Invoke-Expression $__wtInit }
+}
 Remove-Variable __wtCmd, __wtInit, __wtCommandInfo, __wtPath, __wtIsWindowsTerminal -ErrorAction SilentlyContinue

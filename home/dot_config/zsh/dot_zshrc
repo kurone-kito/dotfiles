@@ -16,16 +16,18 @@ done
 # Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
 __wt_path=
 if whence -p git-wt >/dev/null 2>&1; then
-  eval "$(command git-wt config shell init zsh)"
+  __wt_init="$(command git-wt config shell init zsh 2>/dev/null)" && eval "$__wt_init"
+  unset __wt_init
 elif whence -p wt >/dev/null 2>&1; then
-  __wt_path="$(whence -p wt 2>/dev/null || true)"
+  __wt_path="$(whence -p wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
   case "$__wt_path" in
-    *WindowsApps*/wt|*WindowsApps*/wt.exe|*WindowsApps*\\wt|*WindowsApps*\\wt.exe|\
-    *Microsoft.WindowsTerminal*/wt|*Microsoft.WindowsTerminal*/wt.exe|\
-    *Microsoft.WindowsTerminal*\\wt|*Microsoft.WindowsTerminal*\\wt.exe)
+    *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
+    *microsoft.windowsterminal*/wt|*microsoft.windowsterminal*/wt.exe|\
+    *microsoft.windowsterminal*\\wt|*microsoft.windowsterminal*\\wt.exe)
       ;;
     *)
-      eval "$(command wt config shell init zsh)"
+      __wt_init="$(command wt config shell init zsh 2>/dev/null)" && eval "$__wt_init"
+      unset __wt_init
       ;;
   esac
 fi
