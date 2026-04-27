@@ -28,7 +28,7 @@ if (-not (Test-Path $privateKey)) {
 {{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
 '@ | Set-Content -Path $privateKey -Encoding utf8NoBOM -NoNewline
   # Restrict to current user only (icacls works without elevation)
-  icacls $privateKey /inheritance:r /grant:r "${env:USERNAME}:(F)" | Out-Null
+  icacls $privateKey /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>&1 | Out-Null
   Write-Host '  Private key written.'
 } else {
   Write-Host '  Private key already exists; skipping.'

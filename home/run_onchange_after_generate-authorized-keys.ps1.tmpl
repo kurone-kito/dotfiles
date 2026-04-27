@@ -33,6 +33,6 @@ if ($lines.Count -eq 0) {
 $lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 
 # Restrict to current user only (icacls works without elevation)
-icacls $authorized /inheritance:r /grant:r "${env:USERNAME}:(F)" | Out-Null
+icacls $authorized /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>&1 | Out-Null
 
 Write-Host 'authorized_keys generated.'
