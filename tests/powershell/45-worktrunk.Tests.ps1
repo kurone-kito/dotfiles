@@ -61,6 +61,24 @@ Describe '45-worktrunk' {
     $script:WorktrunkCommand | Should -Be 'wt'
   }
 
+  It 'does not fall back to wt when wt resolves to Windows Terminal' {
+    function wt {
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "wt"')
+    }
+    Mock Get-Command {
+      [pscustomobject]@{
+        Name = 'wt'
+        CommandType = 'Application'
+        Path = 'C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe'
+      }
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeNullOrEmpty
+    $script:WorktrunkCommand | Should -BeNullOrEmpty
+  }
+
   It 'prefers git-wt when both git-wt and wt are available' {
     function git-wt {
       @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "git-wt"')
