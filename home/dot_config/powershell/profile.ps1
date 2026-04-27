@@ -16,11 +16,15 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
   # PSReadLine may be present but its internal state is null, causing
   # GetHistoryItems null-reference errors from Starship's transient prompt.
   $psReadLineReady = $false
-  if (Get-Module PSReadLine) {
+  if (Get-Command Test-DotfilesPSReadLineReady -ErrorAction SilentlyContinue) {
+    $psReadLineReady = Test-DotfilesPSReadLineReady
+  } elseif (Get-Module PSReadLine) {
     try {
       [void][Microsoft.PowerShell.PSConsoleReadLine]::GetHistoryItems()
       $psReadLineReady = $true
-    } catch {}
+    } catch [System.Exception] {
+      $psReadLineReady = $false
+    }
   }
 
   # Starship checks for this function to enable transient prompt;
