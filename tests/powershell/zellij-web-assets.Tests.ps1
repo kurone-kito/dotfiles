@@ -10,6 +10,8 @@ BeforeAll {
   $script:UnixWrapper = Join-Path $repoRoot 'home\dot_local\bin\executable_ensure-zellij-web'
   $script:SystemdUnit = Join-Path $repoRoot 'home\dot_config\systemd\user\zellij-web.service.tmpl'
   $script:LaunchAgent = Join-Path $repoRoot 'home\Library\LaunchAgents\com.kurone-kito.zellij-web.plist.tmpl'
+  $script:WindowsRegisterScript = Join-Path $repoRoot 'home\run_onchange_after_80-register-zellij-web.ps1.tmpl'
+  $script:WindowsEnsureWrapperTemplate = Join-Path $repoRoot 'home\dot_local\bin\executable_ensure-zellij-web.ps1.tmpl'
   $script:UnixRegisterScript = Join-Path $repoRoot 'home\run_onchange_after_80-register-zellij-web.sh.tmpl'
 }
 
@@ -84,6 +86,14 @@ Describe 'zellij web assets' {
     $lines | Should -Contain '      <string>exec "$HOME/.local/bin/ensure-zellij-web"</string>'
     $lines | Should -Contain '    <key>RunAtLoad</key>'
     $lines | Should -Contain '    <true/>'
+  }
+
+  It 'hashes the Windows wrapper from the chezmoi source template path' {
+    $content = Get-Content $script:WindowsRegisterScript -Raw
+
+    $content | Should -Match 'include "dot_local/bin/executable_ensure-zellij-web\.ps1\.tmpl" \| sha256sum'
+    $content | Should -Not -Match 'include "dot_local/bin/ensure-zellij-web\.ps1\.tmpl" \| sha256sum'
+    Test-Path -LiteralPath $script:WindowsEnsureWrapperTemplate -PathType Leaf | Should -BeTrue
   }
 
   It 'uses systemctl on Linux and launchctl on macOS in the Unix registration script' {

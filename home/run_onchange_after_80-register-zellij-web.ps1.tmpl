@@ -4,7 +4,7 @@
 # Register a per-user Scheduled Task for Zellij Web.
 # Re-runs when the wrapper or autostart mode changes.
 #
-# wrapper hash: <% include "dot_local/bin/ensure-zellij-web.ps1.tmpl" | sha256sum %>
+# wrapper hash: <% include "dot_local/bin/executable_ensure-zellij-web.ps1.tmpl" | sha256sum %>
 $ErrorActionPreference = 'Stop'
 
 $script:DotfilesZellijWebWindowsAutostartMode = '<% dig "zellij" "web" "windows" "autostart" "disabled" . %>'
