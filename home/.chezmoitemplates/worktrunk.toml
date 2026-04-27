@@ -102,10 +102,11 @@ verify = true
 [switch.picker]
   pager = "delta --paging=never"
 
-[pre-start]
+[post-create]
   env = """
 main_wt=$(git worktree list --porcelain | awk 'NR==1{print $2}')
 for f in "$main_wt"/.env*; do
   [ -f "$f" ] && ln -sf "$f" "./$(basename "$f")"
 done
+:
 """
