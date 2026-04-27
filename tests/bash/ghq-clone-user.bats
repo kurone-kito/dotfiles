@@ -1,0 +1,189 @@
+#!/usr/bin/env bats
+# Tests for the ghq-clone-user standalone script.
+
+bats_require_minimum_version 1.5.0
+
+setup() {
+  load 'helpers/bats-support/load'
+  load 'helpers/bats-assert/load'
+  load 'helpers/bats-file/load'
+
+  export HOME="$BATS_TEST_TMPDIR"
+  SCRIPT="$BATS_TEST_DIRNAME/../../home/dot_local/bin/executable_ghq-clone-user"
+  _ORIG_PATH="$PATH"
+  export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$BATS_TEST_TMPDIR/ghq-root"
+  export GHQ_CLONE_LOG="$BATS_TEST_TMPDIR/ghq-clone.log"
+}
+
+teardown() {
+  export PATH="$_ORIG_PATH"
+}
+
+make_mock() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
+#!/bin/sh
+$2
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+setup_standard_mocks() {
+  # ghq root returns our test dir
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+elif [ \"\$1\" = 'get' ]; then
+  echo \"\$@\" >> '$GHQ_CLONE_LOG'
+fi
+"
+  # gh repo list returns two repos
+  make_mock gh "
+if [ \"\$1\" = 'repo' ] && [ \"\$2\" = 'list' ]; then
+  printf 'testuser/repo-a\ntestuser/repo-b\n'
+fi
+"
+}
+
+# ── Argument parsing ─────────────────────────────────────────────
+
+@test "prints help with --help" {
+  setup_standard_mocks
+  run "$SCRIPT" --help
+  assert_success
+  assert_output --partial "Usage"
+}
+
+@test "exits with error when owner is missing" {
+  setup_standard_mocks
+  run "$SCRIPT"
+  assert_failure
+  assert_output --partial "owner"
+}
+
+@test "exits with error on unknown option" {
+  setup_standard_mocks
+  run "$SCRIPT" --bogus
+  assert_failure
+  assert_output --partial "Unknown option"
+}
+
+# ── Tool detection ───────────────────────────────────────────────
+
+@test "exits with error when ghq is not found" {
+  make_mock gh "echo ok"
+  # Ensure only our mock bin dir + essential coreutils are in PATH
+  export PATH="$BATS_TEST_TMPDIR/bin"
+  run "$SCRIPT" testuser
+  assert_failure
+  assert_output --partial "ghq not found"
+}
+
+@test "exits with error when gh is not found" {
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then echo '$BATS_TEST_TMPDIR/ghq-root'; fi
+"
+  export PATH="$BATS_TEST_TMPDIR/bin"
+  run "$SCRIPT" testuser
+  assert_failure
+  assert_output --partial "gh not found"
+}
+
+# ── Cloning behaviour ───────────────────────────────────────────
+
+@test "clones repos with SSH by default" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "clone: testuser/repo-a"
+  assert_output --partial "clone: testuser/repo-b"
+
+  # Verify ghq get was called with -p (SSH)
+  assert_file_exists "$GHQ_CLONE_LOG"
+  run cat "$GHQ_CLONE_LOG"
+  assert_output --partial "get -p github.com/testuser/repo-a"
+  assert_output --partial "get -p github.com/testuser/repo-b"
+}
+
+@test "clones repos with HTTPS when --https is given" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --https
+  assert_success
+
+  run cat "$GHQ_CLONE_LOG"
+  # No -p flag
+  assert_output --partial "get github.com/testuser/repo-a"
+  refute_output --partial "get -p"
+}
+
+@test "uses custom hostname" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --hostname github.example.com
+  assert_success
+
+  run cat "$GHQ_CLONE_LOG"
+  assert_output --partial "get -p github.example.com/testuser/repo-a"
+}
+
+@test "skips already-cloned repos" {
+  setup_standard_mocks
+  # Pre-create a repo dir with .git
+  mkdir -p "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a/.git"
+
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "skip: testuser/repo-a"
+  assert_output --partial "clone: testuser/repo-b"
+
+  run cat "$GHQ_CLONE_LOG"
+  refute_output --partial "repo-a"
+  assert_output --partial "repo-b"
+}
+
+@test "removes dir without .git before cloning" {
+  setup_standard_mocks
+  # Pre-create a repo dir WITHOUT .git (corrupted)
+  mkdir -p "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a"
+  touch "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a/stale-file"
+
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "clone: testuser/repo-a"
+
+  # Stale dir should have been removed
+  assert_file_not_exists "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a/stale-file"
+}
+
+@test "handles gh returning no repos" {
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+fi
+"
+  make_mock gh "true"
+
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "Done"
+}
+
+@test "continues when ghq get fails for one repo" {
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+elif [ \"\$1\" = 'get' ]; then
+  exit 1
+fi
+"
+  make_mock gh "
+if [ \"\$1\" = 'repo' ] && [ \"\$2\" = 'list' ]; then
+  printf 'testuser/repo-a\ntestuser/repo-b\n'
+fi
+"
+
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "clone: testuser/repo-a"
+  assert_output --partial "clone: testuser/repo-b"
+}
