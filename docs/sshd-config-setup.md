@@ -147,6 +147,70 @@ Then re-run `chezmoi apply` and redeploy.
 - All other settings not listed above use the OpenSSH defaults
   for the installed version.
 
+## Windows: Changing the default SSH shell
+
+By default, Windows OpenSSH uses `cmd.exe` as the login shell.
+This project includes a helper script to switch it to PowerShell 7
+(pwsh).
+
+### Why a separate script?
+
+The default shell is controlled by a machine-wide registry key
+(`HKLM:\SOFTWARE\OpenSSH\DefaultShell`) that requires administrator
+privileges. chezmoi deploys the script to `~/.local/bin/`, but you
+must run it manually with elevation.
+
+### Usage
+
+**Set pwsh as the default shell:**
+
+```powershell
+# Run as Administrator
+& "$HOME\.local\bin\set-openssh-default-shell.ps1"
+```
+
+**Preview changes without applying (dry run):**
+
+```powershell
+& "$HOME\.local\bin\set-openssh-default-shell.ps1" -WhatIf
+```
+
+**Specify a custom shell path:**
+
+```powershell
+& "$HOME\.local\bin\set-openssh-default-shell.ps1" -Shell "C:\Program Files\PowerShell\7\pwsh.exe"
+```
+
+**Reset to the system default (cmd.exe):**
+
+```powershell
+& "$HOME\.local\bin\set-openssh-default-shell.ps1" -Reset
+```
+
+**Skip sshd restart:**
+
+```powershell
+& "$HOME\.local\bin\set-openssh-default-shell.ps1" -NoRestart
+```
+
+### What it does
+
+1. Verifies the current session has administrator privileges
+2. Detects the `pwsh.exe` path via `Get-Command` (or uses `-Shell`)
+3. Sets `HKLM:\SOFTWARE\OpenSSH\DefaultShell` to the shell path
+4. Sets `HKLM:\SOFTWARE\OpenSSH\DefaultShellCommandOption` to
+   `-NoLogo -NoProfile` for a clean startup
+5. Restarts the `sshd` service (unless `-NoRestart` is specified)
+
+### Notes
+
+- New SSH sessions use the updated shell immediately after sshd
+  restarts. Existing sessions are unaffected.
+- The `-Reset` flag removes both registry values, reverting to
+  the Windows default (`cmd.exe`).
+- This setting is system-wide (all SSH users). Per-user shell
+  overrides are not supported by Windows OpenSSH.
+
 ## Troubleshooting
 
 ### Locked out after deploying

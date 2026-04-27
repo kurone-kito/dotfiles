@@ -30,6 +30,7 @@ generate-authorized-keys.ps1
 70-deploy-env-files.ps1
 link-powershell-profile.ps1
 .local/bin/ensure-zellij-web.ps1
+.local/bin/set-openssh-default-shell.ps1
 {{- end }}
 {{- if ne .chezmoi.os "linux" }}
 .config/systemd/**
