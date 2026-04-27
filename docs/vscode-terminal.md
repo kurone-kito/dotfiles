@@ -41,6 +41,9 @@ All profile features load in VS Code's integrated terminal:
 | PSReadLine |   ✅    | Emacs mode, history, prediction   |
 | thefuck    |   ✅    | Command correction                |
 
+On Windows, the profile intentionally prefers `git-wt` for worktrunk
+so it does not confuse that binary with Windows Terminal's `wt.exe`.
+
 ## Recommended VS Code settings
 
 Add these to your VS Code **user** settings (`settings.json`) for the
