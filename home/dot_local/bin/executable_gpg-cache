@@ -22,8 +22,8 @@ fi
 
 update_gpg_session
 
-echo "Prompting GPG passphrase (loopback mode)..."
-if printf '' | gpg --pinentry-mode loopback --clearsign --batch --yes >/dev/null 2>&1; then
+echo "Prompting GPG passphrase..."
+if echo "gpg-cache" | gpg --clearsign --yes >/dev/null 2>&1; then
   echo "Passphrase cached successfully (24h TTL)."
 else
   echo "GPG passphrase caching failed." >&2

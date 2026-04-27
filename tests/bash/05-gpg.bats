@@ -77,7 +77,7 @@ EOF
   assert_output --partial "Prompting GPG passphrase"
   assert_output --partial "Passphrase cached successfully"
   assert_file_contains "$GPG_HELPER_LOG" "agent:updatestartuptty /bye"
-  assert_file_contains "$GPG_HELPER_LOG" "gpg:/dev/pts/55:--pinentry-mode loopback --clearsign --batch --yes"
+  assert_file_contains "$GPG_HELPER_LOG" "gpg:/dev/pts/55:--clearsign --yes"
 }
 
 @test "gpg-cache returns failure when gpg exits nonzero" {

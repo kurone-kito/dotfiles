@@ -34,8 +34,8 @@ function global:Invoke-DotfilesGpgCachePassphrase {
   }
 
   Update-DotfilesGpgSession
-  Write-Host 'Prompting GPG passphrase (loopback mode)...'
-  '' | & $gpgCommand.Name --pinentry-mode loopback --clearsign --batch --yes 2>$null | Out-Null
+  Write-Host 'Prompting GPG passphrase...'
+  'gpg-cache' | & $gpgCommand.Name --clearsign --yes 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) {
     Write-Host 'Passphrase cached successfully (24h TTL).'
     return $true
