@@ -14,6 +14,7 @@ command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
 GH="$(mise which gh 2>/dev/null)" || { echo "gh not found via mise; skipping."; exit 0; }
 GHQ_ROOT="$("${GHQ}" root)"
+trap 'unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0' EXIT
 
 {{ range $key, $clone := $clones -}}
 {{ $hostname := dig "hostname" "github.com" $clone -}}
