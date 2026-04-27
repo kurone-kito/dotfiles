@@ -42,6 +42,10 @@ function global:Test-DotfilesPSReadLineReady {
   }
 }
 
+function global:Test-DotfilesVSCodeTerminal {
+  return $env:TERM_PROGRAM -eq 'vscode'
+}
+
 function global:Get-DotfilesPSReadLineSettings {
   param(
     [AllowNull()]

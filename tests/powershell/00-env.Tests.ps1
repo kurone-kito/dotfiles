@@ -22,6 +22,7 @@ Describe '00-env' {
 
     foreach ($name in @(
       'Test-DotfilesPSReadLineInteractive'
+      'Test-DotfilesVSCodeTerminal'
       'Get-DotfilesPSReadLineModule'
       'Test-DotfilesPSReadLineDeferredHost'
       'Test-DotfilesPSReadLineReady'
@@ -189,5 +190,64 @@ Describe '00-env' {
     $global:DotfilesPSReadLineOnIdleRegistered | Should -BeTrue
     $global:DotfilesPSReadLineOnIdleActions.Keys |
       Should -Be @('options', 'psfzf-chords')
+  }
+}
+
+Describe 'Test-DotfilesVSCodeTerminal' {
+
+  BeforeAll {
+    $script:OriginalSkipInit = $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT
+    $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT = '1'
+    . $script:Subject
+  }
+
+  BeforeEach {
+    $script:savedTermProgram = $env:TERM_PROGRAM
+  }
+
+  AfterEach {
+    $env:TERM_PROGRAM = $script:savedTermProgram
+  }
+
+  AfterAll {
+    $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT = $script:OriginalSkipInit
+
+    foreach ($name in @(
+      'Test-DotfilesPSReadLineInteractive'
+      'Test-DotfilesVSCodeTerminal'
+      'Get-DotfilesPSReadLineModule'
+      'Test-DotfilesPSReadLineDeferredHost'
+      'Test-DotfilesPSReadLineReady'
+      'Get-DotfilesPSReadLineSettings'
+      'Set-DotfilesPSReadLineSettings'
+      'Register-DotfilesPSReadLineOnIdleAction'
+      'Invoke-DotfilesPSReadLineStartupAction'
+      'Initialize-DotfilesPSReadLineOptions'
+    )) {
+      Remove-Item "Function:\$name" -ErrorAction SilentlyContinue
+    }
+
+    Remove-Variable DotfilesPSReadLineOnIdleActions -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable DotfilesPSReadLineOnIdleRegistered -Scope Global -ErrorAction SilentlyContinue
+  }
+
+  It 'returns $true when TERM_PROGRAM is vscode' {
+    $env:TERM_PROGRAM = 'vscode'
+    Test-DotfilesVSCodeTerminal | Should -BeTrue
+  }
+
+  It 'returns $false when TERM_PROGRAM is not vscode' {
+    $env:TERM_PROGRAM = 'iTerm.app'
+    Test-DotfilesVSCodeTerminal | Should -BeFalse
+  }
+
+  It 'returns $false when TERM_PROGRAM is empty' {
+    $env:TERM_PROGRAM = ''
+    Test-DotfilesVSCodeTerminal | Should -BeFalse
+  }
+
+  It 'returns $false when TERM_PROGRAM is not set' {
+    $env:TERM_PROGRAM = $null
+    Test-DotfilesVSCodeTerminal | Should -BeFalse
   }
 }

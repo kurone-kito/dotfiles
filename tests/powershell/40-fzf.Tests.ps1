@@ -83,3 +83,81 @@ Describe '40-fzf' {
     }
   }
 }
+
+Describe 'VS Code chord skip' {
+
+  BeforeAll {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    $envScript = Join-Path (
+      (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\conf.d')
+    ) '00-env.ps1'
+    $script:OriginalSkipInit = $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT
+    $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT = '1'
+    . $envScript
+  }
+
+  BeforeEach {
+    $script:savedTermProgram = $env:TERM_PROGRAM
+  }
+
+  AfterEach {
+    $env:TERM_PROGRAM = $script:savedTermProgram
+    Remove-Item Function:\Set-PsFzfOption -ErrorAction SilentlyContinue
+  }
+
+  AfterAll {
+    $env:DOTFILES_TEST_PSREADLINE_SKIP_INIT = $script:OriginalSkipInit
+
+    foreach ($name in @(
+      'Test-DotfilesPSReadLineInteractive'
+      'Test-DotfilesVSCodeTerminal'
+      'Get-DotfilesPSReadLineModule'
+      'Test-DotfilesPSReadLineDeferredHost'
+      'Test-DotfilesPSReadLineReady'
+      'Get-DotfilesPSReadLineSettings'
+      'Set-DotfilesPSReadLineSettings'
+      'Register-DotfilesPSReadLineOnIdleAction'
+      'Invoke-DotfilesPSReadLineStartupAction'
+      'Initialize-DotfilesPSReadLineOptions'
+    )) {
+      Remove-Item "Function:\$name" -ErrorAction SilentlyContinue
+    }
+
+    Remove-Variable DotfilesPSReadLineOnIdleActions -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable DotfilesPSReadLineOnIdleRegistered -Scope Global -ErrorAction SilentlyContinue
+  }
+
+  It 'sets $skipChords to $true when in VS Code terminal' {
+    $env:TERM_PROGRAM = 'vscode'
+    (Test-DotfilesVSCodeTerminal) | Should -BeTrue
+  }
+
+  It 'sets $skipChords to $false when not in VS Code terminal' {
+    $env:TERM_PROGRAM = $null
+    (Test-DotfilesVSCodeTerminal) | Should -BeFalse
+  }
+
+  It 'skips chord bindings when running inside VS Code' {
+    $env:TERM_PROGRAM = 'vscode'
+
+    function Set-PsFzfOption {
+      param(
+        [string]$PSReadlineChordProvider,
+        [string]$PSReadlineChordReverseHistory
+      )
+    }
+
+    Mock Get-Command { [pscustomobject]@{ Name = 'fzf' } } -ParameterFilter {
+      $Name -eq 'fzf'
+    }
+    Mock Get-Module { [pscustomobject]@{ Name = 'PSFzf' } } -ParameterFilter {
+      $Name -eq 'PSFzf' -and $ListAvailable
+    }
+    Mock Import-Module { }
+    Mock Set-PsFzfOption { }
+
+    . $script:Subject
+
+    Assert-MockCalled Set-PsFzfOption -Times 0
+  }
+}

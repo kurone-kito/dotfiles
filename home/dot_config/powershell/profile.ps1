@@ -52,3 +52,20 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
   (& zoxide init powershell 2>$null) | Out-String | Invoke-Expression
 }
+
+# VS Code shell integration — load AFTER Starship and zoxide to avoid
+# prompt handler conflicts. Only inject manually when VS Code has not
+# already auto-injected (indicated by VSCODE_SHELL_INTEGRATION env var).
+if ((Get-Command Test-DotfilesVSCodeTerminal -ErrorAction SilentlyContinue) -and
+    (Test-DotfilesVSCodeTerminal) -and
+    -not $env:VSCODE_SHELL_INTEGRATION -and
+    (Get-Command code -ErrorAction SilentlyContinue)) {
+  try {
+    $siPath = & code --locate-shell-integration-path pwsh 2>$null
+    if ($siPath -and (Test-Path $siPath)) {
+      . $siPath
+    }
+  } catch {
+    # Shell integration unavailable; continue without it
+  }
+}
