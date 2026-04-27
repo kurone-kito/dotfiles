@@ -1,3 +1,8 @@
+{{- /* worktrunk.toml — chezmoi template for worktrunk configuration.
+     Worktrunk uses its own {{ }} template syntax (Jinja-like) which conflicts
+     with Go templates. Since .chezmoitemplates/ files are always processed
+     through Go's template engine, literal braces must be escaped as
+     {{ "{{" }} and {{ "}}" }}. This is unavoidable within chezmoi's design. */ -}}
 worktree-path = '{{ "{{" }} repo_path {{ "}}" }}/../{{ "{{" }} repo {{ "}}" }}.{{ "{{" }} branch | sanitize {{ "}}" }}'
 
 [commit.generation]
