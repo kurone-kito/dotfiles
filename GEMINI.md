@@ -1,6 +1,11 @@
 # Guidelines for AI Agents
 
-This project is a language-independent generic project template.
+A collection of configuration files that we use.
+This is a **git worktree** of
+[kurone-kito/dotfiles](https://github.com/kurone-kito/dotfiles) on
+the `migrate-to-chezmoi` branch — not a separate repository. CI
+badges and workflow URLs correctly reference `kurone-kito/dotfiles`.
+
 It is currently optimized for GitHub Copilot tooling, but `GEMINI.md`
 exists so Gemini CLI can still receive the minimum project rules
 immediately, without depending on a redirect.
