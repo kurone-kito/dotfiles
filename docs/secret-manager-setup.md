@@ -470,6 +470,10 @@ token_item = "github-pat"
    # GitHub PAT
    mkdir -p ~/.config/chezmoi/secrets/github-pat
    echo -n 'ghp_xxxxxxxxxxxx' > ~/.config/chezmoi/secrets/github-pat/password
+
+   # Global secret file (e.g., AWS credentials)
+   mkdir -p ~/.config/chezmoi/secrets/aws-credentials
+   cp ~/.aws/credentials ~/.config/chezmoi/secrets/aws-credentials/credentials
    ```
 
 3. Set restrictive permissions:
@@ -498,6 +502,84 @@ token_item = "github-pat"
   `~/.config/chezmoi/`.
 - If a configured file is missing, `chezmoi apply` fails immediately
   with a clear error — no partial or empty secrets are deployed.
+
+## Deploying user-global secret files
+
+You can deploy secret files from the secret manager to arbitrary
+home-relative paths. This is useful for credentials that live outside
+project repositories, such as `~/.aws/credentials`,
+`~/.docker/config.json`, `~/.npmrc`, or `~/.kube/config`.
+
+Store each file as an **attachment** on a secret manager item. The
+deployment script creates parent directories with restrictive
+permissions and writes the file with mode `600` (Linux/macOS) or
+user-only ACL (Windows).
+
+### Configuring secret file deployment
+
+Edit `~/.config/chezmoi/chezmoi.toml`:
+
+```toml
+[data.secret.files.aws-credentials]
+item = "AWS Credentials"
+target = ".aws/credentials"
+attachment = "credentials"
+
+[data.secret.files.docker-auth]
+item = "Docker Registry Auth"
+target = ".docker/config.json"
+attachment = "config.json"
+
+[data.secret.files.npmrc]
+item = "npm Registry Token"
+target = ".npmrc"
+```
+
+**Fields:**
+
+| Field        | Required | Default              | Description                                  |
+| ------------ | -------- | -------------------- | -------------------------------------------- |
+| `item`       | yes      |                      | Secret manager item name                     |
+| `target`     | yes      |                      | Home-relative path (forward slashes only)    |
+| `attachment` | no       | basename of `target` | Attachment name override in secret manager   |
+
+### Path requirements
+
+- Paths must be **relative** to `$HOME` (no leading `/`)
+- Paths must use **forward slashes** (`/`) — even on Windows
+- Paths must **not** contain `..` (path traversal is rejected)
+- Parent directories are created automatically with mode `700`
+
+### Storing files in Bitwarden
+
+1. Create any item type (Secure Note recommended) in Bitwarden
+2. Name it descriptively (e.g., `AWS Credentials`)
+3. Attach the credentials file (e.g., `credentials`)
+4. Use the attachment filename as `attachment` in the config
+
+### Security notes
+
+- Files are deployed with **mode 600** (Linux/macOS) or **user-only
+  ACL** (Windows) — no admin elevation required
+- Parent directories are created with **mode 700** / user-only ACL
+- Secret content is embedded in the rendered chezmoi script at
+  `chezmoi apply` time (same as .env deployment). The script files
+  themselves are not persisted to disk after execution
+- The feature is designed for **text-based** secret files. Binary
+  files are not supported
+- When `secret.manager` is `"none"`, the script skips entirely —
+  no files are created or overwritten
+
+### Re-deploying secret files
+
+The `run_onchange_after` script re-runs when the **rendered script
+content** changes (i.e., when secret data or config changes). To
+force re-deployment:
+
+```bash
+chezmoi state delete-bucket --bucket=scriptState
+chezmoi apply
+```
 
 ## Deploying .env files to projects
 

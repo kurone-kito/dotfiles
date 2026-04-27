@@ -45,6 +45,15 @@ identity = {{ $host.identity | quote }}
 port = {{ dig "port" 0 $host }}
 {{- end }}
 {{- end }}
+{{- range $key, $file := (dig "secret" "files" dict .) }}
+
+[data.secret.files."{{ $key }}"]
+item = {{ $file.item | quote }}
+target = {{ $file.target | quote }}
+{{- if (dig "attachment" "" $file) }}
+attachment = {{ dig "attachment" "" $file | quote }}
+{{- end }}
+{{- end }}
 {{- range $key, $clone := (dig "ghq" "clone" dict .) }}
 
 [data.ghq.clone."{{ $key }}"]
@@ -158,6 +167,18 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # Store the .env content as an attachment on the secret manager item.
 # The script deploys with mode 600 and warns if .gitignore is missing
 # the target filename. Multiple entries for the same repo are supported.
+#
+# To deploy user-global secret files (e.g., ~/.aws/credentials):
+#
+#   [data.secret.files.<label>]      # <label> is any unique name
+#   item       = "AWS Credentials"   # secret manager item name
+#   target     = ".aws/credentials"  # home-relative path (forward slashes)
+#   attachment = "credentials"       # optional; defaults to target basename
+#
+# Store the file content as an attachment on the secret manager item.
+# The script deploys with mode 600 / user-only ACL. Target paths must
+# be relative, forward-slash-separated, and must not contain "..".
+# See docs/secret-manager-setup.md for details.
 #
 # Zellij Web configuration (optional):
 #
