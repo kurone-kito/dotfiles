@@ -69,6 +69,34 @@ fi
   assert_output --partial "Unknown option"
 }
 
+@test "exits with error when --hostname has no value" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --hostname
+  assert_failure
+  assert_output --partial "requires a value"
+}
+
+@test "exits with error when --limit has no value" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --limit
+  assert_failure
+  assert_output --partial "requires a value"
+}
+
+@test "rejects hostname containing path traversal" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --hostname "../../etc"
+  assert_failure
+  assert_output --partial "invalid hostname"
+}
+
+@test "rejects hostname containing slashes" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --hostname "foo/bar"
+  assert_failure
+  assert_output --partial "invalid hostname"
+}
+
 # ── Tool detection ───────────────────────────────────────────────
 
 @test "exits with error when ghq is not found" {
@@ -118,12 +146,61 @@ if [ \"\$1\" = 'root' ]; then echo '$BATS_TEST_TMPDIR/ghq-root'; fi
 }
 
 @test "uses custom hostname" {
-  setup_standard_mocks
+  # gh mock verifies GH_HOST is set
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+elif [ \"\$1\" = 'get' ]; then
+  echo \"\$@\" >> '$GHQ_CLONE_LOG'
+fi
+"
+  make_mock gh "
+if [ \"\$1\" = 'repo' ] && [ \"\$2\" = 'list' ]; then
+  if [ \"\$GH_HOST\" = 'github.example.com' ]; then
+    printf 'testuser/repo-a\ntestuser/repo-b\n'
+  else
+    echo 'GH_HOST not set correctly' >&2
+    exit 1
+  fi
+fi
+"
   run "$SCRIPT" testuser --hostname github.example.com
   assert_success
 
   run cat "$GHQ_CLONE_LOG"
   assert_output --partial "get -p github.example.com/testuser/repo-a"
+}
+
+@test "passes --limit to gh repo list" {
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+elif [ \"\$1\" = 'get' ]; then
+  echo \"\$@\" >> '$GHQ_CLONE_LOG'
+fi
+"
+  make_mock gh "
+if [ \"\$1\" = 'repo' ] && [ \"\$2\" = 'list' ]; then
+  echo \"\$@\" >> '$BATS_TEST_TMPDIR/gh-args.log'
+  printf 'testuser/repo-a\n'
+fi
+"
+  run "$SCRIPT" testuser --limit 5
+  assert_success
+
+  run cat "$BATS_TEST_TMPDIR/gh-args.log"
+  assert_output --partial "--limit 5"
+}
+
+@test "skips repo with .git file (worktree)" {
+  setup_standard_mocks
+  # Pre-create a repo dir with .git as a file (worktree style)
+  mkdir -p "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a"
+  echo "gitdir: /somewhere/else" > "$BATS_TEST_TMPDIR/ghq-root/github.com/testuser/repo-a/.git"
+
+  run "$SCRIPT" testuser
+  assert_success
+  assert_output --partial "skip: testuser/repo-a"
 }
 
 @test "skips already-cloned repos" {
@@ -166,6 +243,24 @@ fi
   run "$SCRIPT" testuser
   assert_success
   assert_output --partial "Done"
+}
+
+@test "exits with error when gh repo list fails" {
+  make_mock ghq "
+if [ \"\$1\" = 'root' ]; then
+  echo '$BATS_TEST_TMPDIR/ghq-root'
+fi
+"
+  make_mock gh "
+if [ \"\$1\" = 'repo' ] && [ \"\$2\" = 'list' ]; then
+  echo 'authentication required' >&2
+  exit 1
+fi
+"
+
+  run "$SCRIPT" testuser
+  assert_failure
+  assert_output --partial "failed to list"
 }
 
 @test "continues when ghq get fails for one repo" {
