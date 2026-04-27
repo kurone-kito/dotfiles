@@ -256,8 +256,19 @@ plugins {
 load_plugins {
   zellij:link
 }
+{{- $zellijWebServer := dig "zellij" "web" "server" true . -}}
+{{- $zellijWebSharing := dig "zellij" "web" "sharing" "on" . -}}
+{{- $zellijWebBind := dig "zellij" "web" "bind" "127.0.0.1" . -}}
+{{- $zellijWebPort := dig "zellij" "web" "port" 8082 . -}}
+{{- $zellijWebCert := dig "zellij" "web" "cert" "" . -}}
+{{- $zellijWebKey := dig "zellij" "web" "key" "" . -}}
+{{- $zellijWebBaseUrl := dig "zellij" "web" "base_url" "" . -}}
+{{- $zellijWebEnforceHttpsLocalhost := dig "zellij" "web" "enforce_https_on_localhost" false . -}}
 web_client {
   font "monospace"
+{{ if $zellijWebBaseUrl -}}
+  base_url {{ $zellijWebBaseUrl | quote }}
+{{ end -}}
 }
 
 // Choose the theme that is specified in the themes section.
@@ -296,23 +307,37 @@ serialize_pane_viewport true
 // Note: a local web server can still be manually started from within a Zellij session or from the CLI.
 // If this is not desired, one can use a version of Zellij compiled without
 // `web_server_capability`
-web_server true
+web_server {{ if $zellijWebServer }}true{{ else }}false{{ end }}
+
+// Which address the local web server listens on.
+web_server_ip {{ $zellijWebBind | quote }}
+
+// Which port the local web server listens on.
+web_server_port {{ $zellijWebPort }}
 
 // Whether to allow sessions started in the terminal to be shared through a local web server, assuming one is
 // running (see the `web_server` option for more details).
 // (Requires restart)
 //
 // Note: This is an administrative separation and not intended as a security measure.
-web_sharing "on"
+web_sharing {{ $zellijWebSharing | quote }}
 
 // A path to a certificate file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
+{{ if $zellijWebCert -}}
+web_server_cert {{ $zellijWebCert | quote }}
+{{ else -}}
 // web_server_cert "/path/to/cert.pem"
+{{ end -}}
 // A path to a key file to be used when setting up the web client to serve the
 // connection over HTTPs
 //
+{{ if $zellijWebKey -}}
+web_server_key {{ $zellijWebKey | quote }}
+{{ else -}}
 // web_server_key "/path/to/key.pem"
+{{ end -}}
 /// Whether to enforce https connections to the web server when it is bound to localhost
 /// (127.0.0.0/8)
 ///
@@ -320,7 +345,7 @@ web_sharing "on"
 ///
 /// Default: false
 //
-// enforce_https_for_localhost false
+enforce_https_on_localhost {{ if $zellijWebEnforceHttpsLocalhost }}true{{ else }}false{{ end }}
 
 // Whether to stack panes when resizing beyond a certain size
 stacked_resize true

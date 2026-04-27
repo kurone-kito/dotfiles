@@ -1,0 +1,56 @@
+#!/bin/sh
+# Ensure Zellij Web is running for the current user context.
+set -eu
+
+get_zellij_command() {
+  if command -v zellij >/dev/null 2>&1; then
+    command -v zellij
+    return 0
+  fi
+
+  echo "zellij executable not found" >&2
+  return 1
+}
+
+test_zellij_web_running() {
+  "$1" web --status --timeout 2 >/dev/null 2>&1
+}
+
+start_zellij_web() {
+  zellij_command="$1"
+  shift
+
+  exec "$zellij_command" web --start "$@"
+}
+
+ensure_zellij_web() {
+  zellij_command="$(get_zellij_command)"
+
+  if test_zellij_web_running "$zellij_command"; then
+    echo "Zellij Web already running."
+    return 0
+  fi
+
+  "$zellij_command" web --start --daemonize >/dev/null 2>&1
+
+  if ! test_zellij_web_running "$zellij_command"; then
+    echo "zellij web failed to report healthy after startup" >&2
+    return 1
+  fi
+
+  echo "Zellij Web started."
+}
+
+case "${1:-}" in
+  --foreground)
+    shift
+    start_zellij_web "$(get_zellij_command)" "$@"
+    ;;
+  "")
+    ensure_zellij_web
+    ;;
+  *)
+    echo "usage: ensure-zellij-web [--foreground]" >&2
+    exit 1
+    ;;
+esac

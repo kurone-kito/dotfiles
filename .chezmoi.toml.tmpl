@@ -135,6 +135,35 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # The script deploys with mode 600 and warns if .gitignore is missing
 # the target filename. Multiple entries for the same repo are supported.
 #
+# Zellij Web configuration (optional):
+#
+#   [data.zellij.web]
+#   server = true
+#   sharing = "on"
+#   bind = "127.0.0.1"
+#   port = 8082
+#   cert = ""                        # optional; required off localhost
+#   key = ""                         # optional; required off localhost
+#   base_url = ""                    # optional reverse-proxy subpath
+#   enforce_https_on_localhost = false
+#
+#   [data.zellij.web.windows]
+#   autostart = "onlogon"            # or "disabled" (default)
+#   [data.zellij.web.linux]
+#   autostart = "systemd-user"       # or "disabled" (default)
+#   [data.zellij.web.macos]
+#   autostart = "launchagent"        # or "disabled" (default)
+#
+# On Windows, the autostart task calls ~/.local/bin/ensure-zellij-web.ps1.
+# The same script can also be invoked manually over OpenSSH after a reboot:
+#
+#   pwsh ~/.local/bin/ensure-zellij-web.ps1
+#
+# On Ubuntu native, `systemd-user` expects real systemd access. For boot-time
+# persistence outside an interactive login, enable linger once:
+#
+#   sudo loginctl enable-linger "$USER"
+#
 # Local file storage (manager = "local"):
 #
 # Instead of an external secret manager, secrets can be read from a

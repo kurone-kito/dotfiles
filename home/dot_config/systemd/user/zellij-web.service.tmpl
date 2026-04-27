@@ -1,0 +1,14 @@
+[Unit]
+Description=Ensure Zellij Web is running
+Documentation=https://zellij.dev/documentation/web-client.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/.local/bin/ensure-zellij-web
+ExecStop=/bin/sh -lc 'if command -v zellij >/dev/null 2>&1; then zellij web --stop >/dev/null 2>&1 || true; fi'
+
+[Install]
+WantedBy=default.target

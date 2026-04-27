@@ -4,6 +4,7 @@ generate-git-profiles.sh
 10-import-gpg-keys.sh
 20-deploy-ssh-keys.sh
 generate-authorized-keys.sh
+80-register-zellij-web.sh
 50-install-mise-tools.sh
 60-clone-ghq-repos.sh
 70-deploy-env-files.sh
@@ -23,8 +24,16 @@ generate-git-profiles.ps1
 20-deploy-ssh-keys.ps1
 generate-authorized-keys.ps1
 35-register-path.ps1
+80-register-zellij-web.ps1
 50-install-mise-tools.ps1
 60-clone-ghq-repos.ps1
 70-deploy-env-files.ps1
 link-powershell-profile.ps1
+.local/bin/ensure-zellij-web.ps1
+{{- end }}
+{{- if ne .chezmoi.os "linux" }}
+.config/systemd/**
+{{- end }}
+{{- if ne .chezmoi.os "darwin" }}
+Library/LaunchAgents/**
 {{- end }}

@@ -130,6 +130,78 @@ That keeps PSReadLine inline predictions available inside `psmux` panes
 without putting the psmux-only `allow-predictions` option in the shared
 `~/.tmux.conf`, which standard tmux does not understand.
 
+### Zellij Web
+
+The shared Zellij config enables the built-in web server and session sharing
+by default. To customize bind/port/TLS and opt into Windows logon autostart,
+add the following to `~/.config/chezmoi/chezmoi.toml`:
+
+```toml
+[data.zellij.web]
+server = true
+sharing = "on"
+bind = "127.0.0.1"
+port = 8082
+cert = ""
+key = ""
+base_url = ""
+enforce_https_on_localhost = false
+
+[data.zellij.web.windows]
+autostart = "onlogon"
+```
+
+Then apply:
+
+```bash
+chezmoi apply
+```
+
+On Windows, `autostart = "onlogon"` registers a per-user Scheduled Task that
+calls `~/.local/bin/ensure-zellij-web.ps1` after logon. The same script can be
+used manually over Microsoft OpenSSH after a reboot to restore the server
+without requiring a separate Windows service:
+
+```powershell
+pwsh ~/.local/bin/ensure-zellij-web.ps1
+```
+
+On Ubuntu native (non-WSL), you can instead opt into a user service:
+
+```toml
+[data.zellij.web.linux]
+autostart = "systemd-user"
+```
+
+This installs `~/.config/systemd/user/zellij-web.service` and a
+`run_onchange_after` helper that enables and restarts it with
+`systemctl --user`. For persistence after logout or reboot without an
+interactive login, enable linger once:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+On macOS, the future equivalent is:
+
+```toml
+[data.zellij.web.macos]
+autostart = "launchagent"
+```
+
+which deploys `~/Library/LaunchAgents/com.kurone-kito.zellij-web.plist` and
+loads it with `launchctl`.
+
+Create a login token with:
+
+```bash
+zellij web --create-token
+```
+
+If you bind beyond `127.0.0.1`, configure `cert` and `key`. For smartphone
+access, prefer a private network such as Tailscale over direct Internet
+exposure.
+
 ## Git user/profile management
 
 This repository manages `~/.config/git/config` via
