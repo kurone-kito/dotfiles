@@ -1,0 +1,65 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Synchronize editor plugins headlessly.
+# Re-runs when vim or nvim plugin configuration changes.
+# Skipped if neither vim nor nvim is installed.
+#
+# vimrc hash: {{ include "dot_vimrc" | sha256sum }}
+# nvim init hash: {{ include "dot_config/nvim/init.lua" | sha256sum }}
+# nvim plugins hash:
+{{- range glob "dot_config/nvim/lua/plugins/*.lua" }}
+#   {{ . }}: {{ include . | sha256sum }}
+{{- end }}
+set -euo pipefail
+
+found_editor=false
+
+# ---------------------------------------------------------------------------
+# vim — vim-plug
+# ---------------------------------------------------------------------------
+if command -v vim &>/dev/null; then
+  found_editor=true
+  echo "Setting up vim plugins..."
+
+  # Bootstrap vim-plug if missing (mirrors the auto-bootstrap in .vimrc)
+  plug_vim="${HOME}/.vim/autoload/plug.vim"
+  if [ ! -f "$plug_vim" ]; then
+    if command -v curl &>/dev/null; then
+      echo "  Bootstrapping vim-plug..."
+      curl -fLo "$plug_vim" --create-dirs \
+        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim \
+        2>&1 || { echo "  WARNING: vim-plug bootstrap failed; skipping vim."; }
+    else
+      echo "  WARNING: curl not found; cannot bootstrap vim-plug. Skipping vim."
+    fi
+  fi
+
+  # Install / update / clean plugins (non-interactive ex mode)
+  if [ -f "$plug_vim" ]; then
+    vim -es -u "${HOME}/.vimrc" \
+      -c 'PlugInstall --sync' \
+      -c 'PlugClean!' \
+      -c 'qa!' \
+      2>&1 || echo "  WARNING: vim plugin sync reported errors."
+    echo "  vim plugin sync complete."
+  fi
+else
+  echo "vim not found; skipping vim plugin setup."
+fi
+
+# ---------------------------------------------------------------------------
+# nvim — lazy.nvim
+# ---------------------------------------------------------------------------
+if command -v nvim &>/dev/null; then
+  found_editor=true
+  echo "Setting up nvim plugins..."
+
+  nvim --headless "+Lazy! sync" +qa 2>&1 \
+    || echo "  WARNING: nvim plugin sync reported errors."
+  echo "  nvim plugin sync complete."
+else
+  echo "nvim not found; skipping nvim plugin setup."
+fi
+
+if [ "$found_editor" = false ]; then
+  echo "No editors found; skipping editor plugin setup."
+fi
