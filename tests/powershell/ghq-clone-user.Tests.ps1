@@ -59,7 +59,10 @@ Describe 'ghq-clone-user.ps1' {
     }
 
     It 'requires Owner parameter' {
-      { & $Script } | Should -Throw
+      $attributes = (Get-Command $Script).Parameters['Owner'].Attributes |
+        Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] }
+
+      ($attributes | ForEach-Object { $_.Mandatory }) | Should -Contain $true
     }
   }
 }
