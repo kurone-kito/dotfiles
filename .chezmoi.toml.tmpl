@@ -57,6 +57,17 @@ hostname = {{ dig "hostname" "" $clone | quote }}
 ssh = {{ dig "ssh" true $clone }}
 {{- end }}
 {{- end }}
+{{- $sshServer := dig "ssh" "server" dict . }}
+{{- if $sshServer }}
+
+[data.ssh.server]
+{{- if ne (dig "clientAliveInterval" 300 $sshServer) 300 }}
+clientAliveInterval = {{ dig "clientAliveInterval" 300 $sshServer }}
+{{- end }}
+{{- if ne (dig "clientAliveCountMax" 5 $sshServer) 5 }}
+clientAliveCountMax = {{ dig "clientAliveCountMax" 5 $sshServer }}
+{{- end }}
+{{- end }}
 {{- range $key, $entry := (dig "env" "deploy" dict .) }}
 
 [data.env.deploy."{{ $key }}"]
@@ -125,6 +136,15 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   ssh        = true          # optional; false to use HTTPS instead of SSH
 #
 # See docs/ghq-workflow.md for details.
+#
+# To customize sshd_config hardening defaults, add:
+#
+#   [data.ssh.server]
+#   clientAliveInterval = 300  # seconds between keepalive probes (default: 300)
+#   clientAliveCountMax = 5    # missed probes before disconnect (default: 5)
+#
+# The generated file is at ~/.config/ssh/sshd_config.
+# See docs/sshd-config-setup.md for deployment instructions.
 #
 # To deploy .env files from the secret manager into cloned projects:
 #
