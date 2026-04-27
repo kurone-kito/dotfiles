@@ -1,5 +1,5 @@
 return {
-  -- LSP server configurations
+  -- LSP server configurations (Neovim 0.11+ native API)
   {
     "neovim/nvim-lspconfig",
     event = { "BufReadPre", "BufNewFile" },
@@ -11,6 +11,7 @@ return {
     config = function()
       require("mason").setup()
       require("mason-lspconfig").setup({
+        automatic_enable = false,
         ensure_installed = {
           "ts_ls",
           "eslint",
@@ -46,18 +47,13 @@ return {
         end,
       })
 
-      -- Configure individual servers
-      local lspconfig = require("lspconfig")
-
-      -- Use vim.lsp.config for Nvim 0.11+ where possible,
-      -- fall back to lspconfig for compatibility
+      -- Server configurations via vim.lsp.config (Nvim 0.11+)
       local servers = {
         ts_ls = {},
         eslint = {},
-        html = { capabilities = capabilities },
-        cssls = { capabilities = capabilities },
+        html = {},
+        cssls = {},
         jsonls = {
-          capabilities = capabilities,
           settings = {
             json = {
               validate = { enable = true },
@@ -76,13 +72,11 @@ return {
       }
 
       for server, config in pairs(servers) do
-        config.capabilities = vim.tbl_deep_extend(
-          "force",
-          capabilities,
-          config.capabilities or {}
-        )
-        lspconfig[server].setup(config)
+        config.capabilities = capabilities
+        vim.lsp.config(server, config)
       end
+
+      vim.lsp.enable(vim.tbl_keys(servers))
     end,
   },
 
