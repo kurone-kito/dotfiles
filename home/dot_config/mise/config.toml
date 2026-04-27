@@ -4,6 +4,7 @@ node = "latest"
 pnpm = "latest"
 
 "npm:@anthropic-ai/claude-code" = "latest"
+"npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
 "npm:@github/copilot" = "latest"
 "npm:@google/gemini-cli" = "latest"
