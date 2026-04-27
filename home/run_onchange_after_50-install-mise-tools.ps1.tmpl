@@ -11,4 +11,10 @@ if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
 
 Write-Host 'Installing mise tools...'
 mise install --yes 2>&1
+
+# Regenerate shims so newly installed tools are available in shims mode.
+# Windows uses shims mode to stay under cmd.exe's 8,191-char PATH limit.
+Write-Host 'Regenerating mise shims...'
+mise reshim 2>&1
+
 Write-Host 'mise tool installation complete.'

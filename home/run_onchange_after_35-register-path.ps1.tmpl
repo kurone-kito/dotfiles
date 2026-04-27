@@ -48,6 +48,7 @@ function Get-StaticManagedPaths {
   if (-not [string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
     $paths += (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
     $paths += (Join-Path $env:LOCALAPPDATA 'Zellij')
+    $paths += (Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims')
   }
 
   if (-not [string]::IsNullOrEmpty(${env:ProgramFiles(x86)})) {

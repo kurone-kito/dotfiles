@@ -68,11 +68,16 @@ Describe '30-mise' {
     $script:OriginalTrusted = $env:MISE_TRUSTED_CONFIG_PATHS
     $script:OriginalWarning = $env:MISE_PWSH_CHPWD_WARNING
     $script:OriginalLocalAppData = $env:LOCALAPPDATA
+    $script:OriginalPath = $env:PATH
     $script:MiseCalls = @()
     $script:FallbackPath = $null
 
     $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
     $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
+
+    # Pre-create shims directory — on Windows the script prepends this to PATH
+    $script:ShimsDir = Join-Path (Join-Path $localAppDataRoot 'mise') 'shims'
+    New-Item -ItemType Directory -Path $script:ShimsDir -Force | Out-Null
 
     Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
     $env:LOCALAPPDATA = $localAppDataRoot
@@ -83,6 +88,7 @@ Describe '30-mise' {
     $env:MISE_TRUSTED_CONFIG_PATHS = $script:OriginalTrusted
     $env:MISE_PWSH_CHPWD_WARNING = $script:OriginalWarning
     $env:LOCALAPPDATA = $script:OriginalLocalAppData
+    $env:PATH = $script:OriginalPath
     Remove-Item Function:\PathMise -ErrorAction SilentlyContinue
     Remove-Item Function:\FallbackMise -ErrorAction SilentlyContinue
     Remove-Item Function:\WingetMise -ErrorAction SilentlyContinue
@@ -121,11 +127,8 @@ Describe '30-mise' {
     $usedCommands[0] | Should -Be 'PathMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    ($script:MiseCalls | Where-Object {
-      $_.Arguments[0] -eq 'activate' -and
-      $_.Arguments[1] -eq 'pwsh' -and
-      $_.Arguments[2] -eq '--quiet'
-    }).Count | Should -Be 1
+    # Windows: shims dir prepended to PATH (not activate)
+    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
   }
 
   It 'uses the official Windows fallback before winget package bins' {
@@ -166,11 +169,7 @@ Describe '30-mise' {
     $usedCommands[0] | Should -Be 'FallbackMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    ($script:MiseCalls | Where-Object {
-      $_.Arguments[0] -eq 'activate' -and
-      $_.Arguments[1] -eq 'pwsh' -and
-      $_.Arguments[2] -eq '--quiet'
-    }).Count | Should -Be 1
+    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
   }
 
   It 'uses the winget package-bin executable when other Windows paths are unavailable' {
@@ -219,11 +218,7 @@ Describe '30-mise' {
     $usedCommands[0] | Should -Be 'WingetMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    ($script:MiseCalls | Where-Object {
-      $_.Arguments[0] -eq 'activate' -and
-      $_.Arguments[1] -eq 'pwsh' -and
-      $_.Arguments[2] -eq '--quiet'
-    }).Count | Should -Be 1
+    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
   }
 
   It 'de-duplicates winget package-bin candidates that resolve to one executable' {
@@ -284,10 +279,21 @@ Describe '30-mise' {
     $usedCommands[0] | Should -Be 'WingetMiseA'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    ($script:MiseCalls | Where-Object {
-      $_.Arguments[0] -eq 'activate' -and
-      $_.Arguments[1] -eq 'pwsh' -and
-      $_.Arguments[2] -eq '--quiet'
-    }).Count | Should -Be 1
+    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+  }
+
+  It 'calls reshim when shims directory does not exist' {
+    New-TestMiseConfigs
+
+    # Remove the pre-created shims dir
+    Remove-Item -LiteralPath $script:ShimsDir -Recurse -Force
+
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+
+    . $script:Subject
+
+    ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'reshim' }).Count |
+      Should -Be 1
   }
 }

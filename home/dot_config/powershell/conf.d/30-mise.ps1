@@ -98,5 +98,20 @@ foreach ($cfg in @(
   if (Test-Path $cfg) { & $miseCommand trust $cfg 2>$null }
 }
 
-(& $miseCommand activate pwsh --quiet 2>$null) | Out-String | Invoke-Expression
+# Windows: use shims mode to stay under cmd.exe's 8,191-char PATH limit.
+# mise activate adds per-tool directories (~1,000+ chars for 14 tools);
+# shims adds a single directory (~45 chars) and resolves per-directory
+# versions internally via mise exec.
+# Non-Windows: use activate mode for dynamic env var support (JAVA_HOME etc.)
+if ($IsWindows -ne $false) {
+  $shimsDir = Join-Path $env:LOCALAPPDATA 'mise\shims'
+  if (-not (Test-Path $shimsDir)) {
+    & $miseCommand reshim 2>$null
+  }
+  if (Test-Path $shimsDir) {
+    $env:PATH = "$shimsDir$([IO.Path]::PathSeparator)$env:PATH"
+  }
+} else {
+  (& $miseCommand activate pwsh --quiet 2>$null) | Out-String | Invoke-Expression
+}
 Remove-Variable miseCommand -ErrorAction SilentlyContinue
