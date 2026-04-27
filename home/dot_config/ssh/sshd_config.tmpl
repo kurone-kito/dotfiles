@@ -8,6 +8,11 @@
 #   Linux/macOS: sudo cp ~/.config/ssh/sshd_config /etc/ssh/sshd_config
 #   Windows:     Copy-Item ~/.config/ssh/sshd_config C:\ProgramData\ssh\sshd_config
 #
+# Windows administrator accounts use
+# C:\ProgramData\ssh\administrators_authorized_keys by default.
+# Sync ~/.ssh/authorized_keys with ~/.local/bin/sync-openssh-authorized-keys.ps1
+# after key changes.
+#
 # Then reload sshd:
 #
 #   Linux:   sudo systemctl reload sshd

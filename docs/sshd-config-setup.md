@@ -141,11 +141,53 @@ Then re-run `chezmoi apply` and redeploy.
 - **`PermitRootLogin`** is omitted on Windows because the root
   user concept does not exist. Use Windows group policies or
   `DenyGroups` to restrict administrator access instead.
+- **Windows administrator accounts** use
+  `C:\ProgramData\ssh\administrators_authorized_keys` by default,
+  not `%USERPROFILE%\.ssh\authorized_keys`.
 - **`Subsystem sftp internal-sftp`** uses the OpenSSH built-in
   SFTP server (available since OpenSSH 4.9), avoiding
   platform-specific binary paths.
 - All other settings not listed above use the OpenSSH defaults
   for the installed version.
+
+## Windows: Sync administrator authorized_keys
+
+Windows OpenSSH treats administrator accounts specially. When the SSH
+login user belongs to `BUILTIN\Administrators`, the service reads
+`C:\ProgramData\ssh\administrators_authorized_keys` instead of the
+per-user `%USERPROFILE%\.ssh\authorized_keys` file.
+
+This repository still generates `~/.ssh/authorized_keys` from your
+deployed public keys so the key list remains user-managed. For Windows
+administrator accounts, sync that file into the system location after
+key changes:
+
+```powershell
+# Run as Administrator
+& "$HOME\.local\bin\sync-openssh-authorized-keys.ps1"
+```
+
+**Preview changes without applying (dry run):**
+
+```powershell
+& "$HOME\.local\bin\sync-openssh-authorized-keys.ps1" -WhatIf
+```
+
+**Specify a custom source file:**
+
+```powershell
+& "$HOME\.local\bin\sync-openssh-authorized-keys.ps1" `
+  -Source "$HOME\.ssh\authorized_keys"
+```
+
+The helper script:
+
+1. Verifies the current session has administrator privileges
+2. Copies `~/.ssh/authorized_keys` to
+   `C:\ProgramData\ssh\administrators_authorized_keys`
+3. Resets the ACL to `Administrators` + `SYSTEM` only
+
+Re-run the helper whenever `chezmoi apply` updates your public keys.
 
 ## Windows: Changing the default SSH shell
 
@@ -232,6 +274,26 @@ Common causes:
   directive. Check `sshd -V` for the installed version.
 - **`AuthenticationMethods`** requires OpenSSH 6.0+.
 - **`internal-sftp`** requires OpenSSH 4.9+.
+
+### Windows: `Permission denied (publickey)` for admin accounts
+
+If Windows service mode rejects key auth but `sshd -d` from a local
+foreground prompt succeeds, check whether the login account is in the
+local `Administrators` group.
+
+In that case, the most common cause is that `sshd` is looking for
+`C:\ProgramData\ssh\administrators_authorized_keys` while your key only
+exists in `%USERPROFILE%\.ssh\authorized_keys`.
+
+Fix it by re-syncing the administrator key file from an elevated prompt:
+
+```powershell
+& "$HOME\.local\bin\sync-openssh-authorized-keys.ps1"
+```
+
+If the account is **not** an administrator, ensure
+`%USERPROFILE%\.ssh\authorized_keys` exists and still grants read access
+to `SYSTEM`.
 
 ### Connection drops on mobile
 
