@@ -12,6 +12,9 @@ for f in "${ZDOTDIR:-$HOME/.config/zsh}/conf.d/"*.zsh(N); do
   [[ -r "$f" ]] && . "$f"
 done
 
+# Worktrunk (git-wt) shell integration — must be in .zshrc for detection
+if command -v git-wt >/dev/null 2>&1; then eval "$(command git-wt config shell init zsh)"; fi
+
 # Plugin manager
 if (( $+commands[sheldon] )); then
   eval "$(sheldon source)"
