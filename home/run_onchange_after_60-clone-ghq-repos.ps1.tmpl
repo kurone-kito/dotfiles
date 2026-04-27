@@ -10,14 +10,14 @@ Write-Host 'No ghq clone targets configured; skipping.'
 exit 0
 {{ end -}}
 
-if (!(Get-Command mise -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
   Write-Host 'mise not found; skipping.'
   exit 0
 }
 $ghqBin = mise which ghq 2>$null
-if (!$ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
+if (-not $ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
 $ghBin = mise which gh 2>$null
-if (!$ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
+if (-not $ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
 $ghqRoot = & $ghqBin root
 
 {{ range $key, $clone := $clones -}}
