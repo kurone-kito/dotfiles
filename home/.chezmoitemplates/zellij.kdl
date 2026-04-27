@@ -256,6 +256,7 @@ plugins {
 load_plugins {
   zellij:link
 }
+{{ $zellijSimplifiedUi := dig "zellij" "simplified_ui" false . -}}
 {{ $zellijWebServer := dig "zellij" "web" "server" true . -}}
 {{ $zellijWebSharing := dig "zellij" "web" "sharing" "on" . -}}
 {{ $zellijWebBind := dig "zellij" "web" "bind" "127.0.0.1" . -}}
@@ -263,9 +264,21 @@ load_plugins {
 {{ $zellijWebCert := dig "zellij" "web" "cert" "" . -}}
 {{ $zellijWebKey := dig "zellij" "web" "key" "" . -}}
 {{ $zellijWebBaseUrl := dig "zellij" "web" "base_url" "" . -}}
+{{ $zellijWebClientFont := dig "zellij" "web" "client_font" "'HackGen Console NF', 'Hack Nerd Font', monospace" . -}}
+{{ $zellijWebClientCursorBlink := dig "zellij" "web" "client_cursor_blink" true . -}}
+{{ $zellijWebClientCursorStyle := dig "zellij" "web" "client_cursor_style" "bar" . -}}
+{{ $zellijWebClientCursorInactiveStyle := dig "zellij" "web" "client_cursor_inactive_style" "outline" . -}}
 {{ $zellijWebEnforceHttpsLocalhost := dig "zellij" "web" "enforce_https_on_localhost" false . -}}
+
+// Send a request for a simplified ui (without arrow fonts) to plugins
+// Useful for mobile web clients where Nerd Fonts are unavailable
+simplified_ui {{ if $zellijSimplifiedUi }}true{{ else }}false{{ end }}
+
 web_client {
-  font "monospace"
+  font {{ $zellijWebClientFont | quote }}
+  cursor_blink {{ if $zellijWebClientCursorBlink }}true{{ else }}false{{ end }}
+  cursor_style {{ $zellijWebClientCursorStyle | quote }}
+  cursor_inactive_style {{ $zellijWebClientCursorInactiveStyle | quote }}
 {{ if $zellijWebBaseUrl -}}
   base_url {{ $zellijWebBaseUrl | quote }}
 {{ end -}}

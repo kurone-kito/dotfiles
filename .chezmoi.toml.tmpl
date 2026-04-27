@@ -161,6 +161,9 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #
 # Zellij Web configuration (optional):
 #
+#   [data.zellij]
+#   simplified_ui = false             # true replaces Nerd Font glyphs with ASCII
+#
 #   [data.zellij.web]
 #   server = true
 #   sharing = "on"
@@ -168,6 +171,10 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   port = 8082
 #   base_url = ""                    # optional reverse-proxy subpath
 #   enforce_https_on_localhost = false
+#   client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"
+#   client_cursor_blink = true
+#   client_cursor_style = "bar"      # "block", "bar", or "underline"
+#   client_cursor_inactive_style = "outline"  # "outline", "block", "bar", "underline"
 #
 #   [data.zellij.web.tailscale]
 #   enabled = true                   # optional; publish through tailscale serve

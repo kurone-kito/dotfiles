@@ -26,15 +26,39 @@ Describe 'zellij web assets' {
     $lines | Should -Contain 'enforce_https_on_localhost {{ if $zellijWebEnforceHttpsLocalhost }}true{{ else }}false{{ end }}'
   }
 
-  It 'preserves a newline between load_plugins and web_client template sections' {
+  It 'uses non-trimming template syntax for variable assignments near web_client' {
     $lines = Get-Content $script:ZellijTemplate
-    $webClientIndex = [Array]::IndexOf($lines, 'web_client {')
-    $assignmentLines = $lines[($webClientIndex - 8)..($webClientIndex - 1)]
+    $assignmentLines = $lines | Where-Object { $_ -match '^\{\{ \$zellij.*:= dig' }
 
+    $assignmentLines.Count | Should -BeGreaterThan 0
     foreach ($line in $assignmentLines) {
-      $line | Should -Match '^\{\{ \$zellijWeb'
       $line | Should -Not -Match '^\{\{-'
     }
+  }
+
+  It 'exposes simplified_ui as a configurable template option' {
+    $content = Get-Content $script:ZellijTemplate -Raw
+
+    $content | Should -Match '\{\{ \$zellijSimplifiedUi := dig "zellij" "simplified_ui" false \. -\}\}'
+    $content | Should -Match 'simplified_ui \{\{ if \$zellijSimplifiedUi \}\}true\{\{ else \}\}false\{\{ end \}\}'
+  }
+
+  It 'exposes web_client font and cursor settings as configurable template options' {
+    $lines = Get-Content $script:ZellijTemplate
+
+    $lines | Should -Contain '  font {{ $zellijWebClientFont | quote }}'
+    $lines | Should -Contain '  cursor_blink {{ if $zellijWebClientCursorBlink }}true{{ else }}false{{ end }}'
+    $lines | Should -Contain '  cursor_style {{ $zellijWebClientCursorStyle | quote }}'
+    $lines | Should -Contain '  cursor_inactive_style {{ $zellijWebClientCursorInactiveStyle | quote }}'
+  }
+
+  It 'documents simplified_ui and web_client settings in the chezmoi config template' {
+    $lines = Get-Content $script:ChezmoiConfigTemplate
+
+    $lines | Should -Contain '#   simplified_ui = false             # true replaces Nerd Font glyphs with ASCII'
+    $lines | Should -Contain '#   client_font = "''HackGen Console NF'', ''Hack Nerd Font'', monospace"'
+    $lines | Should -Contain '#   client_cursor_blink = true'
+    $lines | Should -Contain '#   client_cursor_style = "bar"      # "block", "bar", or "underline"'
   }
 
   It 'keeps certificate and key comment blocks on their own template lines' {
