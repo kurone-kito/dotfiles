@@ -72,6 +72,13 @@ repos="$(GH_HOST="${HOSTNAME}" "${GH}" repo list "${OWNER}" \
   exit 1
 }
 
+# Accept new SSH host keys on first contact (TOFU) to avoid
+# "Host key verification failed" in non-interactive mode.
+# Changed keys are still rejected to guard against MITM.
+if ${USE_SSH}; then
+  export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+fi
+
 echo "${repos}" |
 while IFS= read -r repo; do
   [ -z "${repo}" ] && continue
@@ -91,4 +98,5 @@ while IFS= read -r repo; do
   fi
 done
 
+unset GIT_SSH_COMMAND
 echo "==> Done."

@@ -30,12 +30,13 @@ EOF
 }
 
 setup_standard_mocks() {
-  # ghq root returns our test dir
+  # ghq root returns our test dir; get logs args and GIT_SSH_COMMAND
   make_mock ghq "
 if [ \"\$1\" = 'root' ]; then
   echo '$BATS_TEST_TMPDIR/ghq-root'
 elif [ \"\$1\" = 'get' ]; then
   echo \"\$@\" >> '$GHQ_CLONE_LOG'
+  echo \"GIT_SSH_COMMAND=\${GIT_SSH_COMMAND:-}\" >> '$BATS_TEST_TMPDIR/ghq-env.log'
 fi
 "
   # gh repo list returns two repos
@@ -281,4 +282,25 @@ fi
   assert_success
   assert_output --partial "clone: testuser/repo-a"
   assert_output --partial "clone: testuser/repo-b"
+}
+
+# ── SSH host key handling ────────────────────────────────────────
+
+@test "sets GIT_SSH_COMMAND with accept-new for SSH clones" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser
+  assert_success
+
+  run cat "$BATS_TEST_TMPDIR/ghq-env.log"
+  assert_output --partial "GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new"
+}
+
+@test "does not set GIT_SSH_COMMAND for HTTPS clones" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --https
+  assert_success
+
+  # env log should not exist (ghq get mock captures it only when called)
+  run cat "$BATS_TEST_TMPDIR/ghq-env.log"
+  refute_output --partial "StrictHostKeyChecking"
 }

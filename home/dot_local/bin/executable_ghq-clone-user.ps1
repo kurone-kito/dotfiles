@@ -77,24 +77,39 @@ try {
   if ($prevGhHost) { $env:GH_HOST = $prevGhHost } else { Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue }
 }
 
-foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
-  $target = Join-Path $ghqRoot (Join-Path $Hostname $repo)
-  if (Test-Path (Join-Path $target '.git')) {
-    Write-Host "  skip: $repo"
-    continue
-  }
-  if (Test-Path $target) {
-    Remove-Item -Path $target -Recurse -Force
-  }
-  Write-Host "  clone: $repo"
-  try {
-    if ($useSsh) {
-      & $ghqBin get -p "${Hostname}/${repo}" 2>&1
-    } else {
-      & $ghqBin get "${Hostname}/${repo}" 2>&1
+# Accept new SSH host keys on first contact (TOFU) to avoid
+# "Host key verification failed" in non-interactive mode.
+# Changed keys are still rejected to guard against MITM.
+$prevGitSshCommand = $env:GIT_SSH_COMMAND
+if ($useSsh) {
+  $env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'
+}
+try {
+  foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {
+    $target = Join-Path $ghqRoot (Join-Path $Hostname $repo)
+    if (Test-Path (Join-Path $target '.git')) {
+      Write-Host "  skip: $repo"
+      continue
     }
-  } catch {
-    Write-Host "  error: $_"
+    if (Test-Path $target) {
+      Remove-Item -Path $target -Recurse -Force
+    }
+    Write-Host "  clone: $repo"
+    try {
+      if ($useSsh) {
+        & $ghqBin get -p "${Hostname}/${repo}" 2>&1
+      } else {
+        & $ghqBin get "${Hostname}/${repo}" 2>&1
+      }
+    } catch {
+      Write-Host "  error: $_"
+    }
+  }
+} finally {
+  if ($prevGitSshCommand) {
+    $env:GIT_SSH_COMMAND = $prevGitSshCommand
+  } else {
+    Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue
   }
 }
 
