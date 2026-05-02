@@ -8,6 +8,7 @@ $profilesDir = Join-Path $HOME '.config/git/profiles'
 New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
 {{ template "signing-validate" . -}}
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ $homeDir := replace "\\" "/" .chezmoi.homeDir -}}
 {{- range $key, $profile := (dig "git" "profiles" dict .) }}
 {{- $signingkey := dig "signingkey" "" $profile -}}
 {{- $sshFile := "" -}}
@@ -17,9 +18,11 @@ New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
 {{- $explicitFormat := dig "signing_format" "" $profile -}}
 {{- $format := "" -}}
 {{- if $explicitFormat -}}{{ $format = $explicitFormat -}}
-{{- else if $sshFile -}}{{ $format = "ssh" -}}
 {{- else if $signingkey -}}{{ $format = "gpg" -}}
-{{- end }}
+{{- else if $sshFile -}}{{ $format = "ssh" -}}
+{{- end -}}
+{{- $sshAbsPath := "" -}}
+{{- if $sshFile -}}{{ $sshAbsPath = printf "%s/.ssh/%s.pub" $homeDir $sshFile -}}{{- end }}
 $profilePath = Join-Path $profilesDir '{{ $key }}'
 @'
 {{- if eq $format "ssh" }}
@@ -30,7 +33,7 @@ $profilePath = Join-Path $profilesDir '{{ $key }}'
   email = {{ $profile.email | quote }}
   name = {{ $profile.name | quote }}
 {{- if eq $format "ssh" }}
-  signingkey = {{ printf "~/.ssh/%s.pub" $sshFile | quote }}
+  signingkey = {{ $sshAbsPath | quote }}
 [commit]
   gpgsign = true
 [tag]
@@ -43,6 +46,12 @@ $profilePath = Join-Path $profilesDir '{{ $key }}'
 [tag]
   forceSignAnnotated = true
   gpgsign = true
+{{- end }}
+{{- if $sshFile }}
+[alias]
+  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f \"$@\""
+  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f \"$@\""
+  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f \"$@\""
 {{- end }}
 '@ | Set-Content -Path $profilePath -Encoding utf8NoBOM
 {{- end }}

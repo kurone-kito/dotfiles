@@ -1,6 +1,5 @@
-{{- /* signing-resolved-format: Determine the effective signing format
-     for a given scope after considering both the GPG signingkey and
-     any SSH primary/profile signing key.
+{{- /* signing-resolved-format: Determine the effective primary signing
+     format for a given scope.
 
      Usage:
        Global scope:
@@ -10,43 +9,45 @@
 
      Returns one of:
        ""    - no signing configured for this scope
-       "gpg" - GPG fingerprint signing
+       "gpg" - GPG fingerprint signing (the default when a fpr is set)
        "ssh" - SSH key signing
 
      Resolution rules (assumes signing-validate has already run):
-       - If `signing_format` is explicitly set on the scope, honor it.
-       - Else if an SSH key targets this scope, return "ssh".
-       - Else if a GPG signingkey is set on this scope, return "gpg".
+       - If `signing_format` is explicitly set on the scope, honor it
+         (this is the only way to make SSH primary when GPG is also
+         configured).
+       - Else if a GPG signingkey is set on the scope, return "gpg".
+       - Else if an SSH key targets this scope via signing_fallback /
+         signing_profiles, return "ssh" (only signing option left).
        - Else return "".
 
-     Note: callers must invoke `template "signing-validate" .ctx`
-     before relying on this template, so that conflicts have already
-     been caught. */ -}}
+     Note: SSH `signing_fallback` / `signing_profiles` keys do NOT
+     override GPG when both are present. The fallback semantic is
+     surfaced via git aliases (commit-ssh / tag-ssh / rebase-ssh)
+     emitted by config.tmpl and the profile generator. */ -}}
 {{- $sshKeys := dig "secret" "ssh" "keys" dict .ctx -}}
 {{- if eq .scope "global" -}}
 {{-   $fmt := dig "git" "signing_format" "" .ctx -}}
 {{-   if $fmt -}}{{ $fmt }}
+{{-   else if dig "git" "signingkey" "" .ctx -}}gpg
 {{-   else -}}
 {{-     $hasSsh := false -}}
 {{-     range $label, $key := $sshKeys -}}
-{{-       if dig "primary_signing" false $key -}}{{- $hasSsh = true -}}{{- end -}}
+{{-       if dig "signing_fallback" false $key -}}{{- $hasSsh = true -}}{{- end -}}
 {{-     end -}}
-{{-     if $hasSsh -}}ssh
-{{-     else if dig "git" "signingkey" "" .ctx -}}gpg
-{{-     end -}}
+{{-     if $hasSsh -}}ssh{{- end -}}
 {{-   end -}}
 {{- else if eq .scope "profile" -}}
 {{-   $profileName := .profile -}}
 {{-   $profile := dig "git" "profiles" .profile dict .ctx -}}
 {{-   $fmt := dig "signing_format" "" $profile -}}
 {{-   if $fmt -}}{{ $fmt }}
+{{-   else if dig "signingkey" "" $profile -}}gpg
 {{-   else -}}
 {{-     $hasSsh := false -}}
 {{-     range $label, $key := $sshKeys -}}
 {{-       if has $profileName (dig "signing_profiles" (list) $key) -}}{{- $hasSsh = true -}}{{- end -}}
 {{-     end -}}
-{{-     if $hasSsh -}}ssh
-{{-     else if dig "signingkey" "" $profile -}}gpg
-{{-     end -}}
+{{-     if $hasSsh -}}ssh{{- end -}}
 {{-   end -}}
 {{- end -}}

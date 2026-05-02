@@ -9,23 +9,30 @@
 {{- /* Resolve global signing format and key inline because Go templates
        cannot use `template` invocations as expression values. The helper
        templates `signing-resolved-format` and `signing-ssh-filename`
-       encode the same rules and are used by the profile generators. */ -}}
+       encode the same rules and are used by the profile generators.
+       Resolution policy: GPG is the primary signing backend whenever a
+       fingerprint is set; SSH `signing_fallback` does NOT override it.
+       SSH only becomes primary when `git.signing_format = "ssh"` is
+       set explicitly OR when no GPG fpr is configured. SSH fallback
+       is surfaced via the commit-ssh / tag-ssh / rebase-ssh aliases
+       below, regardless of which backend is primary. */ -}}
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
-{{ $sshPrimaryFile := "" -}}
+{{ $sshFallbackFile := "" -}}
 {{ range $label, $key := $sshKeys -}}
-{{   if dig "primary_signing" false $key -}}{{ $sshPrimaryFile = $key.filename }}{{ end -}}
+{{   if dig "signing_fallback" false $key -}}{{ $sshFallbackFile = $key.filename }}{{ end -}}
 {{ end -}}
 {{ $explicitFormat := dig "signing_format" "" $git -}}
 {{ $signingFormat := "" -}}
 {{ if $explicitFormat -}}
 {{   $signingFormat = $explicitFormat -}}
-{{ else if $sshPrimaryFile -}}
-{{   $signingFormat = "ssh" -}}
 {{ else if $gitSigningKey -}}
 {{   $signingFormat = "gpg" -}}
+{{ else if $sshFallbackFile -}}
+{{   $signingFormat = "ssh" -}}
 {{ end -}}
+{{ $homeDir := replace "\\" "/" .chezmoi.homeDir -}}
 {{ if eq $signingFormat "ssh" -}}
-{{   $gitSigningKey = printf "~/.ssh/%s.pub" $sshPrimaryFile -}}
+{{   $gitSigningKey = printf "%s/.ssh/%s.pub" $homeDir $sshFallbackFile -}}
 {{ else if ne $signingFormat "gpg" -}}
 {{   $gitSigningKey = "" -}}
 {{ end -}}
@@ -57,6 +64,16 @@
   ri = !git rebase -i "$(git first-commit)"~
   rs = rebase --skip
   sw = switch
+{{- if $sshFallbackFile }}
+{{- /* SSH fallback aliases: opt into SSH signing per-invocation
+       without mutating primary signing config. They force-enable
+       signing via `commit.gpgsign=true` / `tag.gpgsign=true` so
+       they also work in scopes that have no primary signing set. */ -}}
+{{- $sshAbsPath := printf "%s/.ssh/%s.pub" $homeDir $sshFallbackFile }}
+  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f \"$@\""
+  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f \"$@\""
+  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f \"$@\""
+{{- end }}
 [add "interactive"]
   useBuiltin = true
 [apply]

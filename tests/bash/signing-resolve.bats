@@ -49,61 +49,87 @@ JSON
   refute_output --partial 'format = ssh'
 }
 
-@test "config: SSH primary_signing emits ssh format and path-style key" {
+@test "config: SSH-only signing_fallback emits ssh format and absolute path key" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": { "secret": { "ssh": { "keys": {
-  "personal": { "item": "i", "filename": "id_ed25519_personal", "primary_signing": true }
+  "personal": { "item": "i", "filename": "id_ed25519_personal", "signing_fallback": true }
 } } } } }
 JSON
   run _render "$CONFIG_TMPL"
   assert_success
   assert_output --partial 'format = ssh'
-  assert_output --partial 'signingkey = "~/.ssh/id_ed25519_personal.pub"'
+  assert_output --partial '/.ssh/id_ed25519_personal.pub'
   assert_output --partial 'gpgsign = true'
   refute_output --partial 'gpgsign = if-asked'
+  assert_output --partial 'commit-ssh ='
+  assert_output --partial 'tag-ssh ='
+  assert_output --partial 'rebase-ssh ='
 }
 
-@test "config: GPG fpr + primary_signing resolves to SSH (no preference needed)" {
+@test "config: GPG fpr + signing_fallback keeps GPG primary, adds SSH aliases" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
   "git": { "signingkey": "FPR" },
   "secret": { "ssh": { "keys": {
-    "p": { "item": "i", "filename": "id", "primary_signing": true }
-  } } }
-} }
-JSON
-  run _render "$CONFIG_TMPL"
-  assert_success
-  assert_output --partial 'format = ssh'
-  assert_output --partial 'signingkey = "~/.ssh/id.pub"'
-  refute_output --partial 'signingkey = "FPR"'
-}
-
-@test "config: explicit signing_format=gpg overrides SSH primary" {
-  cat > "$TMP_CFG" <<'JSON'
-{ "data": {
-  "git": { "signingkey": "FPR", "signing_format": "gpg" },
-  "secret": { "ssh": { "keys": {
-    "p": { "item": "i", "filename": "id", "primary_signing": true }
+    "p": { "item": "i", "filename": "id", "signing_fallback": true }
   } } }
 } }
 JSON
   run _render "$CONFIG_TMPL"
   assert_success
   assert_output --partial 'signingkey = "FPR"'
+  assert_output --partial 'gpgsign = if-asked'
   refute_output --partial 'format = ssh'
+  assert_output --partial 'commit-ssh ='
+  assert_output --partial "user.signingkey=$HOME/.ssh/id.pub"
 }
 
-@test "config: multiple primary_signing keys fail" {
+@test "config: explicit signing_format=ssh forces SSH primary" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": {
+  "git": { "signingkey": "FPR", "signing_format": "ssh" },
+  "secret": { "ssh": { "keys": {
+    "p": { "item": "i", "filename": "id", "signing_fallback": true }
+  } } }
+} }
+JSON
+  run _render "$CONFIG_TMPL"
+  assert_success
+  assert_output --partial 'format = ssh'
+  assert_output --partial '/.ssh/id.pub"'
+  refute_output --partial 'signingkey = "FPR"'
+}
+
+@test "config: legacy primary_signing field is rejected with rename hint" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": { "secret": { "ssh": { "keys": {
-  "a": { "item": "i", "filename": "a", "primary_signing": true },
-  "b": { "item": "i", "filename": "b", "primary_signing": true }
+  "p": { "item": "i", "filename": "id", "primary_signing": true }
+} } } } }
+JSON
+  run _render "$CONFIG_TMPL"
+  assert_failure
+  assert_output --partial 'primary_signing was renamed to signing_fallback'
+}
+
+@test "config: multiple signing_fallback keys fail" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": { "secret": { "ssh": { "keys": {
+  "a": { "item": "i", "filename": "a", "signing_fallback": true },
+  "b": { "item": "i", "filename": "b", "signing_fallback": true }
 } } } } }
 JSON
   run _render "$CONFIG_TMPL"
   assert_failure
   assert_output --partial 'multiple'
+}
+
+@test "config: signing_format=ssh without a fallback key fails" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": { "git": { "signing_format": "ssh" } } }
+JSON
+  run _render "$CONFIG_TMPL"
+  assert_failure
+  assert_output --partial 'requires exactly one'
 }
 
 @test "config: signing_profiles referencing unknown profile fails" {
@@ -121,7 +147,24 @@ JSON
 # generate-git-profiles.sh.tmpl
 # ---------------------------------------------------------------------------
 
-@test "profiles: profile in signing_profiles emits scope-local SSH block" {
+@test "profiles: GPG profile + signing_profiles keeps GPG primary, adds SSH aliases" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": {
+  "git": { "profiles": { "work": { "name": "W", "email": "w@e", "gitdir": "~/w/", "signingkey": "WORKFPR" } } },
+  "secret": { "ssh": { "keys": {
+    "p": { "item": "i", "filename": "id_work", "signing_profiles": ["work"] }
+  } } }
+} }
+JSON
+  run _render "$PROFILES_TMPL"
+  assert_success
+  assert_output --partial 'signingkey = "WORKFPR"'
+  refute_output --partial 'format = ssh'
+  assert_output --partial 'commit-ssh ='
+  assert_output --partial '/.ssh/id_work.pub'
+}
+
+@test "profiles: SSH-only profile (no GPG signingkey) emits ssh format + aliases" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
   "git": { "profiles": { "work": { "name": "W", "email": "w@e", "gitdir": "~/w/" } } },
@@ -132,12 +175,12 @@ JSON
 JSON
   run _render "$PROFILES_TMPL"
   assert_success
-  assert_output --partial '[gpg]'
   assert_output --partial 'format = ssh'
-  assert_output --partial 'signingkey = "~/.ssh/id_work.pub"'
+  assert_output --partial 'signingkey = "'"$HOME"'/.ssh/id_work.pub"'
+  assert_output --partial 'commit-ssh ='
 }
 
-@test "profiles: GPG-only profile preserves legacy block" {
+@test "profiles: GPG-only profile preserves legacy block (no aliases)" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": { "git": { "profiles": { "work": {
   "name": "W", "email": "w@e", "gitdir": "~/w/", "signingkey": "FPR2"
@@ -147,4 +190,5 @@ JSON
   assert_success
   assert_output --partial 'signingkey = "FPR2"'
   refute_output --partial 'format = ssh'
+  refute_output --partial 'commit-ssh'
 }

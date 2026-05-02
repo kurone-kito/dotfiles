@@ -40,8 +40,8 @@ item = {{ $gpg.item | quote }}
 [data.secret.ssh.keys."{{ $key }}"]
 item = {{ $sshKey.item | quote }}
 filename = {{ $sshKey.filename | quote }}
-{{- if (dig "primary_signing" false $sshKey) }}
-primary_signing = {{ dig "primary_signing" false $sshKey }}
+{{- if (dig "signing_fallback" false $sshKey) }}
+signing_fallback = {{ dig "signing_fallback" false $sshKey }}
 {{- end }}
 {{- with (dig "signing_profiles" (list) $sshKey) }}
 signing_profiles = [
@@ -143,18 +143,21 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   item     = "SSH Key - Personal"
 #   filename = "id_ed25519_personal" # target file under ~/.ssh/
 #
-#   # Optional: also use this key for git commit/tag signing.
-#   # When set, chezmoi configures `gpg.format = ssh` and a
-#   # path-style `user.signingkey` automatically. Default is OFF.
-#   primary_signing  = false           # global [user] signingkey
-#   signing_profiles = []              # per-profile signing
-#   # signing_profiles = ["work", "oss"] # use the same key in
-#   #                                    # multiple profiles
+#   # Optional: register this key as a fallback signing key. GPG
+#   # remains the primary signing backend; the flag adds git aliases
+#   # (commit-ssh, tag-ssh, rebase-ssh) that wrap commands with
+#   # `-c gpg.format=ssh -c user.signingkey=<absolute>/.ssh/<file>.pub`
+#   # so non-interactive callers (CI, AI agents, gpg-agent timeout)
+#   # can sign with SSH on demand. Default is OFF.
+#   signing_fallback = false           # global commit-ssh alias
+#   signing_profiles = []              # per-profile commit-ssh alias
+#   # signing_profiles = ["work", "oss"] # register fallback aliases
+#   #                                    # in multiple profile scopes
 #
-#   # If `git.signingkey` (a GPG fingerprint) and `primary_signing`
-#   # both resolve to the same scope, chezmoi fails the build unless
-#   # you set `signing_format` to disambiguate. See
-#   # `docs/secret-manager-setup.md` for details.
+#   # Set `git.signing_format = "ssh"` to make SSH the *primary*
+#   # signing backend instead of a fallback (requires
+#   # signing_fallback = true). See `docs/secret-manager-setup.md`
+#   # for details.
 #
 # Example SSH host:
 #
