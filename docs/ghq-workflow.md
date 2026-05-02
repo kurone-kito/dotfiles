@@ -155,8 +155,9 @@ item = "GPG Key - Work"
 [data.secret.ssh.keys.personal]
 item = "SSH Key - Personal"
 filename = "id_ed25519_personal"
-# Opt in to SSH-based commit signing for the global identity:
-# primary_signing = true
+# Opt in to SSH-based commit signing as a fallback alias
+# (`git commit-ssh` etc.; plain `git commit` keeps using GPG):
+# signing_fallback = true
 
 [data.secret.ssh.keys.work]
 item = "SSH Key - Work"

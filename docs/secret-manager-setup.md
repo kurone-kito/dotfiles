@@ -211,38 +211,50 @@ filename = "id_ed25519_oss"
 
 - `item` — Bitwarden SSH Key item name (native SSH key type)
 - `filename` — target filename under `~/.ssh/` (without path)
-- `primary_signing` — optional `true` to point Git's global
-  `user.signingkey` at this key (`~/.ssh/<filename>.pub`) and
-  switch `gpg.format` to `ssh`. At most one key may set this.
+- `signing_fallback` — optional `true` to register this key as the
+  SSH **fallback** signing key. Plain `git commit` still uses GPG
+  (or stays unsigned), but `git commit-ssh`, `git tag-ssh`, and
+  `git rebase-ssh` aliases sign with this key via path-style
+  `user.signingkey = <abs>/.ssh/<filename>.pub`. At most one key
+  may set this. Use the SSH fallback in non-interactive contexts
+  (CI, AI agents) or when `gpg-agent`/pinentry hangs.
 - `signing_profiles` — optional list of profile labels (matching
   keys under `[data.git.profiles.*]`); each listed profile's
-  include file gets a scope-local SSH signing block pointing at
-  this key.
+  include file gets the same scope-local `commit-ssh`/`tag-ssh`/
+  `rebase-ssh` aliases (and `[gpg] format = ssh` only when the
+  profile has no GPG `signingkey` of its own).
 
 When SSH signing is opted in, `chezmoi apply` validates the
 configuration and aborts with a clear error if:
 
-- two keys both set `primary_signing = true`, or
-- `signing_profiles` references a profile that does not exist.
+- two keys both set `signing_fallback = true`, or
+- `signing_profiles` references a profile that does not exist, or
+- a stale `primary_signing` field is present (rename it to
+  `signing_fallback`), or
+- `git.signing_format = "ssh"` is set without exactly one resolvable
+  fallback key.
 
-If a GPG fingerprint (`git.signingkey` or
-`git.profiles.<name>.signingkey`) and an SSH opt-in target the
-same scope, **SSH wins** — the GPG fingerprint stays in config
-for reference but the rendered `user.signingkey` and
-`gpg.format = ssh` come from the SSH key. To force GPG to win
-even when an SSH key is opted in, set `signing_format = "gpg"`
-under `[data.git]` (global) or in the relevant profile.
+Resolution order for the **primary** signing format is:
+explicit `signing_format` > GPG fingerprint > SSH fallback > none.
+GPG-only configurations render byte-identically to the pre-fallback
+behavior; SSH only becomes the primary format when there is no GPG
+fingerprint at the same scope, or when `signing_format = "ssh"` is
+set explicitly.
 
 Notes:
 
 - Requires Git 2.34+ for SSH signature support.
 - Register the public key on GitHub as a **Signing key** (separate
   from Authentication key) for the "Verified" badge to appear.
-- Key paths are written in `~/.ssh/<filename>.pub` form with
-  forward slashes for cross-platform compatibility (Git for
-  Windows, MSYS, WSL).
+- Key paths are written as absolute, forward-slash forms (e.g.
+  `/home/user/.ssh/<filename>.pub`) so `ssh-keygen` resolves them
+  on Git for Windows, MSYS, WSL, Linux, and macOS alike.
 - Renaming `filename` after deploy leaves the old file in
   `~/.ssh/`; remove it manually if rotating.
+- `git rebase-ssh` only signs the initial invocation. To continue
+  an interrupted rebase with SSH signing still active, run
+  `git rebase-ssh --continue` (or `--abort` / `--skip`); plain
+  `git rebase --continue` reverts to GPG-primary signing.
 
 ### Adding SSH hosts
 

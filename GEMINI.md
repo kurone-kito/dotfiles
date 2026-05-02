@@ -45,34 +45,43 @@ and split unrelated changes into separate atomic commits.
 
 ### Signing fallback
 
-GPG signing is configured by default. The repository also supports
-**declarative opt-in to persistent SSH signing** via
-`primary_signing` and `signing_profiles` on
+GPG signing is the default for plain `git commit`. The repository
+also exposes opt-in **SSH signing aliases** (`git commit-ssh`,
+`git tag-ssh`, `git rebase-ssh`) when a key sets
+`signing_fallback = true` (or appears in `signing_profiles`) under
 `[data.secret.ssh.keys.<label>]` (see `docs/secret-manager-setup.md`).
 **Use that mechanism** instead of editing
 `home/dot_config/git/config.tmpl` or any chezmoi template by hand;
-ad-hoc edits to enable SSH signing in those templates are forbidden.
+ad-hoc edits to enable persistent SSH signing in those templates are
+forbidden.
 
-If the configured signing (GPG, or declaratively configured SSH)
-fails or hangs in the agent environment (`pinentry`, missing TTY,
-`gpg-agent` issues, hardware-touch timeout), make **one bounded
-retry** with transient SSH signing for that commit only via
-`git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`. This
-fallback must stay per-invocation; never write it into
-`~/.gitconfig` or any chezmoi template.
+If the configured signing fails or hangs in the agent environment
+(`pinentry`, missing TTY, `gpg-agent` issues, hardware-touch
+timeout), try the SSH path in this order, with **one bounded
+attempt** per step (no infinite loops on hardware-touch prompts):
 
-Discover the SSH key without a fixed path: respect existing
-SSH-signing config if `git config gpg.format` is already `ssh`,
-else use `git config gpg.ssh.defaultKeyCommand` output, else use
-the first non-certificate public key from `ssh-add -L` (pass the
-whole line, including comment, as one quoted argument).
+1. If `git commit-ssh` (or the matching `tag-ssh` / `rebase-ssh`)
+   alias is available, use it. This is the project-blessed path.
+2. Otherwise fall back to a per-invocation transient SSH commit:
+   `git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`.
+   Discover `<key>` without a fixed path: respect existing
+   SSH-signing config if `git config gpg.format` is already `ssh`,
+   else use `git config gpg.ssh.defaultKeyCommand` output, else use
+   the first non-certificate public key from `ssh-add -L` (pass the
+   whole line, including comment, as one quoted argument). Never
+   write this fallback into `~/.gitconfig` or any chezmoi template.
+3. If SSH signing is also unavailable, an unsigned commit is
+   acceptable.
+
+`git rebase-ssh` only signs the initial invocation; if the rebase
+stops, continue with `git rebase-ssh --continue` (or `--abort` /
+`--skip`) — plain `git rebase --continue` reverts to GPG.
 
 SSH-signed commits may still appear **Unverified** on GitHub if the
-key is not registered as a signing key on the user's profile. If
-SSH signing is also unavailable, an unsigned commit is acceptable.
-Always report which path (configured / SSH fallback / unsigned) was
-used; when unsigned, disclose both the primary and SSH failure
-reasons.
+key is not registered as a *signing* key on the user's profile.
+Always report which path (GPG / `git commit-ssh` alias / transient
+SSH / unsigned) was used; when unsigned, disclose both the GPG and
+SSH failure reasons.
 
 ## Onboarding detection
 

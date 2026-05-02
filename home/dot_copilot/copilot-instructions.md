@@ -57,11 +57,17 @@ the repository specifies a different convention.
   2. **SSH fallback if the configured method is blocked.** When the
      configured signing (most often GPG) fails or hangs because of
      `pinentry`, missing TTY, `gpg-agent`, or a similar environment
-     issue, make **one bounded retry** using transient SSH signing
-     for that commit only. Do **not** permanently change the user's
-     signing configuration as part of this fallback. Use per-command
-     flags such as
+     issue, make **one bounded attempt** using SSH signing for that
+     commit only. Do **not** permanently change the user's signing
+     configuration as part of this fallback. Prefer a project-blessed
+     alias if one exists (some repositories expose `git commit-ssh`,
+     `git tag-ssh`, `git rebase-ssh`, etc., which wrap a declared
+     fallback key); otherwise use per-command flags such as
      `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
+     If you start an SSH-signed rebase via such an alias, continue
+     it with the alias's own `--continue` form (e.g.
+     `git rebase-ssh --continue`) — plain `git rebase --continue`
+     reverts to the configured primary signing.
   3. **SSH key discovery** — never assume a fixed key path such as
      `~/.ssh/id_ed25519`. Pick the key in this order:
      1. If `git config --get gpg.format` is already `ssh`, respect

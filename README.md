@@ -227,10 +227,15 @@ This repository manages `~/.config/git/config` via
 
 - `[user]` is rendered from `data.git` in `~/.config/chezmoi/chezmoi.toml`
 - GPG signing settings are enabled only when `signingkey` is non-empty
-- SSH commit signing is opt-in via `secret.ssh.keys.<label>.primary_signing`
-  (global) and `signing_profiles` (per-profile); see
-  [docs/secret-manager-setup.md](docs/secret-manager-setup.md) for the
-  schema and conflict rules
+- SSH commit signing is exposed as opt-in fallback aliases
+  (`git commit-ssh`, `git tag-ssh`, `git rebase-ssh`) via
+  `secret.ssh.keys.<label>.signing_fallback` (global) and
+  `signing_profiles` (per-profile). Plain `git commit` keeps using
+  GPG; the SSH aliases are intended for CI, AI agents, and
+  pinentry-blocked sessions. See
+  [docs/secret-manager-setup.md](docs/secret-manager-setup.md) for
+  the schema, resolution policy, and the
+  `git rebase-ssh --continue` caveat
 - Run `gpg-cache` once per session when you want to warm `gpg-agent`
   before long signing-heavy workflows
 - Directory-based identities are handled with `includeIf`

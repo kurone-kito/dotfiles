@@ -133,45 +133,54 @@ Keep each commit as **small and focused** as possible:
 ### Signing fallback
 
 This repository configures **GPG** signing for commits and tags via
-`home/dot_config/git/config.tmpl` by default. It also supports
-**declarative opt-in to persistent SSH signing** through
-`primary_signing = true` and `signing_profiles = [...]` on
-`[data.secret.ssh.keys.<label>]` entries (see
-`docs/secret-manager-setup.md`); when those flags are set, chezmoi
-emits the necessary `gpg.format = ssh` and path-style
-`user.signingkey` for you. **Use that mechanism instead of editing
+`home/dot_config/git/config.tmpl` by default, and **GPG remains the
+primary format for plain `git commit`**. The repository also exposes
+opt-in **SSH signing aliases** (`git commit-ssh`, `git tag-ssh`,
+`git rebase-ssh`) when an entry under `[data.secret.ssh.keys.<label>]`
+sets `signing_fallback = true` (or appears in `signing_profiles`),
+see `docs/secret-manager-setup.md`. The aliases wrap the underlying
+command with `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
+commit.gpgsign=true`; they do **not** flip the global `gpg.format`.
+**Use that mechanism instead of editing
 `home/dot_config/git/config.tmpl` (or any chezmoi-managed git
-template) by hand.** Ad-hoc edits to enable SSH signing in those
-templates are still forbidden.
+template) by hand.** Ad-hoc edits to enable persistent SSH signing
+in those templates are forbidden.
 
-When AI agents create commits and the repository's configured
-signing (GPG or declaratively configured SSH) fails or hangs
-(`pinentry`, missing TTY, `gpg-agent`, hardware-touch timeout, or
-similar environment issues), follow this ladder rather than going
-straight to unsigned:
+When AI agents create commits and the configured signing fails or
+hangs (`pinentry`, missing TTY, `gpg-agent`, hardware-touch timeout,
+or similar environment issues), follow this ladder rather than going
+straight to unsigned. Each step is a **single bounded attempt** —
+do not loop on hardware-touch prompts.
 
-1. Make **one bounded retry** with transient SSH signing for that
-   commit only:
+1. If the project-blessed `git commit-ssh` (or `tag-ssh` /
+   `rebase-ssh`) alias is available, use it. This honors the
+   declaratively configured fallback key and keeps signing scoped to
+   the invocation.
+2. Otherwise make a per-invocation transient SSH commit:
    `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
    This is per-invocation only; it must not modify `~/.gitconfig`
-   or any chezmoi template.
-2. Pick the SSH key without assuming a fixed path such as
-   `~/.ssh/id_ed25519`:
+   or any chezmoi template. Pick the SSH key without assuming a
+   fixed path such as `~/.ssh/id_ed25519`:
    1. respect existing SSH-signing config if `git config --get
       gpg.format` is already `ssh`,
    2. else use a usable public key from
       `git config --get gpg.ssh.defaultKeyCommand`,
    3. else use the first non-certificate public key from
-      `ssh-add -L`. Pass the entire line, including the comment, as
-      a single quoted argument value.
+      `ssh-add -L`. Pass the entire line, including the comment,
+      as a single quoted argument value.
 3. Treat SSH signing as **best-effort** — GitHub may still mark the
    commit **Unverified** if the key is not registered as a *signing*
    key on the user's GitHub profile.
 4. If SSH signing also fails or no key is available, an unsigned
    commit is acceptable as a final resort.
-5. Always **report which path was used** (configured signing, SSH
-   fallback, or unsigned). When unsigned, disclose both the primary
-   failure and why the SSH fallback did not succeed.
+5. Always **report which path was used** (GPG, `git commit-ssh`
+   alias, transient SSH, or unsigned). When unsigned, disclose both
+   the GPG failure and why the SSH fallback did not succeed.
+
+`git rebase-ssh` only signs the **initial** invocation; if the rebase
+stops on a conflict, continue it with `git rebase-ssh --continue`
+(or `--abort` / `--skip`) to keep SSH signing active. Plain
+`git rebase --continue` reverts to GPG-primary signing.
 
 ### Examples
 
