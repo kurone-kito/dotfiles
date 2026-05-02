@@ -1,0 +1,111 @@
+{
+  "$help": "https://aka.ms/terminal-documentation",
+  "$schema": "https://aka.ms/terminal-profiles-schema",
+  "actions": [
+    {
+      "command": {
+        "action": "sendInput",
+        "input": "\u001b\r"
+      },
+      "id": "User.sendInput.8F63D3A9"
+    }
+  ],
+  "compatibility.allowHeadless": true,
+  "copyFormatting": "none",
+  "copyOnSelect": false,
+  "defaultProfile": "{5fb123f1-af88-5b5c-8953-d14a8def1978}",
+  "keybindings": [
+    {
+      "id": "User.sendInput.8F63D3A9",
+      "keys": "shift+enter"
+    },
+    {
+      "id": "Terminal.DuplicatePaneAuto",
+      "keys": "alt+shift+d"
+    },
+    {
+      "id": "Terminal.CopyToClipboard",
+      "keys": "ctrl+c"
+    },
+    {
+      "id": "Terminal.PasteFromClipboard",
+      "keys": "ctrl+v"
+    },
+    {
+      "id": "Terminal.FindText",
+      "keys": "ctrl+shift+f"
+    },
+    {
+      "id": "User.swapPane.2A0DA8E0",
+      "keys": "ctrl+alt+shift+left"
+    },
+    {
+      "id": "User.swapPane.6CD791B",
+      "keys": "ctrl+alt+shift+up"
+    },
+    {
+      "id": "User.swapPane.87C324ED",
+      "keys": "ctrl+alt+shift+right"
+    },
+    {
+      "id": "User.swapPane.F747588A",
+      "keys": "ctrl+alt+shift+down"
+    }
+  ],
+  "newTabMenu": [
+    {
+      "type": "remainingProfiles"
+    }
+  ],
+  "profiles": {
+    "defaults": {
+      "adjustIndistinguishableColors": "never",
+      "colorScheme": "Vintage",
+      "compatibility.allowDECRQCRA": true,
+      "experimental.rainbowSuggestions": true,
+      "experimental.retroTerminalEffect": false,
+      "font": {
+        "face": "HackGen Console NF",
+        "size": 10
+      },
+      "opacity": 78,
+      "rightClickContextMenu": true,
+      "useAcrylic": true
+    },
+    "list": [
+      {
+        "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+        "hidden": false,
+        "name": "Windows PowerShell"
+      },
+      {
+        "commandline": "%SystemRoot%\\System32\\cmd.exe",
+        "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+        "hidden": false,
+        "name": "\u30b3\u30de\u30f3\u30c9 \u30d7\u30ed\u30f3\u30d7\u30c8"
+      },
+      {
+        "guid": "{b453ae62-4e3d-5e58-b989-0a998ec441b8}",
+        "hidden": true,
+        "name": "Azure Cloud Shell",
+        "source": "Windows.Terminal.Azure"
+      },
+      {
+        "guid": "{5fb123f1-af88-5b5c-8953-d14a8def1978}",
+        "hidden": false,
+        "name": "PowerShell",
+        "source": "Windows.Terminal.PowershellCore"
+      },
+      {
+        "guid": "{df32f151-c2ce-5e02-80ae-9633442ee309}",
+        "hidden": false,
+        "name": "Ubuntu",
+        "source": "Microsoft.WSL"
+      }
+    ]
+  },
+  "schemes": [],
+  "themes": [],
+  "useAcrylicInTabRow": true
+}
