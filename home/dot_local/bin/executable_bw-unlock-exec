@@ -3,6 +3,8 @@
 # BW_SESSION set. Useful when `bw unlock --raw` leaves the controlling
 # TTY in a broken state and the next interactive prompt stops accepting
 # input (observed with `chezmoi apply` overwrite prompts on WSL).
+# If the repair must happen in the interactive parent shell itself, use
+# `bw-unlock-env` and `eval "$(bw-unlock-env ...)"` instead.
 #
 # Usage:
 #   bw-unlock-exec [--sync] [--] <command> [args...]
