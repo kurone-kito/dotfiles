@@ -71,11 +71,26 @@ if ($nvimCmd) {
   $foundEditor = $true
   Write-Host 'Setting up nvim plugins...'
 
-  & nvim --headless '+Lazy! sync' +qa 2>&1
-  if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
-    Write-Host '  nvim plugin sync complete.'
+  # Phase 1: Bootstrap — let init.lua clone lazy.nvim on first run.
+  # A separate invocation ensures the Lazy command is registered in a
+  # clean session for phase 2.
+  & nvim --headless +qa 2>&1
+
+  $lazydir = if ($env:XDG_DATA_HOME) {
+    Join-Path $env:XDG_DATA_HOME (Join-Path 'nvim' (Join-Path 'lazy' 'lazy.nvim'))
   } else {
-    Write-Host '  WARNING: nvim plugin sync reported errors.'
+    Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'nvim' (Join-Path 'lazy' 'lazy.nvim'))))
+  }
+  if (-not (Test-Path $lazydir)) {
+    Write-Host '  WARNING: lazy.nvim bootstrap failed; skipping nvim plugin sync.'
+  } else {
+    # Phase 2: Sync plugins — Lazy command available from fresh session
+    & nvim --headless '+Lazy! sync' +qa 2>&1
+    if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
+      Write-Host '  nvim plugin sync complete.'
+    } else {
+      Write-Host '  WARNING: nvim plugin sync reported errors.'
+    }
   }
 } else {
   Write-Host 'nvim not found; skipping nvim plugin setup.'

@@ -57,10 +57,21 @@ if command -v nvim &>/dev/null; then
   found_editor=true
   echo "Setting up nvim plugins..."
 
-  if nvim --headless "+Lazy! sync" +qa 2>&1; then
-    echo "  nvim plugin sync complete."
+  # Phase 1: Bootstrap — let init.lua clone lazy.nvim on first run.
+  # A separate invocation ensures the Lazy command is registered in a
+  # clean session for phase 2.
+  nvim --headless +qa 2>&1 || true
+
+  lazydir="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim"
+  if [ ! -d "$lazydir" ]; then
+    echo "  WARNING: lazy.nvim bootstrap failed; skipping nvim plugin sync."
   else
-    echo "  WARNING: nvim plugin sync reported errors."
+    # Phase 2: Sync plugins — Lazy command available from fresh session
+    if nvim --headless "+Lazy! sync" +qa 2>&1; then
+      echo "  nvim plugin sync complete."
+    else
+      echo "  WARNING: nvim plugin sync reported errors."
+    fi
   fi
 else
   echo "nvim not found; skipping nvim plugin setup."
