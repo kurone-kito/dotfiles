@@ -116,10 +116,17 @@ winget install Bitwarden.CLI     # Windows
 # Log in and unlock
 bw login
 export BW_SESSION="$(bw unlock --raw)"
+stty sane
 ```
 
 > **Tip:** chezmoi caches `BW_SESSION` during a single `chezmoi apply`
 > run, so you only need to unlock once per session.
+>
+> On some terminals (observed on WSL), `bw unlock --raw` can leave the
+> controlling TTY in a broken state and make a later chezmoi overwrite
+> prompt stop accepting input. If that happens, run `stty sane` after
+> unlocking, or use the `bw-unlock-exec` helper described below once it
+> has been deployed to `~/.local/bin/`.
 
 ## Organizing secrets in Bitwarden
 
@@ -346,10 +353,24 @@ identity = "id_ed25519_oss"
 ```bash
 # Ensure secret manager is unlocked
 export BW_SESSION="$(bw unlock --raw)"
+stty sane
 
 # Apply (first run imports GPG keys and deploys SSH keys)
 chezmoi apply
 ```
+
+After this repository has been applied at least once, the recommended
+Bitwarden workflow is:
+
+```bash
+bw-unlock-exec --sync -- chezmoi apply
+```
+
+`bw-unlock-exec` runs `bw sync` (when requested), unlocks Bitwarden,
+repairs the terminal state with `stty sane`, and then execs the target
+command with `BW_SESSION` set. Use it when inline `bw unlock --raw`
+causes chezmoi prompts such as `X has changed since chezmoi last wrote
+it?` to stop responding.
 
 ### What happens on first apply
 
