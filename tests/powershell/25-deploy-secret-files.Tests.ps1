@@ -26,6 +26,14 @@ Describe '25-deploy-secret-files template' {
     It 'secures parent directory permissions' {
       $script:TemplateContent | Should -Match 'icacls \$targetDir'
     }
+
+    It 'wires Record-State for each secret file write' {
+      $script:TemplateContent | Should -Match "Record-State -Category 'secretFile'"
+    }
+
+    It 'guards Record-State when the helper is absent' {
+      $script:TemplateContent | Should -Match 'if \(-not \(Test-Path \$deployState\)\) \{ return \}'
+    }
   }
 
   Context 'fixture deployment' -Skip:($IsWindows -eq $false) {

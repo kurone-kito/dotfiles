@@ -24,6 +24,13 @@
 
 $deployHome = if ($env:DOTFILES_TEST_HOME) { $env:DOTFILES_TEST_HOME } else { $HOME }
 
+$deployState = Join-Path $deployHome '.local/bin/secret-deploy-state.ps1'
+function Record-State {
+  param([string]$Category, [string]$Name, [string]$Path)
+  if (-not (Test-Path $deployState)) { return }
+  try { & $deployState record $Category $Name $Path | Out-Null } catch { }
+}
+
 Write-Host "==> aws-credentials: ~/.aws/credentials"
 
 $targetPath = Join-Path $deployHome '.aws/credentials'
@@ -48,6 +55,7 @@ if ($LASTEXITCODE -ne 0) {
   Write-Warning "Failed to restrict permissions on ${targetPath} (icacls exit code: $LASTEXITCODE)"
 }
 Write-Host "  done: deployed (user-only access)"
+Record-State -Category 'secretFile' -Name 'aws-credentials' -Path $targetPath
 
 Write-Host "==> docker-auth: ~/.docker/config.json"
 
@@ -71,5 +79,6 @@ if ($LASTEXITCODE -ne 0) {
   Write-Warning "Failed to restrict permissions on ${targetPath} (icacls exit code: $LASTEXITCODE)"
 }
 Write-Host "  done: deployed (user-only access)"
+Record-State -Category 'secretFile' -Name 'docker-auth' -Path $targetPath
 
 Write-Host "secret file deploy complete."

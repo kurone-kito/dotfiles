@@ -18,6 +18,13 @@ exit 0
 $sshDir = Join-Path $HOME '.ssh'
 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
 
+$deployState = Join-Path $HOME '.local/bin/secret-deploy-state.ps1'
+function Record-State {
+  param([string]$Category, [string]$Name, [string]$Path)
+  if (-not (Test-Path $deployState)) { return }
+  try { & $deployState record $Category $Name $Path | Out-Null } catch { }
+}
+
 {{ range $key, $sshKey := $sshKeys -}}
 Write-Host 'Deploying SSH key: {{ $key }} ({{ $sshKey.filename }})...'
 $privateKey = Join-Path $sshDir '{{ $sshKey.filename }}'
@@ -33,6 +40,7 @@ if (-not (Test-Path $privateKey)) {
     Write-Warning "Failed to restrict permissions on ${privateKey} (icacls exit code: $LASTEXITCODE)"
   }
   Write-Host '  Private key written.'
+  Record-State -Category 'sshKey' -Name '{{ $key }}' -Path $privateKey
 } else {
   Write-Host '  Private key already exists; skipping.'
 }
@@ -42,6 +50,7 @@ if (-not (Test-Path $publicKey)) {
 {{ template "get-ssh-key" dict "item" $sshKey.item "type" "public" "ctx" $ }}
 '@ | Set-Content -Path $publicKey -Encoding utf8NoBOM -NoNewline
   Write-Host '  Public key written.'
+  Record-State -Category 'sshKey' -Name '{{ $key }}.pub' -Path $publicKey
 } else {
   Write-Host '  Public key already exists; skipping.'
 }
