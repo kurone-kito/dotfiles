@@ -47,10 +47,42 @@ the repository specifies a different convention.
 - Keep each commit **atomic** — one logical change per commit;
   separate refactoring, formatting, and dependency updates from
   behavior changes
-- **Prefer signed commits** by default. If signing is unavailable
-  in the current environment (e.g., pinentry, TTY, or agent issues),
-  unsigned commits are acceptable to avoid stalling progress — but
-  explicitly note that signing was bypassed and why
+- **Prefer signed commits** by default, and try harder before
+  falling back to unsigned:
+  1. **GPG first.** Use the repository or user's normal signing
+     configuration (typically GPG via `commit.gpgsign`).
+  2. **SSH fallback if GPG is blocked.** When GPG signing fails or
+     hangs because of `pinentry`, missing TTY, `gpg-agent`, or a
+     similar environment issue, make **one bounded retry** using
+     transient SSH signing for that commit only. Do **not**
+     permanently change the user's signing configuration. Use
+     per-command flags such as
+     `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
+  3. **SSH key discovery** — never assume a fixed key path such as
+     `~/.ssh/id_ed25519`. Pick the key in this order:
+     1. If `git config --get gpg.format` is already `ssh`, respect
+        the existing `user.signingkey` and
+        `gpg.ssh.defaultKeyCommand`.
+     2. Else if `git config --get gpg.ssh.defaultKeyCommand` is set
+        and produces a usable public key, use that key.
+     3. Else use the first non-certificate public key reported by
+        `ssh-add -L`. This works with hardware-backed keys and
+        agents (1Password, Secretive, `gpg-agent --enable-ssh-support`,
+        etc.) without needing a private key path.
+     - Pass the entire `ssh-add -L` line — public key plus comment —
+       as a single quoted value, since key comments contain spaces.
+  4. **Treat SSH signing as best-effort.** GitHub only marks
+     SSH-signed commits as **Verified** when the public key is
+     registered as a *signing* key on the user's GitHub profile.
+     The agent typically cannot verify that, so the commit may show
+     as **Unverified** even though it is cryptographically signed.
+  5. **Unsigned only as the last resort.** If both GPG and the
+     bounded SSH retry fail (no agent, no usable key, hardware
+     touch timeout, unsupported Git/OpenSSH version, etc.), an
+     unsigned commit is acceptable to avoid stalling progress.
+  6. **Always report which path was taken** — GPG, SSH fallback, or
+     unsigned. When unsigned, disclose **both** the GPG failure
+     reason and why SSH fallback did not succeed.
 
 ## Coding standards
 
