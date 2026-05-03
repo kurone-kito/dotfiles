@@ -39,7 +39,7 @@ if command -v vim &>/dev/null; then
       -c 'PlugInstall --sync' \
       -c 'PlugClean!' \
       -c 'qa!' \
-      2>&1; then
+      </dev/null 2>&1; then
       echo "  vim plugin sync complete."
     else
       echo "  WARNING: vim plugin sync reported errors."
@@ -59,14 +59,19 @@ if command -v nvim &>/dev/null; then
   # Phase 1: Bootstrap — let init.lua clone lazy.nvim on first run.
   # A separate invocation ensures the Lazy command is registered in a
   # clean session for phase 2.
-  nvim --headless +qa 2>&1 || true
+  # Stdin is redirected from /dev/null because nvim, even with
+  # --headless, may put the controlling TTY in raw mode briefly during
+  # startup; if chezmoi's stdin is the TTY, that can leave the terminal
+  # in a state where chezmoi's later prompts (e.g. "X has changed since
+  # chezmoi last wrote it") swallow keypresses.
+  nvim --headless +qa </dev/null 2>&1 || true
 
   lazydir="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim"
   if [ ! -d "$lazydir" ]; then
     echo "  WARNING: lazy.nvim bootstrap failed; skipping nvim plugin sync."
   else
     # Phase 2: Sync plugins — Lazy command available from fresh session
-    if nvim --headless "+Lazy! sync" +qa 2>&1; then
+    if nvim --headless "+Lazy! sync" +qa </dev/null 2>&1; then
       echo "  nvim plugin sync complete."
     else
       echo "  WARNING: nvim plugin sync reported errors."

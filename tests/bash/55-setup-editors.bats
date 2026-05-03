@@ -172,3 +172,45 @@ echo "nvim:ok"
   assert_output --partial "nvim plugin sync complete"
   refute_output --partial "No editors found"
 }
+
+# -----------------------------------------------------------------------
+# Stdin protection — neither vim nor nvim invocation may consume
+# bytes that the parent process (chezmoi) needs for its own prompts.
+# -----------------------------------------------------------------------
+@test "vim and nvim invocations do not consume parent stdin" {
+  mkdir -p "${BATS_TEST_TMPDIR}/.vim/autoload"
+  touch "${BATS_TEST_TMPDIR}/.vim/autoload/plug.vim"
+  # Mocks that try to read stdin if it leaks through. They write what
+  # they read to a debug file so the test can detect leakage.
+  make_mock_command vim "
+IFS= read -r leaked || true
+printf '%s' \"\$leaked\" > '${BATS_TEST_TMPDIR}/vim.leak'
+echo vim:ok
+"
+  make_mock_command nvim "
+mkdir -p \"\$HOME/.local/share/nvim/lazy/lazy.nvim\"
+IFS= read -r leaked || true
+printf '%s' \"\$leaked\" >> '${BATS_TEST_TMPDIR}/nvim.leak'
+echo nvim:ok
+"
+
+  # Feed a sentinel line, then run the fixture, then verify a downstream
+  # reader can still see the sentinel intact.
+  run bash -c "
+    { printf 'SENTINEL\n'; } | {
+      bash '$FIXTURE' >/dev/null 2>&1
+      IFS= read -r line
+      printf '%s' \"\$line\"
+    }
+  "
+  assert_success
+  assert_output "SENTINEL"
+  # And the editor mocks must not have stolen the sentinel either.
+  if [ -s "${BATS_TEST_TMPDIR}/vim.leak" ]; then
+    cat "${BATS_TEST_TMPDIR}/vim.leak" >&2
+    fail "vim leaked: $(cat "${BATS_TEST_TMPDIR}/vim.leak")"
+  fi
+  if [ -s "${BATS_TEST_TMPDIR}/nvim.leak" ]; then
+    fail "nvim leaked: $(cat "${BATS_TEST_TMPDIR}/nvim.leak")"
+  fi
+}

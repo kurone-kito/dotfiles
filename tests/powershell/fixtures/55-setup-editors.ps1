@@ -49,7 +49,7 @@ if ($vimCmd) {
   }
 
   if (Test-Path $plugVim) {
-    & vim -es -u (Join-Path $HOME '.vimrc') `
+    $null | & vim -es -u (Join-Path $HOME '.vimrc') `
       -c 'PlugInstall --sync' `
       -c 'PlugClean!' `
       -c 'qa!' 2>&1
@@ -74,7 +74,7 @@ if ($nvimCmd) {
   # Phase 1: Bootstrap — let init.lua clone lazy.nvim on first run.
   # A separate invocation ensures the Lazy command is registered in a
   # clean session for phase 2.
-  & nvim --headless +qa 2>&1
+  $null | & nvim --headless +qa 2>&1
 
   $lazydir = if ($env:XDG_DATA_HOME) {
     Join-Path $env:XDG_DATA_HOME (Join-Path 'nvim' (Join-Path 'lazy' 'lazy.nvim'))
@@ -87,7 +87,7 @@ if ($nvimCmd) {
     Write-Host '  WARNING: lazy.nvim bootstrap failed; skipping nvim plugin sync.'
   } else {
     # Phase 2: Sync plugins — Lazy command available from fresh session
-    & nvim --headless '+Lazy! sync' +qa 2>&1
+    $null | & nvim --headless '+Lazy! sync' +qa 2>&1
     if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
       Write-Host '  nvim plugin sync complete.'
     } else {
