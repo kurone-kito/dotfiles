@@ -44,8 +44,16 @@ function Invoke-DotfilesPassoutMacOS {
   $cafProc = Start-Process caffeinate -ArgumentList '-dimsu' `
     -PassThru -NoNewWindow
   try {
+    # Fn key (key code 63) registers as activity without side effects.
+    & osascript -e 'tell application "System Events" to key code 63' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning (('osascript keystroke failed (exit {0}). ' +
+        'Accessibility permission may be missing, or this shell ' +
+        'may not have a GUI session. Caffeinate will keep the ' +
+        'display awake but keystrokes will not be simulated ' +
+        'until the issue is resolved.') -f $LASTEXITCODE)
+    }
     while ($true) {
-      # Fn key (key code 63) registers as activity without side effects.
       & osascript -e 'tell application "System Events" to key code 63' 2>$null
       Start-Sleep -Seconds 20
     }
