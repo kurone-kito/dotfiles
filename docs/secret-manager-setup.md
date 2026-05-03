@@ -128,6 +128,9 @@ stty sane
 > unlocking. After these dotfiles have been applied once, the preferred
 > interactive workflow is the `bw_unlock` shell function (`bw-unlock`
 > alias), which performs the unlock and TTY repair in the current shell.
+> The important boundary is returning to the **next shell prompt** before
+> running `chezmoi apply`; chaining unlock and apply on the same command
+> line can still reproduce the issue.
 
 ## Organizing secrets in Bitwarden
 
@@ -364,7 +367,10 @@ After this repository has been applied at least once, the recommended
 Bitwarden workflow on interactive shells is:
 
 ```bash
+# Wait for the next prompt after this command finishes.
 bw-unlock --sync
+
+# Run this as a separate command, not with `&&`.
 chezmoi apply
 ```
 
@@ -373,7 +379,8 @@ current shell, exports `BW_SESSION`, and repairs the terminal state with
 `stty sane`. This mirrors the manually confirmed recovery path more
 closely than script wrappers when inline `bw unlock --raw` causes
 chezmoi prompts such as `X has changed since chezmoi last wrote it?` to
-stop responding.
+stop responding. In this environment, the shell prompt boundary itself
+appears to matter, so do not chain unlock and apply on one line.
 
 If you need a one-off helper before the shell function has been deployed,
 you can still use:
@@ -384,8 +391,9 @@ chezmoi apply
 ```
 
 `bw-unlock-exec --sync -- chezmoi apply` remains available for
-non-interactive wrappers, but if prompt input still fails on your
-terminal, prefer `bw_unlock` / `bw-unlock`.
+non-interactive wrappers, but it does **not** create a prompt boundary.
+If prompt input still fails on your terminal, prefer `bw_unlock` /
+`bw-unlock` and run `chezmoi apply` from the next prompt.
 
 ### What happens on first apply
 

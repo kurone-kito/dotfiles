@@ -23,6 +23,10 @@ Usage: bw_unlock [--sync]
 Unlock Bitwarden in the current shell, export BW_SESSION, and repair the
 terminal state with stty sane.
 
+After this command returns, wait for the next shell prompt before
+running interactive commands such as `chezmoi apply`. Do not chain them
+on the same command line with `&&` on affected terminals.
+
 Options:
   --sync   Run `bw sync` before unlocking
 EOF
@@ -64,6 +68,7 @@ EOF
   fi
 
   printf '\033[0m\033[?25h\r\n' > /dev/tty 2>/dev/null || true
+  echo "bw_unlock: BW_SESSION exported; run chezmoi apply from the next prompt." >&2
 
   unset _dotfiles_bw_unlock_sync _dotfiles_bw_unlock_session
 }

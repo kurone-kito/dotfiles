@@ -64,6 +64,7 @@ printf "stty:%s\n" "$*" >> "$BW_UNLOCK_CONF_LOG"
   assert_success
   assert_output --partial "Usage: bw_unlock"
   assert_output --partial "--sync"
+  assert_output --partial "Do not chain"
 }
 
 @test "bw_unlock errors when bw is missing" {
@@ -77,6 +78,7 @@ printf "stty:%s\n" "$*" >> "$BW_UNLOCK_CONF_LOG"
   run bash -c '. "$1"; bw_unlock; printf "session=%s\n" "$BW_SESSION"' _ "$CONF_PATH"
   assert_success
   assert_output --partial "session=test-session"
+  assert_output --partial "run chezmoi apply from the next prompt"
 
   run cat "$BW_UNLOCK_CONF_LOG"
   assert_output "bw unlock
@@ -88,6 +90,7 @@ stty:sane"
   run bash -c '. "$1"; bw_unlock --sync; printf "session=%s\n" "$BW_SESSION"' _ "$CONF_PATH"
   assert_success
   assert_output --partial "session=test-session"
+  assert_output --partial "run chezmoi apply from the next prompt"
 
   run cat "$BW_UNLOCK_CONF_LOG"
   assert_output "bw sync

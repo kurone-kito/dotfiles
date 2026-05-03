@@ -5,7 +5,8 @@
 # This is more reliable than wrapping a target command directly when
 # `bw unlock --raw` leaves the controlling TTY in a broken state and the
 # repair must run in the interactive parent shell before `chezmoi apply`
-# starts.
+# starts. On affected terminals, still run `chezmoi apply` as a separate
+# next-prompt command rather than chaining it on the same line.
 #
 # Usage:
 #   eval "$(bw-unlock-env [--sync])"
