@@ -57,9 +57,22 @@ if (-not $ghqBin) { Write-Error 'ghq not found.'; return }
 $ghBin = Find-Tool 'gh'
 if (-not $ghBin) { Write-Error 'gh not found.'; return }
 
-# Activate mise environment so git can find mise-managed tools (e.g., git-vrc)
+# Activate mise environment so git can find mise-managed tools (e.g., git-vrc).
+# Windows uses shims mode (single PATH entry) to stay under cmd.exe's 8,191-char
+# PATH limit; non-Windows uses mise env for dynamic env var support.
 if (Get-Command mise -ErrorAction SilentlyContinue) {
-  (& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+  if ($IsWindows -ne $false) {
+    if ($env:LOCALAPPDATA) {
+      $__shimsDir = Join-Path $env:LOCALAPPDATA 'mise\shims'
+      $__pathEntries = $env:PATH -split [regex]::Escape([IO.Path]::PathSeparator)
+      if ((Test-Path $__shimsDir) -and ($__pathEntries -notcontains $__shimsDir)) {
+        $env:PATH = "$__shimsDir$([IO.Path]::PathSeparator)$env:PATH"
+      }
+      Remove-Variable __shimsDir, __pathEntries -ErrorAction SilentlyContinue
+    }
+  } else {
+    (& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+  }
 }
 
 $ghqRoot = & $ghqBin root

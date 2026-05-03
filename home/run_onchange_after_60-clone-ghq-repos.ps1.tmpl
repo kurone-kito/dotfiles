@@ -19,8 +19,20 @@ if (-not $ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
 $ghBin = mise which gh 2>$null
 if (-not $ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
 # Activate mise environment so git subprocesses can find
-# mise-managed tools (e.g., git-vrc filter for VRChat repos)
-(& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+# mise-managed tools (e.g., git-vrc filter for VRChat repos).
+# Windows uses shims mode; non-Windows uses mise env.
+if ($IsWindows -ne $false) {
+  if ($env:LOCALAPPDATA) {
+    $__shimsDir = Join-Path $env:LOCALAPPDATA 'mise\shims'
+    $__pathEntries = $env:PATH -split [regex]::Escape([IO.Path]::PathSeparator)
+    if ((Test-Path $__shimsDir) -and ($__pathEntries -notcontains $__shimsDir)) {
+      $env:PATH = "$__shimsDir$([IO.Path]::PathSeparator)$env:PATH"
+    }
+    Remove-Variable __shimsDir, __pathEntries -ErrorAction SilentlyContinue
+  }
+} else {
+  (& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+}
 
 $cloneScript = Join-Path $HOME (Join-Path '.local' (Join-Path 'bin' 'ghq-clone-user.ps1'))
 if (-not (Test-Path $cloneScript)) {
