@@ -211,3 +211,33 @@ assert any(r['status'] == 'MISSING' for r in m['rows'])
   assert_success
   refute_output --regexp $'\033\\['
 }
+
+@test "summary mode does not consume parent stdin" {
+  _skeleton '{"gpg":[],"sshKeys":[],"sshHosts":[],"secretFiles":[],"envFiles":[]}'
+  local probe="$BATS_TEST_TMPDIR/probe.txt"
+  # Feed a sentinel line, then run --summary with that pipe as stdin.
+  # If --summary consumes the line, the trailing `read` will fail.
+  run bash -c "
+    { printf 'SENTINEL\n'; } | {
+      '$SCRIPT_PATH' --summary >/dev/null
+      IFS= read -r line
+      printf '%s' \"\$line\"
+    }
+  "
+  assert_success
+  assert_output "SENTINEL"
+}
+
+@test "json mode does not consume parent stdin" {
+  _skeleton '{"gpg":[],"sshKeys":[],"sshHosts":[],"secretFiles":[
+    {"label":"x","item":"X","target":"x.txt","absPath":"/nonexistent/x.txt","attachment":""}
+  ],"envFiles":[]}'
+  run bash -c "
+    { printf 'SENTINEL\n'; } | {
+      '$SCRIPT_PATH' --json >/dev/null
+      IFS= read -r line
+      printf '%s' \"\$line\"
+    }
+  "
+  assert_output "SENTINEL"
+}
