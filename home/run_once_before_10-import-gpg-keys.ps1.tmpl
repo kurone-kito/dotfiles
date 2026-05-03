@@ -40,11 +40,20 @@ try {
     ForEach-Object { ($_ -split ':')[9] } |
     Select-Object -First 1
   if ($fpr) {
-    "${fpr}:6:" | gpg --import-ownertrust
-    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-      Write-Warning "gpg --import-ownertrust failed (exit code: $LASTEXITCODE)"
-    } else {
-      Write-Host "  Trust set to ultimate for $fpr"
+    # Write ownertrust to temp file to avoid PowerShell native-command
+    # stdin encoding issues (same reason as the key import above).
+    $__trustTmpFile = [IO.Path]::GetTempFileName()
+    try {
+      [IO.File]::WriteAllText($__trustTmpFile, "${fpr}:6:`n",
+        [Text.UTF8Encoding]::new($false))
+      gpg --import-ownertrust $__trustTmpFile
+      if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+        Write-Warning "gpg --import-ownertrust failed (exit code: $LASTEXITCODE)"
+      } else {
+        Write-Host "  Trust set to ultimate for $fpr"
+      }
+    } finally {
+      Remove-Item $__trustTmpFile -Force -ErrorAction SilentlyContinue
     }
   } else {
     Write-Warning '  Could not extract fingerprint; set trust manually.'
@@ -52,7 +61,7 @@ try {
 } finally {
   Remove-Item $__gpgTmpFile -Force -ErrorAction SilentlyContinue
 }
-Remove-Variable gpgKeyContent, fpr, __gpgTmpFile -ErrorAction SilentlyContinue
+Remove-Variable gpgKeyContent, fpr, __gpgTmpFile, __trustTmpFile -ErrorAction SilentlyContinue
 {{ end -}}
 
 Write-Host 'GPG key import complete.'
