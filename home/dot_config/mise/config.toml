@@ -22,3 +22,7 @@ pnpm = "latest"
 [settings]
 idiomatic_version_file_enable_tools = ["node", "python"]
 not_found_auto_install = false
+trusted_config_paths = [
+  '~/ghq/github.com/kurone-kito',
+]
+
