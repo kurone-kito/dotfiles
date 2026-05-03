@@ -32,6 +32,9 @@ $targetDir = Split-Path -Parent $targetPath
 if (-not (Test-Path $targetDir)) {
   New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
   & icacls $targetDir /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to restrict permissions on ${targetDir} (icacls exit code: $LASTEXITCODE)"
+  }
 }
 
 @'
@@ -41,6 +44,9 @@ aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 '@ | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
 
 & icacls $targetPath /inheritance:r /grant:r "${env:USERNAME}:(R,W)" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "Failed to restrict permissions on ${targetPath} (icacls exit code: $LASTEXITCODE)"
+}
 Write-Host "  done: deployed (user-only access)"
 
 Write-Host "==> docker-auth: ~/.docker/config.json"
@@ -51,6 +57,9 @@ $targetDir = Split-Path -Parent $targetPath
 if (-not (Test-Path $targetDir)) {
   New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
   & icacls $targetDir /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to restrict permissions on ${targetDir} (icacls exit code: $LASTEXITCODE)"
+  }
 }
 
 @'
@@ -58,6 +67,9 @@ if (-not (Test-Path $targetDir)) {
 '@ | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
 
 & icacls $targetPath /inheritance:r /grant:r "${env:USERNAME}:(R,W)" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "Failed to restrict permissions on ${targetPath} (icacls exit code: $LASTEXITCODE)"
+}
 Write-Host "  done: deployed (user-only access)"
 
 Write-Host "secret file deploy complete."

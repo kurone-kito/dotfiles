@@ -19,6 +19,7 @@ Describe 'sync-openssh-authorized-keys' -Skip:($IsWindows -eq $false) {
 
     function global:icacls {
       $global:DotfilesTestIcaclsArgs = @($args)
+      $global:LASTEXITCODE = 0
     }
   }
 

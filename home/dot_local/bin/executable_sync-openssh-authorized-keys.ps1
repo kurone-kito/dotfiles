@@ -50,6 +50,9 @@ function Sync-DotfilesAdministratorsAuthorizedKeys {
   icacls $DestinationPath /inheritance:r `
     /grant:r "${script:AdministratorsSid}:(F)" `
     /grant "${script:SystemSid}:(F)" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "icacls failed to set permissions on ${DestinationPath} (exit code: $LASTEXITCODE)"
+  }
 
   return $DestinationPath
 }

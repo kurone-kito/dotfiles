@@ -37,5 +37,8 @@ $lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 icacls $authorized /inheritance:r `
   /grant:r "${env:USERNAME}:(F)" `
   /grant "*S-1-5-18:(R)" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  Write-Warning "Failed to set permissions on ${authorized} (icacls exit code: $LASTEXITCODE)"
+}
 
 Write-Host 'authorized_keys generated.'

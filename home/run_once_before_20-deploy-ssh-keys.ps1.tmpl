@@ -29,6 +29,9 @@ if (-not (Test-Path $privateKey)) {
 '@ | Set-Content -Path $privateKey -Encoding utf8NoBOM -NoNewline
   # Restrict to current user only (icacls works without elevation)
   icacls $privateKey /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to restrict permissions on ${privateKey} (icacls exit code: $LASTEXITCODE)"
+  }
   Write-Host '  Private key written.'
 } else {
   Write-Host '  Private key already exists; skipping.'
