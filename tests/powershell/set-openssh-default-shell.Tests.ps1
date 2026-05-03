@@ -5,10 +5,9 @@
 BeforeAll {
   $script:Subject = Join-Path $PSScriptRoot `
     '../../home/dot_local/bin/executable_set-openssh-default-shell.ps1'
-  $script:IsWindowsTestHost = $IsWindows -ne $false
 }
 
-Describe 'set-openssh-default-shell' -Skip:(-not $script:IsWindowsTestHost) {
+Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
   BeforeEach {
     $script:OriginalSkip = $env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN

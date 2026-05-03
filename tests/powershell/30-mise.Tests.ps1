@@ -6,7 +6,6 @@ BeforeAll {
   $script:Subject = Join-Path (
     (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\conf.d')
   ) '30-mise.ps1'
-  $script:IsWindowsTestHost = $IsWindows -ne $false
 
   function New-TestMiseCommand {
     param(
@@ -62,7 +61,7 @@ BeforeAll {
   }
 }
 
-Describe '30-mise' -Skip:(-not $script:IsWindowsTestHost) {
+Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
   BeforeEach {
     $script:OriginalHome = $HOME

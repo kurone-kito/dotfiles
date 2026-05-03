@@ -6,7 +6,6 @@ BeforeAll {
   $script:Subject = Join-Path (
     (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\conf.d')
   ) '01-path.ps1'
-  $script:IsWindowsTestHost = $IsWindows -ne $false
 
   function New-ManagedPathLayout {
     $paths = [ordered]@{}
@@ -38,7 +37,7 @@ BeforeAll {
   }
 }
 
-Describe '01-path' -Skip:(-not $script:IsWindowsTestHost) {
+Describe '01-path' -Skip:($IsWindows -eq $false) {
 
   BeforeEach {
     $script:OriginalHome = $HOME

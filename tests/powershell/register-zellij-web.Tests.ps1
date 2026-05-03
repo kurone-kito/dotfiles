@@ -4,10 +4,9 @@
 
 BeforeAll {
   $script:Fixture = Join-Path $PSScriptRoot 'fixtures/register-zellij-web.ps1'
-  $script:IsWindowsTestHost = $IsWindows -ne $false
 }
 
-Describe 'register-zellij-web' -Skip:(-not $script:IsWindowsTestHost) {
+Describe 'register-zellij-web' -Skip:($IsWindows -eq $false) {
 
   BeforeEach {
     $script:OriginalHome = $HOME
