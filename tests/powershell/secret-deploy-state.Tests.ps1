@@ -1,0 +1,142 @@
+# Tests for the secret-deploy-state pwsh helper.
+
+BeforeAll {
+  $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-deploy-state.ps1'
+
+  # Run the helper in a fresh pwsh subprocess so we can isolate $env:HOME
+  # and capture both stdout and stderr.
+  function script:Invoke-Helper {
+    param(
+      [string]   $HomeDir,
+      [string[]] $ScriptArgs = @(),
+      [hashtable]$ExtraEnv = @{}
+    )
+    $envBlock = ''
+    if ($HomeDir) { $envBlock += "`$env:HOME = '$HomeDir';" }
+    foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = '$($ExtraEnv[$k])';" }
+    $argsExpr = ($ScriptArgs | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ' '
+    $cmd = "$envBlock & '$script:ScriptPath' $argsExpr 2>&1; exit `$LASTEXITCODE"
+    $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
+    return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
+  }
+
+  function script:New-FreshHome {
+    $tmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("sds-" + [Guid]::NewGuid().ToString('N'))
+    $homeDir = Join-Path $tmpRoot 'home'
+    New-Item -ItemType Directory -Force -Path (Join-Path $homeDir '.config/chezmoi') | Out-Null
+    return $homeDir
+  }
+
+  function script:New-File {
+    param([string]$Path, [string]$Content = 'hello')
+    $dir = Split-Path -Parent $Path
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [System.IO.File]::WriteAllText($Path, $Content)
+    if ($IsWindows -eq $false) { & chmod 600 $Path }
+  }
+
+  function script:Get-Sha256 {
+    param([string]$Content)
+    $b = [Text.Encoding]::UTF8.GetBytes($Content)
+    return ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)) -replace '-', '').ToLower()
+  }
+
+  function script:Get-StateFor { param([string]$HomeDir) Join-Path $HomeDir '.config/chezmoi/secret-deploy-state.json' }
+}
+
+Describe 'secret-deploy-state.ps1' {
+
+  It 'no args prints usage and exits 2' {
+    $r = Invoke-Helper -HomeDir (New-FreshHome) -ScriptArgs @()
+    $r.ExitCode | Should -Be 2
+    $r.Output  | Should -Match 'Usage:'
+  }
+
+  It '--help exits 0' {
+    $r = Invoke-Helper -HomeDir (New-FreshHome) -ScriptArgs @('--help')
+    $r.ExitCode | Should -Be 0
+    $r.Output  | Should -Match 'Usage:'
+  }
+
+  It 'path subcommand prints default state path' {
+    $h = New-FreshHome
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('path')
+    $r.ExitCode    | Should -Be 0
+    $r.Output.Trim() | Should -Be (Get-StateFor -HomeDir $h)
+  }
+
+  It 'SECRET_DEPLOY_STATE override is honored' {
+    $h = New-FreshHome
+    $alt = Join-Path ([System.IO.Path]::GetTempPath()) ("alt-" + [Guid]::NewGuid().ToString('N') + ".json")
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('path') -ExtraEnv @{ SECRET_DEPLOY_STATE = $alt }
+    $r.ExitCode    | Should -Be 0
+    $r.Output.Trim() | Should -Be $alt
+  }
+
+  It 'record creates state file with sha256 matching content' {
+    $h = New-FreshHome
+    $f = Join-Path $h '.secret/x.txt'
+    New-File -Path $f -Content 'abc'
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'x', $f)
+    $r.ExitCode | Should -Be 0
+    $state = Get-StateFor -HomeDir $h
+    Test-Path $state | Should -BeTrue
+    $j = Get-Content -LiteralPath $state -Raw | ConvertFrom-Json
+    $entry = $j.entries | Where-Object { $_.path -eq $f } | Select-Object -First 1
+    $entry             | Should -Not -BeNullOrEmpty
+    $entry.sha256      | Should -Be (Get-Sha256 -Content 'abc')
+    $entry.category    | Should -Be 'secretFile'
+    $entry.name        | Should -Be 'x'
+    # ConvertFrom-Json may parse the ISO string back to DateTime; just check it's truthy
+    $entry.deployedAt | Should -Not -BeNullOrEmpty
+  }
+
+  It 'record upserts existing entry by path (no duplicates)' {
+    $h = New-FreshHome
+    $f = Join-Path $h '.secret/y.txt'
+    New-File -Path $f -Content 'v1'
+    Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'y', $f) | Out-Null
+    [System.IO.File]::WriteAllText($f, 'v2')
+    Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'y', $f) | Out-Null
+    $j = Get-Content -LiteralPath (Get-StateFor -HomeDir $h) -Raw | ConvertFrom-Json
+    @($j.entries | Where-Object { $_.path -eq $f }).Count | Should -Be 1
+    ($j.entries | Where-Object { $_.path -eq $f })[0].sha256 | Should -Be (Get-Sha256 -Content 'v2')
+  }
+
+  It 'record preserves entries for other paths' {
+    $h = New-FreshHome
+    $a = Join-Path $h '.secret/a.txt'; New-File -Path $a -Content 'A'
+    $b = Join-Path $h '.secret/b.txt'; New-File -Path $b -Content 'B'
+    Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'a', $a) | Out-Null
+    Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'b', $b) | Out-Null
+    $j = Get-Content -LiteralPath (Get-StateFor -HomeDir $h) -Raw | ConvertFrom-Json
+    @($j.entries).Count | Should -Be 2
+  }
+
+  It 'record on missing file is best-effort (exit 0, state untouched)' {
+    $h = New-FreshHome
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'gone', (Join-Path $h '.secret/nope.txt'))
+    $r.ExitCode | Should -Be 0
+    $r.Output   | Should -Match 'file not found'
+    Test-Path (Get-StateFor -HomeDir $h) | Should -BeFalse
+  }
+
+  It 'record with relative path is best-effort skip' {
+    $h = New-FreshHome
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'rel', 'relative/path')
+    $r.ExitCode | Should -Be 0
+    $r.Output   | Should -Match 'must be absolute'
+  }
+
+  It 'record with too few args exits 2' {
+    $h = New-FreshHome
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'only-one')
+    $r.ExitCode | Should -Be 2
+  }
+
+  It 'unknown subcommand exits 2' {
+    $h = New-FreshHome
+    $r = Invoke-Helper -HomeDir $h -ScriptArgs @('gibberish')
+    $r.ExitCode | Should -Be 2
+  }
+}
