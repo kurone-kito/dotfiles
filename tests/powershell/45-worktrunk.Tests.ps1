@@ -30,6 +30,10 @@ Describe '45-worktrunk' {
 
     Remove-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __wtExitOk -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __psi -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __proc -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
 
@@ -39,6 +43,10 @@ Describe '45-worktrunk' {
   AfterEach {
     Remove-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __wtExitOk -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __psi -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __proc -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
     if ($script:MockBin -and (Test-Path $script:MockBin)) {
@@ -195,6 +203,14 @@ Describe '45-worktrunk' {
     Get-Variable __candidatePath -Scope Script -ErrorAction SilentlyContinue |
       Should -BeNullOrEmpty
     Get-Variable __gitWtInfo -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __wtExitOk -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __psi -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __proc -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue |
       Should -BeNullOrEmpty
   }
 }
