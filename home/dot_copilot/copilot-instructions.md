@@ -47,6 +47,10 @@ the repository specifies a different convention.
 - Keep each commit **atomic** — one logical change per commit;
   separate refactoring, formatting, and dependency updates from
   behavior changes
+- **Prefer signed commits** by default. If signing is unavailable
+  in the current environment (e.g., pinentry, TTY, or agent issues),
+  unsigned commits are acceptable to avoid stalling progress — but
+  explicitly note that signing was bypassed and why
 
 ## Coding standards
 
