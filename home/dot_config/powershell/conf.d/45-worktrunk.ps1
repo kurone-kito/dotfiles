@@ -9,18 +9,20 @@ $__wtPath = if ($__wtCommandInfo) {
 }
 $__wtIsWindowsTerminal = $false
 if ($__wtPath) {
-  $__wtPath = $__wtPath.ToString().Replace('/', '\')
   $__wtIsWindowsTerminal = (
-    $__wtPath -match '\\WindowsApps\\wt(?:\.exe)?$' -or
-    $__wtPath -match '\\Microsoft\.WindowsTerminal[^\\]*\\wt(?:\.exe)?$'
+    $__wtPath -match '[/\\]WindowsApps[/\\]wt(?:\.exe)?$' -or
+    $__wtPath -match '[/\\]Microsoft\.WindowsTerminal[^/\\]*[/\\]wt(?:\.exe)?$'
   )
 }
 
-$__wtCmd = if (Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue) { 'git-wt' }
-           elseif ($__wtCommandInfo -and -not $__wtIsWindowsTerminal) { 'wt' }
-           else { $null }
+$__gitWtInfo = Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue
+$__wtCmd = if ($__gitWtInfo) {
+  if ($__gitWtInfo.Path) { $__gitWtInfo.Path } else { $__gitWtInfo.Source }
+} elseif ($__wtCommandInfo -and -not $__wtIsWindowsTerminal) {
+  $__wtPath
+} else { $null }
 if (-not $__wtCmd) {
-  Remove-Variable __wtCmd, __wtCommandInfo, __wtPath, __wtIsWindowsTerminal -ErrorAction SilentlyContinue
+  Remove-Variable __wtCmd, __gitWtInfo, __wtCommandInfo, __wtPath, __wtIsWindowsTerminal -ErrorAction SilentlyContinue
   return
 }
 
@@ -31,4 +33,4 @@ if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
   $__wtInit = $__wtInit -replace '(?s)(\r?\n)0\s*$', ''
   if ($__wtInit.Trim()) { Invoke-Expression $__wtInit }
 }
-Remove-Variable __wtCmd, __wtInit, __wtCommandInfo, __wtPath, __wtIsWindowsTerminal -ErrorAction SilentlyContinue
+Remove-Variable __wtCmd, __gitWtInfo, __wtInit, __wtCommandInfo, __wtPath, __wtIsWindowsTerminal -ErrorAction SilentlyContinue
