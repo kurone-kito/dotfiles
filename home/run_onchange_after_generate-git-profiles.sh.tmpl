@@ -4,6 +4,9 @@
 # and run `chezmoi apply`.
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 profiles_dir="${HOME}/.config/git/profiles"
 mkdir -p "${profiles_dir}"
 {{ range $key, $profile := (dig "git" "profiles" dict .) -}}

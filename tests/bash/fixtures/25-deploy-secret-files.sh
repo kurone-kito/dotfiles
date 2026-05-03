@@ -22,6 +22,9 @@
 #   attachment = "config.json"
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 deploy_state="${HOME}/.local/bin/secret-deploy-state"
 record_state() {
   # See run_once_before_20-deploy-ssh-keys.sh.tmpl for the rationale

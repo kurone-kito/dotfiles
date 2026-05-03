@@ -4,6 +4,9 @@
 # Skipped when no clone targets are configured or tools are missing.
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 {{ $clones := dig "ghq" "clone" dict . -}}
 {{ if not $clones -}}
 echo "No ghq clone targets configured; skipping."

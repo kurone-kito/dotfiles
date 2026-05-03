@@ -163,3 +163,23 @@ EOS
 @test "template closes stdin when invoking deploy-state helper" {
   grep -qF '"${deploy_state}" record "$1" "$2" "$3" </dev/null' "$TEMPLATE"
 }
+
+@test "template closes stdin at script level (exec </dev/null)" {
+  # Any descendant of a chezmoi run script (mise, ghq/git, gpg,
+  # python3, jq) could otherwise consume the controlling TTY and
+  # starve chezmoi's overwrite prompt.
+  grep -qF 'exec </dev/null' "$TEMPLATE"
+}
+
+@test "all chezmoi run script templates close stdin at script level" {
+  repo_root="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+  missing=()
+  for f in "$repo_root"/home/run_*.sh.tmpl "$repo_root"/home/run_*.sh; do
+    [ -e "$f" ] || continue
+    grep -qF 'exec </dev/null' "$f" || missing+=("$f")
+  done
+  if [ "${#missing[@]}" -gt 0 ]; then
+    printf 'Missing exec </dev/null in:\n%s\n' "${missing[@]}" >&2
+    return 1
+  fi
+}

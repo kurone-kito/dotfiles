@@ -3,6 +3,9 @@
 # Skipped when secret.manager is "none" or no GPG keys are configured.
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 {{ $manager := dig "secret" "manager" "none" . -}}
 {{ if eq $manager "none" -}}
 echo "Secret manager not configured; skipping GPG key import."

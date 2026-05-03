@@ -4,6 +4,9 @@
 # mise config hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 
 echo "Installing mise tools..."

@@ -4,6 +4,9 @@
 # secret content changes. Skipped when no targets are configured.
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 {{ $deploys := dig "env" "deploy" dict . -}}
 {{ if not $deploys -}}
 echo "No env deploy targets configured; skipping."

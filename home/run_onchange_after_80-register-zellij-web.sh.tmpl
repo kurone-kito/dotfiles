@@ -2,6 +2,9 @@
 # chezmoi run_onchange_after script: register Zellij Web startup on Unix hosts.
 set -euo pipefail
 
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
 linux_autostart="{{ dig "zellij" "web" "linux" "autostart" "disabled" . }}"
 macos_autostart="{{ dig "zellij" "web" "macos" "autostart" "disabled" . }}"
 
