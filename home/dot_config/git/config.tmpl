@@ -1,10 +1,34 @@
 # -*- mode: properties -*-
 # vim: set ft=properties :
 
+{{ template "signing-validate" . -}}
 {{ $git := dig "git" dict . -}}
 {{ $gitName := dig "name" "" $git -}}
 {{ $gitEmail := dig "email" "" $git -}}
 {{ $gitSigningKey := dig "signingkey" "" $git -}}
+{{- /* Resolve global signing format and key inline because Go templates
+       cannot use `template` invocations as expression values. The helper
+       templates `signing-resolved-format` and `signing-ssh-filename`
+       encode the same rules and are used by the profile generators. */ -}}
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ $sshPrimaryFile := "" -}}
+{{ range $label, $key := $sshKeys -}}
+{{   if dig "primary_signing" false $key -}}{{ $sshPrimaryFile = $key.filename }}{{ end -}}
+{{ end -}}
+{{ $explicitFormat := dig "signing_format" "" $git -}}
+{{ $signingFormat := "" -}}
+{{ if $explicitFormat -}}
+{{   $signingFormat = $explicitFormat -}}
+{{ else if $sshPrimaryFile -}}
+{{   $signingFormat = "ssh" -}}
+{{ else if $gitSigningKey -}}
+{{   $signingFormat = "gpg" -}}
+{{ end -}}
+{{ if eq $signingFormat "ssh" -}}
+{{   $gitSigningKey = printf "~/.ssh/%s.pub" $sshPrimaryFile -}}
+{{ else if ne $signingFormat "gpg" -}}
+{{   $gitSigningKey = "" -}}
+{{ end -}}
 [alias]
   c = clone --recursive
   cb = !git rev-parse --abbrev-ref HEAD
@@ -74,7 +98,10 @@
   clean = git vrc clean --file %f
   smudge = git vrc smudge --file %f
   required = true
-{{- if $gitSigningKey }}
+{{- if eq $signingFormat "ssh" }}
+[gpg]
+  format = ssh
+{{- else if eq $signingFormat "gpg" }}
 {{-   $gpgPath := lookPath "gpg" }}
 {{-   if $gpgPath }}
 [gpg]
@@ -96,7 +123,7 @@
   autoSetupRemote = true
   default = current
   followTags = true
-{{- if $gitSigningKey }}
+{{- if eq $signingFormat "gpg" }}
   gpgsign = if-asked
 {{- end }}
 [rebase]
