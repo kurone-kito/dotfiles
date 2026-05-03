@@ -125,8 +125,9 @@ stty sane
 > On some terminals (observed on WSL), `bw unlock --raw` can leave the
 > controlling TTY in a broken state and make a later chezmoi overwrite
 > prompt stop accepting input. If that happens, run `stty sane` after
-> unlocking, or use the `bw-unlock-env` helper described below once it
-> has been deployed to `~/.local/bin/`.
+> unlocking. After these dotfiles have been applied once, the preferred
+> interactive workflow is the `bw_unlock` shell function (`bw-unlock`
+> alias), which performs the unlock and TTY repair in the current shell.
 
 ## Organizing secrets in Bitwarden
 
@@ -363,20 +364,28 @@ After this repository has been applied at least once, the recommended
 Bitwarden workflow on interactive shells is:
 
 ```bash
+bw-unlock --sync
+chezmoi apply
+```
+
+`bw_unlock` runs `bw sync` (when requested), unlocks Bitwarden in the
+current shell, exports `BW_SESSION`, and repairs the terminal state with
+`stty sane`. This mirrors the manually confirmed recovery path more
+closely than script wrappers when inline `bw unlock --raw` causes
+chezmoi prompts such as `X has changed since chezmoi last wrote it?` to
+stop responding.
+
+If you need a one-off helper before the shell function has been deployed,
+you can still use:
+
+```bash
 eval "$(bw-unlock-env --sync)"
 chezmoi apply
 ```
 
-`bw-unlock-env` runs `bw sync` (when requested), unlocks Bitwarden, and
-prints shell commands that export `BW_SESSION` and repair the terminal
-state in the **current shell** with `stty sane`. This mirrors the
-manually confirmed recovery path more closely than an exec-style wrapper
-when inline `bw unlock --raw` causes chezmoi prompts such as
-`X has changed since chezmoi last wrote it?` to stop responding.
-
 `bw-unlock-exec --sync -- chezmoi apply` remains available for
 non-interactive wrappers, but if prompt input still fails on your
-terminal, prefer `bw-unlock-env`.
+terminal, prefer `bw_unlock` / `bw-unlock`.
 
 ### What happens on first apply
 
