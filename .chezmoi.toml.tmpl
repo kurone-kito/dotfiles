@@ -7,6 +7,9 @@
 name = {{ $gitName | quote }}
 email = {{ $gitEmail | quote }}
 signingkey = {{ $gitSigningKey | quote }}
+{{- if (dig "git" "signing_format" "" .) }}
+signing_format = {{ dig "git" "signing_format" "" . | quote }}
+{{- end }}
 {{- range $key, $profile := (dig "git" "profiles" dict .) }}
 
 [data.git.profiles."{{ $key }}"]
@@ -14,6 +17,9 @@ name = {{ $profile.name | quote }}
 email = {{ $profile.email | quote }}
 signingkey = {{ dig "signingkey" "" $profile | quote }}
 gitdir = {{ $profile.gitdir | quote }}
+{{- if (dig "signing_format" "" $profile) }}
+signing_format = {{ dig "signing_format" "" $profile | quote }}
+{{- end }}
 {{- if (dig "sshhost" "" $profile) }}
 sshhost = {{ dig "sshhost" "" $profile | quote }}
 {{- end }}
@@ -34,6 +40,16 @@ item = {{ $gpg.item | quote }}
 [data.secret.ssh.keys."{{ $key }}"]
 item = {{ $sshKey.item | quote }}
 filename = {{ $sshKey.filename | quote }}
+{{- if (dig "primary_signing" false $sshKey) }}
+primary_signing = {{ dig "primary_signing" false $sshKey }}
+{{- end }}
+{{- with (dig "signing_profiles" (list) $sshKey) }}
+signing_profiles = [
+  {{- range $idx, $name := . -}}
+    {{- if $idx }}, {{ end -}}{{ $name | quote }}
+  {{- end -}}
+]
+{{- end }}
 {{- end }}
 {{- range $key, $host := (dig "secret" "ssh" "hosts" dict .) }}
 
@@ -105,6 +121,10 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   signingkey = ""         # leave empty to disable signing for this profile
 #   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
 #   sshhost    = ""         # optional SSH host alias for url.insteadOf
+#   # signing_format = "ssh"  # optional; "gpg" (default when signingkey is a
+#   #                         # GPG fingerprint) or "ssh" (required when both
+#   #                         # GPG signingkey and signing_profiles target
+#   #                         # this profile, to break the tie)
 #
 # To configure secret manager integration, see docs/secret-manager-setup.md
 #
@@ -122,6 +142,19 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   [data.secret.ssh.keys.<label>]
 #   item     = "SSH Key - Personal"
 #   filename = "id_ed25519_personal" # target file under ~/.ssh/
+#
+#   # Optional: also use this key for git commit/tag signing.
+#   # When set, chezmoi configures `gpg.format = ssh` and a
+#   # path-style `user.signingkey` automatically. Default is OFF.
+#   primary_signing  = false           # global [user] signingkey
+#   signing_profiles = []              # per-profile signing
+#   # signing_profiles = ["work", "oss"] # use the same key in
+#   #                                    # multiple profiles
+#
+#   # If `git.signingkey` (a GPG fingerprint) and `primary_signing`
+#   # both resolve to the same scope, chezmoi fails the build unless
+#   # you set `signing_format` to disambiguate. See
+#   # `docs/secret-manager-setup.md` for details.
 #
 # Example SSH host:
 #
