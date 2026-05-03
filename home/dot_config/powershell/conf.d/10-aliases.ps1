@@ -10,7 +10,7 @@ $compatAliases = @(
   @{ Name = 'bat'; Target = 'batcat' }
 )
 
-$__wtCommand = Get-Command wt -ErrorAction SilentlyContinue
+$__wtCommand = Get-Command wt -CommandType Application -ErrorAction SilentlyContinue
 $__wtPath = if ($__wtCommand) {
   if ($__wtCommand.Path) { $__wtCommand.Path } else { $__wtCommand.Source }
 } else {
