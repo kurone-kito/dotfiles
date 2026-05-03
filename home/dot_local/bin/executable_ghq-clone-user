@@ -29,6 +29,9 @@ require_arg() {
   if [ "$#" -lt 3 ] || [ -z "$3" ]; then
     echo "Error: $1 requires a value." >&2; usage >&2; exit 1
   fi
+  case "$3" in
+    -*) echo "Error: $1 requires a value, got '$3'." >&2; usage >&2; exit 1 ;;
+  esac
 }
 
 while [ $# -gt 0 ]; do

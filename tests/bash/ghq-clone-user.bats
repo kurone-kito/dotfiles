@@ -91,6 +91,20 @@ fi
   assert_output --partial "requires a value"
 }
 
+@test "rejects flag as value for --hostname" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --hostname --limit
+  assert_failure
+  assert_output --partial "requires a value"
+}
+
+@test "rejects flag as value for --limit" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --limit --https
+  assert_failure
+  assert_output --partial "requires a value"
+}
+
 @test "rejects hostname containing path traversal" {
   setup_standard_mocks
   run "$SCRIPT" testuser --hostname "../../etc"
