@@ -9,13 +9,36 @@ exec </dev/null
 
 profiles_dir="${HOME}/.config/git/profiles"
 mkdir -p "${profiles_dir}"
+{{ template "signing-validate" . -}}
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
 {{ range $key, $profile := (dig "git" "profiles" dict .) -}}
-{{- $signingkey := dig "signingkey" "" $profile }}
+{{- $signingkey := dig "signingkey" "" $profile -}}
+{{- $sshFile := "" -}}
+{{- range $label, $k := $sshKeys -}}
+{{-   if has $key (dig "signing_profiles" (list) $k) -}}{{ $sshFile = $k.filename }}{{- end -}}
+{{- end -}}
+{{- $explicitFormat := dig "signing_format" "" $profile -}}
+{{- $format := "" -}}
+{{- if $explicitFormat -}}{{ $format = $explicitFormat -}}
+{{- else if $sshFile -}}{{ $format = "ssh" -}}
+{{- else if $signingkey -}}{{ $format = "gpg" -}}
+{{- end }}
 cat > "${profiles_dir}/{{ $key }}" << 'PROFILE_EOF'
+{{- if eq $format "ssh" }}
+[gpg]
+  format = ssh
+{{- end }}
 [user]
   email = {{ $profile.email | quote }}
   name = {{ $profile.name | quote }}
-{{- if $signingkey }}
+{{- if eq $format "ssh" }}
+  signingkey = {{ printf "~/.ssh/%s.pub" $sshFile | quote }}
+[commit]
+  gpgsign = true
+[tag]
+  forceSignAnnotated = true
+  gpgsign = true
+{{- else if eq $format "gpg" }}
   signingkey = {{ $signingkey | quote }}
 [commit]
   gpgsign = true
