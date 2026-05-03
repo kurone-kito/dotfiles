@@ -38,7 +38,7 @@ Describe '45-worktrunk' {
       @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "git-wt"')
     }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = '/usr/bin/git-wt' }
     } -ParameterFilter { $Name -eq 'git-wt' }
 
     . $script:Subject
@@ -52,13 +52,24 @@ Describe '45-worktrunk' {
       @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "wt"')
     }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'wt'; CommandType = 'Application'; Path = '/usr/bin/wt' }
     } -ParameterFilter { $Name -eq 'wt' }
 
     . $script:Subject
 
     $script:WorktrunkInitialized | Should -BeTrue
     $script:WorktrunkCommand | Should -Be 'wt'
+  }
+
+  It 'ignores function/alias named git-wt (only Application type accepted)' {
+    function git-wt {
+      @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "git-wt"')
+    }
+    # Default mock returns $null — no Application-type git-wt or wt exists.
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeNullOrEmpty
+    $script:WorktrunkCommand | Should -BeNullOrEmpty
   }
 
   It 'does not fall back to wt when wt resolves to Windows Terminal' {
@@ -87,10 +98,10 @@ Describe '45-worktrunk' {
       @('$script:WorktrunkInitialized = $true', '$script:WorktrunkCommand = "wt"')
     }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = '/usr/bin/git-wt' }
     } -ParameterFilter { $Name -eq 'git-wt' }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'wt'; CommandType = 'Application'; Path = '/usr/bin/wt' }
     } -ParameterFilter { $Name -eq 'wt' }
 
     . $script:Subject
@@ -104,7 +115,7 @@ Describe '45-worktrunk' {
       @('$script:WorktrunkInitialized = $true', '0')
     }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = '/usr/bin/git-wt' }
     } -ParameterFilter { $Name -eq 'git-wt' }
 
     . $script:Subject
@@ -117,7 +128,7 @@ Describe '45-worktrunk' {
       '$script:WorktrunkInitialized = $true'
     }
     Mock Get-Command {
-      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Function' }
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = '/usr/bin/git-wt' }
     } -ParameterFilter { $Name -eq 'git-wt' }
 
     . $script:Subject
