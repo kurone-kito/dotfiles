@@ -227,6 +227,10 @@ This repository manages `~/.config/git/config` via
 
 - `[user]` is rendered from `data.git` in `~/.config/chezmoi/chezmoi.toml`
 - GPG signing settings are enabled only when `signingkey` is non-empty
+- SSH commit signing is opt-in via `secret.ssh.keys.<label>.primary_signing`
+  (global) and `signing_profiles` (per-profile); see
+  [docs/secret-manager-setup.md](docs/secret-manager-setup.md) for the
+  schema and conflict rules
 - Run `gpg-cache` once per session when you want to warm `gpg-agent`
   before long signing-heavy workflows
 - Directory-based identities are handled with `includeIf`

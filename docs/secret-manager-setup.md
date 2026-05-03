@@ -211,6 +211,33 @@ filename = "id_ed25519_oss"
 
 - `item` — Bitwarden SSH Key item name (native SSH key type)
 - `filename` — target filename under `~/.ssh/` (without path)
+- `primary_signing` — optional `true` to point Git's global
+  `user.signingkey` at this key (`~/.ssh/<filename>.pub`) and
+  switch `gpg.format` to `ssh`. At most one key may set this.
+- `signing_profiles` — optional list of profile labels (matching
+  keys under `[data.git.profiles.*]`); each listed profile's
+  include file gets a scope-local SSH signing block pointing at
+  this key.
+
+When SSH signing is opted in, `chezmoi apply` validates the
+configuration and aborts with a clear error if:
+
+- two keys both set `primary_signing = true`,
+- `signing_profiles` references a profile that does not exist, or
+- a GPG fingerprint and an SSH key both target the same scope
+  without `signing_format` (under `[data.git]` or per-profile)
+  set to `"gpg"` or `"ssh"` to disambiguate.
+
+Notes:
+
+- Requires Git 2.34+ for SSH signature support.
+- Register the public key on GitHub as a **Signing key** (separate
+  from Authentication key) for the "Verified" badge to appear.
+- Key paths are written in `~/.ssh/<filename>.pub` form with
+  forward slashes for cross-platform compatibility (Git for
+  Windows, MSYS, WSL).
+- Renaming `filename` after deploy leaves the old file in
+  `~/.ssh/`; remove it manually if rotating.
 
 ### Adding SSH hosts
 
