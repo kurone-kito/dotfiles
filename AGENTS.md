@@ -45,13 +45,21 @@ and split unrelated changes into separate atomic commits.
 
 ### Signing fallback
 
-GPG signing is configured by default. If it fails or hangs in the
-agent environment (`pinentry`, missing TTY, `gpg-agent` issues),
-make **one bounded retry** with transient SSH signing for that
-commit only via
-`git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`. Do
-**not** edit `home/dot_config/git/config.tmpl` or any chezmoi
-template to enable SSH signing — the fallback must never persist.
+GPG signing is configured by default. The repository also supports
+**declarative opt-in to persistent SSH signing** via
+`primary_signing` and `signing_profiles` on
+`[data.secret.ssh.keys.<label>]` (see `docs/secret-manager-setup.md`).
+**Use that mechanism** instead of editing
+`home/dot_config/git/config.tmpl` or any chezmoi template by hand;
+ad-hoc edits to enable SSH signing in those templates are forbidden.
+
+If the configured signing (GPG, or declaratively configured SSH)
+fails or hangs in the agent environment (`pinentry`, missing TTY,
+`gpg-agent` issues, hardware-touch timeout), make **one bounded
+retry** with transient SSH signing for that commit only via
+`git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`. This
+fallback must stay per-invocation; never write it into
+`~/.gitconfig` or any chezmoi template.
 
 Discover the SSH key without a fixed path: respect existing
 SSH-signing config if `git config gpg.format` is already `ssh`,
@@ -62,8 +70,9 @@ whole line, including comment, as one quoted argument).
 SSH-signed commits may still appear **Unverified** on GitHub if the
 key is not registered as a signing key on the user's profile. If
 SSH signing is also unavailable, an unsigned commit is acceptable.
-Always report which path (GPG / SSH / unsigned) was used; when
-unsigned, disclose both the GPG and SSH failure reasons.
+Always report which path (configured / SSH fallback / unsigned) was
+used; when unsigned, disclose both the primary and SSH failure
+reasons.
 
 ## Testing
 

@@ -49,14 +49,18 @@ the repository specifies a different convention.
   behavior changes
 - **Prefer signed commits** by default, and try harder before
   falling back to unsigned:
-  1. **GPG first.** Use the repository or user's normal signing
-     configuration (typically GPG via `commit.gpgsign`).
-  2. **SSH fallback if GPG is blocked.** When GPG signing fails or
-     hangs because of `pinentry`, missing TTY, `gpg-agent`, or a
-     similar environment issue, make **one bounded retry** using
-     transient SSH signing for that commit only. Do **not**
-     permanently change the user's signing configuration. Use
-     per-command flags such as
+  1. **Configured signing first.** Use whatever signing the
+     repository or user already configures — typically GPG via
+     `commit.gpgsign`, but a project may also opt in to persistent
+     SSH signing (e.g., `gpg.format = ssh` plus a path-style
+     `user.signingkey`). Respect that configuration as-is.
+  2. **SSH fallback if the configured method is blocked.** When the
+     configured signing (most often GPG) fails or hangs because of
+     `pinentry`, missing TTY, `gpg-agent`, or a similar environment
+     issue, make **one bounded retry** using transient SSH signing
+     for that commit only. Do **not** permanently change the user's
+     signing configuration as part of this fallback. Use per-command
+     flags such as
      `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
   3. **SSH key discovery** — never assume a fixed key path such as
      `~/.ssh/id_ed25519`. Pick the key in this order:
@@ -76,13 +80,14 @@ the repository specifies a different convention.
      registered as a *signing* key on the user's GitHub profile.
      The agent typically cannot verify that, so the commit may show
      as **Unverified** even though it is cryptographically signed.
-  5. **Unsigned only as the last resort.** If both GPG and the
-     bounded SSH retry fail (no agent, no usable key, hardware
-     touch timeout, unsupported Git/OpenSSH version, etc.), an
-     unsigned commit is acceptable to avoid stalling progress.
-  6. **Always report which path was taken** — GPG, SSH fallback, or
-     unsigned. When unsigned, disclose **both** the GPG failure
-     reason and why SSH fallback did not succeed.
+  5. **Unsigned only as the last resort.** If both the configured
+     signing method and the bounded SSH retry fail (no agent, no
+     usable key, hardware touch timeout, unsupported Git/OpenSSH
+     version, etc.), an unsigned commit is acceptable to avoid
+     stalling progress.
+  6. **Always report which path was taken** — configured signing,
+     SSH fallback, or unsigned. When unsigned, disclose **both** the
+     primary failure reason and why the SSH fallback did not succeed.
 
 ## Coding standards
 

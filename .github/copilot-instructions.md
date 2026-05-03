@@ -133,17 +133,28 @@ Keep each commit as **small and focused** as possible:
 ### Signing fallback
 
 This repository configures **GPG** signing for commits and tags via
-`home/dot_config/git/config.tmpl`. When AI agents create commits and
-the configured GPG signing fails or hangs (`pinentry`, missing TTY,
-`gpg-agent`, or similar environment issues), follow this ladder
-rather than going straight to unsigned:
+`home/dot_config/git/config.tmpl` by default. It also supports
+**declarative opt-in to persistent SSH signing** through
+`primary_signing = true` and `signing_profiles = [...]` on
+`[data.secret.ssh.keys.<label>]` entries (see
+`docs/secret-manager-setup.md`); when those flags are set, chezmoi
+emits the necessary `gpg.format = ssh` and path-style
+`user.signingkey` for you. **Use that mechanism instead of editing
+`home/dot_config/git/config.tmpl` (or any chezmoi-managed git
+template) by hand.** Ad-hoc edits to enable SSH signing in those
+templates are still forbidden.
+
+When AI agents create commits and the repository's configured
+signing (GPG or declaratively configured SSH) fails or hangs
+(`pinentry`, missing TTY, `gpg-agent`, hardware-touch timeout, or
+similar environment issues), follow this ladder rather than going
+straight to unsigned:
 
 1. Make **one bounded retry** with transient SSH signing for that
    commit only:
    `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
-   Do **not** edit `home/dot_config/git/config.tmpl` or any other
-   chezmoi-managed git template to enable SSH signing — the fallback
-   must never persist.
+   This is per-invocation only; it must not modify `~/.gitconfig`
+   or any chezmoi template.
 2. Pick the SSH key without assuming a fixed path such as
    `~/.ssh/id_ed25519`:
    1. respect existing SSH-signing config if `git config --get
@@ -158,9 +169,9 @@ rather than going straight to unsigned:
    key on the user's GitHub profile.
 4. If SSH signing also fails or no key is available, an unsigned
    commit is acceptable as a final resort.
-5. Always **report which path was used** (GPG, SSH fallback, or
-   unsigned). When unsigned, disclose both the GPG failure and why
-   SSH fallback did not succeed.
+5. Always **report which path was used** (configured signing, SSH
+   fallback, or unsigned). When unsigned, disclose both the primary
+   failure and why the SSH fallback did not succeed.
 
 ### Examples
 
