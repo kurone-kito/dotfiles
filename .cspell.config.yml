@@ -34,6 +34,7 @@ words:
   - curlrc
   - exrc
   - gdefault
+  - gpgconf
   - inputrc
   - keepassxc
   - kito

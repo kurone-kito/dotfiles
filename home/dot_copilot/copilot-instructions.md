@@ -47,29 +47,69 @@ the repository specifies a different convention.
 - Keep each commit **atomic** — one logical change per commit;
   separate refactoring, formatting, and dependency updates from
   behavior changes
-- **Prefer signed commits** by default, and try harder before
-  falling back to unsigned:
+- **Prefer signed commits** by default, and follow this bounded
+  ladder rather than going straight to unsigned. Each step is **at
+  most one attempt**; the whole ladder is **at most three signing
+  attempts** per commit. Never loop on hardware-touch prompts.
+
   1. **Configured signing first.** Use whatever signing the
      repository or user already configures — typically GPG via
      `commit.gpgsign`, but a project may also opt in to persistent
      SSH signing (e.g., `gpg.format = ssh` plus a path-style
      `user.signingkey`). Respect that configuration as-is.
-  2. **SSH fallback if the configured method is blocked.** When the
-     configured signing (most often GPG) fails or hangs because of
-     `pinentry`, missing TTY, `gpg-agent`, or a similar environment
-     issue, make **one bounded attempt** using SSH signing for that
-     commit only. Do **not** permanently change the user's signing
-     configuration as part of this fallback. Prefer a project-blessed
-     alias if one exists (some repositories expose `git commit-ssh`,
-     `git tag-ssh`, `git rebase-ssh`, etc., which wrap a declared
-     fallback key); otherwise use per-command flags such as
-     `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
-     If you start an SSH-signed rebase via such an alias, continue
-     it with the alias's own `--continue` form (e.g.
-     `git rebase-ssh --continue`) — plain `git rebase --continue`
-     reverts to the configured primary signing.
-  3. **SSH key discovery** — never assume a fixed key path such as
-     `~/.ssh/id_ed25519`. Pick the key in this order:
+
+  2. **Classify the failure by category** (do not rely on exact
+     English/locale strings — read the category from stderr):
+     - **(P) pinentry / TTY** — explicit mention of `pinentry`,
+       "no pinentry", `Inappropriate ioctl for device`, "no tty",
+       batchmode-input, or an interactive passphrase prompt that
+       did not resolve.
+     - **(C) configuration / non-transient** — secret key missing,
+       unusable, unavailable, or passphrase rejected.
+     - **(A) agent-suspect** — agent / socket / IPC errors, or a
+       generic `signing failed: Timeout` (any locale) without
+       pinentry evidence.
+     - **(U) unclear** — the command runner timed out with no
+       useful stderr.
+
+  3. **Optional gpg-agent restart (only for categories A and U).**
+     Run **`gpgconf --kill gpg-agent`** once and retry the original
+     signing exactly once. **Skip this step entirely** if any of
+     the following holds, and proceed straight to step 4:
+     - `gpgconf` is not on `PATH` (minimal CI / container images);
+     - `$SSH_AUTH_SOCK` resolves to gpg-agent's SSH socket
+       (compare with `gpgconf --list-dirs agent-ssh-socket`) —
+       killing the agent there would also break the SSH fallback;
+     - the environment is clearly non-interactive CI where
+       repairing local agent state is not worth the latency.
+
+     Restart is bounded recovery, **not** harmless: it drops
+     cached passphrases and may force a fresh prompt. Do it once
+     or not at all.
+
+  4. **SSH fallback (one bounded attempt).** Allowed for any
+     category, including (C). When picking the command:
+     - Prefer a project-blessed alias if one exists (some
+       repositories expose `git commit-ssh` / `tag-ssh` /
+       `rebase-ssh` which wrap a declared fallback key with
+       `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
+       commit.gpgsign=true`). Do **not** assume the alias exists
+       in every repo.
+     - Otherwise use per-command flags:
+       `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
+     - If you start an SSH-signed rebase via such an alias,
+       continue it with the alias's own `--continue` form
+       (e.g. `git rebase-ssh --continue`); plain
+       `git rebase --continue` reverts to the configured primary
+       signing.
+
+     Do **not** permanently change the user's signing
+     configuration as part of this fallback.
+
+  5. **SSH key discovery** — never assume a fixed key path such as
+     `~/.ssh/id_ed25519`, and never invent one. Pick the key in
+     this order, and skip the SSH fallback entirely if none of
+     these yield a usable key:
      1. If `git config --get gpg.format` is already `ssh`, respect
         the existing `user.signingkey` and
         `gpg.ssh.defaultKeyCommand`.
@@ -81,19 +121,37 @@ the repository specifies a different convention.
         etc.) without needing a private key path.
      - Pass the entire `ssh-add -L` line — public key plus comment —
        as a single quoted value, since key comments contain spaces.
-  4. **Treat SSH signing as best-effort.** GitHub only marks
+
+  6. **Treat SSH signing as best-effort.** GitHub only marks
      SSH-signed commits as **Verified** when the public key is
      registered as a *signing* key on the user's GitHub profile.
      The agent typically cannot verify that, so the commit may show
      as **Unverified** even though it is cryptographically signed.
-  5. **Unsigned only as the last resort.** If both the configured
-     signing method and the bounded SSH retry fail (no agent, no
-     usable key, hardware touch timeout, unsupported Git/OpenSSH
-     version, etc.), an unsigned commit is acceptable to avoid
-     stalling progress.
-  6. **Always report which path was taken** — configured signing,
-     SSH fallback, or unsigned. When unsigned, disclose **both** the
-     primary failure reason and why the SSH fallback did not succeed.
+
+  7. **Unsigned commit is the accepted final fallback.** If both
+     GPG (with or without an agent restart) and the bounded SSH
+     attempt fail — no agent, no usable key, hardware-touch
+     timeout, unsupported Git/OpenSSH version, missing keyring,
+     etc. — create an unsigned commit so that work is not blocked
+     by signing failures alone.
+
+  8. **Always report which path was taken** — configured signing,
+     gpg-agent restart + retry, SSH fallback (alias or transient),
+     or unsigned. When unsigned, disclose **every** underlying
+     failure (configured-signing cause, whether the agent restart
+     was attempted or skipped + why, and the SSH cause or the
+     reason no SSH key was usable) so the user can repair the
+     environment.
+
+  In CI / clearly non-interactive automation, prefer the shortest
+  path: try the configured signing once, then a single SSH attempt
+  if a fallback key is configured, then unsigned. Skip the
+  gpg-agent restart entirely — `gpg-agent` in CI is rarely worth
+  reviving and may not even exist.
+
+  Do **not** recommend `pinentry-mode loopback` as part of
+  automated recovery; it is a setup/policy decision that requires
+  non-interactive passphrase access.
 
 ## Coding standards
 
