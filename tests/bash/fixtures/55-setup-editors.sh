@@ -36,12 +36,15 @@ if command -v vim &>/dev/null; then
 
   # Install / update / clean plugins (non-interactive ex mode)
   if [ -f "$plug_vim" ]; then
-    vim -es -u "${HOME}/.vimrc" \
+    if vim -es -u "${HOME}/.vimrc" \
       -c 'PlugInstall --sync' \
       -c 'PlugClean!' \
       -c 'qa!' \
-      2>&1 || echo "  WARNING: vim plugin sync reported errors."
-    echo "  vim plugin sync complete."
+      2>&1; then
+      echo "  vim plugin sync complete."
+    else
+      echo "  WARNING: vim plugin sync reported errors."
+    fi
   fi
 else
   echo "vim not found; skipping vim plugin setup."
@@ -54,9 +57,11 @@ if command -v nvim &>/dev/null; then
   found_editor=true
   echo "Setting up nvim plugins..."
 
-  nvim --headless "+Lazy! sync" +qa 2>&1 \
-    || echo "  WARNING: nvim plugin sync reported errors."
-  echo "  nvim plugin sync complete."
+  if nvim --headless "+Lazy! sync" +qa 2>&1; then
+    echo "  nvim plugin sync complete."
+  else
+    echo "  WARNING: nvim plugin sync reported errors."
+  fi
 else
   echo "nvim not found; skipping nvim plugin setup."
 fi

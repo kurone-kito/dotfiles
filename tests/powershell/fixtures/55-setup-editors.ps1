@@ -50,15 +50,15 @@ if ($vimCmd) {
   }
 
   if (Test-Path $plugVim) {
-    try {
-      & vim -es -u (Join-Path $HOME '.vimrc') `
-        -c 'PlugInstall --sync' `
-        -c 'PlugClean!' `
-        -c 'qa!' 2>&1
-    } catch {
+    & vim -es -u (Join-Path $HOME '.vimrc') `
+      -c 'PlugInstall --sync' `
+      -c 'PlugClean!' `
+      -c 'qa!' 2>&1
+    if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
+      Write-Host '  vim plugin sync complete.'
+    } else {
       Write-Host '  WARNING: vim plugin sync reported errors.'
     }
-    Write-Host '  vim plugin sync complete.'
   }
 } else {
   Write-Host 'vim not found; skipping vim plugin setup.'
@@ -72,12 +72,12 @@ if ($nvimCmd) {
   $foundEditor = $true
   Write-Host 'Setting up nvim plugins...'
 
-  try {
-    & nvim --headless '+Lazy! sync' +qa 2>&1
-  } catch {
+  & nvim --headless '+Lazy! sync' +qa 2>&1
+  if ($null -eq $LASTEXITCODE -or $LASTEXITCODE -eq 0) {
+    Write-Host '  nvim plugin sync complete.'
+  } else {
     Write-Host '  WARNING: nvim plugin sync reported errors.'
   }
-  Write-Host '  nvim plugin sync complete.'
 } else {
   Write-Host 'nvim not found; skipping nvim plugin setup.'
 }
