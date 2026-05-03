@@ -93,6 +93,72 @@ MOCK
 }
 
 # ---------------------------------------------------------------------------
+# ghq trusted paths
+# ---------------------------------------------------------------------------
+
+@test "appends ghq-cloned owner paths from chezmoi-ghq-trusted-paths" {
+  _setup_mock_mise
+
+  # Create a mock ghq command that returns a fixed root
+  cat > "$BATS_TEST_TMPDIR/bin/ghq" << 'MOCK'
+#!/bin/sh
+if [ "$1" = "root" ]; then echo "$HOME/ghq"; fi
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/ghq"
+
+  # Create the trusted paths file
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' "github.com/alice" "github.example.com/acme-corp" \
+    > "$HOME/.config/mise/chezmoi-ghq-trusted-paths"
+
+  _source_script
+
+  assert_equal "$MISE_TRUSTED_CONFIG_PATHS" \
+    "$HOME/.mise:$HOME/.config/mise:$HOME/ghq/github.com/alice:$HOME/ghq/github.example.com/acme-corp"
+}
+
+@test "skips ghq trusted paths when ghq is not installed" {
+  _setup_mock_mise
+
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' "github.com/alice" \
+    > "$HOME/.config/mise/chezmoi-ghq-trusted-paths"
+
+  # Restrict PATH to only mock mise + basic system dirs (no ghq)
+  PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
+
+  _source_script
+
+  assert_equal "$MISE_TRUSTED_CONFIG_PATHS" "$HOME/.mise:$HOME/.config/mise"
+}
+
+@test "skips ghq trusted paths when file does not exist" {
+  _setup_mock_mise
+  _source_script
+
+  assert_equal "$MISE_TRUSTED_CONFIG_PATHS" "$HOME/.mise:$HOME/.config/mise"
+}
+
+@test "skips blank lines in chezmoi-ghq-trusted-paths" {
+  _setup_mock_mise
+
+  cat > "$BATS_TEST_TMPDIR/bin/ghq" << 'MOCK'
+#!/bin/sh
+if [ "$1" = "root" ]; then echo "$HOME/ghq"; fi
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/ghq"
+
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' "" "github.com/alice" "" \
+    > "$HOME/.config/mise/chezmoi-ghq-trusted-paths"
+
+  _source_script
+
+  assert_equal "$MISE_TRUSTED_CONFIG_PATHS" \
+    "$HOME/.mise:$HOME/.config/mise:$HOME/ghq/github.com/alice"
+}
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 
@@ -103,4 +169,7 @@ MOCK
   assert [ -z "${_mise_trusted+x}" ]
   assert [ -z "${_mise_dir+x}" ]
   assert [ -z "${_mise_cfg+x}" ]
+  assert [ -z "${_ghq_trust_file+x}" ]
+  assert [ -z "${_ghq_root+x}" ]
+  assert [ -z "${_pair+x}" ]
 }

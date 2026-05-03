@@ -15,6 +15,18 @@ if [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
   done
 fi
 
+# Append ghq-cloned owner directories opted in via mise_trust in chezmoi
+_ghq_trust_file="${HOME}/.config/mise/chezmoi-ghq-trusted-paths"
+if [ -f "${_ghq_trust_file}" ] && command -v ghq >/dev/null 2>&1; then
+  _ghq_root="$(ghq root 2>/dev/null)"
+  if [ -n "${_ghq_root}" ]; then
+    while IFS= read -r _pair || [ -n "${_pair}" ]; do
+      [ -n "${_pair}" ] && _mise_trusted="${_mise_trusted}:${_ghq_root}/${_pair}"
+    done < "${_ghq_trust_file}"
+  fi
+fi
+unset _ghq_trust_file _ghq_root _pair
+
 export MISE_TRUSTED_CONFIG_PATHS="${_mise_trusted}"
 unset _mise_trusted _mise_dir
 

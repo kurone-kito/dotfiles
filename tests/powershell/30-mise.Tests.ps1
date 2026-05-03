@@ -296,4 +296,118 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'reshim' }).Count |
       Should -Be 1
   }
+
+}
+
+Describe '30-mise ghq trusted paths' {
+
+  BeforeEach {
+    $script:OriginalHome = $HOME
+    $script:OriginalTrusted = $env:MISE_TRUSTED_CONFIG_PATHS
+    $script:OriginalWarning = $env:MISE_PWSH_CHPWD_WARNING
+    $script:OriginalLocalAppData = $env:LOCALAPPDATA
+    $script:OriginalPath = $env:PATH
+    $script:MiseCalls = @()
+
+    $homeDirName = "home-trust-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    $homeRoot = (New-Item -ItemType Directory -Path "TestDrive:\$homeDirName").FullName
+    Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
+
+    # LOCALAPPDATA must be set so the script's shims dir logic doesn't fail
+    $localAppDataRoot = (New-Item -ItemType Directory -Path "TestDrive:\localapp-$homeDirName").FullName
+    $env:LOCALAPPDATA = $localAppDataRoot
+
+    $script:GhqRoot = Join-Path $homeRoot 'repos'
+    New-Item -ItemType Directory -Path $script:GhqRoot -Force | Out-Null
+
+    $script:TrustFile = Join-Path (
+      Join-Path (Join-Path $homeRoot '.config') 'mise'
+    ) 'chezmoi-ghq-trusted-paths'
+
+    New-TestMiseConfigs
+  }
+
+  AfterEach {
+    Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
+    $env:MISE_TRUSTED_CONFIG_PATHS = $script:OriginalTrusted
+    $env:MISE_PWSH_CHPWD_WARNING = $script:OriginalWarning
+    $env:LOCALAPPDATA = $script:OriginalLocalAppData
+    $env:PATH = $script:OriginalPath
+    Remove-Item Function:\PathMise -ErrorAction SilentlyContinue
+  }
+
+  It 'appends ghq-cloned owner paths from chezmoi-ghq-trusted-paths' {
+    $miseCmd = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $miseCmd }
+      if ($Name -eq 'ghq') { return $true }
+      return $null
+    }
+    Mock ghq { $script:GhqRoot } -ParameterFilter { $args[0] -eq 'root' }
+
+    New-Item -ItemType Directory -Path (Split-Path $script:TrustFile) -Force | Out-Null
+    Set-Content -Path $script:TrustFile -Value @(
+      'github.com/alice'
+      'github.example.com/acme-corp'
+    )
+
+    . $script:Subject
+
+    $paths = $env:MISE_TRUSTED_CONFIG_PATHS.Split([IO.Path]::PathSeparator)
+    $paths | Should -Contain (Join-Path $script:GhqRoot 'github.com/alice')
+    $paths | Should -Contain (Join-Path $script:GhqRoot 'github.example.com/acme-corp')
+  }
+
+  It 'skips ghq trusted paths when ghq is not installed' {
+    $miseCmd = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $miseCmd }
+      return $null
+    }
+
+    New-Item -ItemType Directory -Path (Split-Path $script:TrustFile) -Force | Out-Null
+    Set-Content -Path $script:TrustFile -Value @('github.com/alice')
+
+    . $script:Subject
+
+    $paths = $env:MISE_TRUSTED_CONFIG_PATHS.Split([IO.Path]::PathSeparator)
+    $paths | Should -Not -Contain (Join-Path $script:GhqRoot 'github.com/alice')
+  }
+
+  It 'skips ghq trusted paths when file does not exist' {
+    $miseCmd = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $miseCmd }
+      if ($Name -eq 'ghq') { return $true }
+      return $null
+    }
+
+    . $script:Subject
+
+    $env:MISE_TRUSTED_CONFIG_PATHS | Should -Not -BeLike "*$($script:GhqRoot)*"
+  }
+
+  It 'skips blank lines in chezmoi-ghq-trusted-paths' {
+    $miseCmd = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command {
+      if ($Name -eq 'mise') { return $miseCmd }
+      if ($Name -eq 'ghq') { return $true }
+      return $null
+    }
+    Mock ghq { $script:GhqRoot } -ParameterFilter { $args[0] -eq 'root' }
+
+    New-Item -ItemType Directory -Path (Split-Path $script:TrustFile) -Force | Out-Null
+    Set-Content -Path $script:TrustFile -Value @(
+      ''
+      'github.com/alice'
+      ''
+    )
+
+    . $script:Subject
+
+    $paths = $env:MISE_TRUSTED_CONFIG_PATHS.Split([IO.Path]::PathSeparator)
+    $ghqPaths = @($paths | Where-Object { $_ -like "$($script:GhqRoot)*" })
+    $ghqPaths | Should -HaveCount 1
+    $ghqPaths[0] | Should -Be (Join-Path $script:GhqRoot 'github.com/alice')
+  }
 }

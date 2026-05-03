@@ -65,6 +65,9 @@ hostname = {{ dig "hostname" "" $clone | quote }}
 {{- if ne (dig "ssh" true $clone) true }}
 ssh = {{ dig "ssh" true $clone }}
 {{- end }}
+{{- if (dig "mise_trust" false $clone) }}
+mise_trust = {{ dig "mise_trust" false $clone }}
+{{- end }}
 {{- end }}
 {{- $sshServer := dig "ssh" "server" dict . }}
 {{- if $sshServer }}
@@ -143,6 +146,7 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   token_item = "GitHub PAT"  # secret manager item (repo scope)
 #   hostname   = "github.com"  # optional; defaults to github.com
 #   ssh        = true          # optional; false to use HTTPS instead of SSH
+#   mise_trust = false         # optional; true to auto-trust mise configs
 #
 # See docs/ghq-workflow.md for details.
 #

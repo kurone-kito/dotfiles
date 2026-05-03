@@ -86,6 +86,20 @@ if (Test-Path /proc/version -ErrorAction SilentlyContinue) {
   }
 }
 
+# Append ghq-cloned owner directories opted in via mise_trust in chezmoi
+$__ghqTrustFile = Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'chezmoi-ghq-trusted-paths'
+if ((Test-Path $__ghqTrustFile) -and (Get-Command ghq -ErrorAction SilentlyContinue)) {
+  $__ghqRoot = (ghq root 2>$null)
+  if (-not [string]::IsNullOrWhiteSpace($__ghqRoot)) {
+    foreach ($__pair in @(Get-Content $__ghqTrustFile -ErrorAction SilentlyContinue)) {
+      if (-not [string]::IsNullOrWhiteSpace($__pair)) {
+        $miseTrusted += Join-Path $__ghqRoot $__pair
+      }
+    }
+  }
+}
+Remove-Variable __ghqTrustFile, __ghqRoot, __pair -ErrorAction SilentlyContinue
+
 $env:MISE_TRUSTED_CONFIG_PATHS = $miseTrusted -join [IO.Path]::PathSeparator
 $env:MISE_PWSH_CHPWD_WARNING = '0'
 Remove-Variable miseTrusted -ErrorAction SilentlyContinue
