@@ -2,27 +2,65 @@
 
 <#
 .SYNOPSIS
-    A script that moves the cursor randomly to keep the PC active.
+    Keeps the computer active by simulating user activity.
 .DESCRIPTION
-    This script moves the cursor randomly and sends the BREAK key
-    periodically to prevent the PC from going into sleep or screensaver mode.
+    Prevents the PC from entering sleep or screensaver mode by
+    simulating periodic user activity.
 
-    **Caution**: The cursor will move automatically while the program runs,
-    so that it may interfere with your PC operations. To exit, press Ctrl+C.
-+#>
+    On Windows, moves the cursor randomly and sends the BREAK key.
+    On macOS, uses caffeinate to block sleep and osascript to
+    simulate periodic keystrokes.
+
+    **Caution**: The cursor may move automatically while the program
+    runs, so it may interfere with your PC operations.
+    To exit, press Ctrl+C.
+#>
 Set-StrictMode -Version Latest
-Add-Type -AssemblyName System.Windows.Forms
-while ($true) {
-  $POSITION = [Windows.Forms.Cursor]::Position
-  $DX = (Get-Random -Minimum -1 -Maximum 2)
-  $DY = (Get-Random -Minimum -1 -Maximum 2)
-  for ($I=0; $I -lt 10; $I+=1) {
-    $POSITION.x += $DX
-    $POSITION.y += $DY
-    [Windows.Forms.Cursor]::Position = $POSITION
-    Start-Sleep -Milliseconds 50
-  }
-  [Windows.Forms.SendKeys]::SendWait("{BREAK}")
 
-  Start-Sleep -Seconds 20
+function Invoke-DotfilesPassoutWindows {
+  Add-Type -AssemblyName System.Windows.Forms
+  Write-Host 'Keeping PC awake (cursor jiggle)... Press Ctrl+C to stop.'
+  while ($true) {
+    $pos = [Windows.Forms.Cursor]::Position
+    $dx = Get-Random -Minimum -1 -Maximum 2
+    $dy = Get-Random -Minimum -1 -Maximum 2
+    for ($i = 0; $i -lt 10; $i++) {
+      $pos.x += $dx
+      $pos.y += $dy
+      [Windows.Forms.Cursor]::Position = $pos
+      Start-Sleep -Milliseconds 50
+    }
+    [Windows.Forms.SendKeys]::SendWait('{BREAK}')
+    Start-Sleep -Seconds 20
+  }
+}
+
+function Invoke-DotfilesPassoutMacOS {
+  if (-not (Get-Command caffeinate -ErrorAction SilentlyContinue)) {
+    Write-Error 'caffeinate not found. Cannot prevent sleep on this Mac.'
+    exit 1
+  }
+  Write-Host 'Keeping Mac awake (caffeinate + keystroke)... Press Ctrl+C to stop.'
+  $cafProc = Start-Process caffeinate -ArgumentList '-dimsu' `
+    -PassThru -NoNewWindow
+  try {
+    while ($true) {
+      # Fn key (key code 63) registers as activity without side effects.
+      & osascript -e 'tell application "System Events" to key code 63' 2>$null
+      Start-Sleep -Seconds 20
+    }
+  } finally {
+    if ($cafProc -and -not $cafProc.HasExited) {
+      Stop-Process -Id $cafProc.Id -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+if ($IsWindows -ne $false) {
+  Invoke-DotfilesPassoutWindows
+} elseif ($IsMacOS) {
+  Invoke-DotfilesPassoutMacOS
+} else {
+  Write-Warning 'passout.ps1 does not support this platform yet.'
+  exit 1
 }
