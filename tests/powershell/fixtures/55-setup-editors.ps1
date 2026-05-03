@@ -38,10 +38,9 @@ if ($vimCmd) {
       if (-not (Test-Path $plugDir)) {
         New-Item -ItemType Directory -Path $plugDir -Force | Out-Null
       }
-      try {
-        & curl -fLo $plugVim --create-dirs `
-          'https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim' 2>&1
-      } catch {
+      & curl -fLo $plugVim --create-dirs `
+        'https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim' 2>&1
+      if ($LASTEXITCODE -ne 0) {
         Write-Host "  WARNING: vim-plug bootstrap failed; skipping vim."
       }
     } else {
@@ -79,6 +78,8 @@ if ($nvimCmd) {
 
   $lazydir = if ($env:XDG_DATA_HOME) {
     Join-Path $env:XDG_DATA_HOME (Join-Path 'nvim' (Join-Path 'lazy' 'lazy.nvim'))
+  } elseif ($IsWindows -ne $false -and $env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA (Join-Path 'nvim-data' (Join-Path 'lazy' 'lazy.nvim'))
   } else {
     Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'nvim' (Join-Path 'lazy' 'lazy.nvim'))))
   }
