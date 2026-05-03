@@ -146,41 +146,93 @@ commit.gpgsign=true`; they do **not** flip the global `gpg.format`.
 template) by hand.** Ad-hoc edits to enable persistent SSH signing
 in those templates are forbidden.
 
-When AI agents create commits and the configured signing fails or
-hangs (`pinentry`, missing TTY, `gpg-agent`, hardware-touch timeout,
-or similar environment issues), follow this ladder rather than going
-straight to unsigned. Each step is a **single bounded attempt** —
-do not loop on hardware-touch prompts.
+When AI agents create commits and the configured GPG signing fails
+or hangs, follow this bounded ladder rather than going straight to
+unsigned. The whole ladder is **at most three signing attempts** per
+commit; each numbered step is a **single bounded attempt**. Never
+loop on hardware-touch prompts.
 
-1. If the project-blessed `git commit-ssh` (or `tag-ssh` /
-   `rebase-ssh`) alias is available, use it. This honors the
-   declaratively configured fallback key and keeps signing scoped to
-   the invocation.
-2. Otherwise make a per-invocation transient SSH commit:
-   `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
-   This is per-invocation only; it must not modify `~/.gitconfig`
-   or any chezmoi template. Pick the SSH key without assuming a
-   fixed path such as `~/.ssh/id_ed25519`:
-   1. respect existing SSH-signing config if `git config --get
-      gpg.format` is already `ssh`,
-   2. else use a usable public key from
-      `git config --get gpg.ssh.defaultKeyCommand`,
-   3. else use the first non-certificate public key from
-      `ssh-add -L`. Pass the entire line, including the comment,
-      as a single quoted argument value.
-3. Treat SSH signing as **best-effort** — GitHub may still mark the
+1. **Attempt 1 — GPG.** Try `git commit` (or `git tag -s`,
+   `git rebase`) with the configured GPG signing exactly once.
+
+2. **On failure, classify the cause from stderr by category** —
+   not by exact English/locale strings:
+   - **(P) pinentry / TTY** — explicit mention of `pinentry`,
+     "no pinentry", `Inappropriate ioctl for device`, "no tty",
+     batchmode-input, or an interactive passphrase prompt that did
+     not resolve.
+   - **(C) configuration / non-transient** — secret key missing,
+     unusable, unavailable, or passphrase rejected.
+   - **(A) agent-suspect** — agent / socket / IPC errors, or a
+     generic `signing failed: Timeout` (any locale, e.g.
+     `タイムアウトです`) without pinentry evidence.
+   - **(U) unclear** — the command runner timed out with no useful
+     stderr.
+
+3. **Attempt 2 — gpg-agent restart + GPG retry (categories A and U
+   only).** Run `gpgconf --kill gpg-agent` once and retry the
+   original signing exactly once. `gpg` auto-launches a fresh agent
+   on the next call.
+
+   **Skip this step entirely** (proceed straight to step 4) when
+   any of the following holds:
+   - `gpgconf` is not on `PATH`;
+   - `$SSH_AUTH_SOCK` resolves to gpg-agent's SSH socket
+     (compare with `gpgconf --list-dirs agent-ssh-socket`) — the
+     `gpg-agent --enable-ssh-support` setup uses the same agent
+     for SSH, and killing it would also break the SSH fallback;
+   - the environment is clearly non-interactive CI.
+
+   Restart drops cached passphrases, so do it once or not at all.
+
+4. **Attempt 3 — SSH fallback (one bounded attempt).** Allowed for
+   any category, including (C) — a missing or unusable GPG key
+   should not block the commit if a declared SSH fallback key is
+   available.
+   - If the project-blessed `git commit-ssh` (or `tag-ssh` /
+     `rebase-ssh`) alias is available, use it. This honors the
+     declaratively configured fallback key and keeps signing scoped
+     to the invocation.
+   - Otherwise make a per-invocation transient SSH commit:
+     `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
+     This is per-invocation only; it must not modify `~/.gitconfig`
+     or any chezmoi template. Pick the SSH key without assuming a
+     fixed path such as `~/.ssh/id_ed25519`, and do not invent one:
+     1. respect existing SSH-signing config if `git config --get
+        gpg.format` is already `ssh`,
+     2. else use a usable public key from
+        `git config --get gpg.ssh.defaultKeyCommand`,
+     3. else use the first non-certificate public key from
+        `ssh-add -L`. Pass the entire line, including the comment,
+        as a single quoted argument value.
+
+   Treat SSH signing as **best-effort** — GitHub may still mark the
    commit **Unverified** if the key is not registered as a *signing*
    key on the user's GitHub profile.
-4. If SSH signing also fails or no key is available, an unsigned
-   commit is acceptable as a final resort.
-5. Always **report which path was used** (GPG, `git commit-ssh`
-   alias, transient SSH, or unsigned). When unsigned, disclose both
-   the GPG failure and why the SSH fallback did not succeed.
+
+5. **Final — unsigned commit (accepted fallback).** If SSH signing
+   also fails or no usable SSH key is available, an unsigned commit
+   is the accepted last resort so that work is not blocked by
+   signing failures alone.
+
+6. **Always report which path was used** — GPG, GPG-after-restart,
+   `git commit-ssh` alias, transient SSH, or unsigned. When
+   unsigned, disclose **every** underlying failure: the GPG cause,
+   whether the gpg-agent restart was attempted or skipped (and
+   why), and the SSH cause or the reason no SSH key was usable.
 
 `git rebase-ssh` only signs the **initial** invocation; if the rebase
 stops on a conflict, continue it with `git rebase-ssh --continue`
 (or `--abort` / `--skip`) to keep SSH signing active. Plain
 `git rebase --continue` reverts to GPG-primary signing.
+
+In CI / clearly non-interactive automation, prefer the shortest
+path: try GPG once, then a single SSH attempt if a fallback key is
+configured, then unsigned. Skip the gpg-agent restart entirely.
+
+Do **not** recommend `pinentry-mode loopback` as part of automated
+recovery; it is a setup decision that requires non-interactive
+passphrase access.
 
 ### Examples
 

@@ -55,14 +55,27 @@ also exposes opt-in **SSH signing aliases** (`git commit-ssh`,
 ad-hoc edits to enable persistent SSH signing in those templates are
 forbidden.
 
-If the configured signing fails or hangs in the agent environment
-(`pinentry`, missing TTY, `gpg-agent` issues, hardware-touch
-timeout), try the SSH path in this order, with **one bounded
-attempt** per step (no infinite loops on hardware-touch prompts):
+When GPG signing fails or hangs, follow this bounded ladder. The
+whole ladder is **at most three signing attempts**; each step is a
+**single bounded attempt**. Never loop on hardware-touch prompts.
 
-1. If `git commit-ssh` (or the matching `tag-ssh` / `rebase-ssh`)
-   alias is available, use it. This is the project-blessed path.
-2. Otherwise fall back to a per-invocation transient SSH commit:
+1. **GPG (attempt 1).** Try the configured GPG signing once.
+2. **Classify the failure** by category, not by exact strings:
+   **(P)** pinentry / TTY / passphrase prompt failure;
+   **(C)** missing / unusable secret key (configuration);
+   **(A)** agent / socket / IPC error or generic
+   `signing failed: Timeout` (any locale, e.g. `タイムアウトです`)
+   without pinentry evidence; **(U)** runner timeout with no useful
+   stderr.
+3. **gpg-agent restart + GPG retry (attempt 2, categories A and U
+   only).** Run `gpgconf --kill gpg-agent` once and retry. **Skip
+   this step entirely** when `gpgconf` is not on `PATH`, when
+   `$SSH_AUTH_SOCK` matches `gpgconf --list-dirs agent-ssh-socket`
+   (gpg-agent backs SSH and would also be killed), or in
+   non-interactive CI.
+4. **SSH fallback (attempt 3, allowed for any category).** Prefer
+   the project-blessed `git commit-ssh` (or `tag-ssh` /
+   `rebase-ssh`) alias when available; otherwise transient
    `git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`.
    Discover `<key>` without a fixed path: respect existing
    SSH-signing config if `git config gpg.format` is already `ssh`,
@@ -70,8 +83,9 @@ attempt** per step (no infinite loops on hardware-touch prompts):
    the first non-certificate public key from `ssh-add -L` (pass the
    whole line, including comment, as one quoted argument). Never
    write this fallback into `~/.gitconfig` or any chezmoi template.
-3. If SSH signing is also unavailable, an unsigned commit is
-   acceptable.
+5. **Unsigned (final, accepted fallback).** If SSH also fails or no
+   usable key is available, an unsigned commit is acceptable so that
+   work is not blocked by signing failures alone.
 
 `git rebase-ssh` only signs the initial invocation; if the rebase
 stops, continue with `git rebase-ssh --continue` (or `--abort` /
@@ -79,9 +93,10 @@ stops, continue with `git rebase-ssh --continue` (or `--abort` /
 
 SSH-signed commits may still appear **Unverified** on GitHub if the
 key is not registered as a *signing* key on the user's profile.
-Always report which path (GPG / `git commit-ssh` alias / transient
-SSH / unsigned) was used; when unsigned, disclose both the GPG and
-SSH failure reasons.
+Always report which path (GPG / GPG-after-restart / `git commit-ssh`
+alias / transient SSH / unsigned) was used; when unsigned, disclose
+the GPG cause, whether the gpg-agent restart was attempted or
+skipped (and why), and the SSH cause.
 
 ## Testing
 
