@@ -8,16 +8,15 @@ BeforeAll {
     (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\conf.d')
   ) '45-worktrunk.ps1'
 
-  # Create a mock native executable that outputs given lines to stdout.
+  # Create a mock Application command that outputs given lines to stdout.
   # The production code invokes by resolved path, so tests need real files.
   function New-MockNativeCommand {
     param([string]$Dir, [string]$Name, [string[]]$Lines)
-    $path = Join-Path $Dir $Name
-    $body = "#!/bin/sh`n" + (
-      ($Lines | ForEach-Object { "echo '$($_ -replace "'", "'\''")'" }) -join "`n"
+    $path = Join-Path $Dir "$Name.ps1"
+    $body = "#!/usr/bin/env pwsh`n" + (
+      ($Lines | ForEach-Object { "Write-Output '$($_ -replace "'", "''")'" }) -join "`n"
     ) + "`n"
     [System.IO.File]::WriteAllText($path, $body)
-    if ($IsWindows -eq $false) { & chmod +x $path }
     return $path
   }
 }
