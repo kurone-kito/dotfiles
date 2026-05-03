@@ -10,7 +10,10 @@ $compatAliases = @(
   @{ Name = 'bat'; Target = 'batcat' }
 )
 
-$__wtCommand = Get-Command wt -CommandType Application -ErrorAction SilentlyContinue
+# Select-Object -First 1: aliases resolve by name so only the first wt
+# in PATH matters (unlike 45-worktrunk.ps1 which iterates all candidates
+# to find a non-Windows-Terminal wt it can invoke by path).
+$__wtCommand = Get-Command wt -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $__wtPath = if ($__wtCommand) {
   if ($__wtCommand.Path) { $__wtCommand.Path } else { $__wtCommand.Source }
 } else {

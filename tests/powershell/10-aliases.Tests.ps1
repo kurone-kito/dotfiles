@@ -123,6 +123,39 @@ Describe '10-aliases' {
     Get-Alias -Name git-wt -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
   }
 
+  It 'skips the git-wt alias when wt resolves to Microsoft.WindowsTerminal path' {
+    Mock Get-Command {
+      [pscustomobject]@{
+        Name = 'wt'
+        CommandType = 'Application'
+        Path = 'C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.21.10.0_x64__8wekyb3d8bbwe\wt.exe'
+      }
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    Get-Alias -Name git-wt -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+  }
+
+  It 'skips the git-wt alias when first wt is Windows Terminal even with worktrunk wt later in PATH' {
+    Mock Get-Command {
+      @(
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = 'C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe'
+        },
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = 'C:\tools\worktrunk\wt.exe'
+        }
+      )
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    Get-Alias -Name git-wt -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+  }
+
   It 'creates the batcat alias pointing to bat when bat is available' {
     Mock Get-Command {
       [pscustomobject]@{ Name = 'bat'; CommandType = 'Application' }
