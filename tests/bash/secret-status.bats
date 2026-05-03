@@ -241,3 +241,134 @@ assert any(r['status'] == 'MISSING' for r in m['rows'])
   "
   assert_output "SENTINEL"
 }
+
+# ---------------------------------------------------------------------------
+# DRIFT detection (deploy-state file)
+# ---------------------------------------------------------------------------
+
+# Write a deploy-state file with a single entry for $1 (path), $2 (sha).
+_state() {
+  local path="$1" sha="$2"
+  cat > "$TMP_HOME/.config/chezmoi/secret-deploy-state.json" <<JSON
+{
+  "version": 1,
+  "entries": [
+    {"category":"secretFile","name":"s","path":"$path","sha256":"$sha","mode":"600","deployedAt":"2026-04-26T00:00:00Z"}
+  ]
+}
+JSON
+}
+
+@test "DRIFT: secret file with sha mismatch is promoted to DRIFT" {
+  printf 'modified\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  _state "$TMP_HOME/secret.txt" "0000000000000000000000000000000000000000000000000000000000000000"
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH"
+  assert_failure 1
+  assert_output --partial "DRIFT"
+  assert_output --partial "content changed since deploy"
+}
+
+@test "DRIFT: secret file with matching sha stays OK" {
+  printf 'expected\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  local sha; sha="$(sha256sum "$TMP_HOME/secret.txt" | awk '{print $1}')"
+  _state "$TMP_HOME/secret.txt" "$sha"
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH"
+  assert_success
+  refute_output --partial "DRIFT 1"
+}
+
+@test "DRIFT: row stays OK when no state record exists for the path" {
+  printf 'anything\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  # deliberately no state file
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH"
+  assert_success
+  refute_output --partial "DRIFT 1"
+}
+
+@test "DRIFT: WARN takes precedence over content drift" {
+  printf 'changed\n' > "$TMP_HOME/secret.txt"
+  chmod 644 "$TMP_HOME/secret.txt"
+  _state "$TMP_HOME/secret.txt" "0000000000000000000000000000000000000000000000000000000000000000"
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH"
+  assert_failure 1
+  assert_output --partial "WARN"
+  refute_output --partial "DRIFT 1"
+}
+
+@test "DRIFT: ssh key DRIFT detected when only the public key drifts" {
+  install -m 600 /dev/null "$TMP_HOME/.ssh/id_test"
+  printf 'priv\n' > "$TMP_HOME/.ssh/id_test"
+  chmod 600 "$TMP_HOME/.ssh/id_test"
+  printf 'pub-changed\n' > "$TMP_HOME/.ssh/id_test.pub"
+  chmod 644 "$TMP_HOME/.ssh/id_test.pub"
+  local pshashes; pshashes="$(sha256sum "$TMP_HOME/.ssh/id_test" | awk '{print $1}')"
+  cat > "$TMP_HOME/.config/chezmoi/secret-deploy-state.json" <<JSON
+{
+  "version": 1,
+  "entries": [
+    {"category":"sshKey","name":"k","path":"$TMP_HOME/.ssh/id_test","sha256":"$pshashes","mode":"600","deployedAt":"2026-04-26T00:00:00Z"},
+    {"category":"sshKey","name":"k.pub","path":"$TMP_HOME/.ssh/id_test.pub","sha256":"deadbeef","mode":"644","deployedAt":"2026-04-26T00:00:00Z"}
+  ]
+}
+JSON
+  _skeleton "{\"gpg\":[],\"sshKeys\":[
+    {\"label\":\"k\",\"item\":\"K\",\"filename\":\"id_test\",\"privatePath\":\"$TMP_HOME/.ssh/id_test\",\"publicPath\":\"$TMP_HOME/.ssh/id_test.pub\"}
+  ],\"sshHosts\":[],\"secretFiles\":[],\"envFiles\":[]}"
+  run "$SCRIPT_PATH"
+  assert_failure 1
+  assert_output --partial "DRIFT"
+  assert_output --partial "public key content changed"
+}
+
+@test "DRIFT: summary mode includes DRIFT counter" {
+  printf 'modified\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  _state "$TMP_HOME/secret.txt" "0000000000000000000000000000000000000000000000000000000000000000"
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH" --summary
+  assert_failure 1
+  assert_output --partial "DRIFT 1"
+}
+
+@test "DRIFT: JSON mode emits status=DRIFT" {
+  printf 'modified\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  _state "$TMP_HOME/secret.txt" "0000000000000000000000000000000000000000000000000000000000000000"
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  run "$SCRIPT_PATH" --json
+  assert_failure 1
+  assert_output --partial '"status": "DRIFT"'
+}
+
+@test "DRIFT: SECRET_DEPLOY_STATE env override is honored" {
+  printf 'modified\n' > "$TMP_HOME/secret.txt"
+  chmod 600 "$TMP_HOME/secret.txt"
+  cat > "$TMP_HOME/alt-state.json" <<JSON
+{"version":1,"entries":[{"category":"secretFile","name":"s","path":"$TMP_HOME/secret.txt","sha256":"deadbeef","mode":"600","deployedAt":"2026-04-26T00:00:00Z"}]}
+JSON
+  _skeleton "{\"gpg\":[],\"sshKeys\":[],\"sshHosts\":[],\"secretFiles\":[
+    {\"label\":\"s\",\"item\":\"S\",\"target\":\"secret.txt\",\"absPath\":\"$TMP_HOME/secret.txt\",\"attachment\":\"\"}
+  ],\"envFiles\":[]}"
+  SECRET_DEPLOY_STATE="$TMP_HOME/alt-state.json" run "$SCRIPT_PATH"
+  assert_failure 1
+  assert_output --partial "DRIFT"
+}
