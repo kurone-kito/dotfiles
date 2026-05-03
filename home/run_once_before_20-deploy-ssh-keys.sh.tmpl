@@ -19,6 +19,13 @@ ssh_dir="${HOME}/.ssh"
 mkdir -p "${ssh_dir}"
 chmod 700 "${ssh_dir}"
 
+deploy_state="${HOME}/.local/bin/secret-deploy-state"
+record_state() {
+  # best-effort: never fail the deploy on a state-recording error
+  [ -x "${deploy_state}" ] || return 0
+  "${deploy_state}" record "$1" "$2" "$3" || true
+}
+
 {{ range $key, $sshKey := $sshKeys -}}
 echo "Deploying SSH key: {{ $key }} ({{ $sshKey.filename }})..."
 private_key="${ssh_dir}/{{ $sshKey.filename }}"
@@ -30,6 +37,7 @@ if [ ! -f "${private_key}" ]; then
 SSH_PRIVATE_KEY_EOF
   )
   echo "  Private key written."
+  record_state sshKey "{{ $key }}" "${private_key}"
 else
   echo "  Private key already exists; skipping."
 fi
@@ -40,6 +48,7 @@ if [ ! -f "${public_key}" ]; then
 SSH_PUBLIC_KEY_EOF
   chmod 644 "${public_key}"
   echo "  Public key written."
+  record_state sshKey "{{ $key }}.pub" "${public_key}"
 else
   echo "  Public key already exists; skipping."
 fi

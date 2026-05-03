@@ -14,6 +14,12 @@ command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
 GHQ_ROOT="$("${GHQ}" root)"
 
+deploy_state="${HOME}/.local/bin/secret-deploy-state"
+record_state() {
+  [ -x "${deploy_state}" ] || return 0
+  "${deploy_state}" record "$1" "$2" "$3" || true
+}
+
 {{ range $key, $entry := $deploys -}}
 {{ $filename := dig "filename" ".env" $entry -}}
 {{ $subpath := dig "subpath" "" $entry -}}
@@ -42,6 +48,7 @@ CHEZMOI_ENV_EOF
 
   chmod 600 "${target_path}"
   echo "  done: deployed (mode 600)"
+  record_state envFile "{{ $key }}" "${target_path}"
 fi
 
 {{ end -}}

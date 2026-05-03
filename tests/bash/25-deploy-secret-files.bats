@@ -101,3 +101,38 @@ setup() {
   assert_output --partial "==> docker-auth:"
   assert_output --partial "secret file deploy complete."
 }
+
+# ---------------------------------------------------------------------------
+# Deploy-state recording
+# ---------------------------------------------------------------------------
+
+@test "template wires secret-deploy-state record after each write" {
+  grep -qF 'record_state secretFile' "$TEMPLATE"
+}
+
+@test "template guards record_state when helper is absent" {
+  grep -qF '[ -x "${deploy_state}" ] || return 0' "$TEMPLATE"
+}
+
+@test "fixture invokes deploy-state helper when present" {
+  mkdir -p "$HOME/.local/bin"
+  cat > "$HOME/.local/bin/secret-deploy-state" <<'EOS'
+#!/bin/bash
+echo "$@" >> "${HOME}/.record.log"
+EOS
+  chmod +x "$HOME/.local/bin/secret-deploy-state"
+
+  run bash "$FIXTURE"
+  assert_success
+
+  run cat "$HOME/.record.log"
+  assert_output --partial "record secretFile aws-credentials ${HOME}/.aws/credentials"
+  assert_output --partial "record secretFile docker-auth ${HOME}/.docker/config.json"
+}
+
+@test "fixture is best-effort when deploy-state helper is missing" {
+  # No helper installed → deployment must still succeed.
+  run bash "$FIXTURE"
+  assert_success
+  assert_file_exists "$HOME/.aws/credentials"
+}

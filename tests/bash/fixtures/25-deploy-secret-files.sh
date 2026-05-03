@@ -22,6 +22,12 @@
 #   attachment = "config.json"
 set -euo pipefail
 
+deploy_state="${HOME}/.local/bin/secret-deploy-state"
+record_state() {
+  [ -x "${deploy_state}" ] || return 0
+  "${deploy_state}" record "$1" "$2" "$3" || true
+}
+
 echo "==> aws-credentials: ~/.aws/credentials"
 
 target_path="${HOME}/.aws/credentials"
@@ -37,6 +43,7 @@ CHEZMOI_SECRET_EOF
 
 chmod 600 "${target_path}"
 echo "  done: deployed (mode 600)"
+record_state secretFile aws-credentials "${target_path}"
 
 echo "==> docker-auth: ~/.docker/config.json"
 
@@ -51,5 +58,6 @@ CHEZMOI_SECRET_EOF
 
 chmod 600 "${target_path}"
 echo "  done: deployed (mode 600)"
+record_state secretFile docker-auth "${target_path}"
 
 echo "secret file deploy complete."
