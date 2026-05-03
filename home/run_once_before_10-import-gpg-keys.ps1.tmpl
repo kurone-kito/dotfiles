@@ -20,28 +20,39 @@ Write-Host 'Importing GPG key: {{ $key }}...'
 $gpgKeyContent = @'
 {{ template "get-secret-attachment" dict "item" $gpg.item "filename" "private.asc" "ctx" $ }}
 '@
-$gpgKeyContent | gpg --batch --import
-if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-  throw "gpg --import failed (exit code: $LASTEXITCODE)"
-}
-
-# Extract primary fingerprint and set ultimate trust (level 6)
-$fpr = ($gpgKeyContent |
-  gpg --batch --import-options show-only --with-colons --import 2>$null) |
-  Where-Object { $_ -match '^fpr:' } |
-  ForEach-Object { ($_ -split ':')[9] } |
-  Select-Object -First 1
-if ($fpr) {
-  "${fpr}:6:" | gpg --import-ownertrust
+# Strip a leading UTF-8 BOM if the secret source included one
+$gpgKeyContent = $gpgKeyContent.TrimStart([char]0xFEFF)
+# Write to temp file to avoid PowerShell native-command stdin encoding
+# issues on PS5 / PS7.0-7.3 (PowerShell/PowerShell#11885).
+$__gpgTmpFile = [IO.Path]::GetTempFileName()
+try {
+  [IO.File]::WriteAllText($__gpgTmpFile, $gpgKeyContent,
+    [Text.UTF8Encoding]::new($false))
+  gpg --batch --import $__gpgTmpFile
   if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-    Write-Warning "gpg --import-ownertrust failed (exit code: $LASTEXITCODE)"
-  } else {
-    Write-Host "  Trust set to ultimate for $fpr"
+    throw "gpg --import failed (exit code: $LASTEXITCODE)"
   }
-} else {
-  Write-Warning '  Could not extract fingerprint; set trust manually.'
+
+  # Extract primary fingerprint and set ultimate trust (level 6)
+  $fpr = (gpg --batch --import-options show-only --with-colons `
+    --import $__gpgTmpFile 2>$null) |
+    Where-Object { $_ -match '^fpr:' } |
+    ForEach-Object { ($_ -split ':')[9] } |
+    Select-Object -First 1
+  if ($fpr) {
+    "${fpr}:6:" | gpg --import-ownertrust
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+      Write-Warning "gpg --import-ownertrust failed (exit code: $LASTEXITCODE)"
+    } else {
+      Write-Host "  Trust set to ultimate for $fpr"
+    }
+  } else {
+    Write-Warning '  Could not extract fingerprint; set trust manually.'
+  }
+} finally {
+  Remove-Item $__gpgTmpFile -Force -ErrorAction SilentlyContinue
 }
-Remove-Variable gpgKeyContent, fpr -ErrorAction SilentlyContinue
+Remove-Variable gpgKeyContent, fpr, __gpgTmpFile -ErrorAction SilentlyContinue
 {{ end -}}
 
 Write-Host 'GPG key import complete.'
