@@ -1,12 +1,17 @@
 #!/bin/bash
-# chezmoi run_onchange_after script: register Zellij Web startup on Unix hosts.
+# Pre-rendered test fixture for run_onchange_after_80-register-zellij-web.sh.tmpl.
+#
+# Mirrors the rendered template but accepts the two `dig` values via
+# environment variables so the same fixture can exercise every
+# autostart mode (disabled / systemd-user / unknown / etc).
+#
+# This script is intentionally NOT a chezmoi template.
 set -euo pipefail
 
-# See run_after_99-secret-status-summary.sh.tmpl for rationale.
 exec </dev/null
 
-linux_autostart="{{ dig "zellij" "web" "linux" "autostart" "disabled" . }}"
-macos_autostart="{{ dig "zellij" "web" "macos" "autostart" "disabled" . }}"
+linux_autostart="${LINUX_AUTOSTART:-disabled}"
+macos_autostart="${MACOS_AUTOSTART:-disabled}"
 
 dotfiles_user_systemd_available() {
   command -v systemctl >/dev/null 2>&1 \
@@ -14,8 +19,6 @@ dotfiles_user_systemd_available() {
 }
 
 register_linux_service() {
-  # Validate the mode first so typos fail loudly regardless of host
-  # systemd availability.
   case "$linux_autostart" in
     disabled|systemd-user) ;;
     *)
@@ -26,9 +29,6 @@ register_linux_service() {
 
   case "$linux_autostart" in
     disabled)
-      # Opt-out path: silently skip when systemctl is missing or the
-      # user bus is unavailable (e.g. WSL Ubuntu without systemd-user).
-      # There is no service to disable on such hosts.
       if ! dotfiles_user_systemd_available; then
         echo "Zellij Web user service not managed because user systemd is unavailable."
         return 0
@@ -37,8 +37,6 @@ register_linux_service() {
       echo "Zellij Web user service disabled."
       ;;
     systemd-user)
-      # Opt-in path: fail loudly when prerequisites are missing so the
-      # user knows the requested registration could not be realized.
       if ! command -v systemctl >/dev/null 2>&1; then
         echo "systemctl is required for zellij.web.linux.autostart=systemd-user; install systemd or set autostart=disabled." >&2
         return 1
