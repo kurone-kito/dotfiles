@@ -14,6 +14,8 @@ in this template.
   then point to the canonical Copilot guide for the remaining detail.
 - [CLAUDE.md](../CLAUDE.md) is a Claude Code compatibility entry point
   with the same role.
+- [GEMINI.md](../GEMINI.md) is a Gemini CLI compatibility entry point
+  with the same role.
 
 ## Change policy
 
@@ -32,5 +34,5 @@ in this template.
 - Treat this file as a human-facing strategy note, not as the primary
   instruction file for any agent.
 - When updating AI guidance, review `README.md`,
-  `.github/copilot-instructions.md`, `AGENTS.md`, and `CLAUDE.md`
-  together.
+  `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, and
+  `GEMINI.md` together.

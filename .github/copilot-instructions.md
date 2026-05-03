@@ -130,6 +130,38 @@ Keep each commit as **small and focused** as possible:
 - When in doubt, prefer smaller commits that are easy to review,
   revert, and bisect
 
+### Signing fallback
+
+This repository configures **GPG** signing for commits and tags via
+`home/dot_config/git/config.tmpl`. When AI agents create commits and
+the configured GPG signing fails or hangs (`pinentry`, missing TTY,
+`gpg-agent`, or similar environment issues), follow this ladder
+rather than going straight to unsigned:
+
+1. Make **one bounded retry** with transient SSH signing for that
+   commit only:
+   `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
+   Do **not** edit `home/dot_config/git/config.tmpl` or any other
+   chezmoi-managed git template to enable SSH signing — the fallback
+   must never persist.
+2. Pick the SSH key without assuming a fixed path such as
+   `~/.ssh/id_ed25519`:
+   1. respect existing SSH-signing config if `git config --get
+      gpg.format` is already `ssh`,
+   2. else use a usable public key from
+      `git config --get gpg.ssh.defaultKeyCommand`,
+   3. else use the first non-certificate public key from
+      `ssh-add -L`. Pass the entire line, including the comment, as
+      a single quoted argument value.
+3. Treat SSH signing as **best-effort** — GitHub may still mark the
+   commit **Unverified** if the key is not registered as a *signing*
+   key on the user's GitHub profile.
+4. If SSH signing also fails or no key is available, an unsigned
+   commit is acceptable as a final resort.
+5. Always **report which path was used** (GPG, SSH fallback, or
+   unsigned). When unsigned, disclose both the GPG failure and why
+   SSH fallback did not succeed.
+
 ### Examples
 
 #### Good — single-line (trivial change)

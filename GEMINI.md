@@ -43,6 +43,28 @@ A `.gitmessage` template is available at the repository root.
 Write user-facing, lowercase subjects, keep them under 72 characters,
 and split unrelated changes into separate atomic commits.
 
+### Signing fallback
+
+GPG signing is configured by default. If it fails or hangs in the
+agent environment (`pinentry`, missing TTY, `gpg-agent` issues),
+make **one bounded retry** with transient SSH signing for that
+commit only via
+`git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`. Do
+**not** edit `home/dot_config/git/config.tmpl` or any chezmoi
+template to enable SSH signing — the fallback must never persist.
+
+Discover the SSH key without a fixed path: respect existing
+SSH-signing config if `git config gpg.format` is already `ssh`,
+else use `git config gpg.ssh.defaultKeyCommand` output, else use
+the first non-certificate public key from `ssh-add -L` (pass the
+whole line, including comment, as one quoted argument).
+
+SSH-signed commits may still appear **Unverified** on GitHub if the
+key is not registered as a signing key on the user's profile. If
+SSH signing is also unavailable, an unsigned commit is acceptable.
+Always report which path (GPG / SSH / unsigned) was used; when
+unsigned, disclose both the GPG and SSH failure reasons.
+
 ## Onboarding detection
 
 When starting a session, check whether this repository is the base
