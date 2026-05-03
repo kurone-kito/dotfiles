@@ -22,6 +22,8 @@ OWNER=""
 USE_SSH=true
 HOSTNAME="github.com"
 LIMIT=1000
+_SEEN_SSH=false
+_SEEN_HTTPS=false
 
 require_arg() {
   if [ "$#" -lt 3 ] || [ -z "$3" ]; then
@@ -31,8 +33,8 @@ require_arg() {
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ssh)      USE_SSH=true;  shift ;;
-    --https)    USE_SSH=false; shift ;;
+    --ssh)      USE_SSH=true;  _SEEN_SSH=true;  shift ;;
+    --https)    USE_SSH=false; _SEEN_HTTPS=true; shift ;;
     --hostname) require_arg "$1" "$@"; HOSTNAME="$2"; shift 2 ;;
     --limit)    require_arg "$1" "$@"; LIMIT="$2";    shift 2 ;;
     -h|--help)  usage; exit 0 ;;
@@ -44,6 +46,11 @@ done
 if [ -z "${OWNER}" ]; then
   echo "Error: <owner> is required." >&2
   usage >&2
+  exit 1
+fi
+
+if ${_SEEN_SSH} && ${_SEEN_HTTPS}; then
+  echo "Error: --ssh and --https are mutually exclusive." >&2
   exit 1
 fi
 
@@ -76,7 +83,11 @@ repos="$(GH_HOST="${HOSTNAME}" "${GH}" repo list "${OWNER}" \
 # "Host key verification failed" in non-interactive mode.
 # Changed keys are still rejected to guard against MITM.
 if ${USE_SSH}; then
-  export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+    export GIT_SSH_COMMAND="${GIT_SSH_COMMAND} -o StrictHostKeyChecking=accept-new"
+  else
+    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+  fi
 fi
 
 echo "${repos}" |

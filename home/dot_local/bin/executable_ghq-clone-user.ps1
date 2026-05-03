@@ -66,7 +66,7 @@ try {
   $env:GH_HOST = $Hostname
   $repos = & $ghBin repo list $Owner `
     --no-archived --source --limit $Limit `
-    --json nameWithOwner -q '.[].nameWithOwner' 2>&1
+    --json nameWithOwner -q '.[].nameWithOwner'
   if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to list repos for ${Owner}: $repos"
     return
@@ -84,7 +84,11 @@ try {
 $hadGitSshCommand = Test-Path Env:\GIT_SSH_COMMAND
 $prevGitSshCommand = $env:GIT_SSH_COMMAND
 if ($useSsh) {
-  $env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'
+  if ($env:GIT_SSH_COMMAND) {
+    $env:GIT_SSH_COMMAND = "$env:GIT_SSH_COMMAND -o StrictHostKeyChecking=accept-new"
+  } else {
+    $env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'
+  }
 }
 try {
   foreach ($repo in ($repos -split "`n" | Where-Object { $_ })) {

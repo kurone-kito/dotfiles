@@ -77,6 +77,13 @@ fi
   assert_output --partial "requires a value"
 }
 
+@test "exits with error when --ssh and --https are both given" {
+  setup_standard_mocks
+  run "$SCRIPT" testuser --ssh --https
+  assert_failure
+  assert_output --partial "mutually exclusive"
+}
+
 @test "exits with error when --limit has no value" {
   setup_standard_mocks
   run "$SCRIPT" testuser --limit
@@ -303,4 +310,13 @@ fi
   # env log should not exist (ghq get mock captures it only when called)
   run cat "$BATS_TEST_TMPDIR/ghq-env.log"
   refute_output --partial "StrictHostKeyChecking"
+}
+
+@test "preserves existing GIT_SSH_COMMAND and appends accept-new" {
+  setup_standard_mocks
+  GIT_SSH_COMMAND="ssh -i ~/.ssh/custom_key" run "$SCRIPT" testuser
+  assert_success
+
+  run cat "$BATS_TEST_TMPDIR/ghq-env.log"
+  assert_output --partial "GIT_SSH_COMMAND=ssh -i ~/.ssh/custom_key -o StrictHostKeyChecking=accept-new"
 }
