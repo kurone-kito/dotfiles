@@ -113,18 +113,36 @@ EOF
 # -----------------------------------------------------------------------
 # nvim: lazy.nvim
 # -----------------------------------------------------------------------
-@test "runs nvim headless lazy sync" {
-  make_mock_command nvim "echo \"nvim-args:\$*\""
+@test "runs nvim two-phase bootstrap and lazy sync" {
+  make_mock_command nvim '
+mkdir -p "$HOME/.local/share/nvim/lazy/lazy.nvim"
+echo "nvim-args:$*"
+'
 
   run bash "$FIXTURE"
 
   assert_success
+  assert_output --partial "nvim-args:--headless +qa"
   assert_output --partial "nvim-args:--headless +Lazy! sync +qa"
   assert_output --partial "nvim plugin sync complete"
 }
 
-@test "warns when nvim plugin sync fails" {
+@test "warns when lazy.nvim bootstrap fails (lazydir not created)" {
   make_mock_command nvim "exit 1"
+
+  run bash "$FIXTURE"
+
+  assert_success
+  assert_output --partial "WARNING: lazy.nvim bootstrap failed; skipping nvim plugin sync"
+}
+
+@test "warns when nvim plugin sync fails" {
+  make_mock_command nvim '
+if echo "$*" | grep -q "Lazy"; then
+  exit 1
+fi
+mkdir -p "$HOME/.local/share/nvim/lazy/lazy.nvim"
+'
 
   run bash "$FIXTURE"
 
@@ -139,7 +157,10 @@ EOF
   mkdir -p "${BATS_TEST_TMPDIR}/.vim/autoload"
   touch "${BATS_TEST_TMPDIR}/.vim/autoload/plug.vim"
   make_mock_command vim "echo 'vim:ok'"
-  make_mock_command nvim "echo 'nvim:ok'"
+  make_mock_command nvim '
+mkdir -p "$HOME/.local/share/nvim/lazy/lazy.nvim"
+echo "nvim:ok"
+'
 
   run bash "$FIXTURE"
 
