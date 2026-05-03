@@ -63,7 +63,7 @@ JSON
   refute_output --partial 'gpgsign = if-asked'
 }
 
-@test "config: GPG fpr + primary_signing without preference fails" {
+@test "config: GPG fpr + primary_signing resolves to SSH (no preference needed)" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
   "git": { "signingkey": "FPR" },
@@ -73,14 +73,16 @@ JSON
 } }
 JSON
   run _render "$CONFIG_TMPL"
-  assert_failure
-  assert_output --partial 'signing_format'
+  assert_success
+  assert_output --partial 'format = ssh'
+  assert_output --partial 'signingkey = "~/.ssh/id.pub"'
+  refute_output --partial 'signingkey = "FPR"'
 }
 
-@test "config: explicit signing_format=ssh resolves the conflict" {
+@test "config: explicit signing_format=gpg overrides SSH primary" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
-  "git": { "signingkey": "FPR", "signing_format": "ssh" },
+  "git": { "signingkey": "FPR", "signing_format": "gpg" },
   "secret": { "ssh": { "keys": {
     "p": { "item": "i", "filename": "id", "primary_signing": true }
   } } }
@@ -88,8 +90,8 @@ JSON
 JSON
   run _render "$CONFIG_TMPL"
   assert_success
-  assert_output --partial 'signingkey = "~/.ssh/id.pub"'
-  refute_output --partial 'signingkey = "FPR"'
+  assert_output --partial 'signingkey = "FPR"'
+  refute_output --partial 'format = ssh'
 }
 
 @test "config: multiple primary_signing keys fail" {

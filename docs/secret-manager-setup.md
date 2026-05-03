@@ -222,11 +222,16 @@ filename = "id_ed25519_oss"
 When SSH signing is opted in, `chezmoi apply` validates the
 configuration and aborts with a clear error if:
 
-- two keys both set `primary_signing = true`,
-- `signing_profiles` references a profile that does not exist, or
-- a GPG fingerprint and an SSH key both target the same scope
-  without `signing_format` (under `[data.git]` or per-profile)
-  set to `"gpg"` or `"ssh"` to disambiguate.
+- two keys both set `primary_signing = true`, or
+- `signing_profiles` references a profile that does not exist.
+
+If a GPG fingerprint (`git.signingkey` or
+`git.profiles.<name>.signingkey`) and an SSH opt-in target the
+same scope, **SSH wins** — the GPG fingerprint stays in config
+for reference but the rendered `user.signingkey` and
+`gpg.format = ssh` come from the SSH key. To force GPG to win
+even when an SSH key is opted in, set `signing_format = "gpg"`
+under `[data.git]` (global) or in the relevant profile.
 
 Notes:
 

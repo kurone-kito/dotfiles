@@ -6,15 +6,15 @@
        1. At most one ssh key entry may have `primary_signing = true`.
        2. Each name in any `signing_profiles` list must match a key in
           `data.git.profiles`.
-       3. If the global `data.git.signingkey` (a GPG fingerprint) is
-          non-empty AND a `primary_signing` SSH key exists, then
-          `data.git.signing_format` must be set to "gpg" or "ssh"
-          to break the tie.
-       4. For each profile P, if the profile has a non-empty
-          `signingkey` AND P appears in some key's `signing_profiles`,
-          then the profile's `signing_format` must be set to "gpg"
-          or "ssh" to break the tie.
-       5. `signing_format` values must be one of "", "gpg", "ssh".
+       3. `signing_format` values must be one of "", "gpg", "ssh".
+
+     Resolution policy (see signing-resolved-format):
+       Explicit `signing_format` wins; otherwise SSH wins when an SSH
+       key targets the scope (`primary_signing` / `signing_profiles`
+       are themselves the explicit opt-in); otherwise GPG when a
+       fingerprint is set. A leftover `git.signingkey` GPG fingerprint
+       alongside an SSH opt-in is therefore not an error — SSH simply
+       takes precedence.
 
      Returns the empty string on success (so callers can ignore the
      output and only rely on the side effect of failing).
@@ -24,9 +24,8 @@
        tests/powershell/signing-resolve.Tests.ps1 */ -}}
 {{- $sshKeys := dig "secret" "ssh" "keys" dict . -}}
 {{- $profiles := dig "git" "profiles" dict . -}}
-{{- $globalFpr := dig "git" "signingkey" "" . -}}
 {{- $globalFmt := dig "git" "signing_format" "" . -}}
-{{- /* (5) signing_format value sanity */ -}}
+{{- /* (3) signing_format value sanity */ -}}
 {{- if and $globalFmt (not (has $globalFmt (list "gpg" "ssh"))) -}}
 {{-   fail (printf "git.signing_format must be \"gpg\", \"ssh\", or unset; got %q" $globalFmt) -}}
 {{- end -}}
@@ -51,27 +50,6 @@
 {{-   range $p := dig "signing_profiles" (list) $key -}}
 {{-     if not (hasKey $profiles $p) -}}
 {{-       fail (printf "secret.ssh.keys.%s.signing_profiles references unknown profile %q (known: %v)" $label $p (keys $profiles)) -}}
-{{-     end -}}
-{{-   end -}}
-{{- end -}}
-{{- /* (3) global GPG vs SSH conflict */ -}}
-{{- if and $globalFpr (eq (len $primaries) 1) -}}
-{{-   if eq $globalFmt "" -}}
-{{-     fail (printf "git.signingkey (GPG fingerprint) and secret.ssh.keys.%s.primary_signing both target the global scope; set git.signing_format to \"gpg\" or \"ssh\" to disambiguate" (index $primaries 0)) -}}
-{{-   end -}}
-{{- end -}}
-{{- /* (4) per-profile GPG vs SSH conflict */ -}}
-{{- range $name, $profile := $profiles -}}
-{{-   $pFpr := dig "signingkey" "" $profile -}}
-{{-   if $pFpr -}}
-{{-     $usedBy := list -}}
-{{-     range $label, $key := $sshKeys -}}
-{{-       if has $name (dig "signing_profiles" (list) $key) -}}
-{{-         $usedBy = append $usedBy $label -}}
-{{-       end -}}
-{{-     end -}}
-{{-     if and (gt (len $usedBy) 0) (eq (dig "signing_format" "" $profile) "") -}}
-{{-       fail (printf "git.profiles.%s.signingkey (GPG) and secret.ssh.keys.%v.signing_profiles both target profile %q; set git.profiles.%s.signing_format to \"gpg\" or \"ssh\" to disambiguate" $name $usedBy $name $name) -}}
 {{-     end -}}
 {{-   end -}}
 {{- end -}}

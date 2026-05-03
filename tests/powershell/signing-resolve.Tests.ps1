@@ -60,18 +60,21 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
       $r.Output   | Should -Match 'signingkey = "~/.ssh/id_ed25519_personal.pub"'
     }
 
-    It 'GPG fpr + primary_signing without preference fails' {
+    It 'GPG fpr + primary_signing resolves to SSH (no preference needed)' {
       $json = '{ "data": { "git": { "signingkey": "FPR" }, "secret": { "ssh": { "keys": { "p": { "item": "i", "filename": "id", "primary_signing": true } } } } } }'
       $r = Invoke-Render $script:ConfigTmpl $json
-      $r.ExitCode | Should -Not -Be 0
-      $r.Output   | Should -Match 'signing_format'
+      $r.ExitCode | Should -Be 0
+      $r.Output   | Should -Match 'format = ssh'
+      $r.Output   | Should -Match 'signingkey = "~/.ssh/id.pub"'
+      $r.Output   | Should -Not -Match 'signingkey = "FPR"'
     }
 
-    It 'explicit signing_format=ssh resolves the conflict' {
-      $json = '{ "data": { "git": { "signingkey": "FPR", "signing_format": "ssh" }, "secret": { "ssh": { "keys": { "p": { "item": "i", "filename": "id", "primary_signing": true } } } } } }'
+    It 'explicit signing_format=gpg overrides SSH primary' {
+      $json = '{ "data": { "git": { "signingkey": "FPR", "signing_format": "gpg" }, "secret": { "ssh": { "keys": { "p": { "item": "i", "filename": "id", "primary_signing": true } } } } } }'
       $r = Invoke-Render $script:ConfigTmpl $json
       $r.ExitCode | Should -Be 0
-      $r.Output   | Should -Match 'signingkey = "~/.ssh/id.pub"'
+      $r.Output   | Should -Match 'signingkey = "FPR"'
+      $r.Output   | Should -Not -Match 'format = ssh'
     }
 
     It 'multiple primary_signing keys fail' {
