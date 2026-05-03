@@ -21,9 +21,13 @@ chmod 700 "${ssh_dir}"
 
 deploy_state="${HOME}/.local/bin/secret-deploy-state"
 record_state() {
-  # best-effort: never fail the deploy on a state-recording error
+  # best-effort: never fail the deploy on a state-recording error.
+  # stdin is closed so the helper (and any descendant it may spawn)
+  # cannot consume bytes from chezmoi's controlling TTY, which would
+  # later starve chezmoi's "<file> has changed since chezmoi last
+  # wrote it" overwrite prompt.
   [ -x "${deploy_state}" ] || return 0
-  "${deploy_state}" record "$1" "$2" "$3" || true
+  "${deploy_state}" record "$1" "$2" "$3" </dev/null || true
 }
 
 {{ range $key, $sshKey := $sshKeys -}}

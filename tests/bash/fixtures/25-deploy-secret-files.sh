@@ -24,8 +24,10 @@ set -euo pipefail
 
 deploy_state="${HOME}/.local/bin/secret-deploy-state"
 record_state() {
+  # See run_once_before_20-deploy-ssh-keys.sh.tmpl for the rationale
+  # behind closing stdin on the helper invocation.
   [ -x "${deploy_state}" ] || return 0
-  "${deploy_state}" record "$1" "$2" "$3" || true
+  "${deploy_state}" record "$1" "$2" "$3" </dev/null || true
 }
 
 echo "==> aws-credentials: ~/.aws/credentials"

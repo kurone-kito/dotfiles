@@ -136,3 +136,30 @@ EOS
   assert_success
   assert_file_exists "$HOME/.aws/credentials"
 }
+
+@test "record_state does not consume parent stdin" {
+  # Regression for the chezmoi 'has changed since chezmoi last wrote
+  # it' overwrite prompt being starved when the deploy helper (or any
+  # subprocess it spawns) accidentally reads from the controlling TTY.
+  mkdir -p "$HOME/.local/bin"
+  # A helper that NAIVELY reads from stdin (the worst-case future
+  # regression) — the </dev/null guard in record_state must shield
+  # the parent shell from it.
+  cat > "$HOME/.local/bin/secret-deploy-state" <<'EOS'
+#!/bin/bash
+cat >/dev/null
+EOS
+  chmod +x "$HOME/.local/bin/secret-deploy-state"
+
+  run bash -c '
+    bash "'"$FIXTURE"'" >/dev/null
+    IFS= read -r line
+    printf "AFTER:%s\n" "$line"
+  ' <<<'sentinel-survives'
+  assert_success
+  assert_output --partial "AFTER:sentinel-survives"
+}
+
+@test "template closes stdin when invoking deploy-state helper" {
+  grep -qF '"${deploy_state}" record "$1" "$2" "$3" </dev/null' "$TEMPLATE"
+}
