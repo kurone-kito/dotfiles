@@ -1,10 +1,16 @@
 #!/usr/bin/env pwsh
 # Sync per-user authorized_keys into ProgramData for Windows admin SSH logins.
+# This script requires Windows (ProgramData, icacls, NTFS ACLs).
 [CmdletBinding(SupportsShouldProcess)]
 param(
   [Parameter()]
   [string] $Source
 )
+
+if ($IsWindows -eq $false) {
+  Write-Warning 'sync-openssh-authorized-keys: this script is Windows-only; skipping.'
+  exit 0
+}
 $ErrorActionPreference = 'Stop'
 
 $script:AdministratorsSid = '*S-1-5-32-544'
