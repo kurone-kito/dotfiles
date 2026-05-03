@@ -9,7 +9,10 @@
   (gpg, sshKeys, sshHosts, secretFiles, envFiles).
 
   Status taxonomy:
-    OK      verified present, correct permissions / keyring entry
+    OK      verified present, correct permissions / keyring entry,
+            and (when recorded) content matches the last deploy
+    DRIFT   present and otherwise valid, but content differs from
+            the sha-256 fingerprint recorded at deploy time
     WARN    present but with the wrong mode or related drift
     MISSING expected, not found
     UNKNOWN cannot be verified
@@ -27,7 +30,7 @@
 .NOTES
   Exit codes:
     0  all rows OK
-    1  at least one non-OK row (WARN, MISSING, or UNKNOWN)
+    1  at least one non-OK row (DRIFT, WARN, MISSING, or UNKNOWN)
     2  manifest unreadable or invalid
 #>
 [CmdletBinding()]
@@ -59,6 +62,7 @@ try {
 
 $colorMap = @{
   OK      = "`e[32m"
+  DRIFT   = "`e[35m"
   WARN    = "`e[33m"
   MISSING = "`e[31m"
   UNKNOWN = "`e[90m"
@@ -94,6 +98,42 @@ try {
 $manifestOs = [string]$data.os
 $manager    = [string]$data.manager
 $ghqRoot    = [string]$data.ghqRoot
+
+# ---------------------------------------------------------------------------
+# Deploy-state loading (for DRIFT detection)
+# ---------------------------------------------------------------------------
+
+$statePath = if ($env:SECRET_DEPLOY_STATE) {
+  $env:SECRET_DEPLOY_STATE
+} else {
+  $h = if ($env:HOME) { $env:HOME } else { $HOME }
+  Join-Path (Join-Path $h '.config') (Join-Path 'chezmoi' 'secret-deploy-state.json')
+}
+
+$stateSha = @{}
+if (Test-Path -LiteralPath $statePath) {
+  try {
+    $sd = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json -ErrorAction Stop
+    foreach ($e in @($sd.entries)) {
+      if ($e -and $e.path) { $stateSha[[string]$e.path] = [string]$e.sha256 }
+    }
+  } catch { }
+}
+
+function Test-PathDrifted {
+  param([string]$Path)
+  if ([string]::IsNullOrEmpty($Path)) { return $false }
+  if (-not $stateSha.ContainsKey($Path)) { return $false }
+  $want = $stateSha[$Path]
+  if ([string]::IsNullOrEmpty($want)) { return $false }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+  try {
+    $got = (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+  } catch {
+    return $false
+  }
+  return ($want.ToLowerInvariant() -ne $got)
+}
 
 # ---------------------------------------------------------------------------
 # Verifier helpers
@@ -271,7 +311,15 @@ foreach ($e in @($data.categories.gpg)) {
 foreach ($e in @($data.categories.sshKeys)) {
   if (-not $e) { continue }
   $r = Test-SshKey -Priv $e.privatePath -Pub $e.publicPath
-  Add-Row $r.Status 'SSHKEY' $e.label $e.privatePath $r.Note
+  $status = $r.Status; $note = $r.Note
+  if ($status -eq 'OK') {
+    if (Test-PathDrifted -Path $e.privatePath) {
+      $status = 'DRIFT'; $note = 'private key content changed since deploy'
+    } elseif (Test-PathDrifted -Path $e.publicPath) {
+      $status = 'DRIFT'; $note = 'public key content changed since deploy'
+    }
+  }
+  Add-Row $status 'SSHKEY' $e.label $e.privatePath $note
 }
 
 foreach ($e in @($data.categories.sshHosts)) {
@@ -284,13 +332,21 @@ foreach ($e in @($data.categories.sshHosts)) {
 foreach ($e in @($data.categories.secretFiles)) {
   if (-not $e) { continue }
   $r = Test-FileWithMode -Path $e.absPath -WantMode '600'
-  Add-Row $r.Status 'FILE' $e.label $e.absPath $r.Note
+  $status = $r.Status; $note = $r.Note
+  if ($status -eq 'OK' -and (Test-PathDrifted -Path $e.absPath)) {
+    $status = 'DRIFT'; $note = 'content changed since deploy'
+  }
+  Add-Row $status 'FILE' $e.label $e.absPath $note
 }
 
 foreach ($e in @($data.categories.envFiles)) {
   if (-not $e) { continue }
   $r = Test-EnvFile -AbsPath $e.absPath -Repo $e.repo -Filename $e.filename
-  Add-Row $r.Status 'ENV' $e.label $e.absPath $r.Note
+  $status = $r.Status; $note = $r.Note
+  if ($status -eq 'OK' -and (Test-PathDrifted -Path $e.absPath)) {
+    $status = 'DRIFT'; $note = 'content changed since deploy'
+  }
+  Add-Row $status 'ENV' $e.label $e.absPath $note
 }
 
 # ---------------------------------------------------------------------------
@@ -298,6 +354,7 @@ foreach ($e in @($data.categories.envFiles)) {
 # ---------------------------------------------------------------------------
 
 $okCount      = ($rows | Where-Object status -eq 'OK').Count
+$driftCount   = ($rows | Where-Object status -eq 'DRIFT').Count
 $warnCount    = ($rows | Where-Object status -eq 'WARN').Count
 $missingCount = ($rows | Where-Object status -eq 'MISSING').Count
 $unknownCount = ($rows | Where-Object status -eq 'UNKNOWN').Count
@@ -309,6 +366,7 @@ if ($Json) {
 } elseif ($Summary) {
   $line = "secret-status: " +
     "$(Format-Status 'OK') $okCount / " +
+    "$(Format-Status 'DRIFT') $driftCount / " +
     "$(Format-Status 'WARN') $warnCount / " +
     "$(Format-Status 'MISSING') $missingCount / " +
     "$(Format-Status 'UNKNOWN') $unknownCount " +
@@ -338,13 +396,14 @@ if ($Json) {
   }
   $tally = '  ' +
     "$(Format-Status 'OK') $okCount / " +
+    "$(Format-Status 'DRIFT') $driftCount / " +
     "$(Format-Status 'WARN') $warnCount / " +
     "$(Format-Status 'MISSING') $missingCount / " +
     "$(Format-Status 'UNKNOWN') $unknownCount"
   Write-Host $tally
 }
 
-if ($warnCount -gt 0 -or $missingCount -gt 0 -or $unknownCount -gt 0) {
+if ($driftCount -gt 0 -or $warnCount -gt 0 -or $missingCount -gt 0 -or $unknownCount -gt 0) {
   exit 1
 }
 exit 0
