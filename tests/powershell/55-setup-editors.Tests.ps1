@@ -33,6 +33,7 @@ Describe 'setup-editors' {
       $output = & pwsh -NoProfile -Command "
         function Get-Command { param([string]`$Name, [string]`$ErrorAction) `$null }
         `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
         & '$($script:Fixture -replace "'","''")'
       " 2>&1
 
@@ -48,6 +49,7 @@ Describe 'setup-editors' {
           `$null
         }
         `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
         & '$($script:Fixture -replace "'","''")'
       " 2>&1
 
@@ -61,6 +63,7 @@ Describe 'setup-editors' {
           `$null
         }
         `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
         & '$($script:Fixture -replace "'","''")'
       " 2>&1
 
@@ -68,26 +71,26 @@ Describe 'setup-editors' {
     }
 
     It 'skips vim-plug bootstrap when plug.vim exists' {
-      # Pre-create plug.vim so bootstrap is skipped
-      $vimDir = Join-Path $script:TempDir '.vim/autoload'
+      # Pre-create plug.vim at the platform-correct path
+      # (Windows/PS5 → vimfiles, non-Windows → .vim)
+      if ($IsWindows -ne $false) {
+        $vimDir = Join-Path $script:TempDir (Join-Path 'vimfiles' 'autoload')
+      } else {
+        $vimDir = Join-Path $script:TempDir (Join-Path '.vim' 'autoload')
+      }
       New-Item -ItemType Directory -Path $vimDir -Force | Out-Null
       Set-Content (Join-Path $vimDir 'plug.vim') ''
 
       $output = & pwsh -NoProfile -Command "
-        function script:OrigGetCommand {}
-        `$getRealCommand = (Get-Command Get-Command).ScriptBlock
         function Get-Command {
           param([string]`$Name, [string]`$ErrorAction)
           if (`$Name -eq 'vim') {
             [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
-          } elseif (`$Name -eq 'nvim') {
-            `$null
-          } else {
-            & `$using:getRealCommand -Name `$Name -ErrorAction SilentlyContinue
-          }
+          } else { `$null }
         }
-        function vim { Write-Host 'vim:mock' }
+        function vim { `$global:LASTEXITCODE = 0 }
         `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
         & '$($script:Fixture -replace "'","''")'
       " 2>&1
 
@@ -118,8 +121,10 @@ Describe 'setup-editors' {
             New-Item -ItemType Directory -Path `$lazydir -Force | Out-Null
           }
           Write-Host ('nvim-args:' + (`$args -join ' '))
+          `$global:LASTEXITCODE = 0
         }
         `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
         `$env:XDG_DATA_HOME = '$($xdgData -replace "'","''")'
         & '$($script:Fixture -replace "'","''")'
       " 2>&1
