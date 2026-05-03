@@ -1,7 +1,7 @@
 # Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
 # Restrict to Application to match bash/zsh type -P / whence -p semantics
 # and prevent function/alias injection into Invoke-Expression.
-$__wtCommandInfo = Get-Command wt -CommandType Application -ErrorAction SilentlyContinue
+$__wtCommandInfo = Get-Command wt -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $__wtPath = if ($__wtCommandInfo) {
   if ($__wtCommandInfo.Path) { $__wtCommandInfo.Path } else { $__wtCommandInfo.Source }
 } else {
@@ -15,7 +15,7 @@ if ($__wtPath) {
   )
 }
 
-$__gitWtInfo = Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue
+$__gitWtInfo = Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $__wtCmd = if ($__gitWtInfo) {
   if ($__gitWtInfo.Path) { $__gitWtInfo.Path } else { $__gitWtInfo.Source }
 } elseif ($__wtCommandInfo -and -not $__wtIsWindowsTerminal) {
