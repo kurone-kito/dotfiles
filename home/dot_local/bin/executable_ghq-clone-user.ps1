@@ -60,6 +60,7 @@ $ghqRoot = & $ghqBin root
 
 Write-Host "==> Cloning repos for ${Owner}@${Hostname}"
 
+$hadGhHost = Test-Path Env:\GH_HOST
 $prevGhHost = $env:GH_HOST
 try {
   $env:GH_HOST = $Hostname
@@ -74,12 +75,13 @@ try {
   Write-Error "Failed to list repos for ${Owner}: $_"
   return
 } finally {
-  if ($prevGhHost) { $env:GH_HOST = $prevGhHost } else { Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue }
+  if ($hadGhHost) { $env:GH_HOST = $prevGhHost } else { Remove-Item Env:\GH_HOST -ErrorAction SilentlyContinue }
 }
 
 # Accept new SSH host keys on first contact (TOFU) to avoid
 # "Host key verification failed" in non-interactive mode.
 # Changed keys are still rejected to guard against MITM.
+$hadGitSshCommand = Test-Path Env:\GIT_SSH_COMMAND
 $prevGitSshCommand = $env:GIT_SSH_COMMAND
 if ($useSsh) {
   $env:GIT_SSH_COMMAND = 'ssh -o StrictHostKeyChecking=accept-new'
@@ -106,7 +108,7 @@ try {
     }
   }
 } finally {
-  if ($prevGitSshCommand) {
+  if ($hadGitSshCommand) {
     $env:GIT_SSH_COMMAND = $prevGitSshCommand
   } else {
     Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue

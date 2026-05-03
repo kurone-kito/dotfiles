@@ -67,8 +67,8 @@ echo "==> Cloning repos for ${OWNER}@${HOSTNAME}"
 
 repos="$(GH_HOST="${HOSTNAME}" "${GH}" repo list "${OWNER}" \
   --no-archived --source --limit "${LIMIT}" \
-  --json nameWithOwner -q '.[].nameWithOwner' 2>&1)" || {
-  echo "Error: failed to list repos for ${OWNER}: ${repos}" >&2
+  --json nameWithOwner -q '.[].nameWithOwner')" || {
+  echo "Error: failed to list repos for ${OWNER}." >&2
   exit 1
 }
 
