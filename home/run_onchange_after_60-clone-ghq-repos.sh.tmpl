@@ -13,6 +13,10 @@ exit 0
 command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
 GH="$(mise which gh 2>/dev/null)" || { echo "gh not found via mise; skipping."; exit 0; }
+# Activate mise environment so git subprocesses can find
+# mise-managed tools (e.g., git-vrc filter for VRChat repos)
+eval "$(mise env -s bash 2>/dev/null)" || true
+
 CLONE_SCRIPT="${HOME}/.local/bin/ghq-clone-user"
 [ -x "${CLONE_SCRIPT}" ] || { echo "ghq-clone-user not found; skipping."; exit 0; }
 trap 'unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0' EXIT

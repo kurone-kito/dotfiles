@@ -71,6 +71,12 @@ find_tool() {
 
 GHQ="$(find_tool ghq)" || { echo "Error: ghq not found." >&2; exit 1; }
 GH="$(find_tool gh)"   || { echo "Error: gh not found." >&2; exit 1; }
+
+# Activate mise environment so git can find mise-managed tools (e.g., git-vrc)
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise env -s bash 2>/dev/null)" || true
+fi
+
 GHQ_ROOT="$("${GHQ}" root)"
 
 echo "==> Cloning repos for ${OWNER}@${HOSTNAME}"

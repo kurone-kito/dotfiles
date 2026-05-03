@@ -56,6 +56,12 @@ $ghqBin = Find-Tool 'ghq'
 if (-not $ghqBin) { Write-Error 'ghq not found.'; return }
 $ghBin = Find-Tool 'gh'
 if (-not $ghBin) { Write-Error 'gh not found.'; return }
+
+# Activate mise environment so git can find mise-managed tools (e.g., git-vrc)
+if (Get-Command mise -ErrorAction SilentlyContinue) {
+  (& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+}
+
 $ghqRoot = & $ghqBin root
 
 Write-Host "==> Cloning repos for ${Owner}@${Hostname}"
