@@ -14,6 +14,7 @@ BeforeAll {
     $paths.Zellij = Join-Path $env:LOCALAPPDATA 'Zellij'
     $paths.GnuWin32 = Join-Path ${env:ProgramFiles(x86)} 'GnuWin32\bin'
     $paths.HomeLocalBin = Join-Path $HOME '.local\bin'
+    $paths.HomeCargoBin = Join-Path $HOME '.cargo\bin'
     $paths.CurrentMiseBin = Join-Path (
       (Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages') 'jdx.mise_Microsoft.Winget.Source_test') 'mise')
     ) 'bin'
@@ -28,6 +29,7 @@ BeforeAll {
       $paths.Zellij
       $paths.GnuWin32
       $paths.HomeLocalBin
+      $paths.HomeCargoBin
       $paths.CurrentMiseBin
     )) {
       New-Item -ItemType Directory -Path $managed -Force | Out-Null
@@ -93,6 +95,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $script:Paths.Zellij
       $script:Paths.GnuWin32
       $script:Paths.HomeLocalBin
+      $script:Paths.HomeCargoBin
       $script:Paths.UnrelatedA
       $script:Paths.UnrelatedB
     ) -join ';')
@@ -106,6 +109,13 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $secondPath = $env:PATH
 
     $secondPath | Should -Be $firstPath
+  }
+
+  It 'lists the default Cargo bin among the static managed paths' {
+    . $script:Subject
+
+    $static = @(Get-StaticManagedPaths)
+    $static | Should -Contain (Join-Path $HOME '.cargo\bin')
   }
 
   Context 'registry User PATH sync' {

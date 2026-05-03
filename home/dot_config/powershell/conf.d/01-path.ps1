@@ -55,6 +55,13 @@ function Get-StaticManagedPaths {
 
   if (-not [string]::IsNullOrEmpty($HOME)) {
     $paths += (Join-Path $HOME '.local\bin')
+    # Default Cargo bin. Honor only the default location on Windows
+    # (not $env:CARGO_HOME) because this list is also consumed by
+    # run_onchange_after_35-register-path.ps1.tmpl which writes to
+    # the User PATH registry; persisting a transient process-level
+    # CARGO_HOME would pollute future sessions. Persistent CARGO_HOME
+    # users should set it themselves at User scope.
+    $paths += (Join-Path $HOME '.cargo\bin')
   }
 
   return $paths
