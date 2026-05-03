@@ -700,7 +700,7 @@ After every `chezmoi apply`, a one-line digest summarizes the state of
 all configured deploy targets:
 
 ```text
-secret-status: OK 12 / WARN 1 / MISSING 0 / UNKNOWN 1 (total 14)
+secret-status: OK 11 / DRIFT 1 / WARN 1 / MISSING 0 / UNKNOWN 1 (total 14)
 ```
 
 For a full breakdown, run the standalone command at any time:
@@ -727,23 +727,52 @@ work even when `mise` / `ghq` are not on `PATH`.
 
 | Status    | Meaning                                                     |
 | --------- | ----------------------------------------------------------- |
-| `OK`      | Target is present, has the expected mode/ACL, and (for GPG) the fingerprint is in the keyring. |
-| `WARN`    | Target is present but with the wrong permissions, or `.gitignore` is missing the env filename, or the SSH host alias is missing the expected `IdentityFile`. |
+| `OK`      | Target is present, has the expected mode/ACL, (for GPG) the fingerprint is in the keyring, and (when a deploy fingerprint is recorded) the file content still matches what was last deployed. |
+| `DRIFT`   | Target is present with the correct mode but the SHA-256 of its content no longer matches the fingerprint recorded by the last deploy. Typically caused by a manual edit or by answering `s` (skip) at a chezmoi `has changed since chezmoi last wrote it` prompt. Re-deploy with `chezmoi apply --force` to overwrite, or accept the local edit by re-recording the state (delete the entry from `~/.config/chezmoi/secret-deploy-state.json` and re-run `chezmoi apply`). |
+| `WARN`    | Target is present but with the wrong permissions, or `.gitignore` is missing the env filename, or the SSH host alias is missing the expected `IdentityFile`. Takes precedence over `DRIFT`. |
 | `MISSING` | Target is configured but not deployed. Re-run `chezmoi apply` after fixing the secret-manager entry. |
 | `UNKNOWN` | The check could not run — e.g., `gpg`/`ssh` are not on `PATH`, the manifest lacks an expected fingerprint, or `ghq root` could not be resolved. |
+
+### Listing DRIFT/MISSING/UNKNOWN details
+
+The colored table view shows the per-row note for every non-`OK`
+row, but it can be hard to spot a single offender among dozens of
+green rows. Filter the JSON output with `jq` (bash) or
+`Where-Object` (pwsh) to list only the rows that need attention:
+
+```bash
+secret-status --json | jq '.rows[] | select(.status != "OK")'
+secret-status --json | jq -r '.rows[] | select(.status=="DRIFT") | "\(.target)\t\(.note)"'
+```
+
+```powershell
+secret-status.ps1 -Json | ConvertFrom-Json |
+  Select-Object -ExpandProperty rows |
+  Where-Object status -ne 'OK' |
+  Format-Table status, label, target, note
+```
+
+The deploy-state file at
+`~/.config/chezmoi/secret-deploy-state.json` (mode 600) records the
+SHA-256 fingerprint, mode, and timestamp of every secret the deploy
+scripts wrote. It is rewritten on every successful deploy and is
+safe to delete at any time — the next `chezmoi apply` re-seeds it,
+and `secret-status` simply skips DRIFT detection for paths that
+have no recorded fingerprint.
 
 ### Exit codes
 
 - `0` — every row is `OK`.
-- `1` — at least one `WARN`, `MISSING`, or `UNKNOWN` row.
+- `1` — at least one `DRIFT`, `WARN`, `MISSING`, or `UNKNOWN` row.
 - `2` — the manifest is missing or unreadable. Re-run `chezmoi apply`.
 
 ### Known limitations
 
-- **Freshness is not checked.** The command verifies on-disk presence
-  and permissions, not whether the file content matches the current
-  Bitwarden / 1Password / KeePassXC entry. Re-run `chezmoi apply` to
-  refresh content.
+- **Freshness against the secret manager is not checked.**
+  `DRIFT` tells you the file changed _after_ deploy, but it cannot
+  tell you whether the Bitwarden / 1Password / KeePassXC entry has
+  been rotated upstream. Re-run `chezmoi apply` to refresh content
+  from the manager.
 - **SSH keys are skip-if-exists.** The deploy script does not overwrite
   `~/.ssh/<filename>` when it already exists. If you rotate a key in
   the secret manager, delete the local file before running
