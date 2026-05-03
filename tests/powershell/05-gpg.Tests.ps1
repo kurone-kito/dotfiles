@@ -1,5 +1,6 @@
 # Tests for the PowerShell GPG cache helper wrapper.
-# Exercises: alias creation, missing script handling, and delegation.
+# Exercises: alias creation, missing script handling, delegation, and
+# gpg-agent config reload at profile load.
 
 BeforeAll {
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -24,6 +25,8 @@ Describe '05-gpg' {
   }
 
   It 'creates the gpg-cache alias pointing to Invoke-GpgCachePassphrase' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'gpg-connect-agent' }
+
     . $script:Subject
 
     $alias = Get-Alias -Name gpg-cache -ErrorAction SilentlyContinue
@@ -32,6 +35,8 @@ Describe '05-gpg' {
   }
 
   It 'warns and returns early when the helper script is missing' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'gpg-connect-agent' }
+
     . $script:Subject
 
     $result = Invoke-GpgCachePassphrase 3>&1
@@ -41,6 +46,8 @@ Describe '05-gpg' {
   }
 
   It 'invokes the helper script when it exists' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'gpg-connect-agent' }
+
     $scriptPath = Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'gpg-cache.ps1'
     $null = New-Item -ItemType Directory -Path (Split-Path -Parent $scriptPath) -Force
     Set-Content -Path $scriptPath -Value "Write-Output 'script-invoked'"
@@ -49,5 +56,20 @@ Describe '05-gpg' {
 
     $output = (Invoke-GpgCachePassphrase) 6>&1 | Out-String
     $output | Should -Match 'script-invoked'
+  }
+
+  It 'calls gpg-connect-agent reloadagent at load time' {
+    $script:AgentCalls = [System.Collections.Generic.List[string]]::new()
+    function script:gpg-connect-agent {
+      $script:AgentCalls.Add(($args -join ' '))
+      $global:LASTEXITCODE = 0
+    }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'gpg-connect-agent'; CommandType = 'Function' }
+    } -ParameterFilter { $Name -eq 'gpg-connect-agent' }
+
+    . $script:Subject
+
+    $script:AgentCalls | Should -Contain 'reloadagent /bye'
   }
 }
