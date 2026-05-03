@@ -104,6 +104,30 @@ Describe '45-worktrunk' {
     $script:WorktrunkCommand | Should -BeNullOrEmpty
   }
 
+  It 'skips Windows Terminal wt and uses worktrunk wt from later PATH entry' {
+    $mockPath = New-MockNativeCommand $script:MockBin 'wt' @(
+      '$script:WorktrunkInitialized = $true',
+      '$script:WorktrunkCommand = "wt"'
+    )
+    Mock Get-Command {
+      @(
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = 'C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe'
+        },
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = $mockPath
+        }
+      )
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeTrue
+    $script:WorktrunkCommand | Should -Be 'wt'
+  }
+
   It 'prefers git-wt when both git-wt and wt are available' {
     $gitWtPath = New-MockNativeCommand $script:MockBin 'git-wt' @(
       '$script:WorktrunkInitialized = $true',
@@ -140,6 +164,17 @@ Describe '45-worktrunk' {
     $script:WorktrunkInitialized | Should -BeTrue
   }
 
+  It 'strips output that is only a bare zero' {
+    $mockPath = New-MockNativeCommand $script:MockBin 'git-wt' @('0')
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $mockPath }
+    } -ParameterFilter { $Name -eq 'git-wt' }
+
+    . $script:Subject
+
+    $script:WorktrunkInitialized | Should -BeNullOrEmpty
+  }
+
   It 'cleans up temporary variables after execution' {
     $mockPath = New-MockNativeCommand $script:MockBin 'git-wt' @(
       '$script:WorktrunkInitialized = $true'
@@ -153,6 +188,14 @@ Describe '45-worktrunk' {
     Get-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue |
       Should -BeNullOrEmpty
     Get-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __wtPath -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __wtCandidate -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __candidatePath -Scope Script -ErrorAction SilentlyContinue |
+      Should -BeNullOrEmpty
+    Get-Variable __gitWtInfo -Scope Script -ErrorAction SilentlyContinue |
       Should -BeNullOrEmpty
   }
 }
