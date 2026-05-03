@@ -9,6 +9,7 @@ setup() {
   load 'helpers/bats-file/load'
 
   export HOME="$BATS_TEST_TMPDIR"
+  unset XDG_DATA_HOME
   FIXTURE="$BATS_TEST_DIRNAME/fixtures/55-setup-editors.sh"
   _ORIG_PATH="$PATH"
 
@@ -138,9 +139,9 @@ echo "nvim-args:$*"
 
 @test "warns when nvim plugin sync fails" {
   make_mock_command nvim '
-if echo "$*" | grep -q "Lazy"; then
-  exit 1
-fi
+case "$*" in
+  *Lazy*) exit 1 ;;
+esac
 mkdir -p "$HOME/.local/share/nvim/lazy/lazy.nvim"
 '
 
