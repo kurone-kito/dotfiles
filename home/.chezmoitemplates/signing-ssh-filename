@@ -1,0 +1,21 @@
+{{- /* signing-ssh-filename: Return the SSH key filename (basename
+     under ~/.ssh/) used for signing in a given scope.
+
+     Usage:
+       Global:  {{ template "signing-ssh-filename" dict "scope" "global" "ctx" . }}
+       Profile: {{ template "signing-ssh-filename" dict "scope" "profile" "profile" "work" "ctx" . }}
+
+     Returns the filename (e.g., "id_ed25519_personal") or "".
+     Callers should append ".pub" themselves to get the public key
+     path used as `user.signingkey`. */ -}}
+{{- $sshKeys := dig "secret" "ssh" "keys" dict .ctx -}}
+{{- if eq .scope "global" -}}
+{{-   range $label, $key := $sshKeys -}}
+{{-     if dig "primary_signing" false $key -}}{{ $key.filename }}{{- end -}}
+{{-   end -}}
+{{- else if eq .scope "profile" -}}
+{{-   $profileName := .profile -}}
+{{-   range $label, $key := $sshKeys -}}
+{{-     if has $profileName (dig "signing_profiles" (list) $key) -}}{{ $key.filename }}{{- end -}}
+{{-   end -}}
+{{- end -}}
