@@ -693,3 +693,62 @@ attributes `privateKey` and `publicKey` on the KeePassXC entry.
 > **Note:** For KeePassXC GPG key attachments, store the key
 > content as a named attribute (base64-encoded if binary). The
 > attribute name must match the `filename` parameter.
+
+## Troubleshooting deployment status
+
+After every `chezmoi apply`, a one-line digest summarizes the state of
+all configured deploy targets:
+
+```text
+secret-status: OK 12 / WARN 1 / MISSING 0 / UNKNOWN 1 (total 14)
+```
+
+For a full breakdown, run the standalone command at any time:
+
+```bash
+secret-status            # colored table (Linux/macOS)
+secret-status --summary  # one-line digest only
+secret-status --json     # machine-readable JSON
+secret-status --no-color # plain text
+```
+
+```powershell
+secret-status.ps1            # colored table (Windows)
+secret-status.ps1 -Summary
+secret-status.ps1 -Json
+secret-status.ps1 -NoColor
+```
+
+Both commands read a manifest rendered by `chezmoi apply` at
+`~/.config/chezmoi/secret-deploy-manifest.json` (mode 600), so they
+work even when `mise` / `ghq` are not on `PATH`.
+
+### Status taxonomy
+
+| Status    | Meaning                                                     |
+| --------- | ----------------------------------------------------------- |
+| `OK`      | Target is present, has the expected mode/ACL, and (for GPG) the fingerprint is in the keyring. |
+| `WARN`    | Target is present but with the wrong permissions, or `.gitignore` is missing the env filename, or the SSH host alias is missing the expected `IdentityFile`. |
+| `MISSING` | Target is configured but not deployed. Re-run `chezmoi apply` after fixing the secret-manager entry. |
+| `UNKNOWN` | The check could not run — e.g., `gpg`/`ssh` are not on `PATH`, the manifest lacks an expected fingerprint, or `ghq root` could not be resolved. |
+
+### Exit codes
+
+- `0` — every row is `OK`.
+- `1` — at least one `WARN`, `MISSING`, or `UNKNOWN` row.
+- `2` — the manifest is missing or unreadable. Re-run `chezmoi apply`.
+
+### Known limitations
+
+- **Freshness is not checked.** The command verifies on-disk presence
+  and permissions, not whether the file content matches the current
+  Bitwarden / 1Password / KeePassXC entry. Re-run `chezmoi apply` to
+  refresh content.
+- **SSH keys are skip-if-exists.** The deploy script does not overwrite
+  `~/.ssh/<filename>` when it already exists. If you rotate a key in
+  the secret manager, delete the local file before running
+  `chezmoi apply`.
+- **Windows mode check uses ACLs.** `WARN: ACL allows non-owners`
+  appears when an ACE other than the current user, `Administrators`,
+  or `SYSTEM` has access. Other heuristics (group, integrity level)
+  are not inspected.
