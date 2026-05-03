@@ -17,9 +17,31 @@ exit 0
 
 {{ range $key, $gpg := $gpgKeys -}}
 Write-Host 'Importing GPG key: {{ $key }}...'
-@'
+$gpgKeyContent = @'
 {{ template "get-secret-attachment" dict "item" $gpg.item "filename" "private.asc" "ctx" $ }}
-'@ | gpg --batch --import
+'@
+$gpgKeyContent | gpg --batch --import
+if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+  throw "gpg --import failed (exit code: $LASTEXITCODE)"
+}
+
+# Extract primary fingerprint and set ultimate trust (level 6)
+$fpr = ($gpgKeyContent |
+  gpg --batch --import-options show-only --with-colons --import 2>$null) |
+  Where-Object { $_ -match '^fpr:' } |
+  ForEach-Object { ($_ -split ':')[9] } |
+  Select-Object -First 1
+if ($fpr) {
+  "${fpr}:6:" | gpg --import-ownertrust
+  if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+    Write-Warning "gpg --import-ownertrust failed (exit code: $LASTEXITCODE)"
+  } else {
+    Write-Host "  Trust set to ultimate for $fpr"
+  }
+} else {
+  Write-Warning '  Could not extract fingerprint; set trust manually.'
+}
+Remove-Variable gpgKeyContent, fpr -ErrorAction SilentlyContinue
 {{ end -}}
 
 Write-Host 'GPG key import complete.'

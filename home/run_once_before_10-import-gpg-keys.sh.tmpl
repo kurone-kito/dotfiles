@@ -17,9 +17,23 @@ exit 0
 
 {{ range $key, $gpg := $gpgKeys -}}
 echo "Importing GPG key: {{ $key }}..."
-gpg --batch --import << 'GPG_KEY_EOF'
+GPG_KEY_CONTENT=$(cat << 'GPG_KEY_EOF'
 {{ template "get-secret-attachment" dict "item" $gpg.item "filename" "private.asc" "ctx" $ }}
 GPG_KEY_EOF
+)
+printf '%s\n' "$GPG_KEY_CONTENT" | gpg --batch --import
+
+# Extract primary fingerprint and set ultimate trust (level 6).
+# The extraction may fail on very old gpg; allow graceful fallback.
+FPR=$(printf '%s\n' "$GPG_KEY_CONTENT" | gpg --batch --import-options show-only \
+  --with-colons --import 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}') || true
+if [ -n "$FPR" ]; then
+  echo "${FPR}:6:" | gpg --import-ownertrust
+  echo "  Trust set to ultimate for ${FPR}"
+else
+  echo "  Warning: could not extract fingerprint; set trust manually."
+fi
+unset GPG_KEY_CONTENT FPR
 {{ end -}}
 
 echo "GPG key import complete."
