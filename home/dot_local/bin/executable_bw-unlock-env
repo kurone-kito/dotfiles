@@ -51,4 +51,4 @@ BW_SESSION="$(bw unlock --raw)"
 
 printf 'export BW_SESSION=%s\n' "$(shell_quote "$BW_SESSION")"
 printf 'stty sane\n'
-printf '%s\n' "printf '\\033[0m\\033[?25h\\r\\n' > /dev/tty 2>/dev/null || true"
+printf '%s\n' "if tty -s >/dev/null 2>&1; then printf '\\033[0m\\033[?25h\\r\\n' > /dev/tty 2>/dev/null || true; fi"

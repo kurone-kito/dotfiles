@@ -369,7 +369,11 @@ If the wrong key is offered:
 
 1. Check `~/.ssh/config` for the correct `Host` entry
 2. Verify the key file exists: `ls -la ~/.ssh/id_ed25519_work*`
-3. Check `insteadOf` is active: `git config --get-urlmatch url.insteadOf https://github.com/acme-corp/`
+3. Check `insteadOf` is active:
+
+   ```bash
+   git config --get-urlmatch url.insteadOf https://github.com/acme-corp/
+   ```
 
 ### ghq clones to unexpected directory
 

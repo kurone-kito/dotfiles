@@ -453,7 +453,8 @@ If prompt input still fails on your terminal, prefer `bw_unlock` /
    to install declared tools (re-runs when mise config changes)
 6. **`run_onchange_after_60-clone-ghq-repos`** — bulk-clones
    repositories for configured GitHub accounts via ghq (re-runs
-   when ghq clone configuration changes; see [ghq-workflow.md](./ghq-workflow.md))
+   when ghq clone configuration changes; see
+   [ghq-workflow.md](./ghq-workflow.md))
 7. **`run_onchange_after_70-deploy-env-files`** — deploys `.env`
    files from the secret manager into cloned project directories
    (re-runs when env deploy configuration or secret content changes)

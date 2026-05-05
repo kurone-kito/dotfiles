@@ -85,7 +85,9 @@ in the [Zellij issue tracker](https://github.com/zellij-org/zellij/issues).
 Mobile screens are narrow, making terminal sessions difficult to use.
 Zellij's `web_client` block does not yet support a `font_size` option.
 
-See: [Expose font size parameter (discussion #4482)](https://github.com/zellij-org/zellij/discussions/4482)
+See the discussion on GitHub:
+
+[Expose font size parameter][font-size-discussion]
 
 ### Workarounds
 
@@ -130,3 +132,5 @@ client_cursor_inactive_style = "outline"  # "outline", "block", "bar", "underlin
 - [Zellij Web Client](https://zellij.dev/documentation/web-client.html)
 - [Zellij Options](https://zellij.dev/documentation/options.html)
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve)
+
+[font-size-discussion]: https://github.com/zellij-org/zellij/discussions/4482

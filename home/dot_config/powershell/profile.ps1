@@ -52,4 +52,3 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
   (& zoxide init powershell 2>$null) | Out-String | Invoke-Expression
 }
-
