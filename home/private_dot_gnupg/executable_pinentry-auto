@@ -1,0 +1,38 @@
+#!/bin/sh
+# Auto-detect the best pinentry program for the current session.
+# Installed by chezmoi to ~/.gnupg/pinentry-auto and referenced
+# from gpg-agent.conf as the pinentry-program on Linux/macOS.
+#
+# Decision logic (checked via env vars propagated by updatestartuptty):
+#   1. macOS pinentry-mac        — native dialog, works everywhere
+#   2. DISPLAY/WAYLAND_DISPLAY   — X11/Wayland GUI pinentry
+#   3. Fallback                  — curses or tty for terminal sessions
+
+# macOS: pinentry-mac handles both GUI and terminal contexts natively
+if command -v pinentry-mac >/dev/null 2>&1; then
+  exec pinentry-mac "$@"
+fi
+
+# Graphical session available: prefer GUI pinentry
+if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+  for p in pinentry-gnome3 pinentry-qt pinentry-qt5 pinentry-gtk-2; do
+    if command -v "$p" >/dev/null 2>&1; then
+      exec "$p" "$@"
+    fi
+  done
+fi
+
+# Terminal fallback: curses provides a TUI, tty is simpler
+for p in pinentry-curses pinentry-tty; do
+  if command -v "$p" >/dev/null 2>&1; then
+    exec "$p" "$@"
+  fi
+done
+
+# Last resort: system default pinentry
+if command -v pinentry >/dev/null 2>&1; then
+  exec pinentry "$@"
+fi
+
+echo "pinentry-auto: no pinentry program found" >&2
+exit 1

@@ -1,0 +1,47 @@
+{{- if eq .chezmoi.os "windows" }}
+.gnupg/**
+generate-git-profiles.sh
+10-import-gpg-keys.sh
+20-deploy-ssh-keys.sh
+generate-authorized-keys.sh
+80-register-zellij-web.sh
+cleanup-worktrunk-confd.sh
+50-install-mise-tools.sh
+55-setup-editors.sh
+60-clone-ghq-repos.sh
+70-deploy-env-files.sh
+25-deploy-secret-files.sh
+99-secret-status-summary.sh
+.bashrc
+.bash_profile
+.zshenv
+.profile
+.config/shell/**
+.config/bash/**
+.config/zsh/**
+.config/sheldon/**
+{{- else }}
+AppData
+.psmux.conf
+generate-git-profiles.ps1
+10-import-gpg-keys.ps1
+20-deploy-ssh-keys.ps1
+generate-authorized-keys.ps1
+35-register-path.ps1
+80-register-zellij-web.ps1
+50-install-mise-tools.ps1
+55-setup-editors.ps1
+60-clone-ghq-repos.ps1
+70-deploy-env-files.ps1
+25-deploy-secret-files.ps1
+99-secret-status-summary.ps1
+link-powershell-profile.ps1
+.local/bin/ensure-zellij-web.ps1
+.local/bin/set-openssh-default-shell.ps1
+{{- end }}
+{{- if ne .chezmoi.os "linux" }}
+.config/systemd/**
+{{- end }}
+{{- if ne .chezmoi.os "darwin" }}
+Library/LaunchAgents/**
+{{- end }}

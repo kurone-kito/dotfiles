@@ -1,0 +1,9 @@
+#!/bin/bash
+# ~/.bash_profile — Login shell entry point
+# Sources .profile (shared login env) then .bashrc (interactive).
+
+# shellcheck source=/dev/null
+[ -r "$HOME/.profile" ] && . "$HOME/.profile"
+
+# shellcheck source=/dev/null
+[ -r "$HOME/.bashrc" ] && . "$HOME/.bashrc"

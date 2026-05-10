@@ -1,0 +1,94 @@
+{{- /* signing-validate: Enforce SSH/GPG signing schema constraints.
+     Usage: {{ template "signing-validate" . }}
+     - ctx:  The top-level chezmoi template data (pass . from caller)
+
+     Constraints (all violations call `fail`, halting the render):
+       1. The legacy field `primary_signing` is rejected outright with
+          a rename hint; users must migrate to `signing_fallback`.
+       2. `signing_format` values must be one of "", "gpg", "ssh".
+       3. At most one ssh key entry may have `signing_fallback = true`.
+       4. Each name in any `signing_profiles` list must match a key in
+          `data.git.profiles`.
+       5. When `git.signing_format = "ssh"` is set, exactly one ssh key
+          must have `signing_fallback = true` (so SSH primary has a
+          resolvable key).
+       6. When a profile has `signing_format = "ssh"`, exactly one ssh
+          key must list that profile in its `signing_profiles`.
+
+     Resolution policy (see signing-resolved-format):
+       GPG is always the default primary signing backend when a
+       fingerprint is set. SSH is opt-in either via:
+         - an explicit `signing_format = "ssh"` override (forces SSH
+           primary; requires `signing_fallback = true` on a key), or
+         - the absence of a GPG fingerprint with one or more
+           `signing_fallback` keys (SSH then becomes the only signing
+           option for that scope).
+       Independently, every ssh key with `signing_fallback = true`
+       (or referenced by `signing_profiles`) gains git aliases
+       (commit-ssh / tag-ssh / rebase-ssh) so non-interactive callers
+       can opt into SSH signing per-invocation without touching the
+       primary GPG configuration.
+
+     Returns the empty string on success (so callers can ignore the
+     output and only rely on the side effect of failing).
+
+     Tests:
+       tests/bash/signing-resolve.bats
+       tests/powershell/signing-resolve.Tests.ps1 */ -}}
+{{- $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{- $profiles := dig "git" "profiles" dict . -}}
+{{- $globalFmt := dig "git" "signing_format" "" . -}}
+{{- /* (1) reject legacy primary_signing field (renamed to signing_fallback). */ -}}
+{{- range $label, $key := $sshKeys -}}
+{{-   if hasKey $key "primary_signing" -}}
+{{-     fail (printf "secret.ssh.keys.%s.primary_signing was renamed to signing_fallback; update chezmoi.toml. The field's semantics also changed: it now registers commit-ssh/tag-ssh/rebase-ssh git aliases for fallback use, while GPG remains primary by default." $label) -}}
+{{-   end -}}
+{{- end -}}
+{{- /* (2) signing_format value sanity */ -}}
+{{- if and $globalFmt (not (has $globalFmt (list "gpg" "ssh"))) -}}
+{{-   fail (printf "git.signing_format must be \"gpg\", \"ssh\", or unset; got %q" $globalFmt) -}}
+{{- end -}}
+{{- range $name, $profile := $profiles -}}
+{{-   $pFmt := dig "signing_format" "" $profile -}}
+{{-   if and $pFmt (not (has $pFmt (list "gpg" "ssh"))) -}}
+{{-     fail (printf "git.profiles.%s.signing_format must be \"gpg\", \"ssh\", or unset; got %q" $name $pFmt) -}}
+{{-   end -}}
+{{- end -}}
+{{- /* (3) at most one signing_fallback */ -}}
+{{- $fallbacks := list -}}
+{{- range $label, $key := $sshKeys -}}
+{{-   if dig "signing_fallback" false $key -}}
+{{-     $fallbacks = append $fallbacks $label -}}
+{{-   end -}}
+{{- end -}}
+{{- if gt (len $fallbacks) 1 -}}
+{{-   fail (printf "multiple secret.ssh.keys entries have signing_fallback = true: %v; only one is allowed" $fallbacks) -}}
+{{- end -}}
+{{- /* (4) signing_profiles must reference real profiles */ -}}
+{{- range $label, $key := $sshKeys -}}
+{{-   range $p := dig "signing_profiles" (list) $key -}}
+{{-     if not (hasKey $profiles $p) -}}
+{{-       fail (printf "secret.ssh.keys.%s.signing_profiles references unknown profile %q (known: %v)" $label $p (keys $profiles)) -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- /* (5) global signing_format=ssh requires exactly one signing_fallback */ -}}
+{{- if eq $globalFmt "ssh" -}}
+{{-   if ne (len $fallbacks) 1 -}}
+{{-     fail (printf "git.signing_format = \"ssh\" requires exactly one secret.ssh.keys entry with signing_fallback = true; found %d" (len $fallbacks)) -}}
+{{-   end -}}
+{{- end -}}
+{{- /* (6) per-profile signing_format=ssh requires exactly one matching key */ -}}
+{{- range $name, $profile := $profiles -}}
+{{-   if eq (dig "signing_format" "" $profile) "ssh" -}}
+{{-     $matches := list -}}
+{{-     range $label, $key := $sshKeys -}}
+{{-       if has $name (dig "signing_profiles" (list) $key) -}}
+{{-         $matches = append $matches $label -}}
+{{-       end -}}
+{{-     end -}}
+{{-     if ne (len $matches) 1 -}}
+{{-       fail (printf "git.profiles.%s.signing_format = \"ssh\" requires exactly one ssh key listing %q in signing_profiles; found %d" $name $name (len $matches)) -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}

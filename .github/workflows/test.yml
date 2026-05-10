@@ -1,0 +1,58 @@
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+name: Test workflow
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  bash-tests:
+    name: Bash tests (bats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Run bats tests
+        run: tests/bash/helpers/bats-core/bin/bats tests/bash/
+
+  powershell-tests:
+    name: PowerShell tests (Pester)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Pester if needed
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable Pester |
+              Where-Object { $_.Version -ge [version]'5.0' })) {
+            Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
+          }
+      - name: Run Pester tests
+        shell: pwsh
+        run: Invoke-Pester tests/powershell/ -Output Detailed
+
+  lua-syntax:
+    name: Lua syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.1
+      - name: Check Lua syntax
+        shell: bash
+        run: |
+          errors=0
+          while IFS= read -r -d '' f; do
+            if ! luac -p "$f"; then
+              errors=$((errors + 1))
+            fi
+          done < <(find home/dot_config/nvim -name '*.lua' -print0)
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors Lua file(s) have syntax errors"
+            exit 1
+          fi

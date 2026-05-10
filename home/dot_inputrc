@@ -1,0 +1,17 @@
+# -*- mode: sh -*-
+# vim: set ft=sh :
+
+# Make Tab autocomplete regardless of filename case
+set completion-ignore-case on
+
+# Use Vi keybindings in the command line
+set editing-mode vi
+
+# Immediately add a trailing slash when autocompleting symlinks to directories
+set mark-symlinked-directories on
+
+# Do not show the completed text in the command line when there are multiple matches, but instead list all the matches
+set skip-completed-text on
+
+# Show extra file information when completing, like `ls -F` does
+set visible-stats on

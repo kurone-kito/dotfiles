@@ -1,24 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/git,gpg,linux,macos,vim,visualstudiocode,windows,zsh
-# Edit at https://www.toptal.com/developers/gitignore?templates=git,gpg,linux,macos,vim,visualstudiocode,windows,zsh
-
-### Git ###
-# Created by git for backups. To disable backups in Git:
-# $ git config --global mergetool.keepBackup false
-*.orig
-
-# Created by git when using merge tools for conflicts
-*.BACKUP.*
-*.BASE.*
-*.LOCAL.*
-*.REMOTE.*
-*_BACKUP_*.txt
-*_BASE_*.txt
-*_LOCAL_*.txt
-*_REMOTE_*.txt
-
-### GPG ###
-secring.*
-
+# Created by https://www.toptal.com/developers/gitignore/api/linux,macos,vim,visualstudiocode,windows
+# Edit at https://www.toptal.com/developers/gitignore?templates=linux,macos,vim,visualstudiocode,windows
 
 ### Linux ###
 *~
@@ -133,45 +114,17 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-### Zsh ###
-# Zsh compiled script + zrecompile backup
-*.zwc
-*.zwc.old
-
-# Zsh completion-optimization dumpfile
-*zcompdump*
-
-# Zsh history
-.zsh_history
-
-# Zsh sessions
-.zsh_sessions
-
-# Zsh zcalc history
-.zcalc_history
-
-# A popular plugin manager's files
-._zinit
-.zinit_lstupd
-
-# zdharma/zshelldoc tool's files
-zsdoc/data
-
-# robbyrussell/oh-my-zsh/plugins/per-directory-history plugin's files
-# (when set-up to store the history in the local directory)
-.directory_history
-
-# MichaelAquilina/zsh-autoswitch-virtualenv plugin's files
-# (for Zsh plugins using Python)
-.venv
-
-# Zunit tests' output
-/tests/_output/*
-!/tests/_output/.gitkeep
-
-# End of https://www.toptal.com/developers/gitignore/api/git,gpg,linux,macos,vim,visualstudiocode,windows,zsh
+# End of https://www.toptal.com/developers/gitignore/api/linux,macos,vim,visualstudiocode,windows
 
 ### THE PROJECT SPECIFIES #################################################
 
-### GPG ###
-pubring.*
+### AI Agents ###
+# Claude Code local config
+.claude/
+
+# OpenAI Codex sandbox
+.codex/
+
+### NeoVim ###
+# Project-local NeoVim config
+.nvim.lua

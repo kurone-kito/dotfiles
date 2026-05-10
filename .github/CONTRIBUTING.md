@@ -14,3 +14,13 @@ Language: **🇬🇧** | [🇯🇵](./CONTRIBUTING.ja.md) | [🇨🇳](./CONTRIB
    [pull request](https://github.com/kurone-kito/dotfiles/pulls)**.
 4. In this repository, discussion
    **[in English or Japanese](https://translate.google.com/) is recommended**.
+5. This project follows
+   [Conventional Commits](https://www.conventionalcommits.org/).
+   Please write a user-facing subject line and, in the body, briefly cover
+   why the change is needed, any important context, and what was changed.
+   A suggested `.gitmessage` template is available at the repository root.
+   See [copilot-instructions.md](./copilot-instructions.md#commit-rules)
+   for examples and full details.
+6. If your change involves scripts, **run the test suite before
+   submitting**. See the [Testing section in the README](../README.md#testing)
+   for commands and prerequisites.

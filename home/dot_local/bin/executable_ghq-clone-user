@@ -1,0 +1,122 @@
+#!/bin/bash
+# Clone all non-archived, non-fork repositories for a GitHub user or
+# organization into the local ghq root. Skips repositories that are
+# already cloned. Requires gh (GitHub CLI) and ghq.
+#
+# Usage:
+#   ghq-clone-user <owner> [options]
+#
+# Options:
+#   --ssh           Clone via SSH (default)
+#   --https         Clone via HTTPS
+#   --hostname H    GitHub hostname (default: github.com)
+#   --limit N       Maximum repositories to list (default: 1000)
+#   -h, --help      Show this help
+set -euo pipefail
+
+usage() {
+  sed -n '2,/^[^#]/{ /^#/s/^# \?//p; }' "$0"
+}
+
+OWNER=""
+USE_SSH=true
+HOSTNAME="github.com"
+LIMIT=1000
+_SEEN_SSH=false
+_SEEN_HTTPS=false
+
+require_arg() {
+  if [ "$#" -lt 3 ] || [ -z "$3" ]; then
+    echo "Error: $1 requires a value." >&2; usage >&2; exit 1
+  fi
+  case "$3" in
+    -*) echo "Error: $1 requires a value, got '$3'." >&2; usage >&2; exit 1 ;;
+  esac
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ssh)      USE_SSH=true;  _SEEN_SSH=true;  shift ;;
+    --https)    USE_SSH=false; _SEEN_HTTPS=true; shift ;;
+    --hostname) require_arg "$1" "$@"; HOSTNAME="$2"; shift 2 ;;
+    --limit)    require_arg "$1" "$@"; LIMIT="$2";    shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*)         echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    *)          OWNER="$1";    shift ;;
+  esac
+done
+
+if [ -z "${OWNER}" ]; then
+  echo "Error: <owner> is required." >&2
+  usage >&2
+  exit 1
+fi
+
+if ${_SEEN_SSH} && ${_SEEN_HTTPS}; then
+  echo "Error: --ssh and --https are mutually exclusive." >&2
+  exit 1
+fi
+
+# Validate hostname — reject path separators and traversal sequences
+case "$HOSTNAME" in
+  */* | *\\* | *..*) echo "Error: invalid hostname '${HOSTNAME}'." >&2; exit 1 ;;
+esac
+
+# Locate gh and ghq — check PATH first, then mise shims
+find_tool() {
+  command -v "$1" 2>/dev/null && return 0
+  command -v mise >/dev/null 2>&1 && mise which "$1" 2>/dev/null && return 0
+  return 1
+}
+
+GHQ="$(find_tool ghq)" || { echo "Error: ghq not found." >&2; exit 1; }
+GH="$(find_tool gh)"   || { echo "Error: gh not found." >&2; exit 1; }
+
+# Activate mise environment so git can find mise-managed tools (e.g., git-vrc)
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise env -s bash 2>/dev/null)" || true
+fi
+
+GHQ_ROOT="$("${GHQ}" root)"
+
+echo "==> Cloning repos for ${OWNER}@${HOSTNAME}"
+
+repos="$(GH_HOST="${HOSTNAME}" "${GH}" repo list "${OWNER}" \
+  --no-archived --source --limit "${LIMIT}" \
+  --json nameWithOwner -q '.[].nameWithOwner')" || {
+  echo "Error: failed to list repos for ${OWNER}." >&2
+  exit 1
+}
+
+# Accept new SSH host keys on first contact (TOFU) to avoid
+# "Host key verification failed" in non-interactive mode.
+# Changed keys are still rejected to guard against MITM.
+if ${USE_SSH}; then
+  if [ -n "${GIT_SSH_COMMAND:-}" ]; then
+    export GIT_SSH_COMMAND="${GIT_SSH_COMMAND} -o StrictHostKeyChecking=accept-new"
+  else
+    export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+  fi
+fi
+
+echo "${repos}" |
+while IFS= read -r repo; do
+  [ -z "${repo}" ] && continue
+  target="${GHQ_ROOT}/${HOSTNAME}/${repo}"
+  if [ -e "${target}/.git" ]; then
+    echo "  skip: ${repo}"
+    continue
+  fi
+  if [ -e "${target}" ]; then
+    rm -rf "${target}"
+  fi
+  echo "  clone: ${repo}"
+  if ${USE_SSH}; then
+    "${GHQ}" get -p "${HOSTNAME}/${repo}" 2>&1 || true
+  else
+    "${GHQ}" get "${HOSTNAME}/${repo}" 2>&1 || true
+  fi
+done
+
+unset GIT_SSH_COMMAND
+echo "==> Done."

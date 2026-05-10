@@ -1,0 +1,44 @@
+#!/bin/zsh
+# ~/.config/zsh/.zshrc — Interactive zsh configuration
+# Sources shared POSIX conf.d, zsh-specific conf.d, then tools.
+
+# Source shared POSIX conf.d (bash + zsh common)
+for f in "$HOME/.config/shell/conf.d/"*.sh(N); do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Source zsh-specific conf.d
+for f in "${ZDOTDIR:-$HOME/.config/zsh}/conf.d/"*.zsh(N); do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Worktrunk shell integration — must be in .zshrc for detection
+# Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
+__wt_path=
+if whence -p git-wt >/dev/null 2>&1; then
+  __wt_init="$(command git-wt config shell init zsh 2>/dev/null)" && eval "$__wt_init"
+  unset __wt_init
+elif whence -p wt >/dev/null 2>&1; then
+  __wt_path="$(whence -p wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+  case "$__wt_path" in
+    *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
+    *microsoft.windowsterminal*/wt|*microsoft.windowsterminal*/wt.exe|\
+    *microsoft.windowsterminal*\\wt|*microsoft.windowsterminal*\\wt.exe)
+      ;;
+    *)
+      __wt_init="$(command wt config shell init zsh 2>/dev/null)" && eval "$__wt_init"
+      unset __wt_init
+      ;;
+  esac
+fi
+unset __wt_path
+
+# Plugin manager
+if (( $+commands[sheldon] )); then
+  eval "$(sheldon source)"
+fi
+
+# Prompt
+if (( $+commands[starship] )); then
+  eval "$(starship init zsh)"
+fi

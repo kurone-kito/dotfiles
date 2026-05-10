@@ -1,0 +1,106 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: register Zellij Web startup on Unix hosts.
+set -euo pipefail
+
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
+linux_autostart="{{ dig "zellij" "web" "linux" "autostart" "disabled" . }}"
+macos_autostart="{{ dig "zellij" "web" "macos" "autostart" "disabled" . }}"
+
+dotfiles_user_systemd_available() {
+  command -v systemctl >/dev/null 2>&1 \
+    && systemctl --user show-environment >/dev/null 2>&1
+}
+
+register_linux_service() {
+  # Validate the mode first so typos fail loudly regardless of host
+  # systemd availability.
+  case "$linux_autostart" in
+    disabled|systemd-user) ;;
+    *)
+      echo "Unsupported zellij.web.linux.autostart mode: $linux_autostart" >&2
+      return 1
+      ;;
+  esac
+
+  case "$linux_autostart" in
+    disabled)
+      # Opt-out path: silently skip when systemctl is missing or the
+      # user bus is unavailable (e.g. WSL Ubuntu without systemd-user).
+      # There is no service to disable on such hosts.
+      if ! dotfiles_user_systemd_available; then
+        echo "Zellij Web user service not managed because user systemd is unavailable."
+        return 0
+      fi
+      systemctl --user disable --now zellij-web.service >/dev/null 2>&1 || true
+      echo "Zellij Web user service disabled."
+      ;;
+    systemd-user)
+      # Opt-in path: fail loudly when prerequisites are missing so the
+      # user knows the requested registration could not be realized.
+      if ! command -v systemctl >/dev/null 2>&1; then
+        echo "systemctl is required for zellij.web.linux.autostart=systemd-user; install systemd or set autostart=disabled." >&2
+        return 1
+      fi
+      if ! systemctl --user show-environment >/dev/null 2>&1; then
+        echo "user systemd is not available; enable WSL systemd, run 'loginctl enable-linger', or set zellij.web.linux.autostart=disabled." >&2
+        return 1
+      fi
+      systemctl --user daemon-reload
+      systemctl --user enable zellij-web.service >/dev/null
+      systemctl --user restart zellij-web.service
+      if command -v loginctl >/dev/null 2>&1; then
+        current_user="${USER:-$(id -un)}"
+        linger="$(loginctl show-user "$current_user" -p Linger --value 2>/dev/null || true)"
+        if [ "$linger" != "yes" ]; then
+          echo "warn: linger not enabled; Zellij Web will not survive logout or reboot without an interactive login."
+        fi
+      fi
+      echo "Zellij Web user service enabled."
+      ;;
+  esac
+}
+
+register_macos_agent() {
+  if ! command -v launchctl >/dev/null 2>&1; then
+    echo "launchctl not found; skipping Zellij Web LaunchAgent registration."
+    return 0
+  fi
+
+  label="com.kurone-kito.zellij-web"
+  plist="$HOME/Library/LaunchAgents/$label.plist"
+  domain="gui/$(id -u)"
+
+  case "$macos_autostart" in
+    disabled)
+      launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
+      echo "Zellij Web LaunchAgent disabled."
+      ;;
+    launchagent)
+      if [ ! -f "$plist" ]; then
+        echo "LaunchAgent not found: $plist" >&2
+        return 1
+      fi
+      launchctl bootout "$domain" "$plist" >/dev/null 2>&1 || true
+      launchctl bootstrap "$domain" "$plist"
+      echo "Zellij Web LaunchAgent loaded."
+      ;;
+    *)
+      echo "Unsupported zellij.web.macos.autostart mode: $macos_autostart" >&2
+      return 1
+      ;;
+  esac
+}
+
+case "$(uname -s)" in
+  Linux)
+    register_linux_service
+    ;;
+  Darwin)
+    register_macos_agent
+    ;;
+  *)
+    echo "Zellij Web startup registration is not managed on this platform."
+    ;;
+esac

@@ -1,0 +1,128 @@
+# chezmoi:template:left-delimiter=<% right-delimiter=%>
+<%- if eq .chezmoi.os "windows" %>
+#!/usr/bin/env pwsh
+# Register a per-user Scheduled Task for Zellij Web.
+# Re-runs when the wrapper or autostart mode changes.
+#
+# wrapper hash: <% include "dot_local/bin/executable_ensure-zellij-web.ps1.tmpl" | sha256sum %>
+$ErrorActionPreference = 'Stop'
+
+$script:DotfilesZellijWebWindowsAutostartMode = '<% dig "zellij" "web" "windows" "autostart" "disabled" . %>'
+
+function Get-DotfilesZellijWebTaskName {
+  return 'dotfiles-zellij-web'
+}
+
+function Get-DotfilesZellijWebCurrentUser {
+  return [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+}
+
+function Get-DotfilesPreferredPowerShell {
+  $command = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Path
+  }
+
+  $command = Get-Command powershell -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Path
+  }
+
+  throw 'No PowerShell executable was found for Scheduled Task registration.'
+}
+
+function Get-DotfilesZellijWebWrapperPath {
+  return Join-Path (Join-Path (Join-Path $HOME '.local') 'bin') 'ensure-zellij-web.ps1'
+}
+
+function Get-DotfilesZellijWebTaskDescription {
+  return 'Ensure Zellij Web is running for the current user after logon.'
+}
+
+function Invoke-DotfilesZellijWebTaskRegistration {
+  param(
+    [Parameter(Mandatory)]
+    [object] $Action,
+
+    [Parameter(Mandatory)]
+    [object] $Trigger,
+
+    [Parameter(Mandatory)]
+    [object] $Principal
+  )
+
+  Register-ScheduledTask `
+    -TaskName (Get-DotfilesZellijWebTaskName) `
+    -Action $Action `
+    -Trigger $Trigger `
+    -Principal $Principal `
+    -Description (Get-DotfilesZellijWebTaskDescription) `
+    -Force | Out-Null
+}
+
+function Register-DotfilesZellijWebTask {
+  $wrapperPath = Get-DotfilesZellijWebWrapperPath
+  if (-not (Test-Path -LiteralPath $wrapperPath -PathType Leaf)) {
+    throw "Zellij Web wrapper not found: $wrapperPath"
+  }
+
+  $currentUser = Get-DotfilesZellijWebCurrentUser
+  $powerShell = Get-DotfilesPreferredPowerShell
+  $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$wrapperPath`""
+
+  $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+  $principal = New-ScheduledTaskPrincipal `
+    -UserId $currentUser `
+    -LogonType Interactive `
+    -RunLevel Limited
+
+  Invoke-DotfilesZellijWebTaskRegistration `
+    -Action $action `
+    -Trigger $trigger `
+    -Principal $principal
+
+  Write-Host 'Zellij Web logon task registered.'
+}
+
+function Unregister-DotfilesZellijWebTaskIfPresent {
+  $taskName = Get-DotfilesZellijWebTaskName
+
+  try {
+    Get-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null
+  } catch [System.Exception] {
+    Write-Host 'Zellij Web logon task already absent.'
+    return $false
+  }
+
+  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+  Write-Host 'Zellij Web logon task removed.'
+  return $true
+}
+
+function Set-DotfilesZellijWebTaskAutostart {
+  param(
+    [Parameter(Mandatory)]
+    [string] $AutostartMode
+  )
+
+  switch ($AutostartMode) {
+    'disabled' {
+      Unregister-DotfilesZellijWebTaskIfPresent | Out-Null
+      return
+    }
+    'onlogon' {
+      Register-DotfilesZellijWebTask
+      return
+    }
+    default {
+      throw "Unsupported zellij.web.windows.autostart mode: $AutostartMode"
+    }
+  }
+}
+
+if ($env:DOTFILES_TEST_ZELLIJ_WEB_SKIP_REGISTER -ne '1') {
+  Set-DotfilesZellijWebTaskAutostart `
+    -AutostartMode $script:DotfilesZellijWebWindowsAutostartMode
+}
+<% end -%>

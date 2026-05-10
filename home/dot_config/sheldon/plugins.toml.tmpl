@@ -1,0 +1,18 @@
+{{ if ne .chezmoi.os "windows" -}}
+# Sheldon plugin manager configuration
+# https://sheldon.cli.rs/
+
+shell = "zsh"
+
+[plugins.zsh-completions]
+github = "zsh-users/zsh-completions"
+
+[plugins.zsh-autosuggestions]
+github = "zsh-users/zsh-autosuggestions"
+
+[plugins.fast-syntax-highlighting]
+github = "zdharma-continuum/fast-syntax-highlighting"
+
+[plugins.zsh-history-substring-search]
+github = "zsh-users/zsh-history-substring-search"
+{{ end -}}

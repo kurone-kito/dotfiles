@@ -1,0 +1,29 @@
+# -*- mode: sh -*-
+# vim: set ft=sh :
+
+# Add a `.html` extension to `text/html` or `application/xhtml+xml` files that lack one, or a `.css` extension to `text/css` files that lack one
+adjust_extension = on
+
+# Force continuation of preexistent partially retrieved files, like `--c`.
+continue = on
+
+# Follow FTP links from HTML documents by default
+follow_ftp = on
+
+# Use UTF-8 as the default system encoding, like `--local-encoding`.
+local_encoding = UTF-8
+
+# Do not go up in the directory structure when downloading recursively
+no_parent = on
+
+# Retry even when the connection was refused
+retry_connrefused = on
+
+# Do not download `/robots.txt` and ignore `<meta name="robots"> tags`.
+robots = off
+
+# Use the server-provided last modification date, if available
+timestamping = on
+
+# Use the last component of a redirection URL for the local file name
+trust_server_names = on

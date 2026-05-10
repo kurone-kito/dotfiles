@@ -1,0 +1,292 @@
+{{- $gitName := promptStringOnce . "git.name" "Git user name" -}}
+{{- $gitEmail := promptStringOnce . "git.email" "Git email address" -}}
+{{- $gitSigningKey := promptStringOnce . "git.signingkey" "GPG signing key fingerprint (leave empty to disable signing)" -}}
+{{- $secretManager := promptStringOnce . "secret.manager" "Secret manager (bitwarden, onepassword, keepassxc, local, none)" -}}
+
+[data.git]
+name = {{ $gitName | quote }}
+email = {{ $gitEmail | quote }}
+signingkey = {{ $gitSigningKey | quote }}
+{{- if (dig "git" "signing_format" "" .) }}
+signing_format = {{ dig "git" "signing_format" "" . | quote }}
+{{- end }}
+{{- range $key, $profile := (dig "git" "profiles" dict .) }}
+
+[data.git.profiles."{{ $key }}"]
+name = {{ $profile.name | quote }}
+email = {{ $profile.email | quote }}
+signingkey = {{ dig "signingkey" "" $profile | quote }}
+gitdir = {{ $profile.gitdir | quote }}
+{{- if (dig "signing_format" "" $profile) }}
+signing_format = {{ dig "signing_format" "" $profile | quote }}
+{{- end }}
+{{- if (dig "sshhost" "" $profile) }}
+sshhost = {{ dig "sshhost" "" $profile | quote }}
+{{- end }}
+{{- end }}
+
+[data.secret]
+manager = {{ $secretManager | quote }}
+{{- if (dig "secret" "local_dir" "" .) }}
+local_dir = {{ dig "secret" "local_dir" "" . | quote }}
+{{- end }}
+{{- range $key, $gpg := (dig "secret" "gpg" dict .) }}
+
+[data.secret.gpg."{{ $key }}"]
+item = {{ $gpg.item | quote }}
+{{- end }}
+{{- range $key, $sshKey := (dig "secret" "ssh" "keys" dict .) }}
+
+[data.secret.ssh.keys."{{ $key }}"]
+item = {{ $sshKey.item | quote }}
+filename = {{ $sshKey.filename | quote }}
+{{- if (dig "signing_fallback" false $sshKey) }}
+signing_fallback = {{ dig "signing_fallback" false $sshKey }}
+{{- end }}
+{{- with (dig "signing_profiles" (list) $sshKey) }}
+signing_profiles = [
+  {{- range $idx, $name := . -}}
+    {{- if $idx }}, {{ end -}}{{ $name | quote }}
+  {{- end -}}
+]
+{{- end }}
+{{- end }}
+{{- range $key, $host := (dig "secret" "ssh" "hosts" dict .) }}
+
+[data.secret.ssh.hosts."{{ $key }}"]
+hostname = {{ $host.hostname | quote }}
+user = {{ dig "user" "git" $host | quote }}
+identity = {{ $host.identity | quote }}
+{{- if (dig "port" 0 $host) }}
+port = {{ dig "port" 0 $host }}
+{{- end }}
+{{- end }}
+{{- range $key, $file := (dig "secret" "files" dict .) }}
+
+[data.secret.files."{{ $key }}"]
+item = {{ $file.item | quote }}
+target = {{ $file.target | quote }}
+{{- if (dig "attachment" "" $file) }}
+attachment = {{ dig "attachment" "" $file | quote }}
+{{- end }}
+{{- end }}
+{{- range $key, $clone := (dig "ghq" "clone" dict .) }}
+
+[data.ghq.clone."{{ $key }}"]
+owner = {{ $clone.owner | quote }}
+token_item = {{ $clone.token_item | quote }}
+{{- if (dig "hostname" "" $clone) }}
+hostname = {{ dig "hostname" "" $clone | quote }}
+{{- end }}
+{{- if ne (dig "ssh" true $clone) true }}
+ssh = {{ dig "ssh" true $clone }}
+{{- end }}
+{{- if (dig "mise_trust" false $clone) }}
+mise_trust = {{ dig "mise_trust" false $clone }}
+{{- end }}
+{{- end }}
+{{- $sshServer := dig "ssh" "server" dict . }}
+{{- if $sshServer }}
+
+[data.ssh.server]
+{{- if ne (dig "clientAliveInterval" 300 $sshServer) 300 }}
+clientAliveInterval = {{ dig "clientAliveInterval" 300 $sshServer }}
+{{- end }}
+{{- if ne (dig "clientAliveCountMax" 5 $sshServer) 5 }}
+clientAliveCountMax = {{ dig "clientAliveCountMax" 5 $sshServer }}
+{{- end }}
+{{- end }}
+{{- range $key, $entry := (dig "env" "deploy" dict .) }}
+
+[data.env.deploy."{{ $key }}"]
+repo = {{ $entry.repo | quote }}
+item = {{ $entry.item | quote }}
+{{- if (dig "filename" "" $entry) }}
+filename = {{ dig "filename" "" $entry | quote }}
+{{- end }}
+{{- if (dig "subpath" "" $entry) }}
+subpath = {{ dig "subpath" "" $entry | quote }}
+{{- end }}
+{{- if (dig "attachment" "" $entry) }}
+attachment = {{ dig "attachment" "" $entry | quote }}
+{{- end }}
+{{- end }}
+
+# To add a directory-specific profile, append the following to
+# ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
+#
+#   [data.git.profiles.<label>]     # <label> is any user-chosen name
+#   name       = "Display Name"
+#   email      = "user@example.com"
+#   signingkey = ""         # leave empty to disable signing for this profile
+#   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
+#   sshhost    = ""         # optional SSH host alias for url.insteadOf
+#   # signing_format = "ssh"  # optional; "gpg" (default when signingkey is a
+#   #                         # GPG fingerprint) or "ssh" (required when both
+#   #                         # GPG signingkey and signing_profiles target
+#   #                         # this profile, to break the tie)
+#
+# To configure secret manager integration, see docs/secret-manager-setup.md
+#
+# Section keys (e.g., "personal", "work") are user-defined labels.
+# Use consistent labels across gpg, ssh.keys, and ssh.hosts for
+# traceability. You may add as many entries as needed.
+#
+# Example Bitwarden GPG key:
+#
+#   [data.secret.gpg.<label>]       # <label> matches a signingkey identity
+#   item = "GPG Key - Personal"
+#
+# Example SSH key (Bitwarden SSH Key item type):
+#
+#   [data.secret.ssh.keys.<label>]
+#   item     = "SSH Key - Personal"
+#   filename = "id_ed25519_personal" # target file under ~/.ssh/
+#
+#   # Optional: register this key as a fallback signing key. GPG
+#   # remains the primary signing backend; the flag adds git aliases
+#   # (commit-ssh, tag-ssh, rebase-ssh) that wrap commands with
+#   # `-c gpg.format=ssh -c user.signingkey=<absolute>/.ssh/<file>.pub`
+#   # so non-interactive callers (CI, AI agents, gpg-agent timeout)
+#   # can sign with SSH on demand. Default is OFF.
+#   signing_fallback = false           # global commit-ssh alias
+#   signing_profiles = []              # per-profile commit-ssh alias
+#   # signing_profiles = ["work", "oss"] # register fallback aliases
+#   #                                    # in multiple profile scopes
+#
+#   # Set `git.signing_format = "ssh"` to make SSH the *primary*
+#   # signing backend instead of a fallback (requires
+#   # signing_fallback = true). See `docs/secret-manager-setup.md`
+#   # for details.
+#
+# Example SSH host:
+#
+#   [data.secret.ssh.hosts.<service>-<label>]
+#   hostname = "github.com"
+#   user     = "git"
+#   identity = "id_ed25519_personal" # must match a filename above
+#   port     = 2222                  # optional; omit for default (22)
+#
+# To override the default connection for a domain (e.g., github.com),
+# quote the key to prevent TOML from splitting on the dot:
+#
+#   [data.secret.ssh.hosts."github.com"]
+#   hostname = "github.com"
+#   user     = "git"
+#   identity = "id_ed25519_personal"
+#
+# To bulk-clone repositories for a GitHub user/org, add:
+#
+#   [data.ghq.clone.<label>]
+#   owner      = "your-github-username"
+#   token_item = "GitHub PAT"  # secret manager item (repo scope)
+#   hostname   = "github.com"  # optional; defaults to github.com
+#   ssh        = true          # optional; false to use HTTPS instead of SSH
+#   mise_trust = false         # optional; true to auto-trust mise configs
+#
+# See docs/ghq-workflow.md for details.
+#
+# To customize sshd_config hardening defaults, add:
+#
+#   [data.ssh.server]
+#   clientAliveInterval = 300  # seconds between keepalive probes (default: 300)
+#   clientAliveCountMax = 5    # missed probes before disconnect (default: 5)
+#
+# The generated file is at ~/.config/ssh/sshd_config.
+# See docs/sshd-config-setup.md for deployment instructions.
+#
+# To deploy .env files from the secret manager into cloned projects:
+#
+#   [data.env.deploy.<label>]        # <label> is any unique name
+#   repo       = "github.com/you/project"  # ghq-style repo path
+#   item       = "Project .env"      # secret manager item with .env attached
+#   filename   = ".env"              # optional; defaults to ".env"
+#   subpath    = ""                  # optional subdirectory within the repo
+#   attachment = ""                  # optional; attachment name override
+#
+# Store the .env content as an attachment on the secret manager item.
+# The script deploys with mode 600 and warns if .gitignore is missing
+# the target filename. Multiple entries for the same repo are supported.
+#
+# To deploy user-global secret files (e.g., ~/.aws/credentials):
+#
+#   [data.secret.files.<label>]      # <label> is any unique name
+#   item       = "AWS Credentials"   # secret manager item name
+#   target     = ".aws/credentials"  # home-relative path (forward slashes)
+#   attachment = "credentials"       # optional; defaults to target basename
+#
+# Store the file content as an attachment on the secret manager item.
+# The script deploys with mode 600 / user-only ACL. Target paths must
+# be relative, forward-slash-separated, and must not contain "..".
+# See docs/secret-manager-setup.md for details.
+#
+# Zellij Web configuration (optional):
+#
+#   [data.zellij]
+#   simplified_ui = false             # true replaces Nerd Font glyphs with ASCII
+#
+#   [data.zellij.web]
+#   server = true
+#   sharing = "on"
+#   bind = "127.0.0.1"
+#   port = 8082
+#   base_url = ""                    # optional reverse-proxy subpath
+#   enforce_https_on_localhost = false
+#   client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"
+#   client_cursor_blink = true
+#   client_cursor_style = "bar"      # "block", "bar", or "underline"
+#   client_cursor_inactive_style = "outline"  # "outline", "block", "bar", "underline"
+#
+#   [data.zellij.web.tailscale]
+#   enabled = true                   # optional; publish through tailscale serve
+#   https_port = 443                 # optional tailnet HTTPS port
+#
+#   [data.zellij.web.windows]
+#   autostart = "onlogon"            # or "disabled" (default)
+#   [data.zellij.web.linux]
+#   autostart = "systemd-user"       # or "disabled" (default)
+#   [data.zellij.web.macos]
+#   autostart = "launchagent"        # or "disabled" (default)
+#
+# When tailscale publication is enabled, keep bind on 127.0.0.1 and let the
+# wrapper reconcile `tailscale serve` against the local Zellij listener.
+#
+# If you intentionally bind beyond localhost instead, configure:
+#
+#   cert = ""                        # required off localhost
+#   key = ""                         # required off localhost
+#
+# On Windows, the autostart task calls ~/.local/bin/ensure-zellij-web.ps1.
+# If Tailscale publication is enabled, the same wrapper also ensures
+# `tailscale serve` points at the local Zellij listener.
+#
+# The wrapper can also be invoked manually over OpenSSH after a reboot:
+#
+#   pwsh ~/.local/bin/ensure-zellij-web.ps1
+#
+# On Ubuntu native, `systemd-user` expects real systemd access. For boot-time
+# persistence outside an interactive login, enable linger once:
+#
+#   sudo loginctl enable-linger "$USER"
+#
+# Local file storage (manager = "local"):
+#
+# Instead of an external secret manager, secrets can be read from a
+# local directory. Set manager = "local" and optionally configure
+# local_dir (defaults to ~/.config/chezmoi/secrets):
+#
+#   [data.secret]
+#   manager   = "local"
+#   local_dir = "~/.config/chezmoi/secrets"  # optional
+#
+# Organize files as: <local_dir>/<item>/<param>
+# The "item" field becomes a subdirectory name, and the template
+# parameter (field, filename, or key type) becomes the filename:
+#
+#   <local_dir>/gpg-personal/private.asc   # GPG key attachment
+#   <local_dir>/ssh-work/private           # SSH private key
+#   <local_dir>/ssh-work/public            # SSH public key
+#   <local_dir>/github-pat/password        # PAT for ghq clone
+#   <local_dir>/myapp-env/.env             # .env file attachment
+#
+# See docs/secret-manager-setup.md for details.

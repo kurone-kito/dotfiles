@@ -1,0 +1,64 @@
+#!/bin/bash
+# chezmoi run_once_before script: Deploy SSH key pairs from secret manager.
+# Skipped when secret.manager is "none" or no SSH keys are configured.
+set -euo pipefail
+
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
+{{ $manager := dig "secret" "manager" "none" . -}}
+{{ if eq $manager "none" -}}
+echo "Secret manager not configured; skipping SSH key deployment."
+exit 0
+{{ end -}}
+
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ if not $sshKeys -}}
+echo "No SSH keys configured; skipping."
+exit 0
+{{ end -}}
+
+ssh_dir="${HOME}/.ssh"
+mkdir -p "${ssh_dir}"
+chmod 700 "${ssh_dir}"
+
+deploy_state="${HOME}/.local/bin/secret-deploy-state"
+record_state() {
+  # best-effort: never fail the deploy on a state-recording error.
+  # stdin is closed so the helper (and any descendant it may spawn)
+  # cannot consume bytes from chezmoi's controlling TTY, which would
+  # later starve chezmoi's "<file> has changed since chezmoi last
+  # wrote it" overwrite prompt.
+  [ -x "${deploy_state}" ] || return 0
+  "${deploy_state}" record "$1" "$2" "$3" </dev/null || true
+}
+
+{{ range $key, $sshKey := $sshKeys -}}
+echo "Deploying SSH key: {{ $key }} ({{ $sshKey.filename }})..."
+private_key="${ssh_dir}/{{ $sshKey.filename }}"
+public_key="${ssh_dir}/{{ $sshKey.filename }}.pub"
+
+if [ ! -f "${private_key}" ]; then
+  (umask 077 && cat > "${private_key}" << 'SSH_PRIVATE_KEY_EOF'
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
+SSH_PRIVATE_KEY_EOF
+  )
+  echo "  Private key written."
+  record_state sshKey "{{ $key }}" "${private_key}"
+else
+  echo "  Private key already exists; skipping."
+fi
+
+if [ ! -f "${public_key}" ]; then
+  cat > "${public_key}" << 'SSH_PUBLIC_KEY_EOF'
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "public" "ctx" $ }}
+SSH_PUBLIC_KEY_EOF
+  chmod 644 "${public_key}"
+  echo "  Public key written."
+  record_state sshKey "{{ $key }}.pub" "${public_key}"
+else
+  echo "  Public key already exists; skipping."
+fi
+{{ end -}}
+
+echo "SSH key deployment complete."

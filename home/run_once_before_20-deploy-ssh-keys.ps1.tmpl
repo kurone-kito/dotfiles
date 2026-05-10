@@ -1,0 +1,59 @@
+#!/usr/bin/env pwsh
+# chezmoi run_once_before script: Deploy SSH key pairs from secret manager.
+# Skipped when secret.manager is "none" or no SSH keys are configured.
+$ErrorActionPreference = 'Stop'
+
+{{ $manager := dig "secret" "manager" "none" . -}}
+{{ if eq $manager "none" -}}
+Write-Host 'Secret manager not configured; skipping SSH key deployment.'
+exit 0
+{{ end -}}
+
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ if not $sshKeys -}}
+Write-Host 'No SSH keys configured; skipping.'
+exit 0
+{{ end -}}
+
+$sshDir = Join-Path $HOME '.ssh'
+New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+
+$deployState = Join-Path $HOME '.local/bin/secret-deploy-state.ps1'
+function Record-State {
+  param([string]$Category, [string]$Name, [string]$Path)
+  if (-not (Test-Path $deployState)) { return }
+  try { & $deployState record $Category $Name $Path | Out-Null } catch { }
+}
+
+{{ range $key, $sshKey := $sshKeys -}}
+Write-Host 'Deploying SSH key: {{ $key }} ({{ $sshKey.filename }})...'
+$privateKey = Join-Path $sshDir '{{ $sshKey.filename }}'
+$publicKey = Join-Path $sshDir '{{ $sshKey.filename }}.pub'
+
+if (-not (Test-Path $privateKey)) {
+  @'
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
+'@ | Set-Content -Path $privateKey -Encoding utf8NoBOM -NoNewline
+  # Restrict to current user only (icacls works without elevation)
+  icacls $privateKey /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "Failed to restrict permissions on ${privateKey} (icacls exit code: $LASTEXITCODE)"
+  }
+  Write-Host '  Private key written.'
+  Record-State -Category 'sshKey' -Name '{{ $key }}' -Path $privateKey
+} else {
+  Write-Host '  Private key already exists; skipping.'
+}
+
+if (-not (Test-Path $publicKey)) {
+  @'
+{{ template "get-ssh-key" dict "item" $sshKey.item "type" "public" "ctx" $ }}
+'@ | Set-Content -Path $publicKey -Encoding utf8NoBOM -NoNewline
+  Write-Host '  Public key written.'
+  Record-State -Category 'sshKey' -Name '{{ $key }}.pub' -Path $publicKey
+} else {
+  Write-Host '  Public key already exists; skipping.'
+}
+{{ end -}}
+
+Write-Host 'SSH key deployment complete.'

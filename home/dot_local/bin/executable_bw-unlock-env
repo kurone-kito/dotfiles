@@ -1,0 +1,54 @@
+#!/bin/bash
+# Unlock Bitwarden and print shell commands that export BW_SESSION and
+# repair the current terminal state in the caller's shell.
+#
+# This is more reliable than wrapping a target command directly when
+# `bw unlock --raw` leaves the controlling TTY in a broken state and the
+# repair must run in the interactive parent shell before `chezmoi apply`
+# starts. On affected terminals, still run `chezmoi apply` as a separate
+# next-prompt command rather than chaining it on the same line.
+#
+# Usage:
+#   eval "$(bw-unlock-env [--sync])"
+#
+# Options:
+#   --sync      Run `bw sync` before unlocking
+#   -h, --help  Show this help
+set -euo pipefail
+
+usage() {
+  sed -n '2,/^[^#]/{ /^#/s/^# \?//p; }' "$0"
+}
+
+shell_quote() {
+  local value="$1"
+  value=${value//\'/\'\\\'\'}
+  printf "'%s'" "$value"
+}
+
+SYNC=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sync)    SYNC=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; break ;;
+    -*)        echo "Error: unknown option '$1'." >&2; usage >&2; exit 1 ;;
+    *)         echo "Error: unexpected argument '$1'." >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+command -v bw >/dev/null 2>&1 || {
+  echo "Error: bw not found in PATH." >&2
+  exit 1
+}
+
+if ${SYNC}; then
+  bw sync >/dev/null
+fi
+
+BW_SESSION="$(bw unlock --raw)"
+
+printf 'export BW_SESSION=%s\n' "$(shell_quote "$BW_SESSION")"
+printf 'stty sane\n'
+printf '%s\n' "if tty -s >/dev/null 2>&1; then printf '\\033[0m\\033[?25h\\r\\n' > /dev/tty 2>/dev/null || true; fi"

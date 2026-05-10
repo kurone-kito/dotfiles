@@ -1,0 +1,62 @@
+# chezmoi run_onchange_after script: Deploy .env files from the secret
+# manager into project directories. Re-runs when env deploy config or
+# secret content changes. Skipped when no targets are configured.
+
+{{ $deploys := dig "env" "deploy" dict . -}}
+{{ if not $deploys -}}
+Write-Host "No env deploy targets configured; skipping."
+exit 0
+{{ end -}}
+
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host "mise not found; skipping."
+  exit 0
+}
+$ghq = (& mise which ghq 2>$null)
+if (-not $ghq) {
+  Write-Host "ghq not found via mise; skipping."
+  exit 0
+}
+$ghqRoot = (& $ghq root).Trim()
+
+$deployState = Join-Path $HOME '.local/bin/secret-deploy-state.ps1'
+function Record-State {
+  param([string]$Category, [string]$Name, [string]$Path)
+  if (-not (Test-Path $deployState)) { return }
+  try { & $deployState record $Category $Name $Path | Out-Null } catch { }
+}
+
+{{ range $key, $entry := $deploys -}}
+{{ $filename := dig "filename" ".env" $entry -}}
+{{ $subpath := dig "subpath" "" $entry -}}
+{{ $attachment := dig "attachment" $filename $entry -}}
+Write-Host "==> {{ $key }}: {{ $entry.repo }}/{{ $subpath }}{{ $filename }}"
+
+$targetDir = Join-Path $ghqRoot '{{ $entry.repo }}{{ if $subpath }}/{{ $subpath }}{{ end }}'
+$targetPath = Join-Path $targetDir '{{ $filename }}'
+
+if (-not (Test-Path $targetDir)) {
+  Write-Host "  skip: directory not found"
+} else {
+  # Warn if .gitignore does not list the target filename
+  $gitignore = Join-Path $ghqRoot '{{ $entry.repo }}/.gitignore'
+  if (Test-Path $gitignore) {
+    if (-not (Select-String -Path $gitignore -Pattern '{{ $filename }}' -SimpleMatch -Quiet)) {
+      Write-Host "  warn: {{ $filename }} not found in .gitignore"
+    }
+  } else {
+    Write-Host "  warn: .gitignore not found in {{ $entry.repo }}"
+  }
+
+  @'
+{{ template "get-secret-attachment" dict "item" $entry.item "filename" $attachment "ctx" $ -}}
+'@ | Set-Content -Path $targetPath -NoNewline -Encoding UTF8
+
+  # Restrict to current user only (no admin elevation required)
+  & icacls $targetPath /inheritance:r /grant:r "${env:USERNAME}:(R,W)" 2>&1 | Out-Null
+  Write-Host "  done: deployed (user-only access)"
+  Record-State -Category 'envFile' -Name '{{ $key }}' -Path $targetPath
+}
+
+{{ end -}}
+Write-Host "env deploy complete."

@@ -1,0 +1,66 @@
+#!/usr/bin/env pwsh
+# chezmoi run_onchange_after script: Clone repositories via ghq for
+# configured GitHub accounts. Re-runs when ghq clone config changes.
+# Skipped when no clone targets are configured or tools are missing.
+$ErrorActionPreference = 'Stop'
+
+{{ $clones := dig "ghq" "clone" dict . -}}
+{{ if not $clones -}}
+Write-Host 'No ghq clone targets configured; skipping.'
+exit 0
+{{ end -}}
+
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping.'
+  exit 0
+}
+$ghqBin = mise which ghq 2>$null
+if (-not $ghqBin) { Write-Host 'ghq not found via mise; skipping.'; exit 0 }
+$ghBin = mise which gh 2>$null
+if (-not $ghBin) { Write-Host 'gh not found via mise; skipping.'; exit 0 }
+# Activate mise environment so git subprocesses can find
+# mise-managed tools (e.g., git-vrc filter for VRChat repos).
+# Windows uses shims mode; non-Windows uses mise env.
+if ($IsWindows -ne $false) {
+  if ($env:LOCALAPPDATA) {
+    $__shimsDir = Join-Path $env:LOCALAPPDATA 'mise\shims'
+    $__pathEntries = $env:PATH -split [regex]::Escape([IO.Path]::PathSeparator)
+    if ((Test-Path $__shimsDir) -and ($__pathEntries -notcontains $__shimsDir)) {
+      $env:PATH = "$__shimsDir$([IO.Path]::PathSeparator)$env:PATH"
+    }
+    Remove-Variable __shimsDir, __pathEntries -ErrorAction SilentlyContinue
+  }
+} else {
+  (& mise env -s pwsh 2>$null) | Out-String | Invoke-Expression
+}
+
+$cloneScript = Join-Path $HOME (Join-Path '.local' (Join-Path 'bin' 'ghq-clone-user.ps1'))
+if (-not (Test-Path $cloneScript)) {
+  Write-Host 'ghq-clone-user.ps1 not found; skipping.'
+  exit 0
+}
+
+{{ range $key, $clone := $clones -}}
+{{ $hostname := dig "hostname" "github.com" $clone -}}
+Write-Host '==> {{ $clone.owner }}@{{ $hostname }}'
+$token = '{{ template "get-secret" dict "item" $clone.token_item "field" "password" "ctx" $ }}'
+if ([string]::IsNullOrEmpty($token)) {
+  Write-Host '  skip: no token available for {{ $key }}'
+} else {
+  $ghUnixPath = $ghBin -replace '\\', '/'
+  $env:GH_TOKEN = $token
+  $env:GH_HOST = '{{ $hostname }}'
+  $env:GIT_CONFIG_COUNT = '1'
+  $env:GIT_CONFIG_KEY_0 = "credential.https://{{ $hostname }}.helper"
+  $env:GIT_CONFIG_VALUE_0 = "!$ghUnixPath auth git-credential"
+  try {
+    & $cloneScript -Owner '{{ $clone.owner }}' {{ if not (dig "ssh" true $clone) }}-Https {{ end }}-Hostname '{{ $hostname }}'
+  } finally {
+    foreach ($v in @('GH_TOKEN', 'GH_HOST', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0')) {
+      Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+{{ end -}}
+Write-Host 'ghq clone complete.'

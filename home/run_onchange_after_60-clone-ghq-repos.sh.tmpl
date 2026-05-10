@@ -1,0 +1,44 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Clone repositories via ghq for
+# configured GitHub accounts. Re-runs when ghq clone config changes.
+# Skipped when no clone targets are configured or tools are missing.
+set -euo pipefail
+
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
+{{ $clones := dig "ghq" "clone" dict . -}}
+{{ if not $clones -}}
+echo "No ghq clone targets configured; skipping."
+exit 0
+{{ end -}}
+
+command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
+GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
+GH="$(mise which gh 2>/dev/null)" || { echo "gh not found via mise; skipping."; exit 0; }
+# Activate mise environment so git subprocesses can find
+# mise-managed tools (e.g., git-vrc filter for VRChat repos)
+eval "$(mise env -s bash 2>/dev/null)" || true
+
+CLONE_SCRIPT="${HOME}/.local/bin/ghq-clone-user"
+[ -x "${CLONE_SCRIPT}" ] || { echo "ghq-clone-user not found; skipping."; exit 0; }
+trap 'unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0' EXIT
+
+{{ range $key, $clone := $clones -}}
+{{ $hostname := dig "hostname" "github.com" $clone -}}
+echo "==> {{ $clone.owner }}@{{ $hostname }}"
+TOKEN='{{ template "get-secret" dict "item" $clone.token_item "field" "password" "ctx" $ }}'
+if [ -z "${TOKEN}" ]; then
+  echo "  skip: no token available for {{ $key }}"
+else
+  export GH_TOKEN="${TOKEN}"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0="credential.https://{{ $hostname }}.helper"
+  export GIT_CONFIG_VALUE_0="!${GH} auth git-credential"
+  export GH_HOST="{{ $hostname }}"
+  "${CLONE_SCRIPT}" '{{ $clone.owner }}' {{ if not (dig "ssh" true $clone) }}--https {{ end }}--hostname '{{ $hostname }}'
+  unset GH_TOKEN GH_HOST GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+fi
+
+{{ end -}}
+echo "ghq clone complete."

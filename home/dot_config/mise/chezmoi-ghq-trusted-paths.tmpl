@@ -1,0 +1,5 @@
+{{- range $key, $clone := (dig "ghq" "clone" dict .) -}}
+{{- if (dig "mise_trust" false $clone) }}
+{{ dig "hostname" "github.com" $clone }}/{{ $clone.owner }}
+{{- end -}}
+{{- end }}

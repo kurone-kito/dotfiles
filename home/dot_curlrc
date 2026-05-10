@@ -1,0 +1,17 @@
+# -*- mode: sh -*-
+# vim: set ft=sh :
+
+# Follow HTTP redirects
+location
+
+# Display progress as a simple progress bar
+progress-bar
+
+# Set the default referer to the URL of the previous request, if any. This is useful when you want to maintain a session across multiple requests.
+referer = ";auto"
+
+# Use the server-provided timestamp, if any.
+remote-time
+
+# Consider connections refused as transient errors.
+retry-connrefused

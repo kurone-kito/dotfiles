@@ -1,0 +1,23 @@
+{{- /* read-local-file: Read a file from the local secrets directory.
+     Usage: {{ template "read-local-file" dict "item" "dir-name" "filename" "file" "ctx" . }}
+     - item:     Subdirectory name within local_dir
+     - filename: File to read within the item subdirectory
+     - ctx:      The top-level chezmoi template data (pass . from caller)
+
+     Resolves data.secret.local_dir (default: ~/.config/chezmoi/secrets).
+     Supports tilde expansion in the configured path.
+     Uses cat on Unix, PowerShell Get-Content on Windows. */ -}}
+{{- $localDir := dig "secret" "local_dir" "" .ctx -}}
+{{- if not $localDir -}}
+{{-   $localDir = joinPath .ctx.chezmoi.homeDir ".config" "chezmoi" "secrets" -}}
+{{- else if hasPrefix "~/" $localDir -}}
+{{-   $localDir = joinPath .ctx.chezmoi.homeDir (trimPrefix "~/" $localDir) -}}
+{{- else if eq $localDir "~" -}}
+{{-   $localDir = .ctx.chezmoi.homeDir -}}
+{{- end -}}
+{{- $path := joinPath $localDir .item .filename -}}
+{{- if eq .ctx.chezmoi.os "windows" -}}
+{{-   output "powershell.exe" "-NoProfile" "-Command" (printf "Get-Content -Raw -LiteralPath '%s'" ($path | replace "'" "''")) -}}
+{{- else -}}
+{{-   output "cat" $path -}}
+{{- end -}}

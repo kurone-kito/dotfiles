@@ -1,0 +1,20 @@
+#!/usr/bin/env pwsh
+# chezmoi run_onchange_after script: Install tools declared in mise config.
+# Re-runs when mise config changes. Skipped if mise is not installed.
+# mise config hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
+$ErrorActionPreference = 'Stop'
+
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping.'
+  exit 0
+}
+
+Write-Host 'Installing mise tools...'
+mise install --yes 2>&1
+
+# Regenerate shims so newly installed tools are available in shims mode.
+# Windows uses shims mode to stay under cmd.exe's 8,191-char PATH limit.
+Write-Host 'Regenerating mise shims...'
+mise reshim 2>&1
+
+Write-Host 'mise tool installation complete.'

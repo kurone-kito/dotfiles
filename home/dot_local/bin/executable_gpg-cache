@@ -1,0 +1,70 @@
+#!/bin/sh
+# Prime the gpg-agent cache for the current session with a throwaway signature.
+# Discovers all signing keys from git config and profile configs, then signs
+# with each via --local-user so every key's passphrase is cached.
+set -eu
+
+update_gpg_session() {
+  if gpg_tty="$(tty 2>/dev/null)"; then
+    GPG_TTY="$gpg_tty"
+    export GPG_TTY
+  fi
+
+  if command -v gpg-connect-agent >/dev/null 2>&1; then
+    gpg-connect-agent reloadagent /bye >/dev/null 2>&1 || true
+    gpg-connect-agent updatestartuptty /bye >/dev/null 2>&1 || true
+  fi
+
+  unset gpg_tty
+}
+
+get_signing_keys() {
+  # 1. Default git signing key
+  if command -v git >/dev/null 2>&1; then
+    git config user.signingkey 2>/dev/null || true
+  fi
+
+  # 2. Per-directory profile signing keys
+  profile_dir="$HOME/.config/git/profiles"
+  if [ -d "$profile_dir" ]; then
+    for f in "$profile_dir"/*; do
+      [ -f "$f" ] || continue
+      sed -n 's/^[[:space:]]*signingkey[[:space:]]*=[[:space:]]*"\?\([A-Fa-f0-9]\{1,\}\)"\?/\1/p' "$f"
+    done
+  fi
+}
+
+if ! command -v gpg >/dev/null 2>&1; then
+  echo "gpg not found in PATH" >&2
+  exit 1
+fi
+
+update_gpg_session
+
+# Collect unique signing keys
+SIGNING_KEYS="$(get_signing_keys | sort -u)"
+
+if [ -z "$SIGNING_KEYS" ]; then
+  # No signing keys configured; fall back to default key
+  echo "Prompting GPG passphrase..."
+  if echo "gpg-cache" | gpg --clearsign --yes >/dev/null 2>&1; then
+    echo "Passphrase cached successfully (24h TTL)."
+  else
+    echo "GPG passphrase caching failed." >&2
+    exit 1
+  fi
+else
+  ALL_OK=true
+  for key in $SIGNING_KEYS; do
+    echo "Prompting GPG passphrase for key ${key}..."
+    if echo "gpg-cache" | gpg --local-user "$key" --clearsign --yes >/dev/null 2>&1; then
+      echo "  Passphrase cached successfully (24h TTL)."
+    else
+      echo "  GPG passphrase caching failed for key ${key}." >&2
+      ALL_OK=false
+    fi
+  done
+  if [ "$ALL_OK" = false ]; then
+    exit 1
+  fi
+fi

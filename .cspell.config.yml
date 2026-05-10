@@ -1,0 +1,49 @@
+allowCompoundWords: true
+dictionaries:
+  - cpp-compound-words
+  - dotnet
+  - en_US
+  - en-gb
+  - fullstack
+  - git
+  - markdown
+  - misc
+  - node
+  - redis
+  - shellscript
+  - softwareTerms
+  - vim
+enableGlobDot: true
+features:
+  weighted-suggestions: true
+globRoot: ${cwd}
+ignorePaths:
+  - .*ignore
+  - .git
+  - .github/CODE_OF_CONDUCT.*
+  - .vscode/extensions.json
+  - home/dot_config/git/ignore
+  - tests/bash/helpers
+ignoreRegExpList:
+  - 'github:[a-zA-Z0-9_-]+/'
+  - kuroné?
+language: en,ja
+useGitignore: true
+version: '0.2'
+words:
+  - curlrc
+  - exrc
+  - gdefault
+  - gpgconf
+  - inputrc
+  - keepassxc
+  - kito
+  - luks
+  - psmux
+  - rerere
+  - taskrc
+  - wgetrc
+  - viml
+  - xclip
+  - zcompdump
+  - zdharma

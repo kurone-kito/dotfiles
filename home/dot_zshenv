@@ -1,0 +1,4 @@
+# ~/.zshenv — Always loaded by zsh (before .zprofile / .zshrc)
+# Redirect all other zsh config to ~/.config/zsh to keep $HOME clean.
+
+export ZDOTDIR="${XDG_CONFIG_HOME:-$HOME/.config}/zsh"

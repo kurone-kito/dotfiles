@@ -1,0 +1,71 @@
+#!/bin/bash
+# Unlock Bitwarden, repair the terminal state, and exec a command with
+# BW_SESSION set. Useful when `bw unlock --raw` leaves the controlling
+# TTY in a broken state and the next interactive prompt stops accepting
+# input (observed with `chezmoi apply` overwrite prompts on WSL).
+# If the repair must happen in the interactive parent shell itself, use
+# `bw-unlock-env` and `eval "$(bw-unlock-env ...)"` instead.
+#
+# Usage:
+#   bw-unlock-exec [--sync] [--] <command> [args...]
+#
+# Options:
+#   --sync      Run `bw sync` before unlocking
+#   -h, --help  Show this help
+#
+# Environment:
+#   BW_UNLOCK_EXEC_TTY  Override the TTY path used for terminal reset
+set -euo pipefail
+
+usage() {
+  sed -n '2,/^[^#]/{ /^#/s/^# \?//p; }' "$0"
+}
+
+SYNC=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sync)    SYNC=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; break ;;
+    -*)        echo "Error: unknown option '$1'." >&2; usage >&2; exit 1 ;;
+    *)         break ;;
+  esac
+done
+
+if [ $# -eq 0 ]; then
+  echo "Error: <command> is required." >&2
+  usage >&2
+  exit 1
+fi
+
+command -v bw >/dev/null 2>&1 || {
+  echo "Error: bw not found in PATH." >&2
+  exit 1
+}
+
+TTY_PATH="${BW_UNLOCK_EXEC_TTY:-/dev/tty}"
+
+reset_tty() {
+  [ -e "$TTY_PATH" ] || return 0
+
+  if command -v stty >/dev/null 2>&1; then
+    stty sane < "$TTY_PATH" > "$TTY_PATH" 2>/dev/null || true
+  fi
+
+  # Restore default attributes and ensure the cursor is visible again.
+  printf '\033[0m\033[?25h' > "$TTY_PATH" 2>/dev/null || true
+}
+
+trap 'reset_tty' EXIT
+
+if ${SYNC}; then
+  bw sync >/dev/null
+fi
+
+BW_SESSION="$(bw unlock --raw)"
+export BW_SESSION
+
+reset_tty
+
+exec "$@"

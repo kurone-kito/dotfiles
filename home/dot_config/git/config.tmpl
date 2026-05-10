@@ -1,0 +1,194 @@
+# -*- mode: properties -*-
+# vim: set ft=properties :
+
+{{ template "signing-validate" . -}}
+{{ $git := dig "git" dict . -}}
+{{ $gitName := dig "name" "" $git -}}
+{{ $gitEmail := dig "email" "" $git -}}
+{{ $gitSigningKey := dig "signingkey" "" $git -}}
+{{- /* Resolve global signing format and key inline because Go templates
+       cannot use `template` invocations as expression values. The helper
+       templates `signing-resolved-format` and `signing-ssh-filename`
+       encode the same rules and are used by the profile generators.
+       Resolution policy: GPG is the primary signing backend whenever a
+       fingerprint is set; SSH `signing_fallback` does NOT override it.
+       SSH only becomes primary when `git.signing_format = "ssh"` is
+       set explicitly OR when no GPG fpr is configured. SSH fallback
+       is surfaced via the commit-ssh / tag-ssh / rebase-ssh aliases
+       below, regardless of which backend is primary. */ -}}
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ $sshFallbackFile := "" -}}
+{{ range $label, $key := $sshKeys -}}
+{{   if dig "signing_fallback" false $key -}}{{ $sshFallbackFile = $key.filename }}{{ end -}}
+{{ end -}}
+{{ $explicitFormat := dig "signing_format" "" $git -}}
+{{ $signingFormat := "" -}}
+{{ if $explicitFormat -}}
+{{   $signingFormat = $explicitFormat -}}
+{{ else if $gitSigningKey -}}
+{{   $signingFormat = "gpg" -}}
+{{ else if $sshFallbackFile -}}
+{{   $signingFormat = "ssh" -}}
+{{ end -}}
+{{ $homeDir := replace "\\" "/" .chezmoi.homeDir -}}
+{{ if eq $signingFormat "ssh" -}}
+{{   $gitSigningKey = printf "%s/.ssh/%s.pub" $homeDir $sshFallbackFile -}}
+{{ else if ne $signingFormat "gpg" -}}
+{{   $gitSigningKey = "" -}}
+{{ end -}}
+[alias]
+  c = clone --recursive
+  cb = !git rev-parse --abbrev-ref HEAD
+  co = checkout
+  count = "!git logb | wc -l | sed 's/^ *//;s/ *$//'"
+  cp = cherry-pick
+  cpa = cp --abort
+  cpc = cp --continue
+  delete-merged-branches = "!f() { git branch --merged | egrep -v '(^\\*|develop|master|main)$' | xargs git branch -d; }; f"
+  df = diff --name-only
+  dfs = df --staged
+  first-commit = !git log --pretty=format:\"%h\" --abbrev=40 "$(git main)"..HEAD | tail -1
+  gc-full = "!git reflog expire --expire=now --all && git gc --aggressive --prune=now"
+  logb = !git log --oneline "$(git main)"..HEAD
+  main = symbolic-ref --short refs/remotes/origin/HEAD
+  nuke = !git clean -fdx && git clean -fdX
+  plf = pull-f
+  psf = push-f
+  pull = pull --recurse-submodules
+  pull-f = !git fetch && git reset --hard origin/$(git cb)
+  push-f = push --force-with-lease
+  ra = rebase --abort
+  rc = rebase --continue
+  rd = !git rebase "$(git first-commit)"~ --committer-date-is-author-date -S
+  re = rebase --edit-todo
+  ri = !git rebase -i "$(git first-commit)"~
+  rs = rebase --skip
+  sw = switch
+{{- if $sshFallbackFile }}
+{{- /* SSH fallback aliases: opt into SSH signing per-invocation
+       without mutating primary signing config. They force-enable
+       signing via `commit.gpgsign=true` / `tag.gpgsign=true` so
+       they also work in scopes that have no primary signing set. */ -}}
+{{- $sshAbsPath := printf "%s/.ssh/%s.pub" $homeDir $sshFallbackFile }}
+  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f \"$@\""
+  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f \"$@\""
+  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f \"$@\""
+{{- end }}
+[add "interactive"]
+  useBuiltin = true
+[apply]
+  whitespace = fix
+[column]
+  ui = auto
+{{- if $gitSigningKey }}
+[commit]
+  gpgsign = true
+{{- end }}
+[core]
+  autoCRLF = input
+  compression = 9
+  editor = nvim
+  eol = lf
+  excludesfile = ./ignore
+  longpaths = true
+  precomposeUnicode = true
+  quotepath = false
+  safecrlf = warn
+[delta]
+  features = side-by-side line-numbers decorations
+[diff]
+  algorithm = minimal
+  colorMoved = dimmed-zebra
+  compactionHeuristic = true
+  renames = copies
+[extensions]
+  worktreeConfig = true
+[fetch]
+  all = true
+  fsckobjects = true
+  prune = true
+[filter "lfs"]
+  clean = git-lfs clean %f
+  smudge = git-lfs smudge %f
+  required = true
+[filter "vrc"]
+  clean = git vrc clean --file %f
+  smudge = git vrc smudge --file %f
+  required = true
+{{- if eq $signingFormat "ssh" }}
+[gpg]
+  format = ssh
+{{- else if eq $signingFormat "gpg" }}
+{{-   $gpgPath := lookPath "gpg" }}
+{{-   if $gpgPath }}
+[gpg]
+  program = {{ $gpgPath | quote }}
+{{-   end }}
+{{- end }}
+[help]
+  autocorrect = prompt
+[init]
+  defaultBranch = main
+[merge]
+  autostash = true
+  conflictStyle = zdiff3
+  ff = false
+  log = true
+[pull]
+  rebase = true
+[push]
+  autoSetupRemote = true
+  default = current
+  followTags = true
+{{- if eq $signingFormat "gpg" }}
+  gpgsign = if-asked
+{{- end }}
+[rebase]
+  abbreviateCommands = true
+  autoSquash = true
+  autostash = true
+  missingCommitsCheck = error
+  updateRefs = true
+[receive]
+  fsckobjects = true
+[rerere]
+  enable = true
+{{- if $gitSigningKey }}
+[tag]
+  forceSignAnnotated = true
+  gpgsign = true
+{{- end }}
+[transfer]
+  fsckobjects = true
+[trim]
+  bases = main,master,gh-pages
+{{- if or $gitName $gitEmail $gitSigningKey }}
+[user]
+{{- if $gitEmail }}
+  email = {{ $gitEmail | quote }}
+{{- end }}
+{{- if $gitName }}
+  name = {{ $gitName | quote }}
+{{- end }}
+{{- if $gitSigningKey }}
+  signingkey = {{ $gitSigningKey | quote }}
+{{- end }}
+{{- end }}
+{{- $sshHosts := dig "secret" "ssh" "hosts" dict . }}
+{{- range $key, $profile := (dig "git" "profiles" dict .) }}
+[includeIf "gitdir:{{ $profile.gitdir }}"]
+  path = ~/.config/git/profiles/{{ $key }}
+{{- $sshhost := dig "sshhost" "" $profile }}
+{{- if $sshhost }}
+{{- $host := dig $sshhost dict $sshHosts }}
+{{- $hostname := dig "hostname" "" $host }}
+{{- if and $hostname (contains $hostname $profile.gitdir) }}
+{{- $orgPath := index (splitList $hostname $profile.gitdir) 1 | trimPrefix "/" | trimSuffix "/" }}
+{{- if $orgPath }}
+[url "git@{{ $sshhost }}:{{ $orgPath }}/"]
+  insteadOf = https://{{ $hostname }}/{{ $orgPath }}/
+  insteadOf = git@{{ $hostname }}:{{ $orgPath }}/
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

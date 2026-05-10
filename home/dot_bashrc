@@ -1,0 +1,47 @@
+#!/bin/bash
+# ~/.bashrc — Interactive bash configuration
+# Sources shared POSIX conf.d, bash-specific conf.d, then tools.
+
+# Abort if not running interactively
+[[ $- != *i* ]] && return
+
+# Source shared POSIX conf.d (bash + zsh common)
+for f in "$HOME/.config/shell/conf.d/"*.sh; do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Source bash-specific conf.d
+for f in "$HOME/.config/bash/conf.d/"*.bash; do
+  [[ -r "$f" ]] && . "$f"
+done
+
+# Worktrunk shell integration — must be in .bashrc for detection
+# Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
+__wt_path=
+if type -P git-wt >/dev/null 2>&1; then
+  __wt_init="$(command git-wt config shell init bash 2>/dev/null)" && eval "$__wt_init"
+  unset __wt_init
+elif type -P wt >/dev/null 2>&1; then
+  __wt_path="$(type -P wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+  case "$__wt_path" in
+    *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
+    *microsoft.windowsterminal*/wt|*microsoft.windowsterminal*/wt.exe|\
+    *microsoft.windowsterminal*\\wt|*microsoft.windowsterminal*\\wt.exe)
+      ;;
+    *)
+      __wt_init="$(command wt config shell init bash 2>/dev/null)" && eval "$__wt_init"
+      unset __wt_init
+      ;;
+  esac
+fi
+unset __wt_path
+
+# Plugin manager
+if command -v sheldon >/dev/null 2>&1; then
+  eval "$(sheldon source)"
+fi
+
+# Prompt
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init bash)"
+fi

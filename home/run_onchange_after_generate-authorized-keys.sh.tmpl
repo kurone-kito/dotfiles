@@ -1,0 +1,39 @@
+#!/bin/bash
+# chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
+# from deployed public key files. Re-runs when SSH key config changes.
+set -euo pipefail
+
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
+{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
+{{ if not $sshKeys -}}
+echo "No SSH keys configured; skipping authorized_keys generation."
+exit 0
+{{ end -}}
+
+ssh_dir="${HOME}/.ssh"
+authorized="${ssh_dir}/authorized_keys"
+
+mkdir -p "${ssh_dir}"
+chmod 700 "${ssh_dir}"
+
+: > "${authorized}"
+
+{{ range $key, $sshKey := $sshKeys -}}
+pubfile="${ssh_dir}/{{ $sshKey.filename }}.pub"
+if [ -f "${pubfile}" ]; then
+  cat "${pubfile}" >> "${authorized}"
+  echo "" >> "${authorized}"
+  echo "  Added {{ $sshKey.filename }}.pub"
+else
+  echo "  Skipped {{ $sshKey.filename }}.pub (not found)"
+fi
+{{ end -}}
+
+if [ ! -s "${authorized}" ]; then
+  echo "  WARNING: no public keys were found; authorized_keys is empty."
+fi
+
+chmod 600 "${authorized}"
+echo "authorized_keys generated."

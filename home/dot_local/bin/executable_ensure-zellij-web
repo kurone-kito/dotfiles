@@ -1,0 +1,155 @@
+#!/bin/sh
+# Ensure Zellij Web and optional Tailscale publication are ready for the current user context.
+set -eu
+
+DOTFILES_ZELLIJ_WEB_BIND={{ dig "zellij" "web" "bind" "127.0.0.1" . | quote }}
+DOTFILES_ZELLIJ_WEB_PORT={{ dig "zellij" "web" "port" 8082 . }}
+DOTFILES_ZELLIJ_WEB_BASE_URL={{ dig "zellij" "web" "base_url" "" . | quote }}
+DOTFILES_ZELLIJ_WEB_TAILSCALE_ENABLED={{ if dig "zellij" "web" "tailscale" "enabled" false . }}true{{ else }}false{{ end }}
+DOTFILES_ZELLIJ_WEB_TAILSCALE_HTTPS_PORT={{ dig "zellij" "web" "tailscale" "https_port" 443 . }}
+
+get_zellij_command() {
+  if command -v zellij >/dev/null 2>&1; then
+    command -v zellij
+    return 0
+  fi
+
+  echo "zellij executable not found" >&2
+  return 1
+}
+
+get_tailscale_command() {
+  if command -v tailscale >/dev/null 2>&1; then
+    command -v tailscale
+    return 0
+  fi
+
+  echo "tailscale executable not found" >&2
+  return 1
+}
+
+get_zellij_web_serve_path() {
+  if [ -z "$DOTFILES_ZELLIJ_WEB_BASE_URL" ]; then
+    printf '/\n'
+    return 0
+  fi
+
+  case "$DOTFILES_ZELLIJ_WEB_BASE_URL" in
+    /)
+      printf '/\n'
+      ;;
+    /*)
+      printf '%s\n' "${DOTFILES_ZELLIJ_WEB_BASE_URL%/}"
+      ;;
+    *)
+      printf '/%s\n' "${DOTFILES_ZELLIJ_WEB_BASE_URL%/}"
+      ;;
+  esac
+}
+
+get_zellij_web_serve_target() {
+  printf 'http://127.0.0.1:%s\n' "$DOTFILES_ZELLIJ_WEB_PORT"
+}
+
+assert_zellij_web_tailscale_settings() {
+  if [ "$DOTFILES_ZELLIJ_WEB_TAILSCALE_ENABLED" != "true" ]; then
+    return 0
+  fi
+
+  if [ "$DOTFILES_ZELLIJ_WEB_BIND" != "127.0.0.1" ]; then
+    echo "zellij.web.tailscale.enabled requires zellij.web.bind to remain 127.0.0.1." >&2
+    return 1
+  fi
+}
+
+test_zellij_web_running() {
+  "$1" web --status --timeout 2 >/dev/null 2>&1
+}
+
+test_tailscale_serve_configured() {
+  tailscale_command="$1"
+  status_json="$("$tailscale_command" serve status --json 2>/dev/null || true)"
+  serve_path="$(get_zellij_web_serve_path)"
+  serve_target="$(get_zellij_web_serve_target)"
+
+  [ -n "$status_json" ] || return 1
+  printf '%s' "$status_json" | grep -F "\"$DOTFILES_ZELLIJ_WEB_TAILSCALE_HTTPS_PORT\": {" >/dev/null 2>&1 || return 1
+  printf '%s' "$status_json" | grep -F "\"$serve_path\": {" >/dev/null 2>&1 || return 1
+  printf '%s' "$status_json" | grep -F "\"Proxy\": \"$serve_target\"" >/dev/null 2>&1 || return 1
+}
+
+start_zellij_web() {
+  zellij_command="$1"
+  shift
+
+  exec "$zellij_command" web --start "$@"
+}
+
+set_zellij_web_tailscale_serve() {
+  tailscale_command="$1"
+  serve_path="$(get_zellij_web_serve_path)"
+  serve_target="$(get_zellij_web_serve_target)"
+
+  if [ "$serve_path" = "/" ]; then
+    "$tailscale_command" serve --bg --yes --https "$DOTFILES_ZELLIJ_WEB_TAILSCALE_HTTPS_PORT" "$serve_target" >/dev/null
+    return 0
+  fi
+
+  "$tailscale_command" serve --bg --yes --https "$DOTFILES_ZELLIJ_WEB_TAILSCALE_HTTPS_PORT" --set-path "$serve_path" "$serve_target" >/dev/null
+}
+
+ensure_zellij_web_publication() {
+  if [ "$DOTFILES_ZELLIJ_WEB_TAILSCALE_ENABLED" != "true" ]; then
+    return 0
+  fi
+
+  assert_zellij_web_tailscale_settings
+  tailscale_command="$(get_tailscale_command)"
+
+  if test_tailscale_serve_configured "$tailscale_command"; then
+    echo "Tailscale Serve already configured for Zellij Web."
+    return 0
+  fi
+
+  set_zellij_web_tailscale_serve "$tailscale_command"
+
+  if ! test_tailscale_serve_configured "$tailscale_command"; then
+    echo "tailscale serve failed to report the expected zellij web configuration" >&2
+    return 1
+  fi
+
+  echo "Tailscale Serve configured for Zellij Web."
+}
+
+ensure_zellij_web() {
+  zellij_command="$(get_zellij_command)"
+
+  if test_zellij_web_running "$zellij_command"; then
+    echo "Zellij Web already running."
+  else
+    "$zellij_command" web --start --daemonize >/dev/null 2>&1
+
+    if ! test_zellij_web_running "$zellij_command"; then
+      echo "zellij web failed to report healthy after startup" >&2
+      return 1
+    fi
+
+    echo "Zellij Web started."
+  fi
+
+  ensure_zellij_web_publication
+}
+
+case "${1:-}" in
+  --foreground)
+    shift
+    start_zellij_web "$(get_zellij_command)" "$@"
+    ;;
+  "")
+    ensure_zellij_web
+    ;;
+  *)
+    echo "usage: ensure-zellij-web [--foreground]" >&2
+    exit 1
+    ;;
+esac
