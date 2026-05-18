@@ -146,25 +146,55 @@ for the readiness buckets, output chooser, and approval boundary.
 
 ## Open follow-ups
 
-These items were recorded during onboarding as **deferred** or
-**needs-decision**; they do not block the current IDD execution loop
-but should be revisited when the surrounding policy moves.
+The remaining work after onboarding lives in two roadmaps. The
+specific entries below summarize what is still outstanding, what is
+already wired up, and how the IDD CI wait actually behaves when a
+required-check set is partial.
 
-- _(deferred)_ Add a dedicated `idd-task.yml` issue template under
-  `.github/ISSUE_TEMPLATE/` so future IDD-driven issues use a stable
-  shape. The issue-authoring companion already produces a valid shape
-  without a template.
-- _(deferred)_ Create the `idd:ready` and `status:authoring`
-  repository labels. With the approval gate opted out and publication
-  routed through the user, neither label is exercised on the
-  ready-execution side. Add them only if a stricter posture is
-  adopted later.
-- _(deferred)_ Promote `lint.yml` and `test.yml` to **required status
-  checks** on the `master` branch protection. Today neither workflow
-  is required, so `fully_autonomous_merge` proceeds without a CI gate.
-  Promoting them would tighten the merge floor before any unattended
-  run.
-- _(needs-decision)_ Confirm GitHub Copilot Code Review is enabled
-  for this repository. The default `copilot-advisory` profile waits
-  on Copilot review state; if Copilot is not enabled, migrate to the
-  `external-bot` profile pointed at CodeRabbit.
+### Required status checks on `master`
+
+Branch protection's `required_status_checks.contexts` currently lists
+`lint` (from the Linting workflow) and `Lua syntax check` (from the
+Test workflow). The remaining two jobs in the Test workflow —
+`Bash tests (bats)` and `PowerShell tests (Pester)` — are not
+required yet because they fail on `master` baseline for environmental
+reasons (`chezmoi` missing on the Ubuntu runner; 13 Windows-only
+Pester cases). Tracking:
+
+- [`#109`](https://github.com/kurone-kito/dotfiles/issues/109) —
+  install `chezmoi` in the Bash tests job and promote
+  `Bash tests (bats)` to required.
+- [`#110`](https://github.com/kurone-kito/dotfiles/issues/110) —
+  resolve the 13 Pester failures and promote
+  `PowerShell tests (Pester)` to required.
+
+Both issues are children of roadmap
+[`#107`](https://github.com/kurone-kito/dotfiles/issues/107).
+
+This is **not** a "no CI gate" situation: per
+`.github/instructions/idd-ci.instructions.md`, when an IDD run reaches
+the shared CI wait, it builds the required-check set from rulesets
+and branch protection. If neither source yields a check for the
+current PR head, IDD stops and posts a hold for missing merge-gate
+policy evidence — it does not silently merge. The current two-check
+floor (`lint` + `Lua syntax check`) is therefore the active merge
+gate, and the two pending promotions tighten it further.
+
+### Issue authoring gate
+
+The `idd:ready` and `status:authoring` repository labels exist (both
+created via `gh label create` after onboarding). They are not
+exercised today because the issue-author approval gate is opted out
+(`skipIssueAuthorApprovalGate: true`); re-enabling the gate later
+would activate the labels without needing new repository state.
+[`.github/ISSUE_TEMPLATE/idd-task.yml`](../.github/ISSUE_TEMPLATE/idd-task.yml)
+ships the structured form for hand-filed IDD tasks.
+
+### PR review profile
+
+GitHub Copilot Code Review is empirically active on this repository
+— the bot has reviewed every onboarding-chain PR from
+[`#102`](https://github.com/kurone-kito/dotfiles/pull/102) onward via
+the `copilot-pull-request-reviewer` actor. The default
+`copilot-advisory` profile is therefore satisfiable here; the earlier
+"confirm Copilot Code Review is enabled" needs-decision is closed.
