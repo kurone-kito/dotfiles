@@ -87,10 +87,14 @@ needs-decision, blocked-by-human, and out-of-scope.
   [references/workflow-boundary.md](references/workflow-boundary.md).
 - For concrete drafting patterns and example prompts: read
   [references/draft-patterns.md](references/draft-patterns.md).
-- When editing this bundle inside the source repository, keep the
-  bundled references synchronized with the canonical maintenance docs in
-  [../../docs/issue-authoring-skill.md](../../docs/issue-authoring-skill.md)
-  and [../../docs/idd-workflow.md](../../docs/idd-workflow.md).
+- This is an installed companion bundle, not the source-repository
+  copy. When the upstream bundle changes, re-import from the canonical
+  maintenance docs in
+  [`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/docs/issue-authoring-skill.md)
+  and
+  [`kurone-kito/idd-skill:docs/idd-workflow.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/docs/idd-workflow.md);
+  the corresponding in-repo copy of the workflow doc is at
+  [`../../../docs/idd-workflow.md`](../../../docs/idd-workflow.md).
 
 ## Output Checklist
 
