@@ -1,0 +1,76 @@
+---
+name: 🤖 IDD task
+description: 'Issue-Driven Development task — a focused, autonomously claimable unit of work that follows the IDD execution loop'
+labels: idd-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for opening an IDD-ready task. Issues filed through this
+        form follow the same schema the
+        [`issue-authoring` companion](../../.claude/skills/issue-authoring/SKILL.md)
+        produces, so a fresh IDD discover run can claim and execute
+        them without back-and-forth.
+
+        Before filing, please confirm that this issue:
+
+        - has a clear, repository-local scope
+        - lists objectively verifiable acceptance criteria
+        - does not hide a mid-implementation human decision or
+          credential dependency
+
+        If any of the above is uncertain, draft through the
+        `issue-authoring` skill first and surface the unresolved part
+        as a separate `needs-decision` / `blocked-by-human` issue.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent roadmap
+      description: 'Optional reference to the parent roadmap. Use the issue number (e.g. `#107`) or the roadmap-id marker slug (e.g. `post-onboarding-cleanup`). Leave blank for orphan tasks once the repository enables orphan-first scope.'
+      placeholder: '#107'
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: 'Why this task exists. Cite the file, doc, or PR thread that motivates the change.'
+      placeholder: 'The {{file or feature}} currently {{observed state}}. The IDD workflow or a reviewer flagged this on {{PR or thread link}} because {{root cause}}.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed change
+      description: 'What the implementing agent should change. Name the concrete file or surface to edit; do not prescribe every line.'
+      placeholder: 'Edit {{path}} so that {{outcome}}. Keep the surrounding {{section}} intact.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: 'Objectively verifiable checks. Use shell commands, grep queries, or test runs where possible. Avoid criteria that depend on subjective human approval.'
+      placeholder: |
+        - `grep -nE '<pattern>' <file>` returns no matches.
+        - `tests/bash/helpers/bats-core/bin/bats tests/bash/` passes unchanged.
+        - The PR description records {{evidence}}.
+    validations:
+      required: true
+
+  - type: textarea
+    id: candidate_files
+    attributes:
+      label: Candidate files
+      description: 'Optional. Files the implementing agent is most likely to touch. Acts as a hint, not an exhaustive list.'
+      placeholder: |
+        - `path/to/file` (edited)
+        - `path/to/other` (read; edit only if the change requires it)
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: 'Optional. Sequencing, parallelism hints, links to upstream context, or anything else a future claimer should know.'
