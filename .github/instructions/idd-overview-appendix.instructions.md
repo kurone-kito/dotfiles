@@ -96,9 +96,30 @@ For A0-T, A0-O, A1, A1.5, A3, and A4.5 repo-query rules, see
 
 ## Commit signing
 
-In non-interactive agent or CI environments where GPG pinentry cannot be
-presented, add `--no-gpg-sign` to all `git commit` and `git merge`
-commands to prevent blocking.
+Follow the project signing fallback ladder documented in
+[`.github/copilot-instructions.md`](../../.github/copilot-instructions.md)
+(also mirrored in [`CLAUDE.md`](../../CLAUDE.md),
+[`AGENTS.md`](../../AGENTS.md), and [`GEMINI.md`](../../GEMINI.md)).
+The bounded ladder is at most three signing attempts:
+
+1. **GPG** (attempt 1) — the configured default for plain `git commit`.
+2. **gpg-agent restart + GPG retry** (attempt 2, categories A and U
+   only) — skip this step when `gpgconf` is unavailable, when
+   `gpg-agent` also backs SSH, or in non-interactive CI.
+3. **SSH fallback** (attempt 3, any category) — prefer the
+   `git commit-ssh` alias (and `git tag-ssh` / `git rebase-ssh`) when
+   available; otherwise a transient `git -c gpg.format=ssh -c
+   user.signingkey="<key>" commit -S` invocation. Never write the
+   transient fallback into `~/.gitconfig` or any chezmoi template.
+4. **Unsigned** (final accepted fallback) — only after GPG and SSH
+   have demonstrably failed. Disclose which path was used in the PR
+   description; when unsigned, also disclose the GPG cause, whether
+   the gpg-agent restart was attempted or skipped (and why), and the
+   SSH cause.
+
+Do **not** pass `--no-gpg-sign` unconditionally to bypass this
+ladder. A non-interactive run with a usable SSH key should still
+sign via `git commit-ssh` before falling through to unsigned.
 
 Record material progress, decisions, and hold reasons as issue or PR
 comments at the time they are made. This ensures that any agent resuming
