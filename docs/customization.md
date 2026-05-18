@@ -79,9 +79,15 @@ from the target repository root to get the concrete import surface for
 the chosen profile:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/refs/heads/main \
-  idd-helper-bundle-manifest --profile package-manager
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b64eab0d51a79bd3199740505f3b7843bc94a0d4 \
+  idd-helper-bundle-manifest --profile ephemeral-npx
 ```
+
+The tarball URL is pinned to the same upstream commit used as the
+import baseline for this repository's IDD instructions and companion
+bundle, so the helper code never drifts ahead of the checked-in
+phase docs. Replace `--profile ephemeral-npx` with the profile your
+repository actually configured if it differs.
 
 The manifest auto-detects npm, pnpm, or yarn from the target repository
 when possible. If detection is ambiguous, pass this flag explicitly:
