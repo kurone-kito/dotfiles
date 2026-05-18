@@ -121,12 +121,12 @@ Ownership timing in this workflow uses the policy defaults
 `docs/policy-constants.md`.
 
 - **Stale**: an active claim whose latest **valid** `claimed-by`
-  comment's GitHub `created_at` is ≥ 24 h ago. Another session may take
+  comment's GitHub `created_at` is ≥ 12 h ago. Another session may take
   it over by posting a fresh `{claim-id}` whose `supersedes:` value is
   that active claim's `{claim-id}`.
 - **Heartbeat**: after re-validating ownership, re-post the claim
-  comment every 12 h while holding or when any phase is expected to
-  exceed 12 h. The latest **valid** `claimed-by` comment for the same
+  comment every 6 h while holding or when any phase is expected to
+  exceed 6 h. The latest **valid** `claimed-by` comment for the same
   `{claim-id}` resets the stale clock. Embed timestamps are ignored;
   only the GitHub `created_at` of the comment itself counts.
 

@@ -72,7 +72,7 @@ set. If the project is in use, the project status must be "not started".
 using the shared claim-state rules:
 
 Use the `claim-stale-age` policy default from `docs/policy-constants.md`
-for these stale checks (distributed default: `24 h`).
+for these stale checks (distributed default: `12 h`).
 
 - No active claim → unclaimed, proceed.
 - Active claim already uses a `{claim-id}` that this current session had
@@ -80,12 +80,12 @@ for these stale checks (distributed default: `24 h`).
   not post a new claim. Continue with that same `{claim-id}`. A token
   first learned by parsing the current issue comments is not enough.
 - Any other active claim whose latest valid `claimed-by` comment has
-  GitHub `created_at` < 24 h → claimed by another live session, even
+  GitHub `created_at` < 12 h → claimed by another live session, even
   when the `agent-id` matches. Return to Discover using the same
   selection mode that produced this target (orphan-first: continue the
   A0-O capable path; roadmap mode: continue the A3-ready path).
 - Any other active claim whose latest valid `claimed-by` comment has
-  GitHub `created_at` ≥ 24 h → stale, proceed with takeover.
+  GitHub `created_at` ≥ 12 h → stale, proceed with takeover.
 
 Only the GitHub `created_at` of the latest **valid** `claimed-by`
 comment in the active claim counts toward the stale calculation.
@@ -99,12 +99,12 @@ the issue as **unclaimed** — proceed as if no claim exists.
 Otherwise, use the latest trusted legacy `claimed-by` comment as a
 **migration-only** decision input:
 
-- Latest trusted legacy claim has GitHub `created_at` < 24 h → claimed
+- Latest trusted legacy claim has GitHub `created_at` < 12 h → claimed
   by another live session, even when the `agent-id` matches. Return to
   Discover using the same selection mode that produced this target
   (orphan-first: continue the A0-O capable path; roadmap mode: continue
   the A3-ready path).
-- Latest trusted legacy claim has GitHub `created_at` ≥ 24 h → stale,
+- Latest trusted legacy claim has GitHub `created_at` ≥ 12 h → stale,
   proceed and replace it with a new-format claim.
 
 The migration claim uses a fresh `{claim-id}` and `supersedes: none`.

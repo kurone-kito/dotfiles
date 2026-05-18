@@ -93,11 +93,11 @@ waives the stale-threshold gate in S3.
 Apply the shared stale rule from `idd-overview.instructions.md` and
 `claim-stale-age` in `docs/policy-constants.md`:
 takeover is allowed only when the active non-owned claim is stale
-(`latest valid claimed-by created_at >= 24h`).
+(`latest valid claimed-by created_at >= 12h`).
 
-- Claim age `< 24h`: **hold and stop**. Keep waiting for the shared
+- Claim age `< 12h`: **hold and stop**. Keep waiting for the shared
   stale threshold.
-- Claim age `>= 24h`: takeover is eligible; continue to S4.
+- Claim age `>= 12h`: takeover is eligible; continue to S4.
 
 ### S4 — Race-safe takeover recheck
 
