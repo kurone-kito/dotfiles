@@ -93,12 +93,22 @@ credential model first.
 **Profile**: `ephemeral-npx`.
 
 The discover, suitability, review-snapshot, advisory-wait, and
-pre-merge phases may invoke
-`npx --yes --package <reviewed-helper-spec> idd-helper-bundle-manifest`
-when a reviewed helper spec is available. The companion prerequisite
-issue #96 pins Node.js 24.15.0 via project-local
-[`.tool-versions`](../.tool-versions) / [`.node-version`](../.node-version) /
-[`.nvmrc`](../.nvmrc) so `npx` always resolves in a fresh worktree.
+pre-merge phases may invoke the helper manifest via:
+
+```sh
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b64eab0d51a79bd3199740505f3b7843bc94a0d4 \
+  idd-helper-bundle-manifest --profile ephemeral-npx
+```
+
+The tarball URL is pinned to the same upstream commit used as the
+import baseline for `.github/instructions/` and `.claude/skills/`, so
+the helper surface never drifts ahead of the checked-in templates.
+Bump that commit deliberately whenever the IDD instructions are
+re-imported; do **not** point the spec at a mutable `refs/heads/main`
+ref. The companion prerequisite #96 pins Node.js 24.15.0 via
+project-local [`.tool-versions`](../.tool-versions) /
+[`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
+always resolves in a fresh worktree.
 
 ## Issue-Author Approval Gate
 
