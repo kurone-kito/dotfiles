@@ -241,7 +241,7 @@ Otherwise continue to `idd-review-fix.instructions.md`.
 
 After the review loop confirms no PATH A items remain (from E3 or E8),
 check the current branch state before routing to F-phase. This gate uses
-merge-from-`main` (never rebase) when synchronization is required,
+merge-from-`master` (never rebase) when synchronization is required,
 preserving review history on the already-published PR branch.
 
 When helper runtime is enabled, call:
@@ -267,15 +267,15 @@ Route based on `branchState` from the helper (or `mergeable` /
   a PR comment documenting the state and stop. Do not proceed to F-phase
   without confirmed branch-state evidence.
 
-**Sync path** (merge-from-`main`):
+**Sync path** (merge-from-`master`):
 
 1. **Active review gate**: if the PR has unresolved review threads,
    unreplied comments, or any reviewer's latest state is
    `CHANGES_REQUESTED`, get explicit operator confirmation before merging
-   `main` into the feature branch, as the merge commit will appear in the
+   `master` into the feature branch, as the merge commit will appear in the
    PR history.
-2. Merge `main` into the feature branch:
-   `git fetch origin main && git merge origin/main`
+2. Merge `master` into the feature branch:
+   `git fetch origin master && git merge origin/master`
 3. If conflicts arise, resolve them and complete the merge.
 4. Run **post-fix-validate**.
 5. Push the feature branch normally (no force push required for merge

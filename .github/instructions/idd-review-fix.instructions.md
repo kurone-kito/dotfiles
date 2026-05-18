@@ -51,17 +51,17 @@ Convergence guardrails:
   redirected by a maintainer.
 - If the critique pass reports zero issues, proceed to E11.
 
-## E11 — Resolve conflicts with main
+## E11 — Resolve conflicts with master
 
-Check for conflicts between the feature branch and `main`. If conflicts
-exist, merge `main` into the feature branch
-(`git fetch origin main && git merge origin/main`), resolve any
+Check for conflicts between the feature branch and `master`. If conflicts
+exist, merge `master` into the feature branch
+(`git fetch origin master && git merge origin/master`), resolve any
 conflicts, and complete the merge.
 
 **Active review gate**: if the PR has unresolved review threads,
 unreplied comments, or any reviewer's latest state is
 `CHANGES_REQUESTED`, get explicit operator confirmation before merging
-`main` into the feature branch, as the merge commit will appear in the
+`master` into the feature branch, as the merge commit will appear in the
 PR history.
 
 ## E12 — Lint, test, push
@@ -240,7 +240,7 @@ proceeding to F — do not skip triage.
 - **On failure / code-caused**: fix, run **fix-validate**, commit
   atomically, then return to E11
 - **On failure / infra-flaky or pre-existing** (failure also present on
-  `main`, unrelated to this branch): apply `ciWait.rerunPolicy`
+  `master`, unrelated to this branch): apply `ciWait.rerunPolicy`
   (default `rerun-once`). If it authorizes the current rerun, rerun
   once and resume polling. If the failure persists after that rerun, or
   if the policy is `hold`, post a hold comment on the PR documenting the
