@@ -11,8 +11,10 @@ roadmap or blocked-by marker.
 
 - Use the prefix documented by the target repository's onboarding or
   IDD instructions.
-- In this source repository the prefix is `idd-skill`, but installed
-  bundles must not assume that value elsewhere.
+- For this repository, the configured prefix is `dotfiles` (see
+  `.github/idd/config.json#markerPrefix`). Installed bundles in other
+  repositories must read the local config rather than copying this
+  value.
 - If the prefix is not discoverable from the repository docs or user
   context, stop and ask instead of emitting a guessed marker.
 
