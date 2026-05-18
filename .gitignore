@@ -133,3 +133,6 @@ $RECYCLE.BIN/
 ### NeoVim ###
 # Project-local NeoVim config
 .nvim.lua
+
+# Pester test result artifacts (Invoke-Pester -CI emits testResults.xml in cwd)
+testResults.xml

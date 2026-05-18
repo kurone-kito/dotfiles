@@ -8,8 +8,8 @@ onboarding flow (roadmap #95). The machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
-The schema name for each field below comes from
-[`docs/onboarding/policy-decisions.md`](./onboarding/policy-decisions.md)
+The schema name for each field below comes from the upstream
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
