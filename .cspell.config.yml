@@ -39,6 +39,7 @@ words:
   - inputrc
   - keepassxc
   - kito
+  - luac
   - luks
   - psmux
   - pylint
