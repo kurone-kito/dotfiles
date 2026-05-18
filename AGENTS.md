@@ -114,6 +114,20 @@ Windows CI.
 Ensure submodules are initialized first:
 `git submodule update --init --recursive`
 
+## IDD Workflow
+
+This project uses Issue-Driven Development (IDD) with parallel AI
+agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for
+the cross-agent entry path and phase routing.
+
+Before starting IDD work, open
+[`.github/instructions/idd-overview.instructions.md`](.github/instructions/idd-overview.instructions.md).
+Open the routed phase file manually when the current step changes.
+
+For the confirmed policy matrix (merge policy, review profile, claim
+timing, CI wait, helper runtime, and the rest of the eleven
+decisions), see [docs/idd-policy.md](docs/idd-policy.md).
+
 ## Canonical reference
 
 The full, Copilot-first project guidance lives in

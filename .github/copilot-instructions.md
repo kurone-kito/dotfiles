@@ -374,6 +374,35 @@ This isolates tests from chezmoi's template engine and
 CI runs both suites on every push and pull request
 (`.github/workflows/test.yml`).
 
+## IDD Workflow
+
+This project uses Issue-Driven Development (IDD) with parallel AI
+agents. Start with [`docs/idd-workflow.md`](../docs/idd-workflow.md)
+for the cross-agent entry path and phase routing.
+
+Before starting IDD work, open
+[`.github/instructions/idd-overview.instructions.md`](./instructions/idd-overview.instructions.md).
+Open the routed phase file manually when the current step changes.
+The execution loop drives Discover → Claim → Work → PR Submit → CI
+Wait → Review Triage → Review Fix → Merge → Loop through GitHub
+Issues; each phase has its own dedicated instruction file under
+`.github/instructions/`.
+
+For the confirmed policy matrix (merge policy, review profile,
+review-thread resolution, critique-loop, claim timing, CI wait,
+credential scope, helper runtime, issue-author approval gate,
+maintainer-approval-actors policy, and the issue-authoring companion
+status), see [`docs/idd-policy.md`](../docs/idd-policy.md). The
+machine-readable mirror lives at
+[`.github/idd/config.json`](./idd/config.json); keep both in sync.
+
+GitHub Copilot Code Review acts as the advisory reviewer under the
+chosen `copilot-advisory` profile, alongside the existing CodeRabbit
+configuration. `excludeAgent: "code-review"` in
+`idd-overview.instructions.md` keeps the heavy operational workflow
+out of Copilot reviewer context; this lightweight file remains the
+primary reviewer-side reference.
+
 ## Guardrails
 
 - **Do not** modify community documents (CODE_OF_CONDUCT, CONTRIBUTING)
