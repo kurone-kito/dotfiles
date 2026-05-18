@@ -9,20 +9,20 @@ planning (B2), implementation (B3), and the self-review loop (C).
 
 Before creating, check for local conflicts in this order:
 
-1. Ensure the local `main` branch is up to date and has no local
-   commits. Run this from the primary worktree while on `main`:
+1. Ensure the local `master` branch is up to date and has no local
+   commits. Run this from the primary worktree while on `master`:
 
    ```sh
-   git fetch origin main
-   git log origin/main..main --oneline
+   git fetch origin master
+   git log origin/master..master --oneline
    ```
 
-   If the second command outputs any lines, local `main` has unpushed
-   commits — stop and report, do not force-reset `main`. Otherwise,
+   If the second command outputs any lines, local `master` has unpushed
+   commits — stop and report, do not force-reset `master`. Otherwise,
    fast-forward to origin:
 
    ```sh
-   git merge --ff-only origin/main
+   git merge --ff-only origin/master
    ```
 
 2. Run `git worktree list` — if a worktree for the branch already
@@ -68,7 +68,7 @@ If WorkTrunk is not available, choose the correct case:
 
 | Case                                       | Command                                                                             |
 | ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Fresh claim                                | `git worktree add <path> -b <branch-name> origin/main`                              |
+| Fresh claim                                | `git worktree add <path> -b <branch-name> origin/master`                            |
 | Takeover — local branch exists             | `git worktree add <path> <branch-name>`                                             |
 | Takeover — remote branch only              | `git fetch origin && git worktree add <path> -b <branch-name> origin/<branch-name>` |
 | Takeover — neither local nor remote (rare) | treat as fresh claim; preserve the inherited branch name                            |
