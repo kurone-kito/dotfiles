@@ -475,7 +475,7 @@ Before selecting from the surviving viable issues, perform an
    - **Fetch the issue** and parse its comments using the shared claim-state
      rules (defined in `idd-claim.instructions.md`).
    - **Detect active non-stale claims**: Use the `claim-stale-age` policy
-     default from `docs/policy-constants.md` (distributed default: `24 h`).
+     default from `docs/policy-constants.md` (distributed default: `12 h`).
      An issue has an **active non-stale claim** if:
      - A trusted `claimed-by` comment exists, and
      - That comment's GitHub `created_at` timestamp is **less than** the
@@ -488,7 +488,7 @@ Before selecting from the surviving viable issues, perform an
      the scan set.
 
    - **Skip stale or unclaimed candidates**: If the latest `claimed-by`
-     comment is stale (≥ 24 h old) or no claim exists, this candidate
+     comment is stale (≥ 12 h old) or no claim exists, this candidate
      **remains eligible**.
 
 3. **Determine selection candidate**: After scanning the top N:

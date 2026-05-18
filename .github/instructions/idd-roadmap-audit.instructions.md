@@ -94,7 +94,7 @@ discovered beneath it. Before any such side effect, coordinate on the
 
 Treat `stale` and `non-stale` in this section using the
 `claim-stale-age` policy default from `docs/policy-constants.md`
-(distributed default: `24 h`).
+(distributed default: `12 h`).
 
 - Roadmap claim ownership gates roadmap-side mutations only. Do not
   treat a non-stale roadmap claim as a global lock over A2/A3 child

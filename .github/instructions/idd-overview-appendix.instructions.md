@@ -71,7 +71,7 @@ unclaimed state are inheritable by the next agent (see
 
 Keep the claim. Post the hold reason and resume condition to the PR or
 issue comment. After re-validating ownership, re-post the claim comment
-with the same `{claim-id}` every 12 h as heartbeat.
+with the same `{claim-id}` every 6 h as heartbeat.
 After posting the hold reason, upsert the digest with the hold phase, the
 blocking condition in `Open blockers`, and the resume condition in
 `Next action`. Long holds still need claim heartbeats; the digest does
