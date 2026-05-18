@@ -32,6 +32,7 @@ useGitignore: true
 version: '0.2'
 words:
   - curlrc
+  - Esync
   - exrc
   - gdefault
   - gpgconf
@@ -40,8 +41,12 @@ words:
   - kito
   - luks
   - psmux
+  - pylint
   - rerere
   - taskrc
+  - unpushed
+  - unreplied
+  - waivable
   - wgetrc
   - viml
   - xclip
