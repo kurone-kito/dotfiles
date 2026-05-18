@@ -1,8 +1,9 @@
 # Bundled Issue Authoring Contract
 
 This file keeps the `issue-authoring` bundle usable when it is installed
-or copied outside this repository root. It mirrors the canonical
-contract in `docs/issue-authoring-skill.md`.
+or copied outside its source repository. It mirrors the canonical
+contract maintained upstream at
+[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/docs/issue-authoring-skill.md).
 
 ## Target marker prefix
 
