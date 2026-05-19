@@ -17,6 +17,31 @@ in this template.
 - [GEMINI.md](../GEMINI.md) is a Gemini CLI compatibility entry point
   with the same role.
 
+## User-global instructions
+
+In addition to the project-level layer above, this repository ships
+a **user-global** instructions layer via chezmoi. Each supported AI
+CLI reads one file from the user's home directory before loading any
+repository-specific instructions:
+
+| Agent              | Chezmoi source                                 | Deployed to                          |
+| ------------------ | ---------------------------------------------- | ------------------------------------ |
+| GitHub Copilot CLI | `home/dot_copilot/copilot-instructions.md`     | `~/.copilot/copilot-instructions.md` |
+| Codex CLI          | `home/dot_codex/AGENTS.md`                     | `~/.codex/AGENTS.md`                 |
+| Claude Code        | `home/dot_claude/CLAUDE.md`                    | `~/.claude/CLAUDE.md`                |
+| Gemini CLI         | `home/dot_gemini/GEMINI.md`                    | `~/.gemini/GEMINI.md`                |
+
+**Precedence rule**: project-level instructions always take
+precedence over the user-global file. Each user-global file opens
+with an explicit deference paragraph stating this rule.
+
+The user-global layer is repository-independent and intentionally
+smaller than the canonical `.github/copilot-instructions.md`. It
+carries four sections available in any repository: Conversation
+(language matching and autonomous/pause behavior), Commit rules
+(Conventional Commits format and the bounded signing fallback
+ladder), Coding standards, and Guardrails.
+
 ## Change policy
 
 - Prefer preserving existing Copilot behavior over abstracting too
@@ -34,5 +59,7 @@ in this template.
 - Treat this file as a human-facing strategy note, not as the primary
   instruction file for any agent.
 - When updating AI guidance, review `README.md`,
-  `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, and
-  `GEMINI.md` together.
+  `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`,
+  `GEMINI.md`, and the four user-global source files under
+  `home/dot_copilot/`, `home/dot_codex/`, `home/dot_claude/`,
+  and `home/dot_gemini/` together.
