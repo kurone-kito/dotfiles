@@ -125,9 +125,10 @@ Describe 'secret-status.ps1' {
 
   It 'secret file missing is MISSING' {
     $f = Join-Path $HomeDir 'never-existed.txt'
+    $fJson = $f.Replace('\', '\\')
     $cats = @"
 {"gpg":[],"sshKeys":[],"sshHosts":[],"secretFiles":[
-  {"label":"s","item":"S","target":"never-existed.txt","absPath":"$f","attachment":""}
+  {"label":"s","item":"S","target":"never-existed.txt","absPath":"$fJson","attachment":""}
 ],"envFiles":[]}
 "@
     Write-Manifest $cats
