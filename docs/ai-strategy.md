@@ -37,9 +37,10 @@ with an explicit deference paragraph stating this rule.
 
 The user-global layer is repository-independent and intentionally
 smaller than the canonical `.github/copilot-instructions.md`. It
-carries the five sections that need to be available in any
-repository: conversation language policy, Conventional Commits,
-signing fallback ladder, coding standards, and guardrails.
+carries four sections available in any repository: Conversation
+(language matching and autonomous/pause behavior), Commit rules
+(Conventional Commits format and the bounded signing fallback
+ladder), Coding standards, and Guardrails.
 
 ## Change policy
 
