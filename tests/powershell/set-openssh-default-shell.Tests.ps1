@@ -29,7 +29,11 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
     }
   }
 
-  It 'Test-DotfilesAdminElevation returns false for non-elevated session' {
+  It 'Test-DotfilesAdminElevation returns false for non-elevated session' -Skip:(
+    [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT -and
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+      [Security.Principal.WindowsBuiltInRole]::Administrator)
+  ) {
     Test-DotfilesAdminElevation | Should -BeFalse
   }
 
