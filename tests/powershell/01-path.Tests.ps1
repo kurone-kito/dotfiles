@@ -59,7 +59,11 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
     # Disable registry sync by default so existing tests are not
     # affected by the real Windows User PATH.
-    $env:DOTFILES_TEST_REGISTRY_USER_PATH = ''
+    # Use ';' not '' — Windows deletes env vars set to empty string,
+    # which would cause Get-RegistryUserPath to fall through to the
+    # real registry.  A single ';' is non-null yet splits to only
+    # empty entries that the $norm -ne '' guard skips.
+    $env:DOTFILES_TEST_REGISTRY_USER_PATH = ';'
 
     $env:PATH = @(
       $script:Paths.UnrelatedA

@@ -20,12 +20,13 @@ BeforeAll {
 
   function script:Write-Manifest {
     param([string]$CategoriesJson)
+    $escapedHomeDir = $script:HomeDir.Replace('\', '\\')
     $body = @"
 {
   "version": 1,
   "manager": "bitwarden",
   "os": "linux",
-  "homeDir": "$script:HomeDir",
+  "homeDir": "$escapedHomeDir",
   "ghqRoot": "",
   "categories": $CategoriesJson
 }

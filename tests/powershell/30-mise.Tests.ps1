@@ -336,7 +336,7 @@ Describe '30-mise ghq trusted paths' {
     Remove-Item Function:\PathMise -ErrorAction SilentlyContinue
   }
 
-  It 'appends ghq-cloned owner paths from chezmoi-ghq-trusted-paths' {
+  It 'appends ghq-cloned owner paths from chezmoi-ghq-trusted-paths' -Skip:($null -eq (Get-Command 'ghq' -ErrorAction SilentlyContinue)) {
     $miseCmd = New-TestMiseCommand -Name 'PathMise'
     Mock Get-Command {
       if ($Name -eq 'mise') { return $miseCmd }
@@ -387,7 +387,7 @@ Describe '30-mise ghq trusted paths' {
     $env:MISE_TRUSTED_CONFIG_PATHS | Should -Not -BeLike "*$($script:GhqRoot)*"
   }
 
-  It 'skips blank lines in chezmoi-ghq-trusted-paths' {
+  It 'skips blank lines in chezmoi-ghq-trusted-paths' -Skip:($null -eq (Get-Command 'ghq' -ErrorAction SilentlyContinue)) {
     $miseCmd = New-TestMiseCommand -Name 'PathMise'
     Mock Get-Command {
       if ($Name -eq 'mise') { return $miseCmd }

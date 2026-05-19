@@ -37,7 +37,11 @@ Describe 'sync-openssh-authorized-keys' -Skip:($IsWindows -eq $false) {
     }
   }
 
-  It 'Test-DotfilesAdminElevation returns false for non-elevated session' {
+  It 'Test-DotfilesAdminElevation returns false for non-elevated session' -Skip:(
+    $IsWindows -and
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+      [Security.Principal.WindowsBuiltInRole]::Administrator)
+  ) {
     Test-DotfilesAdminElevation | Should -BeFalse
   }
 
