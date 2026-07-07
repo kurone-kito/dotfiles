@@ -14,7 +14,7 @@ jobs:
     name: Bash tests (bats)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install chezmoi and zsh
@@ -31,7 +31,7 @@ jobs:
     name: PowerShell tests (Pester)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Pester if needed
         shell: pwsh
         run: |
@@ -47,7 +47,7 @@ jobs:
     name: Lua syntax check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install Lua
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.1
       - name: Check Lua syntax
