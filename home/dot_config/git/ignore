@@ -79,3 +79,17 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,macos,windows
+
+### THE PROJECT SPECIFIES #################################################
+
+### AI Agents ###
+# Claude Code local config (settings, cache, etc.) stays local-only,
+# but project-shared resources under .claude/skills, .claude/agents,
+# and .claude/commands ship with the repository.
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/commands/
+
+# OpenAI Codex sandbox
+.codex/
