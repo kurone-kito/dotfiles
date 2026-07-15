@@ -3,6 +3,8 @@ dotnet = "latest"
 node = "latest"
 pnpm = "latest"
 
+"aqua:anomalyco/opencode" = "latest"
+
 "npm:@anthropic-ai/claude-code" = { version = "latest", npm_args = "--ignore-scripts=false" }
 "npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
