@@ -13,17 +13,29 @@ jobs:
   bash-tests:
     name: Bash tests (bats)
     runs-on: ubuntu-latest
+    env:
+      CHEZMOI_VERSION: v2.71.0
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      - name: Install chezmoi and zsh
-        run: |
-          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zsh
+      - name: Cache chezmoi binary
+        id: cache-chezmoi
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/chezmoi
+          key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
+      - name: Install chezmoi
+        if: steps.cache-chezmoi.outputs.cache-hit != 'true'
+        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
       - name: Ensure chezmoi on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install zsh if missing
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends zsh
+          fi
       - name: Run bats tests
         run: tests/bash/helpers/bats-core/bin/bats tests/bash/
 
