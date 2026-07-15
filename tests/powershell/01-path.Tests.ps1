@@ -50,6 +50,12 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
     $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
     $programFilesX86Root = (New-Item -ItemType Directory -Path 'TestDrive:\ProgramFilesX86' -Force).FullName
+    # Captured immediately (before $env:LOCALAPPDATA is reassigned)
+    # so the "winget declared packages" Context's AfterEach cleanup
+    # always targets this TestDrive-rooted path, even if a later
+    # step in this block were to fail — never the real
+    # %LOCALAPPDATA%, which could otherwise be deleted from.
+    $script:TestWingetPackagesRoot = Join-Path $localAppDataRoot 'Microsoft\WinGet\Packages'
 
     Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
     $env:LOCALAPPDATA = $localAppDataRoot
@@ -85,9 +91,15 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
+    $script:TestWingetPackagesRoot = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -175,6 +187,145 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $secondPath = $env:PATH
 
       $secondPath | Should -Be $firstPath
+    }
+  }
+
+  Context 'winget declared packages' {
+
+    BeforeEach {
+      $script:WingetManifestPath = 'TestDrive:\winget-manifest.json'
+      $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:WingetManifestPath
+    }
+
+    AfterEach {
+      # TestDrive: persists across It blocks within this run, so any
+      # GitHub.cli_* directory a test creates must be removed here —
+      # otherwise it leaks into later tests (e.g. "contributes
+      # nothing") that assert no matching directory exists on disk.
+      # Uses the TestDrive-rooted path captured in the outer
+      # BeforeEach rather than re-reading $env:LOCALAPPDATA, so a
+      # partially-failed BeforeEach can never point this cleanup at
+      # a real %LOCALAPPDATA%.
+      if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
+        Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    }
+
+    It 'adds a declared package real bin directory ahead of WinGet\Links' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $binDir
+      ([array]::IndexOf($entries, $binDir)) |
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    }
+
+    It 'removes a stale sibling directory of a declared package while keeping the current one' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $currentBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
+      New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $staleBinDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $currentBinDir
+      $entries | Should -Not -Contain $staleBinDir
+    }
+
+    It 'removes a previously-added directory once its declared package''s bin changes' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $oldBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'old-bin'
+      $newBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'new-bin'
+      New-Item -ItemType Directory -Path $oldBinDir -Force | Out-Null
+      New-Item -ItemType Directory -Path $newBinDir -Force | Out-Null
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $oldBinDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        '[{"label":"gh","id":"GitHub.cli","bin":"new-bin"}]'
+      )
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $oldBinDir
+      $entries | Should -Contain $newBinDir
+    }
+
+    It 'removes a previously-added directory once its declared package is disabled' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $binDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        '[{"label":"gh","id":"GitHub.cli","bin":"bin","enabled":false}]'
+      )
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $binDir
+      $entries | Should -Contain $script:Paths.UnrelatedA
+    }
+
+    It 'contributes nothing when the declared package has no matching directory on disk' {
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+
+      . $script:Subject
+
+      $env:PATH | Should -Be (@(
+        $script:Paths.CurrentMiseBin
+        $script:Paths.WinGetLinks
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+        $script:Paths.UnrelatedA
+        $script:Paths.UnrelatedB
+      ) -join ';')
+    }
+
+    It 'is a no-op when no packages are declared (empty manifest)' {
+      Set-Content -Path $script:WingetManifestPath -Value '[]'
+
+      . $script:Subject
+
+      $env:PATH | Should -Be (@(
+        $script:Paths.CurrentMiseBin
+        $script:Paths.WinGetLinks
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+        $script:Paths.UnrelatedA
+        $script:Paths.UnrelatedB
+      ) -join ';')
     }
   }
 }

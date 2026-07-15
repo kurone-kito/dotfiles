@@ -52,6 +52,12 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
     $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
     $programFilesX86Root = (New-Item -ItemType Directory -Path 'TestDrive:\ProgramFilesX86' -Force).FullName
+    # Captured immediately (before $env:LOCALAPPDATA is reassigned)
+    # so the AfterEach cleanup below always targets this
+    # TestDrive-rooted path, even if a later step in this block
+    # were to fail — never the real %LOCALAPPDATA%, which could
+    # otherwise be deleted from.
+    $script:TestWingetPackagesRoot = Join-Path $localAppDataRoot 'Microsoft\WinGet\Packages'
 
     Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
     $env:LOCALAPPDATA = $localAppDataRoot
@@ -67,6 +73,18 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
   }
 
   AfterEach {
+    # TestDrive: persists for the whole Pester session, not just this
+    # Describe — remove any GitHub.cli_* directory a test created
+    # (before $env:LOCALAPPDATA below is restored to its real value)
+    # so it cannot leak into a later file's assumptions. Uses the
+    # TestDrive-rooted path captured in BeforeEach rather than
+    # re-reading $env:LOCALAPPDATA, so a partially-failed BeforeEach
+    # can never point this cleanup at a real %LOCALAPPDATA%.
+    if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
+      Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
     $env:PATH = $script:OriginalPath
     $env:LOCALAPPDATA = $script:OriginalLocalAppData
@@ -77,10 +95,16 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
+    $script:TestWingetPackagesRoot = $null
   }
 
   It 'computes the identical managed-path set on both surfaces' {
@@ -91,6 +115,25 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $registerManagedPaths = @($desiredManagedPaths)
 
     $confDManagedPaths | Should -Not -BeNullOrEmpty
+    $registerManagedPaths | Should -Be $confDManagedPaths
+  }
+
+  It 'computes the identical managed-path set on both surfaces with a winget package declared' {
+    $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+    $manifestPath = 'TestDrive:\winget-manifest.json'
+    Set-Content -Path $manifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
+
+    . $script:ConfDScript
+    $confDManagedPaths = @($desiredManagedPaths)
+
+    . $script:RegisterFixture 6>&1 | Out-Null
+    $registerManagedPaths = @($desiredManagedPaths)
+
+    $confDManagedPaths | Should -Contain $binDir
     $registerManagedPaths | Should -Be $confDManagedPaths
   }
 }

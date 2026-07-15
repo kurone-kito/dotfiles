@@ -1,12 +1,13 @@
 #!/usr/bin/env pwsh
 # Pre-rendered test fixture for run_onchange_after_35-register-path.ps1.tmpl.
-# Hash comment is replaced with a dummy value since tests don't use chezmoi.
-# The lib/managed-paths.ps1 block below is a literal copy of what
-# chezmoi's `include` would splice in at apply time — keep it in sync
-# with home/dot_config/powershell/lib/managed-paths.ps1 by hand; the
-# managed-paths-parity Pester test fails if this copy drifts.
+# Hash comments are replaced with dummy values since tests don't use
+# chezmoi. The lib/managed-paths.ps1 block below is a literal copy of
+# what chezmoi's `include` would splice in at apply time — keep it in
+# sync with home/dot_config/powershell/lib/managed-paths.ps1 by hand;
+# the managed-paths-parity Pester test fails if this copy drifts.
 #
 # hash: ae7bacf10ef20f21f4c9c7992c5fd51a9aa9620333b77b480b2121200dcd23e0
+# winget user path packages hash: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
 
 # Reconcile the repo-managed subset of User PATH. Both surfaces
 # compute the managed-path set from the shared source embedded
@@ -23,6 +24,13 @@
 # Test-IsManagedPath, Get-RegistryUserPath, Set-RegistryUserPath, and
 # $desiredManagedPaths (deduplicated managed directories that exist
 # on disk).
+#
+# WinGet declared-package directories (data.wingetUserPath.packages,
+# see docs/winget-user-path.md) are discovered via the deployed
+# winget-user-path-packages.json manifest (Get-WingetUserPath*) and
+# placed ahead of WinGet\Links in $desiredManagedPaths, mirroring the
+# mise special case below it (folding the two together is tracked
+# separately).
 
 $sep = [IO.Path]::PathSeparator
 
@@ -83,12 +91,89 @@ function Get-StaticManagedPaths {
   return $paths
 }
 
-function Get-MisePackagesRoot {
+function Get-WingetPackagesRoot {
   if ([string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
     return $null
   }
 
   return Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet') 'Packages'
+}
+
+function Get-MisePackagesRoot {
+  Get-WingetPackagesRoot
+}
+
+function Get-WingetUserPathManifestPath {
+  if ($null -ne $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST) {
+    return $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST
+  }
+
+  if ([string]::IsNullOrEmpty($HOME)) {
+    return $null
+  }
+
+  return Join-Path (
+    Join-Path (Join-Path $HOME '.config') 'powershell'
+  ) (Join-Path 'lib' 'winget-user-path-packages.json')
+}
+
+function Get-WingetUserPathDeclaredPackages {
+  $manifestPath = Get-WingetUserPathManifestPath
+  if ([string]::IsNullOrEmpty($manifestPath) -or
+      -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    return @()
+  }
+
+  $raw = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction SilentlyContinue
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    return @()
+  }
+
+  try {
+    $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return @()
+  }
+
+  return @($parsed | Where-Object { -not [string]::IsNullOrWhiteSpace($_.id) })
+}
+
+function Get-WingetUserPathManagedPaths {
+  $packagesRoot = Get-WingetPackagesRoot
+  if ([string]::IsNullOrEmpty($packagesRoot)) {
+    return @()
+  }
+
+  if (-not (Test-Path -LiteralPath $packagesRoot -PathType Container)) {
+    return @()
+  }
+
+  $paths = @()
+  foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
+    # A missing 'enabled' property (older manifests, hand-built test
+    # fixtures) defaults to enabled; only an explicit $false disables.
+    if ($null -ne $declared.enabled -and $declared.enabled -eq $false) {
+      continue
+    }
+
+    foreach ($packageDir in @(
+      Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) } |
+        Sort-Object -Property FullName
+    )) {
+      $dir = if ([string]::IsNullOrWhiteSpace($declared.bin)) {
+        $packageDir.FullName
+      } else {
+        Join-Path $packageDir.FullName $declared.bin
+      }
+
+      if (Test-Path -LiteralPath $dir -PathType Container) {
+        $paths += $dir
+      }
+    }
+  }
+
+  return $paths
 }
 
 function Get-MiseManagedPaths {
@@ -130,6 +215,24 @@ if (-not [string]::IsNullOrEmpty($misePackagesRoot)) {
     '\\jdx\.mise_[^\\]+\\mise\\bin$'
 }
 
+$wingetPackagesRoot = Get-WingetPackagesRoot
+$wingetUserPathPatterns = @()
+if (-not [string]::IsNullOrEmpty($wingetPackagesRoot)) {
+  $normalizedWingetRoot = Normalize-PathEntry $wingetPackagesRoot
+  foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
+    # Match the whole package directory (any subpath), not just the
+    # currently-declared $bin suffix — otherwise changing bin (or
+    # disabling the entry, handled above) would orphan a previously
+    # added PATH entry that no longer matches, and it would never be
+    # recognized as stale for cleanup.
+    $wingetUserPathPatterns += (
+      '^' + [regex]::Escape($normalizedWingetRoot) + '\\' +
+      [regex]::Escape(([string]$declared.id).ToLowerInvariant()) + '_[^\\]+' +
+      '(\\.*)?$'
+    )
+  }
+}
+
 function Test-IsManagedPath {
   param([AllowNull()][string]$PathEntry)
 
@@ -142,12 +245,18 @@ function Test-IsManagedPath {
     return $true
   }
 
+  foreach ($pattern in $wingetUserPathPatterns) {
+    if ($normalized -match $pattern) {
+      return $true
+    }
+  }
+
   return $false
 }
 
 $desiredManagedPaths = @()
 $desiredLookup = @{}
-foreach ($dir in @((@(Get-MiseManagedPaths)) + $staticManagedPaths)) {
+foreach ($dir in @((@(Get-WingetUserPathManagedPaths)) + (@(Get-MiseManagedPaths)) + $staticManagedPaths)) {
   if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
     continue
   }

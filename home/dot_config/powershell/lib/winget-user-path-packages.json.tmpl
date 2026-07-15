@@ -1,0 +1,13 @@
+{{- /* Deployed manifest consumed at runtime by managed-paths.ps1's
+     Get-WingetUserPathDeclaredPackages (plain, non-template file, so
+     it cannot read chezmoi data directly). One JSON object per entry
+     in data.wingetUserPath.packages, including disabled ones — a
+     disabled entry must stay visible so managed-paths.ps1 can still
+     recognize its directory as managed and remove it from PATH
+     if present; only the PATH-add side skips disabled entries. See
+     docs/winget-user-path.md. */ -}}
+{{- $packages := list -}}
+{{- range $label, $pkg := (dig "wingetUserPath" "packages" dict .) -}}
+{{- $packages = append $packages (dict "label" $label "id" (dig "id" "" $pkg) "bin" (dig "bin" "" $pkg) "enabled" (dig "enabled" true $pkg)) -}}
+{{- end -}}
+{{ $packages | toJson }}
