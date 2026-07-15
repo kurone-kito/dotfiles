@@ -25,10 +25,20 @@ setup() {
   cp "$REPO_HOME/dot_profile" "$HOME/.profile"
   cp "$REPO_HOME/dot_bash_profile" "$HOME/.bash_profile"
   cp "$REPO_HOME/dot_bashrc" "$HOME/.bashrc"
+
+  ZDOTDIR="$HOME/.config/zsh"
+  mkdir -p "$ZDOTDIR"
+  cp "$REPO_HOME/dot_config/zsh/dot_zprofile" "$ZDOTDIR/.zprofile"
+  cp "$REPO_HOME/dot_config/zsh/dot_zshrc" "$ZDOTDIR/.zshrc"
+}
+
+require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
 }
 
 @test "sources shared conf.d exactly once during a login+interactive bash startup" {
-  bash -li -c true > /dev/null 2>&1
+  run bash -li -c true
+  assert_success
 
   run wc -l < "$COUNTER"
   assert_output '1'
@@ -46,4 +56,24 @@ setup() {
   run bash -c ". '$HOME/.profile'; wc -l < '$COUNTER'"
   assert_success
   assert_output '1'
+}
+
+@test "sources shared conf.d exactly once during a login+interactive zsh startup" {
+  require_zsh
+
+  run env ZDOTDIR="$ZDOTDIR" zsh -li -c true
+  assert_success
+
+  run wc -l < "$COUNTER"
+  assert_output '1'
+}
+
+@test "a nested interactive zsh shell still sources conf.d (sentinel does not leak)" {
+  require_zsh
+
+  run env ZDOTDIR="$ZDOTDIR" zsh -li -c "ZDOTDIR='$ZDOTDIR' zsh -i -c true"
+  assert_success
+
+  run wc -l < "$COUNTER"
+  assert_output '2'
 }
