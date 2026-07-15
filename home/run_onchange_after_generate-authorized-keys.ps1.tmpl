@@ -8,10 +8,6 @@
 $ErrorActionPreference = 'Stop'
 
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
-{{ if not $sshKeys -}}
-Write-Host 'No SSH keys configured; skipping authorized_keys generation.'
-exit 0
-{{ end -}}
 
 $sshDir = Join-Path $HOME '.ssh'
 $authorized = Join-Path $sshDir 'authorized_keys'

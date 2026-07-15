@@ -11,10 +11,6 @@ set -euo pipefail
 exec </dev/null
 
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
-{{ if not $sshKeys -}}
-echo "No SSH keys configured; skipping authorized_keys generation."
-exit 0
-{{ end -}}
 
 ssh_dir="${HOME}/.ssh"
 authorized="${ssh_dir}/authorized_keys"

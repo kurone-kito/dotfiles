@@ -135,6 +135,10 @@ setup() {
 
   assert_file_exists "$AUTHORIZED"
   assert_output --partial 'WARNING: no public keys were found'
+
+  run cat "$AUTHORIZED"
+  assert_output --partial '# >>> chezmoi managed keys >>>'
+  assert_output --partial '# <<< chezmoi managed keys <<<'
 }
 
 @test "falls back to append instead of dropping content when the end marker is missing" {
