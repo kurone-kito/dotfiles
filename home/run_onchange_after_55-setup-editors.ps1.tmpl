@@ -51,7 +51,10 @@ if ($vimCmd) {
     } else {
       Write-Host '  Bootstrapping vim-plug via Invoke-WebRequest...'
       try {
-        Invoke-WebRequest -Uri $plugUrl -OutFile $plugVim -UseBasicParsing
+        # PS5.1's .NET default protocol set can exclude TLS 1.2, which
+        # GitHub's raw content endpoint requires.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $plugUrl -OutFile $plugVim -UseBasicParsing -ErrorAction Stop
       } catch {
         Write-Host "  WARNING: vim-plug bootstrap failed; skipping vim."
       }
