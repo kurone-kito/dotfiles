@@ -100,10 +100,11 @@ JSON
   refute_output --partial 'signingkey = "FPR"'
 }
 
-@test "config: no relative excludesfile value is emitted" {
+@test "config: no excludesfile key (relative or otherwise) is emitted" {
   echo '{ "data": {} }' > "$TMP_CFG"
   run _render "$CONFIG_TMPL"
   assert_success
+  run tr '[:upper:]' '[:lower:]' <<< "$output"
   refute_output --partial 'excludesfile'
 }
 
