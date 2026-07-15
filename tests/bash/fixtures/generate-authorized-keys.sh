@@ -1,16 +1,13 @@
 #!/bin/bash
-# chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
-# from deployed public key files. Re-runs when SSH key config changes.
-# Only the managed block below is owned by this script; every line
-# outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
-# preserved across regeneration, though a missing trailing newline may
-# be normalized in the process.
+# Pre-rendered test fixture for generate-authorized-keys.sh.tmpl.
+# Contains two hardcoded public key names:
+#   primary.pub   - included when present
+#   secondary.pub - included when present
+#
+# This script is intentionally NOT a chezmoi template. It simulates
+# what chezmoi would render when two SSH keys named "primary" and
+# "secondary" are configured under data.secret.ssh.keys.
 set -euo pipefail
-
-# See run_after_99-secret-status-summary.sh.tmpl for rationale.
-exec </dev/null
-
-{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
 
 ssh_dir="${HOME}/.ssh"
 authorized="${ssh_dir}/authorized_keys"
@@ -24,16 +21,16 @@ managed_keys="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"
 new_file="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"
 trap 'rm -f "${managed_keys}" "${new_file}"' EXIT
 
-{{ range $key, $sshKey := $sshKeys -}}
-pubfile="${ssh_dir}/{{ $sshKey.filename }}.pub"
-if [ -f "${pubfile}" ]; then
-  cat "${pubfile}" >> "${managed_keys}"
-  echo "" >> "${managed_keys}"
-  echo "  Added {{ $sshKey.filename }}.pub"
-else
-  echo "  Skipped {{ $sshKey.filename }}.pub (not found)"
-fi
-{{ end -}}
+for name in primary secondary; do
+  pubfile="${ssh_dir}/${name}.pub"
+  if [ -f "${pubfile}" ]; then
+    cat "${pubfile}" >> "${managed_keys}"
+    echo "" >> "${managed_keys}"
+    echo "  Added ${name}.pub"
+  else
+    echo "  Skipped ${name}.pub (not found)"
+  fi
+done
 
 if [ ! -s "${managed_keys}" ]; then
   echo "  WARNING: no public keys were found; managed block will be empty."
@@ -51,19 +48,11 @@ if [ "${begin_count}" -gt 0 ] || [ "${end_count}" -gt 0 ]; then
   markers_present=true
 fi
 
-# A "shaped" block is exactly one begin and one end marker. Anything
-# else (missing end marker, duplicated markers left behind by a prior
-# malformed run) is flagged every run until an operator cleans it up,
-# even once a valid pair below is found to update in place.
 block_shape_ok=false
 if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
   block_shape_ok=true
 fi
 
-# Locate the last begin marker and the first end marker after it, so a
-# block appended by a prior malformed-recovery run is found and
-# updated in place on the next run instead of appending yet another
-# block (which would never converge).
 begin_line=""
 end_line=""
 if [ -f "${authorized}" ]; then
@@ -82,8 +71,6 @@ if [ "${markers_present}" = true ] && [ "${block_shape_ok}" = false ]; then
 fi
 
 if [ "${has_valid_block}" = true ]; then
-  # Replace the last managed block in place, preserving every line
-  # outside it.
   awk -v begin_line="${begin_line}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
     NR == begin_line {
       print
@@ -100,13 +87,6 @@ if [ "${has_valid_block}" = true ]; then
     { print }
   ' "${authorized}" > "${new_file}"
 else
-  # No managed block yet, or no end marker follows any begin marker:
-  # preserve any existing content and append a fresh managed block
-  # rather than risk dropping foreign lines by guessing at a broken
-  # block's boundaries. Exception: when migrating from the
-  # pre-managed-block script (an unmarked file already containing the
-  # same key lines we are about to manage), drop those exact-duplicate
-  # lines so the first managed run doesn't double them up.
   if [ -f "${authorized}" ]; then
     if [ -s "${managed_keys}" ]; then
       non_empty_managed_keys="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"

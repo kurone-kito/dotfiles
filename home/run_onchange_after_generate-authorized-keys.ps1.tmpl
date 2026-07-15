@@ -1,36 +1,94 @@
 #!/usr/bin/env pwsh
 # chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
 # from deployed public key files. Re-runs when SSH key config changes.
+# Only the managed block below is owned by this script; every line
+# outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
+# preserved across regeneration, though line endings and a missing
+# trailing newline may be normalized in the process.
 $ErrorActionPreference = 'Stop'
 
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
-{{ if not $sshKeys -}}
-Write-Host 'No SSH keys configured; skipping authorized_keys generation.'
-exit 0
-{{ end -}}
 
 $sshDir = Join-Path $HOME '.ssh'
 $authorized = Join-Path $sshDir 'authorized_keys'
+$beginMarker = '# >>> chezmoi managed keys >>>'
+$endMarker = '# <<< chezmoi managed keys <<<'
 
 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
 
-$lines = @()
+$managedLines = @()
 
 {{ range $key, $sshKey := $sshKeys -}}
 $pubFile = Join-Path $sshDir '{{ $sshKey.filename }}.pub'
 if (Test-Path $pubFile) {
-  $lines += (Get-Content -Path $pubFile -Raw).TrimEnd()
+  $managedLines += (Get-Content -Path $pubFile -Raw).TrimEnd()
   Write-Host '  Added {{ $sshKey.filename }}.pub'
 } else {
   Write-Host '  Skipped {{ $sshKey.filename }}.pub (not found)'
 }
 {{ end -}}
 
-if ($lines.Count -eq 0) {
-  Write-Warning 'No public keys were found; authorized_keys will be empty.'
+if ($managedLines.Count -eq 0) {
+  Write-Warning 'No public keys were found; managed block will be empty.'
 }
 
-$lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+$existingLines = @()
+if (Test-Path $authorized) {
+  $existingLines = @(Get-Content -Path $authorized)
+}
+
+$beginCount = ($existingLines | Where-Object { $_ -eq $beginMarker }).Count
+$endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
+$markersPresent = ($beginCount -gt 0) -or ($endCount -gt 0)
+# A "shaped" block is exactly one begin and one end marker. Anything
+# else (missing end marker, duplicated markers left behind by a prior
+# malformed run) is flagged every run until an operator cleans it up,
+# even once a valid pair below is found to update in place.
+$blockShapeOk = ($beginCount -eq 1) -and ($endCount -eq 1)
+
+# Locate the last begin marker and the first end marker after it, so a
+# block appended by a prior malformed-recovery run is found and
+# updated in place on the next run instead of appending yet another
+# block (which would never converge).
+$beginIndex = [array]::LastIndexOf($existingLines, $beginMarker)
+$endIndex = -1
+if ($beginIndex -ge 0) {
+  $endIndex = [array]::IndexOf($existingLines, $endMarker, $beginIndex + 1)
+}
+$hasValidBlock = ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
+
+if ($markersPresent -and -not $blockShapeOk) {
+  Write-Warning "Malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. A valid block will be updated in place if one can be found, otherwise a fresh block is appended."
+}
+
+$outLines = @()
+if ($hasValidBlock) {
+  # Replace the last managed block in place, preserving every line
+  # outside it.
+  if ($beginIndex -gt 0) {
+    $outLines += $existingLines[0..($beginIndex - 1)]
+  }
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+  if ($endIndex + 1 -lt $existingLines.Count) {
+    $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
+  }
+} else {
+  # No managed block yet, or no end marker follows any begin marker:
+  # preserve any existing content and append a fresh managed block
+  # rather than risk dropping foreign lines by guessing at a broken
+  # block's boundaries. Exception: when migrating from the
+  # pre-managed-block script (an unmarked file already containing the
+  # same key lines we are about to manage), drop those exact-duplicate
+  # lines so the first managed run doesn't double them up.
+  $outLines += $existingLines | Where-Object { $managedLines -notcontains $_ }
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+}
+
+($outLines -join "`n") + "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 
 # Keep the file private, but still readable by the LocalSystem sshd
 # service when Windows OpenSSH is configured to use per-user keys.
