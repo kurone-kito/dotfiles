@@ -64,12 +64,17 @@ Describe 'profile.ps1 prompt setup' {
   }
 
   It 'does not define the transient-prompt function when the readiness helper is unavailable and PSReadLine is not loaded' {
+    $wasLoaded = $null -ne (Get-Module PSReadLine)
     Remove-Module PSReadLine -ErrorAction SilentlyContinue
 
-    . $script:Subject
+    try {
+      . $script:Subject
 
-    Get-Command Invoke-Starship-TransientFunction -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
+      Get-Command Invoke-Starship-TransientFunction -ErrorAction SilentlyContinue |
+        Should -BeNullOrEmpty
+    } finally {
+      if ($wasLoaded) { Import-Module PSReadLine -ErrorAction SilentlyContinue }
+    }
   }
 
   It 'initializes zoxide after Starship (Starship replaces $function:prompt, so zoxide must hook after)' {

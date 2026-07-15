@@ -416,7 +416,7 @@ Describe '30-mise ghq trusted paths' {
 # -Skip'd on non-Windows) so the Unix `mise activate` branch and the
 # WSL /proc/version detection — the primary Linux/macOS code paths —
 # get real coverage when Pester runs on a non-Windows host.
-Describe '30-mise Unix' -Skip:($IsWindows -eq $true) {
+Describe '30-mise Unix' -Skip:($IsWindows -ne $false) {
 
   BeforeEach {
     $script:OriginalHome = $HOME
