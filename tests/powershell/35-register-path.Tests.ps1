@@ -133,6 +133,16 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:WingetManifestPath
     }
 
+    AfterEach {
+      # TestDrive: persists across It blocks within this run, so any
+      # GitHub.cli_* directory a test creates must be removed here —
+      # otherwise it leaks into later tests (e.g. "contributes
+      # nothing") that assert no matching directory exists on disk.
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      Get-ChildItem -LiteralPath $packagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     It 'adds a declared package real bin directory ahead of WinGet\Links' {
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'

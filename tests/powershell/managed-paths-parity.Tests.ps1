@@ -67,6 +67,14 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
   }
 
   AfterEach {
+    # TestDrive: persists for the whole Pester session, not just this
+    # Describe — remove any GitHub.cli_* directory a test created
+    # (before $env:LOCALAPPDATA below is restored to its real value)
+    # so it cannot leak into a later file's assumptions.
+    $packagesRootCleanup = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    Get-ChildItem -LiteralPath $packagesRootCleanup -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
     Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
     $env:PATH = $script:OriginalPath
     $env:LOCALAPPDATA = $script:OriginalLocalAppData
