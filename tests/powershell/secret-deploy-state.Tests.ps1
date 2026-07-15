@@ -9,13 +9,28 @@ BeforeAll {
     param(
       [string]   $HomeDir,
       [string[]] $ScriptArgs = @(),
-      [hashtable]$ExtraEnv = @{}
+      [hashtable]$ExtraEnv = @{},
+      # $IsWindows is ReadOnly+AllScope: Set-Variable -Force can stub it,
+      # but the override leaks process-wide. Only ever apply it inside
+      # this throwaway subprocess, never in the Pester process itself.
+      [switch]   $SimulatePS51,
+      # icacls does not exist on Linux/macOS CI. A PowerShell function
+      # resolves before an external command of the same name, so
+      # defining one here shims the call on every platform (including
+      # real Windows, where it just shadows the real binary for this
+      # one test) without needing a real icacls on PATH.
+      [string]   $IcaclsMarkerPath
     )
+    $stubBlock = ''
+    if ($SimulatePS51) { $stubBlock += "Set-Variable -Name IsWindows -Value `$null -Force;" }
+    if ($IcaclsMarkerPath) {
+      $stubBlock += "function icacls { `$args -join ' ' | Out-File -FilePath '$IcaclsMarkerPath' -Append };"
+    }
     $envBlock = ''
     if ($HomeDir) { $envBlock += "`$env:HOME = '$HomeDir';" }
     foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = '$($ExtraEnv[$k])';" }
     $argsExpr = ($ScriptArgs | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ' '
-    $cmd = "$envBlock & '$script:ScriptPath' $argsExpr 2>&1; exit `$LASTEXITCODE"
+    $cmd = "$stubBlock$envBlock & '$script:ScriptPath' $argsExpr 2>&1; exit `$LASTEXITCODE"
     $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
     return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
   }
@@ -138,5 +153,32 @@ Describe 'secret-deploy-state.ps1' {
     $h = New-FreshHome
     $r = Invoke-Helper -HomeDir $h -ScriptArgs @('gibberish')
     $r.ExitCode | Should -Be 2
+  }
+}
+
+Describe 'secret-deploy-state.ps1 (PS5.1 $IsWindows guard)' {
+
+  It 'takes the icacls branch and leaves mode empty when $IsWindows is $null (PS5.1 emulation)' {
+    $h = New-FreshHome
+    $f = Join-Path $h '.secret/ps51.txt'
+    New-File -Path $f -Content 'abc'
+    $marker = Join-Path ([System.IO.Path]::GetTempPath()) ("icacls-marker-" + [Guid]::NewGuid().ToString('N') + '.txt')
+
+    try {
+      $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'ps51', $f) `
+        -ExtraEnv @{ USERNAME = 'testuser' } -SimulatePS51 -IcaclsMarkerPath $marker
+
+      $r.ExitCode | Should -Be 0
+      # Proves the icacls branch ran instead of the pre-fix silent no-op.
+      Test-Path -LiteralPath $marker | Should -BeTrue
+
+      $j = Get-Content -LiteralPath (Get-StateFor -HomeDir $h) -Raw | ConvertFrom-Json
+      $entry = $j.entries | Where-Object { $_.path -eq $f } | Select-Object -First 1
+      $entry             | Should -Not -BeNullOrEmpty
+      # Proves Get-FileMode returned '' instead of shelling out to stat.
+      $entry.mode        | Should -BeNullOrEmpty
+    } finally {
+      Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+    }
   }
 }

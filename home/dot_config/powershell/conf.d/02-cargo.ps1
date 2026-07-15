@@ -9,7 +9,7 @@
 # "rustup-init --no-modify-path" without losing PATH integration and
 # without rustup mutating chezmoi-managed shell rc files.
 
-if ($IsWindows) { return }
+if ($IsWindows -ne $false) { return }
 
 & {
   $cargoHome = if ([string]::IsNullOrEmpty($env:CARGO_HOME)) {
