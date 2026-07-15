@@ -1,19 +1,13 @@
 #!/bin/bash
-# chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
-# from deployed public key files. Re-runs when SSH key config changes.
-# Only the managed block below is owned by this script; every line
-# outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
-# preserved byte-for-byte across regeneration.
+# Pre-rendered test fixture for generate-authorized-keys.sh.tmpl.
+# Contains two hardcoded public key names:
+#   primary.pub   - included when present
+#   secondary.pub - included when present
+#
+# This script is intentionally NOT a chezmoi template. It simulates
+# what chezmoi would render when two SSH keys named "primary" and
+# "secondary" are configured under data.secret.ssh.keys.
 set -euo pipefail
-
-# See run_after_99-secret-status-summary.sh.tmpl for rationale.
-exec </dev/null
-
-{{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
-{{ if not $sshKeys -}}
-echo "No SSH keys configured; skipping authorized_keys generation."
-exit 0
-{{ end -}}
 
 ssh_dir="${HOME}/.ssh"
 authorized="${ssh_dir}/authorized_keys"
@@ -27,24 +21,22 @@ managed_keys="$(mktemp)"
 new_file="$(mktemp)"
 trap 'rm -f "${managed_keys}" "${new_file}"' EXIT
 
-{{ range $key, $sshKey := $sshKeys -}}
-pubfile="${ssh_dir}/{{ $sshKey.filename }}.pub"
-if [ -f "${pubfile}" ]; then
-  cat "${pubfile}" >> "${managed_keys}"
-  echo "" >> "${managed_keys}"
-  echo "  Added {{ $sshKey.filename }}.pub"
-else
-  echo "  Skipped {{ $sshKey.filename }}.pub (not found)"
-fi
-{{ end -}}
+for name in primary secondary; do
+  pubfile="${ssh_dir}/${name}.pub"
+  if [ -f "${pubfile}" ]; then
+    cat "${pubfile}" >> "${managed_keys}"
+    echo "" >> "${managed_keys}"
+    echo "  Added ${name}.pub"
+  else
+    echo "  Skipped ${name}.pub (not found)"
+  fi
+done
 
 if [ ! -s "${managed_keys}" ]; then
   echo "  WARNING: no public keys were found; managed block will be empty."
 fi
 
 if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
-  # Replace the existing managed block in place, preserving every
-  # line outside it byte-for-byte.
   awk -v begin="${begin_marker}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
     $0 == begin {
       print
@@ -56,8 +48,6 @@ if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
     !in_block { print }
   ' "${authorized}" > "${new_file}"
 else
-  # No managed block yet: preserve any existing (foreign) content and
-  # append a fresh managed block.
   if [ -f "${authorized}" ]; then
     cat "${authorized}" > "${new_file}"
     if [ -s "${new_file}" ]; then

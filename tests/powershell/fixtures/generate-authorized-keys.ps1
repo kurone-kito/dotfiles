@@ -13,22 +13,53 @@ $homeDir = if ($env:AUTHORIZED_KEYS_HOME) {
 
 $sshDir = Join-Path $homeDir '.ssh'
 $authorized = Join-Path $sshDir 'authorized_keys'
+$beginMarker = '# >>> chezmoi managed keys >>>'
+$endMarker = '# <<< chezmoi managed keys <<<'
 
 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
 
-$lines = @()
+$managedLines = @()
 foreach ($name in @('primary.pub', 'secondary.pub')) {
   $pubFile = Join-Path $sshDir $name
   if (Test-Path $pubFile) {
-    $lines += (Get-Content -Path $pubFile -Raw).TrimEnd()
+    $managedLines += (Get-Content -Path $pubFile -Raw).TrimEnd()
+    Write-Host "  Added $name"
+  } else {
+    Write-Host "  Skipped $name (not found)"
   }
 }
 
-if ($lines.Count -eq 0) {
-  Write-Warning 'No public keys were found; authorized_keys will be empty.'
+if ($managedLines.Count -eq 0) {
+  Write-Warning 'No public keys were found; managed block will be empty.'
 }
 
-$lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+$existingLines = @()
+if (Test-Path $authorized) {
+  $existingLines = @(Get-Content -Path $authorized)
+}
+
+$beginIndex = [array]::IndexOf($existingLines, $beginMarker)
+$endIndex = [array]::IndexOf($existingLines, $endMarker)
+
+$outLines = @()
+if ($beginIndex -ge 0 -and $endIndex -gt $beginIndex) {
+  if ($beginIndex -gt 0) {
+    $outLines += $existingLines[0..($beginIndex - 1)]
+  }
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+  if ($endIndex + 1 -lt $existingLines.Count) {
+    $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
+  }
+} else {
+  $outLines += $existingLines
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+}
+
+($outLines -join "`n") + "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 
 icacls $authorized /inheritance:r `
   /grant:r "${env:USERNAME}:(F)" `

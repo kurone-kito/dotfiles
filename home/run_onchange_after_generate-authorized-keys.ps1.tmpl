@@ -1,6 +1,9 @@
 #!/usr/bin/env pwsh
 # chezmoi run_onchange_after script: Generate ~/.ssh/authorized_keys
 # from deployed public key files. Re-runs when SSH key config changes.
+# Only the managed block below is owned by this script; every line
+# outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
+# preserved across regeneration.
 $ErrorActionPreference = 'Stop'
 
 {{ $sshKeys := dig "secret" "ssh" "keys" dict . -}}
@@ -11,26 +14,58 @@ exit 0
 
 $sshDir = Join-Path $HOME '.ssh'
 $authorized = Join-Path $sshDir 'authorized_keys'
+$beginMarker = '# >>> chezmoi managed keys >>>'
+$endMarker = '# <<< chezmoi managed keys <<<'
 
 New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
 
-$lines = @()
+$managedLines = @()
 
 {{ range $key, $sshKey := $sshKeys -}}
 $pubFile = Join-Path $sshDir '{{ $sshKey.filename }}.pub'
 if (Test-Path $pubFile) {
-  $lines += (Get-Content -Path $pubFile -Raw).TrimEnd()
+  $managedLines += (Get-Content -Path $pubFile -Raw).TrimEnd()
   Write-Host '  Added {{ $sshKey.filename }}.pub'
 } else {
   Write-Host '  Skipped {{ $sshKey.filename }}.pub (not found)'
 }
 {{ end -}}
 
-if ($lines.Count -eq 0) {
-  Write-Warning 'No public keys were found; authorized_keys will be empty.'
+if ($managedLines.Count -eq 0) {
+  Write-Warning 'No public keys were found; managed block will be empty.'
 }
 
-$lines -join "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+$existingLines = @()
+if (Test-Path $authorized) {
+  $existingLines = @(Get-Content -Path $authorized)
+}
+
+$beginIndex = [array]::IndexOf($existingLines, $beginMarker)
+$endIndex = [array]::IndexOf($existingLines, $endMarker)
+
+$outLines = @()
+if ($beginIndex -ge 0 -and $endIndex -gt $beginIndex) {
+  # Replace the existing managed block in place, preserving every
+  # line outside it.
+  if ($beginIndex -gt 0) {
+    $outLines += $existingLines[0..($beginIndex - 1)]
+  }
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+  if ($endIndex + 1 -lt $existingLines.Count) {
+    $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
+  }
+} else {
+  # No managed block yet: preserve any existing (foreign) content and
+  # append a fresh managed block.
+  $outLines += $existingLines
+  $outLines += $beginMarker
+  $outLines += $managedLines
+  $outLines += $endMarker
+}
+
+($outLines -join "`n") + "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
 
 # Keep the file private, but still readable by the LocalSystem sshd
 # service when Windows OpenSSH is configured to use per-user keys.
