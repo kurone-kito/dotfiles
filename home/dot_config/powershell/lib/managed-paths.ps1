@@ -142,7 +142,7 @@ function Get-WingetUserPathManagedPaths {
 
     foreach ($packageDir in @(
       Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "$($declared.id)_*" } |
+        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) } |
         Sort-Object -Property FullName
     )) {
       $dir = if ([string]::IsNullOrWhiteSpace($declared.bin)) {
