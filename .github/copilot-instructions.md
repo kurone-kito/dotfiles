@@ -6,22 +6,6 @@ When contributing to this repository using AI agents, adhere to the
 following guidelines to ensure high-quality contributions that align with
 the project's standards and practices:
 
-## Repository architecture
-
-This repository is a **git worktree** of
-[kurone-kito/dotfiles](https://github.com/kurone-kito/dotfiles),
-checked out on the `migrate-to-chezmoi` branch. The directory name
-`dotfiles.migrate-to-chezmoi` reflects the branch name, not a
-separate repository.
-
-- **Remote origin:** `kurone-kito/dotfiles`
-- **Branch:** `migrate-to-chezmoi`
-- **CI badges and workflow URLs** correctly reference
-  `kurone-kito/dotfiles`
-
-Do not treat this as a standalone repository or suggest renaming
-remote URLs or badge links.
-
 ## Tooling priority and compatibility
 
 This repository is intentionally optimized for GitHub Copilot CLI and
@@ -290,8 +274,9 @@ feat: add auth system and refactor database layer and update docs
   `.gitattributes`)
 - **Trailing whitespace**: trimmed (except in Markdown)
 - **Final newline**: always present
-- **File naming**: lowercase with hyphens (e.g., `feature-request.yml`)
-  unless constrained by a platform convention (e.g., `CONTRIBUTING.md`)
+- **File naming**: lowercase with hyphens (e.g., `getting-started.md`)
+  unless constrained by a platform convention (e.g., `CONTRIBUTING.md`,
+  or GitHub's underscore-based `.github/ISSUE_TEMPLATE/feature_request.yml`)
 
 ### PowerShell profile
 

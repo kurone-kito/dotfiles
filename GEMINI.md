@@ -1,10 +1,6 @@
 # Guidelines for AI Agents
 
 A collection of configuration files that we use.
-This is a **git worktree** of
-[kurone-kito/dotfiles](https://github.com/kurone-kito/dotfiles) on
-the `migrate-to-chezmoi` branch — not a separate repository. CI
-badges and workflow URLs correctly reference `kurone-kito/dotfiles`.
 
 It is currently optimized for GitHub Copilot tooling, but `GEMINI.md`
 exists so Gemini CLI can still receive the minimum project rules
@@ -97,22 +93,6 @@ Always report which path (GPG / GPG-after-restart / `git commit-ssh`
 alias / transient SSH / unsigned) was used; when unsigned, disclose
 the GPG cause, whether the gpg-agent restart was attempted or
 skipped (and why), and the SSH cause.
-
-## Onboarding detection
-
-When starting a session, check whether this repository is the base
-template or a derived project:
-
-- If the repository name is exactly `template`, it is the base
-  template — no action needed.
-- If the name differs **and** this file still contains the phrase
-  `language-independent generic project template`, the guidelines
-  have not been customized yet.
-
-In that case, **proactively propose an onboarding workflow** to
-customize the project's documentation, tooling, and AI guidelines.
-See the full onboarding checklist in
-[.github/copilot-instructions.md](.github/copilot-instructions.md).
 
 ## IDD Workflow
 

@@ -2,7 +2,7 @@
 
 This repository currently prioritizes GitHub Copilot because it
 provides the best latency and workflow fit for day-to-day vibe coding
-in this template.
+in this repository.
 
 ## Canonical guidance
 
