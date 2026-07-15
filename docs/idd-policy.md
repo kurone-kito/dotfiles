@@ -153,12 +153,12 @@ required-check set is partial.
 
 ### Required status checks on `master`
 
-`master` has no classic branch protection (that API returns 404);
-the gate lives entirely in the default-branch ruleset (`main`, id
-`18861545`, matching `~DEFAULT_BRANCH`). That ruleset's
-`required_status_checks` rule lists all four Test/Linting workflow
-jobs as required: `lint`, `Lua syntax check`, `Bash tests (bats)`,
-and `PowerShell tests (Pester)`.
+`master`'s merge gate is enforced entirely via a default-branch
+ruleset matching `~DEFAULT_BRANCH`, not classic branch protection.
+That ruleset's `required_status_checks` rule lists four required
+check contexts, spanning the Linting and Test workflows: `lint`,
+`Lua syntax check`, `Bash tests (bats)`, and
+`PowerShell tests (Pester)`.
 
 [`#109`](https://github.com/kurone-kito/dotfiles/issues/109) and
 [`#110`](https://github.com/kurone-kito/dotfiles/issues/110) (children
