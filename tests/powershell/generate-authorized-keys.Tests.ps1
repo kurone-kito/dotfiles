@@ -141,12 +141,13 @@ Describe 'generate-authorized-keys' {
     'ssh-ed25519 AAAA primary@test' |
       Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
 
-    & $script:Fixture
+    $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
     $content = Get-Content $script:Authorized
     $content | Should -Contain 'ssh-rsa FOREIGN untouched'
     $content | Should -Contain 'ssh-rsa STALE stale-key'
     $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
+    ($warnings.Message -join "`n") | Should -Match 'Malformed managed-key markers'
   }
 
   It 'falls back to append instead of guessing when markers are duplicated' {
@@ -158,10 +159,20 @@ Describe 'generate-authorized-keys' {
     'ssh-ed25519 AAAA primary@test' |
       Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
 
-    & $script:Fixture
+    $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
     $content = Get-Content $script:Authorized
     $content | Should -Contain 'ssh-rsa FOREIGN between-blocks'
     $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
+    ($warnings.Message -join "`n") | Should -Match 'Malformed managed-key markers'
+  }
+
+  It 'does not warn about malformed markers on a normal run' {
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+    ($warnings.Message -join "`n") | Should -Not -Match 'Malformed managed-key markers'
   }
 }

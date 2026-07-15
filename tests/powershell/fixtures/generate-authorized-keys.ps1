@@ -43,6 +43,11 @@ $endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
 $beginIndex = [array]::IndexOf($existingLines, $beginMarker)
 $endIndex = [array]::IndexOf($existingLines, $endMarker)
 $hasValidBlock = ($beginCount -eq 1) -and ($endCount -eq 1) -and ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
+$markersPresent = ($beginCount -gt 0) -or ($endCount -gt 0)
+
+if ($markersPresent -and -not $hasValidBlock) {
+  Write-Warning "Malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
+}
 
 $outLines = @()
 if ($hasValidBlock) {

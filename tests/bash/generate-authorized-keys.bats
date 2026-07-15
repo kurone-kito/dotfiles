@@ -129,6 +129,7 @@ setup() {
 
   run bash "$FIXTURE"
   assert_success
+  assert_output --partial 'WARNING: malformed managed-key markers found'
 
   run cat "$AUTHORIZED"
   assert_output --partial 'ssh-rsa FOREIGN untouched'
@@ -142,8 +143,17 @@ setup() {
 
   run bash "$FIXTURE"
   assert_success
+  assert_output --partial 'WARNING: malformed managed-key markers found'
 
   run cat "$AUTHORIZED"
   assert_output --partial 'ssh-rsa FOREIGN between-blocks'
   assert_output --partial 'ssh-ed25519 AAAA primary@test'
+}
+
+@test "does not warn about malformed markers on a normal run" {
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+  refute_output --partial 'WARNING: malformed managed-key markers found'
 }

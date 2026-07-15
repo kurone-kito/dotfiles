@@ -3,8 +3,8 @@
 # from deployed public key files. Re-runs when SSH key config changes.
 # Only the managed block below is owned by this script; every line
 # outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
-# preserved across regeneration (a missing trailing newline may be
-# added when a fresh block is first appended).
+# preserved across regeneration, though a missing trailing newline may
+# be normalized in the process.
 set -euo pipefail
 
 # See run_after_99-secret-status-summary.sh.tmpl for rationale.
@@ -44,9 +44,13 @@ if [ ! -s "${managed_keys}" ]; then
 fi
 
 has_valid_block=false
+markers_present=false
 if [ -f "${authorized}" ]; then
   begin_count=$(grep -cF "${begin_marker}" "${authorized}" || true)
   end_count=$(grep -cF "${end_marker}" "${authorized}" || true)
+  if [ "${begin_count}" -gt 0 ] || [ "${end_count}" -gt 0 ]; then
+    markers_present=true
+  fi
   if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
     begin_line=$(grep -nF "${begin_marker}" "${authorized}" | cut -d: -f1)
     end_line=$(grep -nF "${end_marker}" "${authorized}" | cut -d: -f1)
@@ -54,6 +58,10 @@ if [ -f "${authorized}" ]; then
       has_valid_block=true
     fi
   fi
+fi
+
+if [ "${markers_present}" = true ] && [ "${has_valid_block}" = false ]; then
+  echo "  WARNING: malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
 fi
 
 if [ "${has_valid_block}" = true ]; then

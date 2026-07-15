@@ -37,9 +37,13 @@ if [ ! -s "${managed_keys}" ]; then
 fi
 
 has_valid_block=false
+markers_present=false
 if [ -f "${authorized}" ]; then
   begin_count=$(grep -cF "${begin_marker}" "${authorized}" || true)
   end_count=$(grep -cF "${end_marker}" "${authorized}" || true)
+  if [ "${begin_count}" -gt 0 ] || [ "${end_count}" -gt 0 ]; then
+    markers_present=true
+  fi
   if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
     begin_line=$(grep -nF "${begin_marker}" "${authorized}" | cut -d: -f1)
     end_line=$(grep -nF "${end_marker}" "${authorized}" | cut -d: -f1)
@@ -47,6 +51,10 @@ if [ -f "${authorized}" ]; then
       has_valid_block=true
     fi
   fi
+fi
+
+if [ "${markers_present}" = true ] && [ "${has_valid_block}" = false ]; then
+  echo "  WARNING: malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
 fi
 
 if [ "${has_valid_block}" = true ]; then
