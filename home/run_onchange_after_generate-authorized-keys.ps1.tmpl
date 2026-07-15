@@ -62,7 +62,7 @@ if ($beginIndex -ge 0) {
 $hasValidBlock = ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
 
 if ($markersPresent -and -not $blockShapeOk) {
-  Write-Warning "Malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. Regeneration will keep updating the most recent block in place."
+  Write-Warning "Malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. A valid block will be updated in place if one can be found, otherwise a fresh block is appended."
 }
 
 $outLines = @()

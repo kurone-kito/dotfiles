@@ -163,7 +163,7 @@ Describe 'generate-authorized-keys' {
     ($warnings.Message -join "`n") | Should -Match 'Malformed managed-key markers'
   }
 
-  It 'falls back to append instead of guessing when markers are duplicated' {
+  It 'updates the most recent valid block in place when markers are duplicated' {
     @(
       $script:BeginMarker, 'ssh-rsa OLD1 old', $script:EndMarker,
       'ssh-rsa FOREIGN between-blocks',

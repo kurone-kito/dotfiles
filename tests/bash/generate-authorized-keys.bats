@@ -151,7 +151,7 @@ setup() {
   assert_output --partial 'ssh-ed25519 AAAA primary@test'
 }
 
-@test "falls back to append instead of guessing when markers are duplicated" {
+@test "updates the most recent valid block in place when markers are duplicated" {
   printf '# >>> chezmoi managed keys >>>\nssh-rsa OLD1 old\n# <<< chezmoi managed keys <<<\nssh-rsa FOREIGN between-blocks\n# >>> chezmoi managed keys >>>\nssh-rsa OLD2 old\n# <<< chezmoi managed keys <<<\n' > "$AUTHORIZED"
   echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
 

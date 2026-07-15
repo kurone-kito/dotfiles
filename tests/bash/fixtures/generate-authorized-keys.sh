@@ -67,7 +67,7 @@ if [ -n "${begin_line}" ] && [ -n "${end_line}" ]; then
 fi
 
 if [ "${markers_present}" = true ] && [ "${block_shape_ok}" = false ]; then
-  echo "  WARNING: malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. Regeneration will keep updating the most recent block in place."
+  echo "  WARNING: malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. A valid block will be updated in place if one can be found, otherwise a fresh block is appended."
 fi
 
 if [ "${has_valid_block}" = true ]; then
