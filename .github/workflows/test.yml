@@ -53,12 +53,26 @@ jobs:
       - name: Check Lua syntax
         shell: bash
         run: |
+          if [ ! -d home/dot_config/nvim ]; then
+            echo "::error::home/dot_config/nvim directory not found"
+            exit 1
+          fi
+
           errors=0
+          checked=0
           while IFS= read -r -d '' f; do
+            checked=$((checked + 1))
             if ! luac -p "$f"; then
               errors=$((errors + 1))
             fi
           done < <(find home/dot_config/nvim -name '*.lua' -print0)
+
+          echo "Checked $checked Lua file(s)"
+
+          if [ "$checked" -eq 0 ]; then
+            echo "::error::No Lua files found under home/dot_config/nvim"
+            exit 1
+          fi
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors Lua file(s) have syntax errors"
             exit 1
