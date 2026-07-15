@@ -39,6 +39,7 @@ words:
   - gpgconf
   - HKLM
   - inputrc
+  - inshellisense
   - keepassxc
   - kito
   - luac
