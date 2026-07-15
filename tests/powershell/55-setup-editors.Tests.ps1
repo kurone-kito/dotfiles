@@ -108,10 +108,14 @@ Describe 'setup-editors' {
           if (`$Name -eq 'vim') {
             [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
           } elseif (`$Name -eq 'curl.exe') {
+            `$global:curlResolvedViaGetCommand = `$true
             [pscustomobject]@{ Name = 'curl.exe'; Path = 'curl.exe'; Source = 'curl.exe' }
           } else { `$null }
         }
         function curl.exe {
+          if (-not `$global:curlResolvedViaGetCommand) {
+            throw 'curl.exe invoked without resolving it via Get-Command first'
+          }
           Write-Host ('curl-args:' + (`$args -join ' '))
           `$global:LASTEXITCODE = 0
         }
