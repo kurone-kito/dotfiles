@@ -15,7 +15,7 @@ exit 0
 
 command -v mise &>/dev/null || { echo "mise not found; skipping."; exit 0; }
 GHQ="$(mise which ghq 2>/dev/null)" || { echo "ghq not found via mise; skipping."; exit 0; }
-GHQ_ROOT="$("${GHQ}" root)"
+GHQ_ROOT="$("${GHQ}" root 2>/dev/null)" || { echo "ghq root failed; skipping."; exit 0; }
 
 deploy_state="${HOME}/.local/bin/secret-deploy-state"
 record_state() {
@@ -40,7 +40,7 @@ else
   # Warn if .gitignore does not list the target filename
   gitignore="${GHQ_ROOT}/{{ $entry.repo }}/.gitignore"
   if [ -f "${gitignore}" ]; then
-    if ! grep -qF '{{ $filename }}' "${gitignore}" 2>/dev/null; then
+    if ! grep -qxF '{{ $filename }}' "${gitignore}" 2>/dev/null; then
       echo "  warn: {{ $filename }} not found in .gitignore"
     fi
   else
