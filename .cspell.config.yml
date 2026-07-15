@@ -33,6 +33,7 @@ version: '0.2'
 words:
   - anomalyco
   - curlrc
+  - desync
   - Esync
   - exrc
   - gdefault
