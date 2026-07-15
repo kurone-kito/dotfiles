@@ -40,7 +40,7 @@ require_zsh() {
   run bash -li -c true
   assert_success
 
-  run wc -l < "$COUNTER"
+  run awk 'END{print NR}' "$COUNTER"
   assert_output '1'
 }
 
@@ -48,12 +48,12 @@ require_zsh() {
   run bash -li -c "bash -i -c true" 2>/dev/null
   assert_success
 
-  run wc -l < "$COUNTER"
+  run awk 'END{print NR}' "$COUNTER"
   assert_output '2'
 }
 
 @test "a fresh non-interactive bash invocation still sources conf.d via .profile" {
-  run bash -c ". '$HOME/.profile'; wc -l < '$COUNTER'"
+  run bash -c ". '$HOME/.profile'; awk 'END{print NR}' '$COUNTER'"
   assert_success
   assert_output '1'
 }
@@ -64,7 +64,7 @@ require_zsh() {
   run env ZDOTDIR="$ZDOTDIR" zsh -li -c true
   assert_success
 
-  run wc -l < "$COUNTER"
+  run awk 'END{print NR}' "$COUNTER"
   assert_output '1'
 }
 
@@ -74,6 +74,6 @@ require_zsh() {
   run env ZDOTDIR="$ZDOTDIR" zsh -li -c "ZDOTDIR='$ZDOTDIR' zsh -i -c true"
   assert_success
 
-  run wc -l < "$COUNTER"
+  run awk 'END{print NR}' "$COUNTER"
   assert_output '2'
 }
