@@ -17,8 +17,8 @@ end_marker="# <<< chezmoi managed keys <<<"
 mkdir -p "${ssh_dir}"
 chmod 700 "${ssh_dir}"
 
-managed_keys="$(mktemp)"
-new_file="$(mktemp)"
+managed_keys="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"
+new_file="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"
 trap 'rm -f "${managed_keys}" "${new_file}"' EXIT
 
 for name in primary secondary; do
