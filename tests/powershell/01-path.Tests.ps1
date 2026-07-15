@@ -50,6 +50,12 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
     $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
     $programFilesX86Root = (New-Item -ItemType Directory -Path 'TestDrive:\ProgramFilesX86' -Force).FullName
+    # Captured immediately (before $env:LOCALAPPDATA is reassigned)
+    # so the "winget declared packages" Context's AfterEach cleanup
+    # always targets this TestDrive-rooted path, even if a later
+    # step in this block were to fail — never the real
+    # %LOCALAPPDATA%, which could otherwise be deleted from.
+    $script:TestWingetPackagesRoot = Join-Path $localAppDataRoot 'Microsoft\WinGet\Packages'
 
     Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
     $env:LOCALAPPDATA = $localAppDataRoot
@@ -93,6 +99,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
+    $script:TestWingetPackagesRoot = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -195,9 +202,14 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       # GitHub.cli_* directory a test creates must be removed here —
       # otherwise it leaks into later tests (e.g. "contributes
       # nothing") that assert no matching directory exists on disk.
-      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-      Get-ChildItem -LiteralPath $packagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      # Uses the TestDrive-rooted path captured in the outer
+      # BeforeEach rather than re-reading $env:LOCALAPPDATA, so a
+      # partially-failed BeforeEach can never point this cleanup at
+      # a real %LOCALAPPDATA%.
+      if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
+        Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
     }
 
     It 'adds a declared package real bin directory ahead of WinGet\Links' {

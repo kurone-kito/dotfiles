@@ -52,6 +52,12 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home' -Force).FullName
     $localAppDataRoot = (New-Item -ItemType Directory -Path 'TestDrive:\LocalAppData' -Force).FullName
     $programFilesX86Root = (New-Item -ItemType Directory -Path 'TestDrive:\ProgramFilesX86' -Force).FullName
+    # Captured immediately (before $env:LOCALAPPDATA is reassigned)
+    # so the AfterEach cleanup below always targets this
+    # TestDrive-rooted path, even if a later step in this block
+    # were to fail — never the real %LOCALAPPDATA%, which could
+    # otherwise be deleted from.
+    $script:TestWingetPackagesRoot = Join-Path $localAppDataRoot 'Microsoft\WinGet\Packages'
 
     Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
     $env:LOCALAPPDATA = $localAppDataRoot
@@ -70,10 +76,14 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     # TestDrive: persists for the whole Pester session, not just this
     # Describe — remove any GitHub.cli_* directory a test created
     # (before $env:LOCALAPPDATA below is restored to its real value)
-    # so it cannot leak into a later file's assumptions.
-    $packagesRootCleanup = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-    Get-ChildItem -LiteralPath $packagesRootCleanup -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
-      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    # so it cannot leak into a later file's assumptions. Uses the
+    # TestDrive-rooted path captured in BeforeEach rather than
+    # re-reading $env:LOCALAPPDATA, so a partially-failed BeforeEach
+    # can never point this cleanup at a real %LOCALAPPDATA%.
+    if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
+      Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
     Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
     $env:PATH = $script:OriginalPath
@@ -94,6 +104,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
+    $script:TestWingetPackagesRoot = $null
   }
 
   It 'computes the identical managed-path set on both surfaces' {
