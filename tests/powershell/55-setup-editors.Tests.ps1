@@ -104,11 +104,11 @@ Describe 'setup-editors' {
     It 'resolves curl.exe explicitly (bypassing the PS5.1 curl alias) and bootstraps vim-plug' {
       $output = & pwsh -NoProfile -Command "
         function Get-Command {
-          param([string]`$Name, [string]`$ErrorAction)
+          param([string]`$Name, [string]`$CommandType, [string]`$ErrorAction)
           if (`$Name -eq 'vim') {
             [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
           } elseif (`$Name -eq 'curl.exe') {
-            [pscustomobject]@{ Name = 'curl.exe'; Source = '/mock/curl.exe' }
+            [pscustomobject]@{ Name = 'curl.exe'; Path = 'curl.exe'; Source = 'curl.exe' }
           } else { `$null }
         }
         function curl.exe {
@@ -130,7 +130,7 @@ Describe 'setup-editors' {
     It 'falls back to Invoke-WebRequest when curl.exe is not available' {
       $output = & pwsh -NoProfile -Command "
         function Get-Command {
-          param([string]`$Name, [string]`$ErrorAction)
+          param([string]`$Name, [string]`$CommandType, [string]`$ErrorAction)
           if (`$Name -eq 'vim') {
             [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
           } else { `$null }
@@ -154,7 +154,7 @@ Describe 'setup-editors' {
     It 'warns and does not throw when Invoke-WebRequest fails' {
       $output = & pwsh -NoProfile -Command "
         function Get-Command {
-          param([string]`$Name, [string]`$ErrorAction)
+          param([string]`$Name, [string]`$CommandType, [string]`$ErrorAction)
           if (`$Name -eq 'vim') {
             [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
           } else { `$null }

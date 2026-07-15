@@ -42,10 +42,11 @@ if ($vimCmd) {
       New-Item -ItemType Directory -Path $plugDir -Force | Out-Null
     }
 
-    $curlExeCmd = Get-Command curl.exe -ErrorAction SilentlyContinue
+    $curlExeCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue
     if ($curlExeCmd) {
       Write-Host '  Bootstrapping vim-plug...'
-      & curl.exe -fLo $plugVim --create-dirs $plugUrl 2>&1
+      $curlExePath = if ($curlExeCmd.Path) { $curlExeCmd.Path } else { $curlExeCmd.Source }
+      & $curlExePath -fLo $plugVim --create-dirs $plugUrl 2>&1
       if ($LASTEXITCODE -ne 0) {
         Write-Host "  WARNING: vim-plug bootstrap failed; skipping vim."
       }
