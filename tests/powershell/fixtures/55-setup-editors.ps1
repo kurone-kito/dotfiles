@@ -31,20 +31,40 @@ if ($vimCmd) {
   }
 
   if (-not (Test-Path $plugVim)) {
-    $curlCmd = Get-Command curl -ErrorAction SilentlyContinue
-    if ($curlCmd) {
+    # On Windows PowerShell 5.1, "curl" is a built-in alias for
+    # Invoke-WebRequest, so Get-Command curl matches the alias
+    # instead of the real binary and parameter binding fails.
+    # Resolve curl.exe explicitly (extension bypasses alias
+    # resolution) and fall back to Invoke-WebRequest when absent.
+    $plugUrl = 'https://raw.githubusercontent.com/junegunn/vim-plug/88e31471818e9a29a8a20a0ee61360cfd7bdc1cd/plug.vim'
+    $plugDir = Split-Path $plugVim -Parent
+    if (-not (Test-Path $plugDir)) {
+      New-Item -ItemType Directory -Path $plugDir -Force | Out-Null
+    }
+
+    $curlExeCmd = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue
+    if ($curlExeCmd) {
       Write-Host '  Bootstrapping vim-plug...'
-      $plugDir = Split-Path $plugVim -Parent
-      if (-not (Test-Path $plugDir)) {
-        New-Item -ItemType Directory -Path $plugDir -Force | Out-Null
-      }
-      & curl -fLo $plugVim --create-dirs `
-        'https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim' 2>&1
+      $curlExePath = if ($curlExeCmd.Path) { $curlExeCmd.Path } else { $curlExeCmd.Source }
+      & $curlExePath -fLo $plugVim --create-dirs $plugUrl 2>&1
       if ($LASTEXITCODE -ne 0) {
         Write-Host "  WARNING: vim-plug bootstrap failed; skipping vim."
       }
     } else {
-      Write-Host '  WARNING: curl not found; cannot bootstrap vim-plug. Skipping vim.'
+      Write-Host '  Bootstrapping vim-plug via Invoke-WebRequest...'
+      # PS5.1's .NET default protocol set can exclude TLS 1.2, which
+      # GitHub's raw content endpoint requires. Add it without
+      # dropping whatever protocols were already enabled, and scope
+      # the change to this call only.
+      $prevProtocol = [Net.ServicePointManager]::SecurityProtocol
+      try {
+        [Net.ServicePointManager]::SecurityProtocol = $prevProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $plugUrl -OutFile $plugVim -UseBasicParsing -ErrorAction Stop
+      } catch {
+        Write-Host "  WARNING: vim-plug bootstrap failed; skipping vim."
+      } finally {
+        [Net.ServicePointManager]::SecurityProtocol = $prevProtocol
+      }
     }
   }
 

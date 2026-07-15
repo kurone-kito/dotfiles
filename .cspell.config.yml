@@ -37,22 +37,29 @@ words:
   - exrc
   - gdefault
   - gpgconf
+  - hlsearch
   - HKLM
   - inputrc
   - inshellisense
+  - junegunn
   - keepassxc
   - kito
   - luac
   - luks
+  - MYVIMRC
+  - nnoremap
   - psmux
   - pylint
   - rerere
+  - sheerun
   - taskrc
+  - tpope
   - unpushed
   - unreplied
   - waivable
   - wgetrc
   - viml
+  - vimrc
   - virtiofs
   - WORKFPR
   - xclip
