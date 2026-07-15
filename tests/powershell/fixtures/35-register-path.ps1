@@ -227,7 +227,7 @@ if (-not [string]::IsNullOrEmpty($wingetPackagesRoot)) {
     # recognized as stale for cleanup.
     $wingetUserPathPatterns += (
       '^' + [regex]::Escape($normalizedWingetRoot) + '\\' +
-      [regex]::Escape($declared.id.ToLowerInvariant()) + '_[^\\]+' +
+      [regex]::Escape(([string]$declared.id).ToLowerInvariant()) + '_[^\\]+' +
       '(\\.*)?$'
     )
   }
