@@ -248,7 +248,19 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     It 'contributes nothing when the declared package has no matching directory on disk' {
       # This Context's manifest declares only "gh" (overriding the
       # outer BeforeEach's mise-declaring manifest), so mise
-      # contributes nothing here either.
+      # contributes nothing here either. Reset the registry seed
+      # without the outer BeforeEach's StaleMiseBin entry: that value
+      # is a real resolved TestDrive path (New-Item's .FullName, not
+      # a literal "TestDrive:\..." string), so without a mise
+      # declaration in this manifest it would no longer be
+      # recognized as managed and would leak into the result as an
+      # unrelated leftover entry.
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.WinGetLinks
+      ) -join ';'
       Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       . $script:Fixture 6>&1 | Out-Null
@@ -265,6 +277,15 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     }
 
     It 'is a no-op when no packages are declared (empty manifest)' {
+      # See the comment above: reset the registry seed without the
+      # mise StaleMiseBin entry, since an empty manifest declares no
+      # mise entry to recognize it as managed.
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.WinGetLinks
+      ) -join ';'
       Set-Content -Path $script:WingetManifestPath -Value '[]'
 
       . $script:Fixture 6>&1 | Out-Null
