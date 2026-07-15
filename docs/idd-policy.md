@@ -155,8 +155,8 @@ required-check set is partial.
 
 `master`'s merge gate currently comes from a default-branch ruleset
 matching `~DEFAULT_BRANCH`; classic branch protection is not
-configured today, though the CI wait unions both sources should that
-change. The ruleset's `required_status_checks` rule lists four
+configured today, though the CI wait unions both sources if that
+changes. The ruleset's `required_status_checks` rule lists four
 required check contexts, spanning the Linting and Test workflows:
 `lint`, `Lua syntax check`, `Bash tests (bats)`, and
 `PowerShell tests (Pester)`.
