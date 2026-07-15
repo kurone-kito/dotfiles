@@ -411,3 +411,105 @@ Describe '30-mise ghq trusted paths' {
     $ghqPaths[0] | Should -Be (Join-Path $script:GhqRoot 'github.com/alice')
   }
 }
+
+# Split from the Windows-focused '30-mise' describe above (which is
+# -Skip'd on non-Windows) so the Unix `mise activate` branch and the
+# WSL /proc/version detection — the primary Linux/macOS code paths —
+# get real coverage when Pester runs on a non-Windows host.
+Describe '30-mise Unix' -Skip:($IsWindows -eq $true) {
+
+  BeforeEach {
+    $script:OriginalHome = $HOME
+    $script:OriginalTrusted = $env:MISE_TRUSTED_CONFIG_PATHS
+    $script:OriginalWarning = $env:MISE_PWSH_CHPWD_WARNING
+    $script:MiseCalls = @()
+
+    $homeRoot = (New-Item -ItemType Directory -Path 'TestDrive:\home-unix' -Force).FullName
+    Set-Variable -Name HOME -Value $homeRoot -Scope Global -Force
+  }
+
+  AfterEach {
+    Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
+    $env:MISE_TRUSTED_CONFIG_PATHS = $script:OriginalTrusted
+    $env:MISE_PWSH_CHPWD_WARNING = $script:OriginalWarning
+    Remove-Item Function:\PathMise -ErrorAction SilentlyContinue
+  }
+
+  It 'activates mise via "mise activate pwsh --quiet" instead of the Windows shims path' {
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+
+    . $script:Subject
+
+    $usedCommands = @(
+      $script:MiseCalls |
+        Select-Object -ExpandProperty Command |
+        Sort-Object -Unique
+    )
+    $usedCommands | Should -HaveCount 1
+    $usedCommands[0] | Should -Be 'PathMise'
+    ($script:MiseCalls | Where-Object {
+      ($_.Arguments -join ' ') -eq 'activate pwsh --quiet'
+    }).Count | Should -Be 1
+  }
+
+  It 'adds Windows-side mise config directories when /proc/version indicates WSL' {
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+    # Real filesystem path (via .FullName), not the raw TestDrive:
+    # string — MISE_TRUSTED_CONFIG_PATHS is joined with
+    # [IO.Path]::PathSeparator (':' on Unix), which would collide
+    # with the colon in a literal 'TestDrive:...' path.
+    $fakeWinUser = (New-Item -ItemType Directory -Path 'TestDrive:\wsl-c-users\alice' -Force).FullName
+    $expectedMisePath = Join-Path $fakeWinUser '.mise'
+    $expectedConfigPath = Join-Path (Join-Path $fakeWinUser '.config') 'mise'
+    New-Item -ItemType Directory -Path $expectedMisePath -Force | Out-Null
+
+    $ghqTrustFile = Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'chezmoi-ghq-trusted-paths'
+    $miseConfigToml = Join-Path (Join-Path $HOME '.mise') 'config.toml'
+    $xdgMiseConfigToml = Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'config.toml'
+
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+    Mock Test-Path { $true } -ParameterFilter { $Path -eq '/proc/version' }
+    Mock Get-Content {
+      'Linux version 5.15.153.1-microsoft-standard-WSL2 (root@buildkit)'
+    } -ParameterFilter { $Path -eq '/proc/version' }
+    Mock Get-ChildItem {
+      @([pscustomobject]@{ FullName = $fakeWinUser })
+    } -ParameterFilter { $Path -eq '/mnt/c/Users' -and $Directory }
+    # Test-Path is intercepted globally once any filter is registered
+    # above, so every other call site this run reaches needs its own
+    # explicit filter mirroring real disk state.
+    Mock Test-Path { $true } -ParameterFilter { $Path -eq $expectedMisePath }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $expectedConfigPath }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $ghqTrustFile }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $miseConfigToml }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $xdgMiseConfigToml }
+
+    . $script:Subject
+
+    $paths = $env:MISE_TRUSTED_CONFIG_PATHS.Split([IO.Path]::PathSeparator)
+    $paths | Should -Contain $expectedMisePath
+    $paths | Should -Not -Contain $expectedConfigPath
+  }
+
+  It 'does not add Windows-side mise config directories when /proc/version is not WSL' {
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+
+    $ghqTrustFile = Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'chezmoi-ghq-trusted-paths'
+    $miseConfigToml = Join-Path (Join-Path $HOME '.mise') 'config.toml'
+    $xdgMiseConfigToml = Join-Path (Join-Path (Join-Path $HOME '.config') 'mise') 'config.toml'
+
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+    Mock Test-Path { $true } -ParameterFilter { $Path -eq '/proc/version' }
+    Mock Get-Content {
+      'Linux version 6.5.0-generic (gcc version 12.3.0)'
+    } -ParameterFilter { $Path -eq '/proc/version' }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $ghqTrustFile }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $miseConfigToml }
+    Mock Test-Path { $false } -ParameterFilter { $Path -eq $xdgMiseConfigToml }
+
+    . $script:Subject
+
+    $env:MISE_TRUSTED_CONFIG_PATHS | Should -Not -BeLike '*wsl-c-users*'
+  }
+}
