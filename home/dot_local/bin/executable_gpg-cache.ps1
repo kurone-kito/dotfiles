@@ -11,12 +11,14 @@ function global:Get-DotfilesGpgCommand {
 function global:Get-DotfilesGpgSigningKeys {
   $keys = [System.Collections.Generic.List[string]]::new()
 
-  # 1. Default git signing key
+  # 1. Default git signing key (hex fingerprints only; when
+  #    gpg.format=ssh, user.signingkey is an SSH public key path,
+  #    which gpg cannot sign with, so skip it silently)
   $gitCmd = Get-Command git -ErrorAction SilentlyContinue
   if ($gitCmd) {
     try {
       $defaultKey = & $gitCmd.Name config user.signingkey 2>$null
-      if ($defaultKey) { $keys.Add($defaultKey) }
+      if ($defaultKey -match '^[A-Fa-f0-9]+$') { $keys.Add($defaultKey) }
     } catch [System.Exception] {
     }
   }
