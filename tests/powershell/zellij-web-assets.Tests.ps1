@@ -99,7 +99,7 @@ Describe 'zellij web assets' {
 
     $lines | Should -Contain 'Type=oneshot'
     $lines | Should -Contain 'RemainAfterExit=yes'
-    $lines | Should -Contain "ExecStart=/bin/sh -lc 'exec %h/.local/bin/ensure-zellij-web'"
+    $lines | Should -Contain "ExecStart=/bin/sh -lc 'exec ""%h/.local/bin/ensure-zellij-web""'"
     $lines | Should -Not -Contain 'ExecStart=%h/.local/bin/ensure-zellij-web'
     $lines | Should -Contain 'WantedBy=default.target'
   }

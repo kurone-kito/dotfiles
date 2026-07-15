@@ -18,7 +18,7 @@ setup() {
 @test "ExecStart launches through a login shell to inherit a non-minimal PATH" {
   run grep -F 'ExecStart=' "$UNIT"
   assert_success
-  assert_output "ExecStart=/bin/sh -lc 'exec %h/.local/bin/ensure-zellij-web'"
+  assert_output "ExecStart=/bin/sh -lc 'exec \"%h/.local/bin/ensure-zellij-web\"'"
 }
 
 @test "unit stays otherwise well-formed" {
