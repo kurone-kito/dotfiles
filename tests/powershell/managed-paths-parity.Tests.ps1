@@ -113,9 +113,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
     $manifestPath = 'TestDrive:\winget-manifest.json'
-    Set-Content -Path $manifestPath -Value (
-      @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
-    )
+    Set-Content -Path $manifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
 
     . $script:ConfDScript

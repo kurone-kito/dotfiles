@@ -38,7 +38,10 @@ enabled = true             # optional; false disables an inherited entry
 - `enabled` defaults to `true`; set to `false` to disable a
   repo-shipped default entry without deleting it (the repo ships an
   empty default map today, so this mainly matters if a future repo
-  default gets added and you want to opt out).
+  default gets added and you want to opt out). A disabled entry stays
+  in the rendered manifest — it is skipped when adding directories to
+  `PATH`, but its `<id>_*` pattern is still recognized so a previously
+  added directory is cleaned up as stale on the next reconciliation.
 
 Run `chezmoi apply` after editing. Both the session PATH
 (`conf.d/01-path.ps1`) and the persisted registry User PATH

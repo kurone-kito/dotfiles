@@ -91,12 +91,16 @@ function Get-StaticManagedPaths {
   return $paths
 }
 
-function Get-MisePackagesRoot {
+function Get-WingetPackagesRoot {
   if ([string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
     return $null
   }
 
   return Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet') 'Packages'
+}
+
+function Get-MisePackagesRoot {
+  Get-WingetPackagesRoot
 }
 
 function Get-WingetUserPathManifestPath {
@@ -134,14 +138,6 @@ function Get-WingetUserPathDeclaredPackages {
   return @($parsed | Where-Object { -not [string]::IsNullOrWhiteSpace($_.id) })
 }
 
-function Get-WingetPackagesRoot {
-  if ([string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
-    return $null
-  }
-
-  return Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet') 'Packages'
-}
-
 function Get-WingetUserPathManagedPaths {
   $packagesRoot = Get-WingetPackagesRoot
   if ([string]::IsNullOrEmpty($packagesRoot)) {
@@ -154,6 +150,12 @@ function Get-WingetUserPathManagedPaths {
 
   $paths = @()
   foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
+    # A missing 'enabled' property (older manifests, hand-built test
+    # fixtures) defaults to enabled; only an explicit $false disables.
+    if ($null -ne $declared.enabled -and $declared.enabled -eq $false) {
+      continue
+    }
+
     foreach ($packageDir in @(
       Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "$($declared.id)_*" } |

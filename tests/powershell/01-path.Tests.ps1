@@ -205,9 +205,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
       New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
-      Set-Content -Path $script:WingetManifestPath -Value (
-        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
-      )
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       . $script:Subject
 
@@ -223,9 +221,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
       New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
 
-      Set-Content -Path $script:WingetManifestPath -Value (
-        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
-      )
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       $env:PATH = @(
         $script:Paths.UnrelatedA
@@ -240,10 +236,30 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries | Should -Not -Contain $staleBinDir
     }
 
-    It 'contributes nothing when the declared package has no matching directory on disk' {
+    It 'removes a previously-added directory once its declared package is disabled' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $binDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
       Set-Content -Path $script:WingetManifestPath -Value (
-        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+        '[{"label":"gh","id":"GitHub.cli","bin":"bin","enabled":false}]'
       )
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $binDir
+      $entries | Should -Contain $script:Paths.UnrelatedA
+    }
+
+    It 'contributes nothing when the declared package has no matching directory on disk' {
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       . $script:Subject
 
