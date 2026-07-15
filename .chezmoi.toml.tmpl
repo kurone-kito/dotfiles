@@ -85,7 +85,14 @@ ssh = {{ dig "ssh" true $clone }}
 mise_trust = {{ dig "mise_trust" false $clone }}
 {{- end }}
 {{- end }}
-{{- range $key, $pkg := (dig "wingetUserPath" "packages" dict .) }}
+{{- /* Repo-shipped defaults for data.wingetUserPath.packages, merged
+     under any user-declared entries of the same key (dst wins
+     per-field via mergo/sprig merge, so overriding or disabling
+     with enabled = false doesn't require restating id/bin).
+     Mirrored in winget-user-path-packages.json.tmpl — keep both in
+     sync. */ -}}
+{{- $wingetDefaultPackages := dict "mise" (dict "id" "jdx.mise" "bin" "mise/bin") -}}
+{{- range $key, $pkg := (merge (dig "wingetUserPath" "packages" dict .) $wingetDefaultPackages) }}
 
 [data.wingetUserPath.packages."{{ $key }}"]
 id = {{ dig "id" "" $pkg | quote }}

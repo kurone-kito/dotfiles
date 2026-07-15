@@ -65,6 +65,14 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
 
     New-ManagedPathLayout | Out-Null
 
+    # jdx.mise is now a plain declared package (a repo-shipped
+    # default, see docs/winget-user-path.md), not a hardcoded special
+    # case — declare it here so both surfaces still find a non-empty
+    # managed set through the generic mechanism.
+    $script:BaseWingetManifestPath = 'TestDrive:\winget-manifest-base.json'
+    Set-Content -Path $script:BaseWingetManifestPath -Value '[{"label":"mise","id":"jdx.mise","bin":"mise/bin"}]'
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:BaseWingetManifestPath
+
     # ';' not '' — Windows deletes env vars set to empty string,
     # which would fall through to the real registry (see
     # 01-path.Tests.ps1 for the same workaround).
@@ -93,8 +101,6 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Split-PathEntries -ErrorAction SilentlyContinue
     Remove-Item Function:\Normalize-PathEntry -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
@@ -105,6 +111,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
     $script:TestWingetPackagesRoot = $null
+    $script:BaseWingetManifestPath = $null
   }
 
   It 'computes the identical managed-path set on both surfaces' {

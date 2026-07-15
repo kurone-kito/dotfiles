@@ -63,6 +63,15 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
 
     $script:Paths = New-ManagedPathLayout
 
+    # jdx.mise is now a plain declared package (a repo-shipped
+    # default, see docs/winget-user-path.md), not a hardcoded special
+    # case — declare it here so the existing mise PATH scenarios below
+    # keep exercising it through the generic mechanism. The "winget
+    # declared packages" Context overrides this with its own manifest.
+    $script:BaseWingetManifestPath = 'TestDrive:\winget-manifest-base.json'
+    Set-Content -Path $script:BaseWingetManifestPath -Value '[{"label":"mise","id":"jdx.mise","bin":"mise/bin"}]'
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:BaseWingetManifestPath
+
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
       $script:Paths.UnrelatedA
       $script:Paths.StaleMiseBin
@@ -80,8 +89,6 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Split-PathEntries -ErrorAction SilentlyContinue
     Remove-Item Function:\Normalize-PathEntry -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
@@ -92,6 +99,7 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
     $script:TestWingetPackagesRoot = $null
+    $script:BaseWingetManifestPath = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -238,12 +246,14 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     }
 
     It 'contributes nothing when the declared package has no matching directory on disk' {
+      # This Context's manifest declares only "gh" (overriding the
+      # outer BeforeEach's mise-declaring manifest), so mise
+      # contributes nothing here either.
       Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       . $script:Fixture 6>&1 | Out-Null
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
-        $script:Paths.CurrentMiseBin
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32
@@ -260,7 +270,6 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       . $script:Fixture 6>&1 | Out-Null
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
-        $script:Paths.CurrentMiseBin
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32

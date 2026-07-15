@@ -36,12 +36,11 @@ enabled = true             # optional; false disables an inherited entry
   executable lives in a subdirectory of the package, as most portable
   WinGet packages do).
 - `enabled` defaults to `true`; set to `false` to disable a
-  repo-shipped default entry without deleting it (the repo ships an
-  empty default map today, so this mainly matters if a future repo
-  default gets added and you want to opt out). A disabled entry stays
-  in the rendered manifest — it is skipped when adding directories to
-  `PATH`, but its `<id>_*` pattern is still recognized so a previously
-  added directory is cleaned up as stale on the next reconciliation.
+  repo-shipped default entry (see below) without deleting it. A
+  disabled entry stays in the rendered manifest — it is skipped when
+  adding directories to `PATH`, but its `<id>_*` pattern is still
+  recognized so a previously added directory is cleaned up as stale
+  on the next reconciliation.
 
 Run `chezmoi apply` after editing. Both the session PATH
 (`conf.d/01-path.ps1`) and the persisted registry User PATH
@@ -55,10 +54,21 @@ effective declaration and re-triggers when it changes.
 config template (`.chezmoi.toml.tmpl`) re-emits whatever entries
 already exist in your `chezmoi.toml` on every `chezmoi init`/re-init,
 so per-machine entries you add persist across re-inits the same way
-`data.ghq.clone` or `data.secret.ssh.keys` entries do. The repository
-itself ships this map **empty** — there are no repo-wide default
-package declarations today, so every entry is something you add
-yourself, on the machine(s) where you need it.
+`data.ghq.clone` or `data.secret.ssh.keys` entries do.
+
+The repository ships one default entry, labeled `mise`
+(`id = "jdx.mise"`, `bin = "mise/bin"`), merged underneath whatever
+you declare: a field you set on the same label (e.g. `enabled` or a
+different `bin`) overrides the repo default field-by-field, so you
+never need to restate `id`/`bin` just to disable it or add other
+packages alongside it. A label you don't touch at all falls back to
+the shipped default in full.
+
+Both `.chezmoi.toml.tmpl` (which persists the effective declaration
+into your `chezmoi.toml` on `chezmoi init`/re-init) and
+`winget-user-path-packages.json.tmpl` (the runtime manifest) apply
+this same repo-default merge, so `chezmoi apply` alone — without a
+prior re-init — already reflects it.
 
 ## How discovery works
 
