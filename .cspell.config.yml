@@ -50,6 +50,7 @@ words:
   - luks
   - MYVIMRC
   - nnoremap
+  - onlogon
   - psmux
   - pylint
   - rerere

@@ -76,10 +76,15 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -119,5 +124,72 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     $output = . $script:Fixture 6>&1 | Out-String
 
     $output | Should -BeLike '*User PATH already up to date.*'
+  }
+
+  Context 'winget declared packages' {
+
+    BeforeEach {
+      $script:WingetManifestPath = 'TestDrive:\winget-manifest.json'
+      $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:WingetManifestPath
+    }
+
+    It 'adds a declared package real bin directory ahead of WinGet\Links' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      . $script:Fixture 6>&1 | Out-Null
+
+      $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
+      $entries | Should -Contain $binDir
+      ([array]::IndexOf($entries, $binDir)) |
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    }
+
+    It 'removes a stale sibling directory of a declared package while keeping the current one' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $currentBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
+      New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.UnrelatedA
+        $staleBinDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      . $script:Fixture 6>&1 | Out-Null
+
+      $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
+      $entries | Should -Contain $currentBinDir
+      $entries | Should -Not -Contain $staleBinDir
+    }
+
+    It 'contributes nothing when the declared package has no matching directory on disk' {
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      . $script:Fixture 6>&1 | Out-Null
+
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
+        $script:Paths.CurrentMiseBin
+        $script:Paths.WinGetLinks
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+        $script:Paths.UnrelatedA
+        $script:Paths.UnrelatedB
+      ) -join ';')
+    }
   }
 }

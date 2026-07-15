@@ -1,9 +1,11 @@
 # chezmoi:template:left-delimiter=<% right-delimiter=%>
 <%- if eq .chezmoi.os "windows" %>
 # Register tool directories in User PATH (Windows registry).
-# Re-runs when the managed-paths list changes (hash below).
+# Re-runs when the managed-paths list or the winget declaration
+# changes (hashes below).
 #
 # hash: <% include "dot_config/powershell/lib/managed-paths.ps1" | sha256sum %>
+# winget user path packages hash: <% (dig "wingetUserPath" "packages" dict .) | toJson | sha256sum %>
 
 # Reconcile the repo-managed subset of User PATH. Both surfaces
 # compute the managed-path set from the shared source embedded

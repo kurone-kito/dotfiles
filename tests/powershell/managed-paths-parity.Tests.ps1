@@ -77,10 +77,15 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
   }
 
   It 'computes the identical managed-path set on both surfaces' {
@@ -91,6 +96,27 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $registerManagedPaths = @($desiredManagedPaths)
 
     $confDManagedPaths | Should -Not -BeNullOrEmpty
+    $registerManagedPaths | Should -Be $confDManagedPaths
+  }
+
+  It 'computes the identical managed-path set on both surfaces with a winget package declared' {
+    $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+    $manifestPath = 'TestDrive:\winget-manifest.json'
+    Set-Content -Path $manifestPath -Value (
+      @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+    )
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
+
+    . $script:ConfDScript
+    $confDManagedPaths = @($desiredManagedPaths)
+
+    . $script:RegisterFixture 6>&1 | Out-Null
+    $registerManagedPaths = @($desiredManagedPaths)
+
+    $confDManagedPaths | Should -Contain $binDir
     $registerManagedPaths | Should -Be $confDManagedPaths
   }
 }

@@ -1,0 +1,12 @@
+{{- /* Deployed manifest consumed at runtime by managed-paths.ps1's
+     Get-WingetUserPathDeclaredPackages (plain, non-template file, so
+     it cannot read chezmoi data directly). One JSON object per
+     enabled entry in data.wingetUserPath.packages; see
+     docs/winget-user-path.md. */ -}}
+{{- $packages := list -}}
+{{- range $label, $pkg := (dig "wingetUserPath" "packages" dict .) -}}
+{{- if ne (dig "enabled" true $pkg) false -}}
+{{- $packages = append $packages (dict "label" $label "id" $pkg.id "bin" (dig "bin" "" $pkg)) -}}
+{{- end -}}
+{{- end -}}
+{{ $packages | toJson }}

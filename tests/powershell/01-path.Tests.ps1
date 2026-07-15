@@ -85,9 +85,14 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -175,6 +180,90 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $secondPath = $env:PATH
 
       $secondPath | Should -Be $firstPath
+    }
+  }
+
+  Context 'winget declared packages' {
+
+    BeforeEach {
+      $script:WingetManifestPath = 'TestDrive:\winget-manifest.json'
+      $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:WingetManifestPath
+    }
+
+    It 'adds a declared package real bin directory ahead of WinGet\Links' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $binDir
+      ([array]::IndexOf($entries, $binDir)) |
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    }
+
+    It 'removes a stale sibling directory of a declared package while keeping the current one' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $currentBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
+      New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $staleBinDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $currentBinDir
+      $entries | Should -Not -Contain $staleBinDir
+    }
+
+    It 'contributes nothing when the declared package has no matching directory on disk' {
+      Set-Content -Path $script:WingetManifestPath -Value (
+        @(@{ label = 'gh'; id = 'GitHub.cli'; bin = 'bin' } ) | ConvertTo-Json -AsArray
+      )
+
+      . $script:Subject
+
+      $env:PATH | Should -Be (@(
+        $script:Paths.CurrentMiseBin
+        $script:Paths.WinGetLinks
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+        $script:Paths.UnrelatedA
+        $script:Paths.UnrelatedB
+      ) -join ';')
+    }
+
+    It 'is a no-op when no packages are declared (empty manifest)' {
+      Set-Content -Path $script:WingetManifestPath -Value '[]'
+
+      . $script:Subject
+
+      $env:PATH | Should -Be (@(
+        $script:Paths.CurrentMiseBin
+        $script:Paths.WinGetLinks
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+        $script:Paths.UnrelatedA
+        $script:Paths.UnrelatedB
+      ) -join ';')
     }
   }
 }

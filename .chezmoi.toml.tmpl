@@ -85,6 +85,17 @@ ssh = {{ dig "ssh" true $clone }}
 mise_trust = {{ dig "mise_trust" false $clone }}
 {{- end }}
 {{- end }}
+{{- range $key, $pkg := (dig "wingetUserPath" "packages" dict .) }}
+
+[data.wingetUserPath.packages."{{ $key }}"]
+id = {{ $pkg.id | quote }}
+{{- if (dig "bin" "" $pkg) }}
+bin = {{ dig "bin" "" $pkg | quote }}
+{{- end }}
+{{- if not (dig "enabled" true $pkg) }}
+enabled = {{ dig "enabled" true $pkg }}
+{{- end }}
+{{- end }}
 {{- $sshServer := dig "ssh" "server" dict . }}
 {{- if $sshServer }}
 
@@ -185,6 +196,20 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   mise_trust = false         # optional; true to auto-trust mise configs
 #
 # See docs/ghq-workflow.md for details.
+#
+# To register a WinGet-installed portable tool's real package
+# directory in the persisted Windows User PATH (needed when the
+# %LOCALAPPDATA%\Microsoft\WinGet\Links symlinks don't resolve, e.g.
+# inbound SSH sessions to Windows), add:
+#
+#   [data.wingetUserPath.packages.<label>]  # <label> is any unique name
+#   id      = "jdx.mise"       # WinGet package id (Packages\<id>_* prefix)
+#   bin     = "mise/bin"       # optional; subpath within the package dir
+#   enabled = true             # optional; false disables an inherited entry
+#
+# The real Packages\<id>_* directory (with bin appended, if set) is
+# placed in the managed User PATH ahead of WinGet\Links. See
+# docs/winget-user-path.md for details.
 #
 # To customize sshd_config hardening defaults, add:
 #
