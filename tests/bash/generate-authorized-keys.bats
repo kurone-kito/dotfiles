@@ -38,7 +38,7 @@ setup() {
   run bash "$FIXTURE"
   assert_success
 
-  run stat -c '%a' "$AUTHORIZED"
+  run bash -c "stat -c '%a' '$AUTHORIZED' 2>/dev/null || stat -f '%A' '$AUTHORIZED'"
   assert_output '600'
 }
 
