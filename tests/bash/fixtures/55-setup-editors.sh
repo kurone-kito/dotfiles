@@ -27,7 +27,7 @@ if command -v vim &>/dev/null; then
     if command -v curl &>/dev/null; then
       echo "  Bootstrapping vim-plug..."
       curl -fLo "$plug_vim" --create-dirs \
-        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim \
+        https://raw.githubusercontent.com/junegunn/vim-plug/88e31471818e9a29a8a20a0ee61360cfd7bdc1cd/plug.vim \
         2>&1 || { echo "  WARNING: vim-plug bootstrap failed; skipping vim."; }
     else
       echo "  WARNING: curl not found; cannot bootstrap vim-plug. Skipping vim."

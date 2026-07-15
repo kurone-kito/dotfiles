@@ -100,6 +100,58 @@ Describe 'setup-editors' {
     }
   }
 
+  Context 'vim-plug bootstrap on PS5.1-safe curl resolution' {
+    It 'resolves curl.exe explicitly (bypassing the PS5.1 curl alias) and bootstraps vim-plug' {
+      $output = & pwsh -NoProfile -Command "
+        function Get-Command {
+          param([string]`$Name, [string]`$ErrorAction)
+          if (`$Name -eq 'vim') {
+            [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
+          } elseif (`$Name -eq 'curl.exe') {
+            [pscustomobject]@{ Name = 'curl.exe'; Source = '/mock/curl.exe' }
+          } else { `$null }
+        }
+        function curl.exe {
+          Write-Host ('curl-args:' + (`$args -join ' '))
+          `$global:LASTEXITCODE = 0
+        }
+        function vim { `$global:LASTEXITCODE = 0 }
+        `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
+        & '$($script:Fixture -replace "'","''")'
+      " 2>&1
+
+      $text = $output | Out-String
+      $text | Should -BeLike '*Bootstrapping vim-plug...*'
+      $text | Should -BeLike '*curl-args:*vim-plug*plug.vim*'
+      $text | Should -Not -BeLike '*Invoke-WebRequest*'
+    }
+
+    It 'falls back to Invoke-WebRequest when curl.exe is not available' {
+      $output = & pwsh -NoProfile -Command "
+        function Get-Command {
+          param([string]`$Name, [string]`$ErrorAction)
+          if (`$Name -eq 'vim') {
+            [pscustomobject]@{ Name = 'vim'; Source = '/mock/vim' }
+          } else { `$null }
+        }
+        function Invoke-WebRequest {
+          param([string]`$Uri, [string]`$OutFile, [switch]`$UseBasicParsing)
+          Write-Host ('iwr-called:' + `$Uri)
+          Set-Content -Path `$OutFile -Value 'fake plug.vim content'
+        }
+        function vim { `$global:LASTEXITCODE = 0 }
+        `$env:HOME = '$($script:TempDir -replace "'","''")'
+        Set-Variable -Name HOME -Value `$env:HOME -Scope Global -Force
+        & '$($script:Fixture -replace "'","''")'
+      " 2>&1
+
+      $text = $output | Out-String
+      $text | Should -BeLike '*Bootstrapping vim-plug via Invoke-WebRequest*'
+      $text | Should -BeLike '*iwr-called:*vim-plug*plug.vim*'
+    }
+  }
+
   Context 'nvim lazy.nvim sync' {
     It 'runs nvim headless sync when nvim is available' {
       # XDG_DATA_HOME directs lazydir under the temp tree so the mock
