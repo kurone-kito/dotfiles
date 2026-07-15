@@ -5,10 +5,17 @@
 # Abort if not running interactively
 [[ $- != *i* ]] && return
 
-# Source shared POSIX conf.d (bash + zsh common)
-for f in "$HOME/.config/shell/conf.d/"*.sh; do
-  [[ -r "$f" ]] && . "$f"
-done
+# Source shared POSIX conf.d (bash + zsh common). Guarded by an
+# unexported sentinel so a login+interactive shell doesn't run this
+# loop again after .profile already did. Unexported is load-bearing:
+# it dies with this process, so a fresh subshell still sources conf.d
+# normally.
+if [[ -z "${_dotfiles_confd_loaded:-}" ]]; then
+  for f in "$HOME/.config/shell/conf.d/"*.sh; do
+    [[ -r "$f" ]] && . "$f"
+  done
+  _dotfiles_confd_loaded=1
+fi
 
 # Source bash-specific conf.d
 for f in "$HOME/.config/bash/conf.d/"*.bash; do

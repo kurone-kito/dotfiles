@@ -3,7 +3,14 @@
 # Sourced by bash (via .bash_profile) and zsh (via .zprofile).
 # Delegates to conf.d for modularity; only login-time setup here.
 
-# Source shared conf.d if available
-for f in "$HOME/.config/shell/conf.d/"*.sh; do
-  [ -r "$f" ] && . "$f"
-done
+# Source shared conf.d if available. Guarded by an unexported sentinel
+# so a login+interactive shell (every macOS terminal, the initial WSL
+# shell) doesn't run this loop again from .bashrc/.zshrc. Unexported
+# is load-bearing: it dies with this process, so a fresh subshell
+# still sources conf.d normally.
+if [ -z "${_dotfiles_confd_loaded:-}" ]; then
+  for f in "$HOME/.config/shell/conf.d/"*.sh; do
+    [ -r "$f" ] && . "$f"
+  done
+  _dotfiles_confd_loaded=1
+fi
