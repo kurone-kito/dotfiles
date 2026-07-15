@@ -1,10 +1,6 @@
 # Guidelines for AI Agents
 
 A collection of configuration files that we use.
-This is a **git worktree** of
-[kurone-kito/dotfiles](https://github.com/kurone-kito/dotfiles) on
-the `migrate-to-chezmoi` branch — not a separate repository. CI
-badges and workflow URLs correctly reference `kurone-kito/dotfiles`.
 
 It is currently optimized for GitHub Copilot tooling, but `CLAUDE.md`
 exists so Claude Code can still receive the minimum project rules
