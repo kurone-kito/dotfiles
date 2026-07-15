@@ -105,6 +105,7 @@ JSON
   run _render "$CONFIG_TMPL"
   assert_success
   run tr '[:upper:]' '[:lower:]' <<< "$output"
+  assert_success
   refute_output --partial 'excludesfile'
 }
 
