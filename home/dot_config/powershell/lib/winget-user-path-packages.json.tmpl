@@ -8,6 +8,6 @@
      docs/winget-user-path.md. */ -}}
 {{- $packages := list -}}
 {{- range $label, $pkg := (dig "wingetUserPath" "packages" dict .) -}}
-{{- $packages = append $packages (dict "label" $label "id" $pkg.id "bin" (dig "bin" "" $pkg) "enabled" (dig "enabled" true $pkg)) -}}
+{{- $packages = append $packages (dict "label" $label "id" (dig "id" "" $pkg) "bin" (dig "bin" "" $pkg) "enabled" (dig "enabled" true $pkg)) -}}
 {{- end -}}
 {{ $packages | toJson }}

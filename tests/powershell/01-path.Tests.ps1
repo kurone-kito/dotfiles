@@ -236,6 +236,30 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries | Should -Not -Contain $staleBinDir
     }
 
+    It 'removes a previously-added directory once its declared package''s bin changes' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $oldBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'old-bin'
+      $newBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'new-bin'
+      New-Item -ItemType Directory -Path $oldBinDir -Force | Out-Null
+      New-Item -ItemType Directory -Path $newBinDir -Force | Out-Null
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $oldBinDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      Set-Content -Path $script:WingetManifestPath -Value (
+        '[{"label":"gh","id":"GitHub.cli","bin":"new-bin"}]'
+      )
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $oldBinDir
+      $entries | Should -Contain $newBinDir
+    }
+
     It 'removes a previously-added directory once its declared package is disabled' {
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'

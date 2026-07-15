@@ -88,7 +88,7 @@ mise_trust = {{ dig "mise_trust" false $clone }}
 {{- range $key, $pkg := (dig "wingetUserPath" "packages" dict .) }}
 
 [data.wingetUserPath.packages."{{ $key }}"]
-id = {{ $pkg.id | quote }}
+id = {{ dig "id" "" $pkg | quote }}
 {{- if (dig "bin" "" $pkg) }}
 bin = {{ dig "bin" "" $pkg | quote }}
 {{- end }}

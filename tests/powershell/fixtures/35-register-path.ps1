@@ -220,16 +220,15 @@ $wingetUserPathPatterns = @()
 if (-not [string]::IsNullOrEmpty($wingetPackagesRoot)) {
   $normalizedWingetRoot = Normalize-PathEntry $wingetPackagesRoot
   foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
-    $binSuffix = if ([string]::IsNullOrWhiteSpace($declared.bin)) {
-      ''
-    } else {
-      '\\' + [regex]::Escape((Normalize-PathEntry $declared.bin))
-    }
-
+    # Match the whole package directory (any subpath), not just the
+    # currently-declared $bin suffix — otherwise changing bin (or
+    # disabling the entry, handled above) would orphan a previously
+    # added PATH entry that no longer matches, and it would never be
+    # recognized as stale for cleanup.
     $wingetUserPathPatterns += (
       '^' + [regex]::Escape($normalizedWingetRoot) + '\\' +
       [regex]::Escape($declared.id.ToLowerInvariant()) + '_[^\\]+' +
-      $binSuffix + '$'
+      '(\\.*)?$'
     )
   }
 }
