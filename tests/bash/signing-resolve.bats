@@ -104,6 +104,7 @@ JSON
   echo '{ "data": {} }' > "$TMP_CFG"
   run _render "$CONFIG_TMPL"
   assert_success
+  assert_output --partial '[core]'
   run tr '[:upper:]' '[:lower:]' <<< "$output"
   assert_success
   refute_output --partial 'excludesfile'
