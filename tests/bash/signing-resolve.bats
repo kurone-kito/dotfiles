@@ -100,6 +100,16 @@ JSON
   refute_output --partial 'signingkey = "FPR"'
 }
 
+@test "config: no excludesfile key (relative or otherwise) is emitted" {
+  echo '{ "data": {} }' > "$TMP_CFG"
+  run _render "$CONFIG_TMPL"
+  assert_success
+  assert_output --partial '[core]'
+  run tr '[:upper:]' '[:lower:]' <<< "$output"
+  assert_success
+  refute_output --partial 'excludesfile'
+}
+
 @test "config: legacy primary_signing field is rejected with rename hint" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": { "secret": { "ssh": { "keys": {
