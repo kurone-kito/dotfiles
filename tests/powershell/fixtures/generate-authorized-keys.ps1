@@ -40,13 +40,18 @@ if (Test-Path $authorized) {
 
 $beginCount = ($existingLines | Where-Object { $_ -eq $beginMarker }).Count
 $endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
-$beginIndex = [array]::IndexOf($existingLines, $beginMarker)
-$endIndex = [array]::IndexOf($existingLines, $endMarker)
-$hasValidBlock = ($beginCount -eq 1) -and ($endCount -eq 1) -and ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
 $markersPresent = ($beginCount -gt 0) -or ($endCount -gt 0)
+$blockShapeOk = ($beginCount -eq 1) -and ($endCount -eq 1)
 
-if ($markersPresent -and -not $hasValidBlock) {
-  Write-Warning "Malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
+$beginIndex = [array]::LastIndexOf($existingLines, $beginMarker)
+$endIndex = -1
+if ($beginIndex -ge 0) {
+  $endIndex = [array]::IndexOf($existingLines, $endMarker, $beginIndex + 1)
+}
+$hasValidBlock = ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
+
+if ($markersPresent -and -not $blockShapeOk) {
+  Write-Warning "Malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. Regeneration will keep updating the most recent block in place."
 }
 
 $outLines = @()
@@ -61,7 +66,7 @@ if ($hasValidBlock) {
     $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
   }
 } else {
-  $outLines += $existingLines
+  $outLines += $existingLines | Where-Object { $managedLines -notcontains $_ }
   $outLines += $beginMarker
   $outLines += $managedLines
   $outLines += $endMarker

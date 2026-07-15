@@ -36,41 +36,66 @@ if [ ! -s "${managed_keys}" ]; then
   echo "  WARNING: no public keys were found; managed block will be empty."
 fi
 
-has_valid_block=false
-markers_present=false
+begin_count=0
+end_count=0
 if [ -f "${authorized}" ]; then
-  begin_count=$(grep -cF "${begin_marker}" "${authorized}" || true)
-  end_count=$(grep -cF "${end_marker}" "${authorized}" || true)
-  if [ "${begin_count}" -gt 0 ] || [ "${end_count}" -gt 0 ]; then
-    markers_present=true
-  fi
-  if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
-    begin_line=$(grep -nF "${begin_marker}" "${authorized}" | cut -d: -f1)
-    end_line=$(grep -nF "${end_marker}" "${authorized}" | cut -d: -f1)
-    if [ "${begin_line}" -lt "${end_line}" ]; then
-      has_valid_block=true
-    fi
-  fi
+  begin_count=$(grep -cFx "${begin_marker}" "${authorized}" || true)
+  end_count=$(grep -cFx "${end_marker}" "${authorized}" || true)
 fi
 
-if [ "${markers_present}" = true ] && [ "${has_valid_block}" = false ]; then
-  echo "  WARNING: malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
+markers_present=false
+if [ "${begin_count}" -gt 0 ] || [ "${end_count}" -gt 0 ]; then
+  markers_present=true
+fi
+
+block_shape_ok=false
+if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
+  block_shape_ok=true
+fi
+
+begin_line=""
+end_line=""
+if [ -f "${authorized}" ]; then
+  begin_line=$(grep -nFx "${begin_marker}" "${authorized}" | tail -1 | cut -d: -f1 || true)
+  if [ -n "${begin_line}" ]; then
+    end_line=$(awk -v b="${begin_line}" -v end="${end_marker}" 'NR > b && $0 == end { print NR; exit }' "${authorized}")
+  fi
+fi
+has_valid_block=false
+if [ -n "${begin_line}" ] && [ -n "${end_line}" ]; then
+  has_valid_block=true
+fi
+
+if [ "${markers_present}" = true ] && [ "${block_shape_ok}" = false ]; then
+  echo "  WARNING: malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. Regeneration will keep updating the most recent block in place."
 fi
 
 if [ "${has_valid_block}" = true ]; then
-  awk -v begin="${begin_marker}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
-    $0 == begin {
+  awk -v begin_line="${begin_line}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
+    NR == begin_line {
       print
       while ((getline line < keysfile) > 0) print line
       in_block = 1
       next
     }
-    $0 == end { in_block = 0 }
-    !in_block { print }
+    in_block && $0 == end {
+      print
+      in_block = 0
+      next
+    }
+    in_block { next }
+    { print }
   ' "${authorized}" > "${new_file}"
 else
   if [ -f "${authorized}" ]; then
-    cat "${authorized}" > "${new_file}"
+    if [ -s "${managed_keys}" ]; then
+      non_empty_managed_keys="$(mktemp "${ssh_dir}/.authorized_keys.tmp.XXXXXX")"
+      trap 'rm -f "${managed_keys}" "${new_file}" "${non_empty_managed_keys}"' EXIT
+      grep -v '^$' "${managed_keys}" > "${non_empty_managed_keys}" || true
+      grep -vFxf "${non_empty_managed_keys}" "${authorized}" > "${new_file}" || true
+    else
+      cat "${authorized}" > "${new_file}"
+    fi
     if [ -s "${new_file}" ] && [ "$(tail -c1 "${new_file}")" != "" ]; then
       printf '\n' >> "${new_file}"
     fi

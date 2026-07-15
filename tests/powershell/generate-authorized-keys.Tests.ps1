@@ -88,6 +88,19 @@ Describe 'generate-authorized-keys' {
     $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
   }
 
+  It 'does not duplicate a legacy key already present in an unmarked file' {
+    @('ssh-ed25519 AAAA primary@test', 'ssh-rsa FOREIGN other-machine') |
+      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    & $script:Fixture
+
+    $content = Get-Content $script:Authorized
+    ($content | Where-Object { $_ -eq 'ssh-ed25519 AAAA primary@test' }).Count | Should -Be 1
+    $content | Should -Contain 'ssh-rsa FOREIGN other-machine'
+  }
+
   It 'preserves foreign lines on both sides of an existing managed block' {
     'ssh-ed25519 AAAA primary@test' |
       Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
@@ -174,5 +187,57 @@ Describe 'generate-authorized-keys' {
     $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
     ($warnings.Message -join "`n") | Should -Not -Match 'Malformed managed-key markers'
+  }
+
+  It 'converges on the same block count after repeated runs when the end marker was missing' {
+    @('ssh-rsa FOREIGN untouched', $script:BeginMarker, 'ssh-rsa STALE stale-key') |
+      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    & $script:Fixture | Out-Null
+    $countAfterRun1 = (Get-Content $script:Authorized | Where-Object { $_ -eq $script:BeginMarker }).Count
+    $countAfterRun1 | Should -Be 2
+
+    & $script:Fixture | Out-Null
+    $afterRun2 = Get-Content $script:Authorized -Raw
+
+    & $script:Fixture | Out-Null
+    $afterRun3 = Get-Content $script:Authorized -Raw
+    $countAfterRun3 = (Get-Content $script:Authorized | Where-Object { $_ -eq $script:BeginMarker }).Count
+
+    $countAfterRun3 | Should -Be 2
+    $afterRun3 | Should -Be $afterRun2
+
+    $content = Get-Content $script:Authorized
+    $content | Should -Contain 'ssh-rsa FOREIGN untouched'
+    $content | Should -Contain 'ssh-rsa STALE stale-key'
+    $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
+  }
+
+  It 'converges on the same block count after repeated runs when markers were duplicated' {
+    @(
+      $script:BeginMarker, 'ssh-rsa OLD1 old', $script:EndMarker,
+      'ssh-rsa FOREIGN between-blocks',
+      $script:BeginMarker, 'ssh-rsa OLD2 old', $script:EndMarker
+    ) | Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    & $script:Fixture | Out-Null
+    & $script:Fixture | Out-Null
+    $afterRun2 = Get-Content $script:Authorized -Raw
+
+    & $script:Fixture | Out-Null
+    $afterRun3 = Get-Content $script:Authorized -Raw
+    $countAfterRun3 = (Get-Content $script:Authorized | Where-Object { $_ -eq $script:BeginMarker }).Count
+
+    $countAfterRun3 | Should -Be 2
+    $afterRun3 | Should -Be $afterRun2
+
+    $content = Get-Content $script:Authorized
+    $content | Should -Contain 'ssh-rsa OLD1 old'
+    $content | Should -Contain 'ssh-rsa FOREIGN between-blocks'
+    $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
   }
 }

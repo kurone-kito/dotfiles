@@ -63,6 +63,20 @@ setup() {
   assert_output --partial 'ssh-ed25519 AAAA primary@test'
 }
 
+@test "does not duplicate a legacy key already present in an unmarked file" {
+  printf 'ssh-ed25519 AAAA primary@test\n\nssh-rsa FOREIGN other-machine\n' > "$AUTHORIZED"
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+
+  run grep -c 'ssh-ed25519 AAAA primary@test' "$AUTHORIZED"
+  assert_output '1'
+
+  run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa FOREIGN other-machine'
+}
+
 @test "preserves foreign lines on both sides of an existing managed block" {
   echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
   run bash "$FIXTURE"
@@ -146,6 +160,55 @@ setup() {
   assert_output --partial 'WARNING: malformed managed-key markers found'
 
   run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa FOREIGN between-blocks'
+  assert_output --partial 'ssh-ed25519 AAAA primary@test'
+}
+
+@test "converges on the same block count after repeated runs when the end marker was missing" {
+  printf 'ssh-rsa FOREIGN untouched\n# >>> chezmoi managed keys >>>\nssh-rsa STALE stale-key\n' > "$AUTHORIZED"
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+  run grep -c '# >>> chezmoi managed keys >>>' "$AUTHORIZED"
+  assert_output '2'
+
+  run bash "$FIXTURE"
+  assert_success
+  cp "$AUTHORIZED" "$BATS_TEST_TMPDIR/after-run2"
+
+  run bash "$FIXTURE"
+  assert_success
+  run grep -c '# >>> chezmoi managed keys >>>' "$AUTHORIZED"
+  assert_output '2'
+  run diff "$BATS_TEST_TMPDIR/after-run2" "$AUTHORIZED"
+  assert_success
+
+  run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa FOREIGN untouched'
+  assert_output --partial 'ssh-rsa STALE stale-key'
+  assert_output --partial 'ssh-ed25519 AAAA primary@test'
+}
+
+@test "converges on the same block count after repeated runs when markers were duplicated" {
+  printf '# >>> chezmoi managed keys >>>\nssh-rsa OLD1 old\n# <<< chezmoi managed keys <<<\nssh-rsa FOREIGN between-blocks\n# >>> chezmoi managed keys >>>\nssh-rsa OLD2 old\n# <<< chezmoi managed keys <<<\n' > "$AUTHORIZED"
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+  run bash "$FIXTURE"
+  assert_success
+  cp "$AUTHORIZED" "$BATS_TEST_TMPDIR/after-run2"
+
+  run bash "$FIXTURE"
+  assert_success
+  run grep -c '# >>> chezmoi managed keys >>>' "$AUTHORIZED"
+  assert_output '2'
+  run diff "$BATS_TEST_TMPDIR/after-run2" "$AUTHORIZED"
+  assert_success
+
+  run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa OLD1 old'
   assert_output --partial 'ssh-rsa FOREIGN between-blocks'
   assert_output --partial 'ssh-ed25519 AAAA primary@test'
 }

@@ -43,19 +43,32 @@ if (Test-Path $authorized) {
 
 $beginCount = ($existingLines | Where-Object { $_ -eq $beginMarker }).Count
 $endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
-$beginIndex = [array]::IndexOf($existingLines, $beginMarker)
-$endIndex = [array]::IndexOf($existingLines, $endMarker)
-$hasValidBlock = ($beginCount -eq 1) -and ($endCount -eq 1) -and ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
 $markersPresent = ($beginCount -gt 0) -or ($endCount -gt 0)
+# A "shaped" block is exactly one begin and one end marker. Anything
+# else (missing end marker, duplicated markers left behind by a prior
+# malformed run) is flagged every run until an operator cleans it up,
+# even once a valid pair below is found to update in place.
+$blockShapeOk = ($beginCount -eq 1) -and ($endCount -eq 1)
 
-if ($markersPresent -and -not $hasValidBlock) {
-  Write-Warning "Malformed managed-key markers found in ${authorized}; appending a fresh block instead of editing in place. Remove the stale/duplicate markers manually to stop new blocks from accumulating."
+# Locate the last begin marker and the first end marker after it, so a
+# block appended by a prior malformed-recovery run is found and
+# updated in place on the next run instead of appending yet another
+# block (which would never converge).
+$beginIndex = [array]::LastIndexOf($existingLines, $beginMarker)
+$endIndex = -1
+if ($beginIndex -ge 0) {
+  $endIndex = [array]::IndexOf($existingLines, $endMarker, $beginIndex + 1)
+}
+$hasValidBlock = ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
+
+if ($markersPresent -and -not $blockShapeOk) {
+  Write-Warning "Malformed managed-key markers found in ${authorized}; remove the stale/duplicate markers manually. Regeneration will keep updating the most recent block in place."
 }
 
 $outLines = @()
 if ($hasValidBlock) {
-  # Replace the existing managed block in place, preserving every
-  # line outside it.
+  # Replace the last managed block in place, preserving every line
+  # outside it.
   if ($beginIndex -gt 0) {
     $outLines += $existingLines[0..($beginIndex - 1)]
   }
@@ -66,11 +79,14 @@ if ($hasValidBlock) {
     $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
   }
 } else {
-  # No managed block yet, or the existing markers are malformed
-  # (missing/duplicated): preserve any existing content as-is and
-  # append a fresh managed block rather than risk dropping foreign
-  # lines by guessing at a broken block's boundaries.
-  $outLines += $existingLines
+  # No managed block yet, or no end marker follows any begin marker:
+  # preserve any existing content and append a fresh managed block
+  # rather than risk dropping foreign lines by guessing at a broken
+  # block's boundaries. Exception: when migrating from the
+  # pre-managed-block script (an unmarked file already containing the
+  # same key lines we are about to manage), drop those exact-duplicate
+  # lines so the first managed run doesn't double them up.
+  $outLines += $existingLines | Where-Object { $managedLines -notcontains $_ }
   $outLines += $beginMarker
   $outLines += $managedLines
   $outLines += $endMarker
