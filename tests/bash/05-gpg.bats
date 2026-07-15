@@ -133,6 +133,7 @@ EOF
   assert_success
   assert_output --partial "Prompting GPG passphrase"
   refute_output --partial "--local-user"
+  assert_file_contains "$GPG_HELPER_LOG" "gpg:--clearsign --yes"
   run grep -- '--local-user' "$GPG_HELPER_LOG"
   assert_failure
 }
