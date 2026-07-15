@@ -153,32 +153,30 @@ required-check set is partial.
 
 ### Required status checks on `master`
 
-Branch protection's `required_status_checks.contexts` currently lists
-`lint` (from the Linting workflow) and `Lua syntax check` (from the
-Test workflow). The remaining two jobs in the Test workflow —
-`Bash tests (bats)` and `PowerShell tests (Pester)` — are not
-required yet because they fail on `master` baseline for environmental
-reasons (`chezmoi` missing on the Ubuntu runner; 13 Windows-only
-Pester cases). Tracking:
+`master`'s merge gate currently comes from a default-branch ruleset
+matching `~DEFAULT_BRANCH`; classic branch protection is not
+configured today, though the CI wait unions both sources if that
+changes. The ruleset's `required_status_checks` rule lists four
+required check contexts, spanning the Linting and Test workflows:
+`lint`, `Lua syntax check`, `Bash tests (bats)`, and
+`PowerShell tests (Pester)`.
 
-- [`#109`](https://github.com/kurone-kito/dotfiles/issues/109) —
-  install `chezmoi` in the Bash tests job and promote
-  `Bash tests (bats)` to required.
-- [`#110`](https://github.com/kurone-kito/dotfiles/issues/110) —
-  resolve the 13 Pester failures and promote
-  `PowerShell tests (Pester)` to required.
+[`#109`](https://github.com/kurone-kito/dotfiles/issues/109) and
+[`#110`](https://github.com/kurone-kito/dotfiles/issues/110) (children
+of roadmap [`#107`](https://github.com/kurone-kito/dotfiles/issues/107))
+had already fixed the environmental failures blocking
+`Bash tests (bats)` and `PowerShell tests (Pester)` from being
+promoted (`chezmoi` missing on the Ubuntu runner; 13 Windows-only
+Pester cases), but closed without evidence that the actual promotion
+ran. [`#163`](https://github.com/kurone-kito/dotfiles/issues/163)
+registered all four contexts on the ruleset directly.
 
-Both issues are children of roadmap
-[`#107`](https://github.com/kurone-kito/dotfiles/issues/107).
-
-This is **not** a "no CI gate" situation: per
-`.github/instructions/idd-ci.instructions.md`, when an IDD run reaches
-the shared CI wait, it builds the required-check set from rulesets
-and branch protection. If neither source yields a check for the
-current PR head, IDD stops and posts a hold for missing merge-gate
-policy evidence — it does not silently merge. The current two-check
-floor (`lint` + `Lua syntax check`) is therefore the active merge
-gate, and the two pending promotions tighten it further.
+Per `.github/instructions/idd-ci.instructions.md`, when an IDD run
+reaches the shared CI wait, it builds the required-check set from
+rulesets and branch protection; if neither source yields a
+required-check set at all, IDD stops and posts a hold for missing
+merge-gate policy evidence rather than silently merging. The
+four-check ruleset above is now that required set.
 
 ### Issue authoring gate
 
