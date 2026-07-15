@@ -63,6 +63,15 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
     $script:Paths = New-ManagedPathLayout
 
+    # jdx.mise is now a plain declared package (a repo-shipped
+    # default, see docs/winget-user-path.md), not a hardcoded special
+    # case — declare it here so the existing mise PATH scenarios below
+    # keep exercising it through the generic mechanism. The "winget
+    # declared packages" Context overrides this with its own manifest.
+    $script:BaseWingetManifestPath = 'TestDrive:\winget-manifest-base.json'
+    Set-Content -Path $script:BaseWingetManifestPath -Value '[{"label":"mise","id":"jdx.mise","bin":"mise/bin"}]'
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $script:BaseWingetManifestPath
+
     # Disable registry sync by default so existing tests are not
     # affected by the real Windows User PATH.
     # Use ';' not '' — Windows deletes env vars set to empty string,
@@ -89,8 +98,6 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Split-PathEntries -ErrorAction SilentlyContinue
     Remove-Item Function:\Normalize-PathEntry -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MisePackagesRoot -ErrorAction SilentlyContinue
-    Remove-Item Function:\Get-MiseManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
@@ -100,6 +107,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = $null
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $null
     $script:TestWingetPackagesRoot = $null
+    $script:BaseWingetManifestPath = $null
   }
 
   It 'reconciles managed entries and removes stale winget package paths' {
@@ -295,12 +303,25 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     }
 
     It 'contributes nothing when the declared package has no matching directory on disk' {
+      # This Context's manifest declares only "gh" (overriding the
+      # outer BeforeEach's mise-declaring manifest), so mise
+      # contributes nothing here either. Reset $env:PATH without the
+      # outer BeforeEach's StaleMiseBin seed: that value is a real
+      # resolved TestDrive path (New-Item's .FullName, not a literal
+      # "TestDrive:\..." string), so without a mise declaration in
+      # this manifest it would no longer be recognized as managed and
+      # would leak into the result as an unrelated leftover entry.
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.WinGetLinks
+      ) -join ';'
       Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
 
       . $script:Subject
 
       $env:PATH | Should -Be (@(
-        $script:Paths.CurrentMiseBin
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32
@@ -312,12 +333,20 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     }
 
     It 'is a no-op when no packages are declared (empty manifest)' {
+      # See the comment above: reset $env:PATH without the mise
+      # StaleMiseBin seed, since an empty manifest declares no mise
+      # entry to recognize it as managed.
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.WinGetLinks
+      ) -join ';'
       Set-Content -Path $script:WingetManifestPath -Value '[]'
 
       . $script:Subject
 
       $env:PATH | Should -Be (@(
-        $script:Paths.CurrentMiseBin
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32

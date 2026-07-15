@@ -12,9 +12,10 @@
 # WinGet declared-package directories (data.wingetUserPath.packages,
 # see docs/winget-user-path.md) are discovered via the deployed
 # winget-user-path-packages.json manifest (Get-WingetUserPath*) and
-# placed ahead of WinGet\Links in $desiredManagedPaths, mirroring the
-# mise special case below it (folding the two together is tracked
-# separately).
+# placed ahead of WinGet\Links in $desiredManagedPaths. The repo
+# ships one such declaration as a default (see
+# docs/winget-user-path.md) — there is no hardcoded special case for
+# any specific package here.
 
 $sep = [IO.Path]::PathSeparator
 
@@ -81,10 +82,6 @@ function Get-WingetPackagesRoot {
   }
 
   return Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft') 'WinGet') 'Packages'
-}
-
-function Get-MisePackagesRoot {
-  Get-WingetPackagesRoot
 }
 
 function Get-WingetUserPathManifestPath {
@@ -160,43 +157,10 @@ function Get-WingetUserPathManagedPaths {
   return $paths
 }
 
-function Get-MiseManagedPaths {
-  $packagesRoot = Get-MisePackagesRoot
-  if ([string]::IsNullOrEmpty($packagesRoot)) {
-    return @()
-  }
-
-  if (-not (Test-Path -LiteralPath $packagesRoot -PathType Container)) {
-    return @()
-  }
-
-  $paths = @()
-  foreach ($packageDir in @(
-    Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
-      Where-Object { $_.Name -like 'jdx.mise_*' } |
-      Sort-Object -Property FullName
-  )) {
-    $binDir = Join-Path (Join-Path $packageDir.FullName 'mise') 'bin'
-    if (Test-Path -LiteralPath $binDir -PathType Container) {
-      $paths += $binDir
-    }
-  }
-
-  return $paths
-}
-
 $staticManagedPaths = @(Get-StaticManagedPaths)
 $managedLookup = @{}
 foreach ($dir in $staticManagedPaths) {
   $managedLookup[(Normalize-PathEntry $dir)] = $true
-}
-
-$misePackagesRoot = Get-MisePackagesRoot
-$misePackagePattern = $null
-if (-not [string]::IsNullOrEmpty($misePackagesRoot)) {
-  $misePackagePattern = '^' +
-    [regex]::Escape((Normalize-PathEntry $misePackagesRoot)) +
-    '\\jdx\.mise_[^\\]+\\mise\\bin$'
 }
 
 $wingetPackagesRoot = Get-WingetPackagesRoot
@@ -225,10 +189,6 @@ function Test-IsManagedPath {
     return $true
   }
 
-  if ($null -ne $misePackagePattern -and $normalized -match $misePackagePattern) {
-    return $true
-  }
-
   foreach ($pattern in $wingetUserPathPatterns) {
     if ($normalized -match $pattern) {
       return $true
@@ -240,7 +200,7 @@ function Test-IsManagedPath {
 
 $desiredManagedPaths = @()
 $desiredLookup = @{}
-foreach ($dir in @((@(Get-WingetUserPathManagedPaths)) + (@(Get-MiseManagedPaths)) + $staticManagedPaths)) {
+foreach ($dir in @((@(Get-WingetUserPathManagedPaths)) + $staticManagedPaths)) {
   if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
     continue
   }
