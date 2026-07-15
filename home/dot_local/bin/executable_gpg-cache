@@ -19,9 +19,11 @@ update_gpg_session() {
 }
 
 get_signing_keys() {
-  # 1. Default git signing key
+  # 1. Default git signing key (hex fingerprints only; when
+  #    gpg.format=ssh, user.signingkey is an SSH public key path,
+  #    which gpg cannot sign with, so skip it silently)
   if command -v git >/dev/null 2>&1; then
-    git config user.signingkey 2>/dev/null || true
+    git config user.signingkey 2>/dev/null | grep -E '^[A-Fa-f0-9]+$' || true
   fi
 
   # 2. Per-directory profile signing keys

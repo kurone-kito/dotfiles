@@ -104,6 +104,22 @@ Describe 'gpg-cache' {
     $keys | Should -Contain 'AAAA1111BBBB2222'
   }
 
+  It 'skips a non-hex user.signingkey (SSH key path)' {
+    function script:git {
+      if ($args[0] -eq 'config' -and $args[1] -eq 'user.signingkey') {
+        "$HOME/.ssh/id_ed25519.pub"
+        $global:LASTEXITCODE = 0
+      }
+    }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'git'; CommandType = 'Function' }
+    } -ParameterFilter { $Name -eq 'git' }
+
+    $keys = Get-DotfilesGpgSigningKeys
+
+    $keys.Count | Should -Be 0
+  }
+
   It 'reads signing keys from profile config files' {
     $profileDir = Join-Path (Join-Path (Join-Path $HOME '.config') 'git') 'profiles'
     $null = New-Item -ItemType Directory -Path $profileDir -Force

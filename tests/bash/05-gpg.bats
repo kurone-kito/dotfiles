@@ -107,7 +107,7 @@ EOF
   make_mock_command gpg-connect-agent "printf 'agent:%s\n' \"\$*\" >> \"${GPG_HELPER_LOG}\""
   make_mock_command gpg "printf 'gpg:%s\n' \"\$*\" >> \"${GPG_HELPER_LOG}\"; exit 0"
   make_mock_command git \
-    "if [ \"\$1\" = 'config' ] && [ \"\$2\" = 'user.signingkey' ]; then printf 'KEY1\n'; exit 0; fi; exit 1"
+    "if [ \"\$1\" = 'config' ] && [ \"\$2\" = 'user.signingkey' ]; then printf 'EEEE5555FFFF6666\n'; exit 0; fi; exit 1"
 
   mkdir -p "$HOME/.config/git/profiles"
   printf '[user]\n  signingkey = "CCCC3333DDDD4444"\n' > "$HOME/.config/git/profiles/work"
@@ -115,10 +115,26 @@ EOF
   run /bin/sh "$CACHE_PATH"
 
   assert_success
-  assert_output --partial "Prompting GPG passphrase for key KEY1"
+  assert_output --partial "Prompting GPG passphrase for key EEEE5555FFFF6666"
   assert_output --partial "Prompting GPG passphrase for key CCCC3333DDDD4444"
-  assert_file_contains "$GPG_HELPER_LOG" "gpg:--local-user KEY1 --clearsign --yes"
+  assert_file_contains "$GPG_HELPER_LOG" "gpg:--local-user EEEE5555FFFF6666 --clearsign --yes"
   assert_file_contains "$GPG_HELPER_LOG" "gpg:--local-user CCCC3333DDDD4444 --clearsign --yes"
+}
+
+@test "gpg-cache skips a non-hex user.signingkey (SSH key path) and falls back to the default key" {
+  make_mock_command tty "printf '/dev/pts/55\n'"
+  make_mock_command gpg-connect-agent "printf 'agent:%s\n' \"\$*\" >> \"${GPG_HELPER_LOG}\""
+  make_mock_command gpg "printf 'gpg:%s\n' \"\$*\" >> \"${GPG_HELPER_LOG}\"; exit 0"
+  make_mock_command git \
+    "if [ \"\$1\" = 'config' ] && [ \"\$2\" = 'user.signingkey' ]; then printf '%s/.ssh/id_ed25519.pub\n' \"$HOME\"; exit 0; fi; exit 1"
+
+  run /bin/sh "$CACHE_PATH"
+
+  assert_success
+  assert_output --partial "Prompting GPG passphrase"
+  refute_output --partial "--local-user"
+  run grep -- '--local-user' "$GPG_HELPER_LOG"
+  assert_failure
 }
 
 @test "gpg-cache returns failure when gpg exits nonzero" {
