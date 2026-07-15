@@ -6,7 +6,7 @@ identity, and GPG signing key.
 
 ## How the chain works
 
-```
+```text
 ghq get github.com/acme-corp/repo
         │
         ▼
@@ -193,7 +193,7 @@ When a profile has `sshhost` set, the gitconfig template:
 3. Extracts the path after the hostname as the org prefix
 4. Generates `insteadOf` rules for both HTTPS and SSH URLs
 
-```
+```text
 gitdir  = "~/ghq/github.com/acme-corp/"
                   └─────┬─────┘└───┬───┘
                     hostname    org path

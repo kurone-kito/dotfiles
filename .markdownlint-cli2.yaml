@@ -1,2 +1,6 @@
+globs:
+  - "**/*.{md,markdown}"
 ignores:
   - .github/CODE_OF_CONDUCT*
+  - tests/bash/helpers/**
+  - node_modules/**

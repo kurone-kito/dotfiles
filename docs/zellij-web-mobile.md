@@ -58,7 +58,7 @@ limitation on mobile.
 
 The `web_client.font` setting defaults to a Nerd Font fallback chain:
 
-```
+```css
 'HackGen Console NF', 'Hack Nerd Font', monospace
 ```
 

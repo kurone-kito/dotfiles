@@ -814,11 +814,11 @@ work even when `mise` / `ghq` are not on `PATH`.
 
 ### Status taxonomy
 
-| Status    | Meaning                                                     |
-| --------- | ----------------------------------------------------------- |
-| `OK`      | Target is present, has the expected mode/ACL, (for GPG) the fingerprint is in the keyring, and (when a deploy fingerprint is recorded) the file content still matches what was last deployed. |
-| `DRIFT`   | Target is present with the correct mode but the SHA-256 of its content no longer matches the fingerprint recorded by the last deploy. Typically caused by a manual edit or by answering `s` (skip) at a chezmoi `has changed since chezmoi last wrote it` prompt. Re-deploy with `chezmoi apply --force` to overwrite, or accept the local edit by re-recording the state (delete the entry from `~/.config/chezmoi/secret-deploy-state.json` and re-run `chezmoi apply`). |
-| `WARN`    | Target is present but with the wrong permissions, or `.gitignore` is missing the env filename, or the SSH host alias is missing the expected `IdentityFile`. Takes precedence over `DRIFT`. |
+| Status | Meaning |
+| --- | --- |
+| `OK` | Target is present, has the expected mode/ACL, (for GPG) the fingerprint is in the keyring, and (when a deploy fingerprint is recorded) the file content still matches what was last deployed. |
+| `DRIFT` | Target is present with the correct mode but the SHA-256 of its content no longer matches the fingerprint recorded by the last deploy. Typically caused by a manual edit or by answering `s` (skip) at a chezmoi `has changed since chezmoi last wrote it` prompt. Re-deploy with `chezmoi apply --force` to overwrite, or accept the local edit by re-recording the state (delete the entry from `~/.config/chezmoi/secret-deploy-state.json` and re-run `chezmoi apply`). |
+| `WARN` | Target is present but with the wrong permissions, or `.gitignore` is missing the env filename, or the SSH host alias is missing the expected `IdentityFile`. Takes precedence over `DRIFT`. |
 | `MISSING` | Target is configured but not deployed. Re-run `chezmoi apply` after fixing the secret-manager entry. |
 | `UNKNOWN` | The check could not run — e.g., `gpg`/`ssh` are not on `PATH`, the manifest lacks an expected fingerprint, or `ghq root` could not be resolved. |
 
@@ -858,7 +858,7 @@ have no recorded fingerprint.
 ### Known limitations
 
 - **Freshness against the secret manager is not checked.**
-  `DRIFT` tells you the file changed _after_ deploy, but it cannot
+  `DRIFT` tells you the file changed *after* deploy, but it cannot
   tell you whether the Bitwarden / 1Password / KeePassXC entry has
   been rotated upstream. Re-run `chezmoi apply` to refresh content
   from the manager.
