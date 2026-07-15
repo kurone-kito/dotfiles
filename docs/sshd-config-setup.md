@@ -11,11 +11,11 @@ explains how to manually deploy it.
 chezmoi is a **user-level** dotfiles manager. The SSH daemon
 configuration lives in system directories owned by root:
 
-| Platform    | System path                        | Privilege   |
-| ----------- | ---------------------------------- | ----------- |
-| Linux       | `/etc/ssh/sshd_config`             | root        |
-| macOS       | `/etc/ssh/sshd_config`             | root        |
-| Windows     | `C:\ProgramData\ssh\sshd_config`   | Administrator |
+| Platform | System path                      | Privilege     |
+| -------- | -------------------------------- | ------------- |
+| Linux    | `/etc/ssh/sshd_config`           | root          |
+| macOS    | `/etc/ssh/sshd_config`           | root          |
+| Windows  | `C:\ProgramData\ssh\sshd_config` | Administrator |
 
 Automatically escalating to root during `chezmoi apply` would
 violate the principle of least privilege and could break the SSH
@@ -26,17 +26,17 @@ daemon if the configuration is invalid.
 The generated `sshd_config` includes only the settings that differ
 from defaults:
 
-| Setting                 | Value        | Purpose                              |
-| ----------------------- | ------------ | ------------------------------------ |
-| `PasswordAuthentication`| `no`         | Disable password login               |
-| `PermitEmptyPasswords`  | `no`         | Reject empty passwords               |
-| `PermitRootLogin`       | `no`         | Block root SSH access (Unix only)    |
-| `PubkeyAuthentication`  | `yes`        | Enable public key authentication     |
-| `AuthenticationMethods` | `publickey`  | Enforce key-only authentication      |
-| `Subsystem sftp`        | `internal-sftp` | Cross-platform SFTP support       |
-| `ClientAliveInterval`   | `300`        | Keepalive probe interval (seconds)   |
-| `ClientAliveCountMax`   | `5`          | Max missed probes before disconnect  |
-| `TCPKeepAlive`          | `yes`        | Enable TCP-level keepalive           |
+| Setting                  | Value           | Purpose                             |
+| ------------------------ | --------------- | ----------------------------------- |
+| `PasswordAuthentication` | `no`            | Disable password login              |
+| `PermitEmptyPasswords`   | `no`            | Reject empty passwords              |
+| `PermitRootLogin`        | `no`            | Block root SSH access (Unix only)   |
+| `PubkeyAuthentication`   | `yes`           | Enable public key authentication    |
+| `AuthenticationMethods`  | `publickey`     | Enforce key-only authentication     |
+| `Subsystem sftp`         | `internal-sftp` | Cross-platform SFTP support         |
+| `ClientAliveInterval`    | `300`           | Keepalive probe interval (seconds)  |
+| `ClientAliveCountMax`    | `5`             | Max missed probes before disconnect |
+| `TCPKeepAlive`           | `yes`           | Enable TCP-level keepalive          |
 
 The timeout values (`ClientAliveInterval × ClientAliveCountMax`)
 default to approximately 25 minutes, suitable for mobile connections
@@ -261,6 +261,7 @@ If you cannot connect after deploying:
 
 1. Use a local console or out-of-band access (IPMI, cloud console)
 2. Restore the backup:
+
    ```bash
    sudo cp /etc/ssh/sshd_config.bak /etc/ssh/sshd_config
    sudo systemctl reload sshd

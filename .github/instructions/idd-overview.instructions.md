@@ -36,14 +36,14 @@ the recorded machine-readable policy. Absent values keep the gate
 enabled and default approval actors to
 `owners-and-maintainers-only`.
 
-| Name                    | Commands                         |
-| ----------------------- | -------------------------------- |
-| **fix-validate**        | `npx markdownlint-cli2 --fix "**/*.md" && npx markdownlint-cli2 "**/*.md"`      |
-| **pre-push-validate**   | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed"` |
-| **post-fix-validate**   | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed"` |
-| **install-deps**        | `git submodule update --init --recursive`       |
-| **issue-scope**         | `roadmap`                        |
-| **orphan-first-policy** | `none`                           |
+| Name | Commands |
+| --- | --- |
+| **fix-validate** | `npx markdownlint-cli2 --fix && npx markdownlint-cli2` |
+| **pre-push-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed"` |
+| **post-fix-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed"` |
+| **install-deps** | `git submodule update --init --recursive` |
+| **issue-scope** | `roadmap` |
+| **orphan-first-policy** | `none` |
 
 Non-shell rows such as **issue-scope** and **orphan-first-policy** are
 workflow settings. Read them literally, not as commands.

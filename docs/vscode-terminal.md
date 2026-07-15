@@ -29,17 +29,17 @@ The profile detects VS Code's integrated terminal via the
 
 All profile features load in VS Code's integrated terminal:
 
-| Feature    | Status | Notes                             |
-| ---------- | :----: | --------------------------------- |
-| Starship   |   ✅    | Full prompt with transient prompt |
-| zoxide     |   ✅    | `z` directory jumps               |
-| mise       |   ✅    | Runtime version management        |
-| aliases    |   ✅    | `ll`, `which`, etc.               |
-| GPG cache  |   ✅    | Signing commits without pinentry  |
-| fzf        |   ✅    | Module imported, chords disabled  |
-| worktrunk  |   ✅    | `git-wt` worktree management      |
-| PSReadLine |   ✅    | Emacs mode, history, prediction   |
-| thefuck    |   ✅    | Command correction                |
+| Feature | Status | Notes |
+| --- | :-: | --- |
+| Starship | ✅ | Full prompt with transient prompt |
+| zoxide | ✅ | `z` directory jumps |
+| mise | ✅ | Runtime version management |
+| aliases | ✅ | `ll`, `which`, etc. |
+| GPG cache | ✅ | Signing commits without pinentry |
+| fzf | ✅ | Module imported, chords disabled |
+| worktrunk | ✅ | `git-wt` worktree management |
+| PSReadLine | ✅ | Emacs mode, history, prediction |
+| thefuck | ✅ | Command correction |
 
 On Windows, the profile intentionally prefers `git-wt` for worktrunk
 so it does not confuse that binary with Windows Terminal's `wt.exe`.
