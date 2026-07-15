@@ -172,8 +172,8 @@ registered all four contexts on the ruleset directly.
 
 Per `.github/instructions/idd-ci.instructions.md`, when an IDD run
 reaches the shared CI wait, it builds the required-check set from
-rulesets and branch protection; if neither source yields a check for
-the current PR head, IDD stops and posts a hold for missing
+rulesets and branch protection; if neither source yields a
+required-check set at all, IDD stops and posts a hold for missing
 merge-gate policy evidence rather than silently merging. The
 four-check ruleset above is now that required set.
 
