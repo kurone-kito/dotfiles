@@ -54,6 +54,8 @@ words:
   - wgetrc
   - viml
   - virtiofs
+  - WORKFPR
   - xclip
   - zcompdump
   - zdharma
+  - zdiff
