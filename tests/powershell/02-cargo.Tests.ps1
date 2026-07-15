@@ -91,9 +91,15 @@ Describe '02-cargo (PS5.1 $IsWindows guard)' {
     New-Item -ItemType Directory -Path (Join-Path $home51 '.cargo/bin') -Force | Out-Null
 
     try {
+      # Single-quote-escape interpolated paths: a real-world temp path
+      # can contain an apostrophe (e.g. a Windows username like
+      # O'Connor), which would otherwise break the generated -Command
+      # string before it ever exercises the guard logic.
+      $home51Q = "'" + ($home51 -replace "'", "''") + "'"
+      $subjectQ = "'" + ($script:Subject -replace "'", "''") + "'"
       $cmd = "Set-Variable -Name IsWindows -Value `$null -Force; " +
-        "Set-Variable -Name HOME -Value '$home51' -Force; " +
-        "`$env:PATH = '/usr/bin:/bin'; `$before = `$env:PATH; . '$script:Subject'; " +
+        "Set-Variable -Name HOME -Value $home51Q -Force; " +
+        "`$env:PATH = '/usr/bin:/bin'; `$before = `$env:PATH; . $subjectQ; " +
         "if (`$env:PATH -eq `$before) { 'UNCHANGED' } else { 'CHANGED' }"
       $result = (& pwsh -NoLogo -NoProfile -Command $cmd 2>&1 | Select-Object -Last 1)
 

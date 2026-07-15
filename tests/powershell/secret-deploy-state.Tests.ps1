@@ -3,6 +3,16 @@
 BeforeAll {
   $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-deploy-state.ps1'
 
+  # A real-world path can contain an apostrophe (e.g. a Windows
+  # username like O'Connor), which would otherwise break the
+  # generated -Command string before it ever reaches the script under
+  # test. Every value interpolated into a single-quoted segment below
+  # goes through this.
+  function script:ConvertTo-PSSingleQuoted {
+    param([string]$Value)
+    "'" + ($Value -replace "'", "''") + "'"
+  }
+
   # Run the helper in a fresh pwsh subprocess so we can isolate $env:HOME
   # and capture both stdout and stderr.
   function script:Invoke-Helper {
@@ -24,13 +34,15 @@ BeforeAll {
     $stubBlock = ''
     if ($SimulatePS51) { $stubBlock += "Set-Variable -Name IsWindows -Value `$null -Force;" }
     if ($IcaclsMarkerPath) {
-      $stubBlock += "function icacls { `$args -join ' ' | Out-File -FilePath '$IcaclsMarkerPath' -Append };"
+      $markerQ = ConvertTo-PSSingleQuoted $IcaclsMarkerPath
+      $stubBlock += "function icacls { `$args -join ' ' | Out-File -FilePath $markerQ -Append };"
     }
     $envBlock = ''
-    if ($HomeDir) { $envBlock += "`$env:HOME = '$HomeDir';" }
-    foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = '$($ExtraEnv[$k])';" }
-    $argsExpr = ($ScriptArgs | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ' '
-    $cmd = "$stubBlock$envBlock & '$script:ScriptPath' $argsExpr 2>&1; exit `$LASTEXITCODE"
+    if ($HomeDir) { $envBlock += "`$env:HOME = $(ConvertTo-PSSingleQuoted $HomeDir);" }
+    foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = $(ConvertTo-PSSingleQuoted $ExtraEnv[$k]);" }
+    $argsExpr = ($ScriptArgs | ForEach-Object { ConvertTo-PSSingleQuoted $_ }) -join ' '
+    $scriptPathQ = ConvertTo-PSSingleQuoted $script:ScriptPath
+    $cmd = "$stubBlock$envBlock & $scriptPathQ $argsExpr 2>&1; exit `$LASTEXITCODE"
     $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
     return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
   }
