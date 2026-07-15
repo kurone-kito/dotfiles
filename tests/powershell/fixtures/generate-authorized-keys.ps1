@@ -38,11 +38,14 @@ if (Test-Path $authorized) {
   $existingLines = @(Get-Content -Path $authorized)
 }
 
+$beginCount = ($existingLines | Where-Object { $_ -eq $beginMarker }).Count
+$endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
 $beginIndex = [array]::IndexOf($existingLines, $beginMarker)
 $endIndex = [array]::IndexOf($existingLines, $endMarker)
+$hasValidBlock = ($beginCount -eq 1) -and ($endCount -eq 1) -and ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
 
 $outLines = @()
-if ($beginIndex -ge 0 -and $endIndex -gt $beginIndex) {
+if ($hasValidBlock) {
   if ($beginIndex -gt 0) {
     $outLines += $existingLines[0..($beginIndex - 1)]
   }

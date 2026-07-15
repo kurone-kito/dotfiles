@@ -134,4 +134,34 @@ Describe 'generate-authorized-keys' {
 
     $after | Should -Be $before
   }
+
+  It 'falls back to append instead of dropping content when the end marker is missing' {
+    @('ssh-rsa FOREIGN untouched', $script:BeginMarker, 'ssh-rsa STALE stale-key') |
+      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    & $script:Fixture
+
+    $content = Get-Content $script:Authorized
+    $content | Should -Contain 'ssh-rsa FOREIGN untouched'
+    $content | Should -Contain 'ssh-rsa STALE stale-key'
+    $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
+  }
+
+  It 'falls back to append instead of guessing when markers are duplicated' {
+    @(
+      $script:BeginMarker, 'ssh-rsa OLD1 old', $script:EndMarker,
+      'ssh-rsa FOREIGN between-blocks',
+      $script:BeginMarker, 'ssh-rsa OLD2 old', $script:EndMarker
+    ) | Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-ed25519 AAAA primary@test' |
+      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+
+    & $script:Fixture
+
+    $content = Get-Content $script:Authorized
+    $content | Should -Contain 'ssh-rsa FOREIGN between-blocks'
+    $content | Should -Contain 'ssh-ed25519 AAAA primary@test'
+  }
 }

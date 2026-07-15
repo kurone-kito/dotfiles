@@ -3,7 +3,8 @@
 # from deployed public key files. Re-runs when SSH key config changes.
 # Only the managed block below is owned by this script; every line
 # outside it (e.g. keys added via ssh-copy-id or a cloud provider) is
-# preserved byte-for-byte across regeneration.
+# preserved across regeneration (a missing trailing newline may be
+# added when a fresh block is first appended).
 set -euo pipefail
 
 # See run_after_99-secret-status-summary.sh.tmpl for rationale.
@@ -42,9 +43,22 @@ if [ ! -s "${managed_keys}" ]; then
   echo "  WARNING: no public keys were found; managed block will be empty."
 fi
 
-if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
+has_valid_block=false
+if [ -f "${authorized}" ]; then
+  begin_count=$(grep -cF "${begin_marker}" "${authorized}" || true)
+  end_count=$(grep -cF "${end_marker}" "${authorized}" || true)
+  if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
+    begin_line=$(grep -nF "${begin_marker}" "${authorized}" | cut -d: -f1)
+    end_line=$(grep -nF "${end_marker}" "${authorized}" | cut -d: -f1)
+    if [ "${begin_line}" -lt "${end_line}" ]; then
+      has_valid_block=true
+    fi
+  fi
+fi
+
+if [ "${has_valid_block}" = true ]; then
   # Replace the existing managed block in place, preserving every
-  # line outside it byte-for-byte.
+  # line outside it.
   awk -v begin="${begin_marker}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
     $0 == begin {
       print
@@ -56,11 +70,13 @@ if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
     !in_block { print }
   ' "${authorized}" > "${new_file}"
 else
-  # No managed block yet: preserve any existing (foreign) content and
-  # append a fresh managed block.
+  # No managed block yet, or the existing markers are malformed
+  # (missing/duplicated): preserve any existing content as-is and
+  # append a fresh managed block rather than risk dropping foreign
+  # lines by guessing at a broken block's boundaries.
   if [ -f "${authorized}" ]; then
     cat "${authorized}" > "${new_file}"
-    if [ -s "${new_file}" ]; then
+    if [ -s "${new_file}" ] && [ "$(tail -c1 "${new_file}")" != "" ]; then
       printf '\n' >> "${new_file}"
     fi
   else

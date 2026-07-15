@@ -36,7 +36,20 @@ if [ ! -s "${managed_keys}" ]; then
   echo "  WARNING: no public keys were found; managed block will be empty."
 fi
 
-if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
+has_valid_block=false
+if [ -f "${authorized}" ]; then
+  begin_count=$(grep -cF "${begin_marker}" "${authorized}" || true)
+  end_count=$(grep -cF "${end_marker}" "${authorized}" || true)
+  if [ "${begin_count}" -eq 1 ] && [ "${end_count}" -eq 1 ]; then
+    begin_line=$(grep -nF "${begin_marker}" "${authorized}" | cut -d: -f1)
+    end_line=$(grep -nF "${end_marker}" "${authorized}" | cut -d: -f1)
+    if [ "${begin_line}" -lt "${end_line}" ]; then
+      has_valid_block=true
+    fi
+  fi
+fi
+
+if [ "${has_valid_block}" = true ]; then
   awk -v begin="${begin_marker}" -v end="${end_marker}" -v keysfile="${managed_keys}" '
     $0 == begin {
       print
@@ -50,7 +63,7 @@ if [ -f "${authorized}" ] && grep -qF "${begin_marker}" "${authorized}"; then
 else
   if [ -f "${authorized}" ]; then
     cat "${authorized}" > "${new_file}"
-    if [ -s "${new_file}" ]; then
+    if [ -s "${new_file}" ] && [ "$(tail -c1 "${new_file}")" != "" ]; then
       printf '\n' >> "${new_file}"
     fi
   else

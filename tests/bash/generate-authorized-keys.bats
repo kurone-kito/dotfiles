@@ -122,3 +122,28 @@ setup() {
   assert_file_exists "$AUTHORIZED"
   assert_output --partial 'WARNING: no public keys were found'
 }
+
+@test "falls back to append instead of dropping content when the end marker is missing" {
+  printf 'ssh-rsa FOREIGN untouched\n# >>> chezmoi managed keys >>>\nssh-rsa STALE stale-key\n' > "$AUTHORIZED"
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+
+  run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa FOREIGN untouched'
+  assert_output --partial 'ssh-rsa STALE stale-key'
+  assert_output --partial 'ssh-ed25519 AAAA primary@test'
+}
+
+@test "falls back to append instead of guessing when markers are duplicated" {
+  printf '# >>> chezmoi managed keys >>>\nssh-rsa OLD1 old\n# <<< chezmoi managed keys <<<\nssh-rsa FOREIGN between-blocks\n# >>> chezmoi managed keys >>>\nssh-rsa OLD2 old\n# <<< chezmoi managed keys <<<\n' > "$AUTHORIZED"
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+
+  run cat "$AUTHORIZED"
+  assert_output --partial 'ssh-rsa FOREIGN between-blocks'
+  assert_output --partial 'ssh-ed25519 AAAA primary@test'
+}

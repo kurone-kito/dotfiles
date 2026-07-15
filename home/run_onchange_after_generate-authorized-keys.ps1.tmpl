@@ -40,11 +40,14 @@ if (Test-Path $authorized) {
   $existingLines = @(Get-Content -Path $authorized)
 }
 
+$beginCount = ($existingLines | Where-Object { $_ -eq $beginMarker }).Count
+$endCount = ($existingLines | Where-Object { $_ -eq $endMarker }).Count
 $beginIndex = [array]::IndexOf($existingLines, $beginMarker)
 $endIndex = [array]::IndexOf($existingLines, $endMarker)
+$hasValidBlock = ($beginCount -eq 1) -and ($endCount -eq 1) -and ($beginIndex -ge 0) -and ($endIndex -gt $beginIndex)
 
 $outLines = @()
-if ($beginIndex -ge 0 -and $endIndex -gt $beginIndex) {
+if ($hasValidBlock) {
   # Replace the existing managed block in place, preserving every
   # line outside it.
   if ($beginIndex -gt 0) {
@@ -57,8 +60,10 @@ if ($beginIndex -ge 0 -and $endIndex -gt $beginIndex) {
     $outLines += $existingLines[($endIndex + 1)..($existingLines.Count - 1)]
   }
 } else {
-  # No managed block yet: preserve any existing (foreign) content and
-  # append a fresh managed block.
+  # No managed block yet, or the existing markers are malformed
+  # (missing/duplicated): preserve any existing content as-is and
+  # append a fresh managed block rather than risk dropping foreign
+  # lines by guessing at a broken block's boundaries.
   $outLines += $existingLines
   $outLines += $beginMarker
   $outLines += $managedLines
