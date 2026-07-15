@@ -31,6 +31,7 @@ language: en,ja
 useGitignore: true
 version: '0.2'
 words:
+  - anomalyco
   - curlrc
   - Esync
   - exrc
