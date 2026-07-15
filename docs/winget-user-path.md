@@ -75,3 +75,11 @@ directory is gone.
 
 Undeclared or absent packages contribute nothing, and unrelated
 `PATH` entries are always preserved.
+
+To remove a package cleanly, set `enabled = false` first and run
+`chezmoi apply` (this removes its directory from `PATH` while it
+stays recognized as managed) before deleting the declaration
+outright. Deleting the entry directly skips that step: once it is
+gone from the manifest, its `<id>_*` pattern is no longer recognized,
+so any directory already added to `PATH` for it is left in place
+rather than cleaned up.
