@@ -52,7 +52,13 @@ jobs:
   bash-tests:
     name: Bash tests (bats)
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     env:
       CHEZMOI_VERSION: v2.71.0
@@ -83,7 +89,13 @@ jobs:
   powershell-tests:
     name: PowerShell tests (Pester)
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -101,7 +113,13 @@ jobs:
   lua-syntax:
     name: Lua syntax check
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
