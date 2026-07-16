@@ -10,8 +10,34 @@ on:
 permissions:
   contents: read
 jobs:
+  detect-changes:
+    name: Detect docs-only changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      requires_full_ci: ${{ steps.filter.outputs.requires_full_ci }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          # Ignored on pull_request events (uses the GitHub API for the
+          # PR's file list there); used to diff against the previous
+          # commit on the same branch for push events.
+          base: ${{ github.ref }}
+          predicate-quantifier: every
+          filters: |
+            requires_full_ci:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+
   bash-tests:
     name: Bash tests (bats)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.requires_full_ci == 'true'
     runs-on: ubuntu-latest
     env:
       CHEZMOI_VERSION: v2.71.0
@@ -41,6 +67,8 @@ jobs:
 
   powershell-tests:
     name: PowerShell tests (Pester)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.requires_full_ci == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +85,8 @@ jobs:
 
   lua-syntax:
     name: Lua syntax check
+    needs: detect-changes
+    if: needs.detect-changes.outputs.requires_full_ci == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
