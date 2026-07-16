@@ -336,6 +336,34 @@ On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
 authoritative full PowerShell run remains Windows local execution and
 Windows CI.
 
+### Validating Windows-only logic on Linux
+
+A skipped Pester scope proves nothing about the logic inside it — use
+this fallback to gain confidence in Windows-only `conf.d`/`lib`
+changes before pushing, while still treating a real Windows CI Pester
+run as authoritative:
+
+- **Don't force `$IsWindows = $true` inside Pester.** Overriding it
+  via `Set-Variable -Force` to make a Windows-only Describe block
+  execute on Linux breaks Pester's `TestDrive:` provider (its
+  `New-TestRegistry`/`Get-TempRegistry` internals throw), so a forced
+  Pester run isn't a reliable signal either way.
+- **Write a standalone, non-Pester script instead.** Force
+  `$IsWindows = $true` at the top, use a plain OS temp directory in
+  place of `TestDrive:` (e.g.
+  `New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) '...')`),
+  dot-source the subject script directly, and assert with plain
+  PowerShell comparisons (`Should -Be` isn't available outside
+  Pester — compare values directly and `Write-Host` the result).
+- **`[IO.Path]::PathSeparator` still reflects the real host OS**
+  (`:` on Linux) regardless of a forced `$IsWindows` override, since
+  it's a real .NET/OS property, not something the override changes.
+  Use that property consistently in these scripts instead of
+  hardcoding `;`.
+- This only builds local confidence — it is not a substitute for the
+  real Windows CI Pester run (or Windows local execution), which
+  remains the authoritative check.
+
 ### When to run
 
 - **After modifying** any script template in `home/` (especially
