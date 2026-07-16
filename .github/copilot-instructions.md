@@ -352,9 +352,11 @@ run as authoritative:
   `$IsWindows = $true` at the top, use a plain OS temp directory in
   place of `TestDrive:` (e.g.
   `New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) '...')`),
-  dot-source the subject script directly, and assert with plain
-  PowerShell comparisons (`Should -Be` isn't available outside
-  Pester — compare values directly and `Write-Host` the result).
+  dot-source the subject script directly, and assert with
+  `Import-Module Pester; ... | Should -Be ...` (works fine outside
+  `Invoke-Pester` once the module is imported, and throws on a
+  mismatch instead of silently printing a comparison a human could
+  miss).
 - **`[IO.Path]::PathSeparator` still reflects the real host OS**
   (`:` on Linux) regardless of a forced `$IsWindows` override, since
   it's a real .NET/OS property, not something the override changes.
