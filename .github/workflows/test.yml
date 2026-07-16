@@ -20,6 +20,8 @@ jobs:
       requires_full_ci: ${{ steps.resolve.outputs.value }}
     steps:
       - uses: actions/checkout@v7
+      - name: TEMPORARY deliberate failure for #198 fail-safe verification
+        run: exit 1
       # Only meaningful for pull_request events, which paths-filter
       # resolves via the GitHub API (a reliable full PR-vs-base diff,
       # regardless of how many commits are in the PR). Deliberately
@@ -52,7 +54,13 @@ jobs:
   bash-tests:
     name: Bash tests (bats)
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     env:
       CHEZMOI_VERSION: v2.71.0
@@ -83,7 +91,13 @@ jobs:
   powershell-tests:
     name: PowerShell tests (Pester)
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -101,7 +115,13 @@ jobs:
   lua-syntax:
     name: Lua syntax check
     needs: detect-changes
-    if: needs.detect-changes.outputs.requires_full_ci == 'true'
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
