@@ -10,8 +10,55 @@ on:
 permissions:
   contents: read
 jobs:
+  detect-changes:
+    name: Detect docs-only changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      requires_full_ci: ${{ steps.resolve.outputs.value }}
+    steps:
+      - uses: actions/checkout@v7
+      # Only meaningful for pull_request events, which paths-filter
+      # resolves via the GitHub API (a reliable full PR-vs-base diff,
+      # regardless of how many commits are in the PR). Deliberately
+      # not attempted for push events: there is no single correct
+      # "previous state" to diff against for an arbitrary branch name
+      # (a self-referential base like the branch's own ref falls back
+      # to a merge-base-with-master diff, which pulls in the entire
+      # branch history instead of just this push's changes; a fresh
+      # branch's first push also has no prior commit to diff at all).
+      # Push events simply always require full CI below instead.
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            requires_full_ci:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+      - name: Resolve requires_full_ci
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "value=${{ steps.filter.outputs.requires_full_ci }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          fi
+
   bash-tests:
     name: Bash tests (bats)
+    needs: detect-changes
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     env:
       CHEZMOI_VERSION: v2.71.0
@@ -41,6 +88,14 @@ jobs:
 
   powershell-tests:
     name: PowerShell tests (Pester)
+    needs: detect-changes
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +112,14 @@ jobs:
 
   lua-syntax:
     name: Lua syntax check
+    needs: detect-changes
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
