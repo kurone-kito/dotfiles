@@ -206,6 +206,45 @@ JSON
   assert_output --partial '/.ssh/id_work.pub'
 }
 
+@test "profiles: commit-ssh alias forwards extra arguments exactly once" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": {
+  "git": { "profiles": { "work": { "name": "W", "email": "w@e", "gitdir": "~/w/" } } },
+  "secret": { "ssh": { "keys": {
+    "p": { "item": "i", "filename": "id_work", "signing_profiles": ["work"] }
+  } } }
+} }
+JSON
+  run _render "$PROFILES_TMPL"
+  assert_success
+  local rendered_script="$BATS_TEST_TMPDIR/rendered-script"
+  echo "$output" > "$rendered_script"
+
+  # The rendered output is the generator *shell script* source, which
+  # writes the profile gitconfig via a heredoc; extract the heredoc
+  # body itself so it can be read as a real gitconfig file.
+  local rendered_profile="$BATS_TEST_TMPDIR/rendered-profile"
+  sed -n "/<< 'PROFILE_EOF'/,/^PROFILE_EOF\$/p" "$rendered_script" | sed '1d;$d' > "$rendered_profile"
+
+  local scratch="$BATS_TEST_TMPDIR/scratch"
+  mkdir -p "$scratch"
+  git -C "$scratch" init -q
+  git -C "$scratch" config user.email "test@example.com"
+  git -C "$scratch" config user.name "Test"
+
+  local alias_value
+  alias_value=$(git config -f "$rendered_profile" --get alias.commit-ssh)
+  git -C "$scratch" config alias.commit-ssh "$alias_value"
+
+  # Same duplication risk as the global commit-ssh alias: a stray
+  # outer "$@" would forward every argument twice, leaking "-m" past
+  # the first "--" as a bogus pathspec.
+  run git -C "$scratch" commit-ssh -m msg -- no-such-file.txt
+  assert_failure
+  assert_output --partial "pathspec 'no-such-file.txt' did not match"
+  refute_output --partial "pathspec '-m'"
+}
+
 @test "profiles: SSH-only profile (no GPG signingkey) emits ssh format + aliases" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
