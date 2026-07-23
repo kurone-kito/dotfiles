@@ -49,7 +49,7 @@ function Write-Warn([string]$Message) {
 
 function Get-FileMode {
   param([string]$Path)
-  if ($IsWindows) { return '' }
+  if ($IsWindows -ne $false) { return '' }
   try {
     $r = & stat -c '%a' $Path 2>$null
     if (-not $r) { $r = & stat -f '%A' $Path 2>$null }
@@ -59,7 +59,7 @@ function Get-FileMode {
 
 function Set-RestrictedAcl {
   param([string]$Path)
-  if ($IsWindows -and $env:USERNAME) {
+  if ($IsWindows -ne $false -and $env:USERNAME) {
     & icacls $Path /inheritance:r /grant:r "${env:USERNAME}:(R,W)" 2>&1 | Out-Null
   } elseif ($IsWindows -eq $false) {
     & chmod 600 $Path 2>$null | Out-Null

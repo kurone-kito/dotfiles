@@ -3,19 +3,46 @@
 BeforeAll {
   $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-deploy-state.ps1'
 
+  # A real-world path can contain an apostrophe (e.g. a Windows
+  # username like O'Connor), which would otherwise break the
+  # generated -Command string before it ever reaches the script under
+  # test. Every value interpolated into a single-quoted segment below
+  # goes through this.
+  function script:ConvertTo-PSSingleQuoted {
+    param([string]$Value)
+    "'" + ($Value -replace "'", "''") + "'"
+  }
+
   # Run the helper in a fresh pwsh subprocess so we can isolate $env:HOME
   # and capture both stdout and stderr.
   function script:Invoke-Helper {
     param(
       [string]   $HomeDir,
       [string[]] $ScriptArgs = @(),
-      [hashtable]$ExtraEnv = @{}
+      [hashtable]$ExtraEnv = @{},
+      # $IsWindows is ReadOnly+AllScope: Set-Variable -Force can stub it,
+      # but the override leaks process-wide. Only ever apply it inside
+      # this throwaway subprocess, never in the Pester process itself.
+      [switch]   $SimulatePS51,
+      # icacls does not exist on Linux/macOS CI. A PowerShell function
+      # resolves before an external command of the same name, so
+      # defining one here shims the call on every platform (including
+      # real Windows, where it just shadows the real binary for this
+      # one test) without needing a real icacls on PATH.
+      [string]   $IcaclsMarkerPath
     )
+    $stubBlock = ''
+    if ($SimulatePS51) { $stubBlock += "Set-Variable -Name IsWindows -Value `$null -Force;" }
+    if ($IcaclsMarkerPath) {
+      $markerQ = ConvertTo-PSSingleQuoted $IcaclsMarkerPath
+      $stubBlock += "function icacls { `$args -join ' ' | Out-File -FilePath $markerQ -Append };"
+    }
     $envBlock = ''
-    if ($HomeDir) { $envBlock += "`$env:HOME = '$HomeDir';" }
-    foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = '$($ExtraEnv[$k])';" }
-    $argsExpr = ($ScriptArgs | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ' '
-    $cmd = "$envBlock & '$script:ScriptPath' $argsExpr 2>&1; exit `$LASTEXITCODE"
+    if ($HomeDir) { $envBlock += "`$env:HOME = $(ConvertTo-PSSingleQuoted $HomeDir);" }
+    foreach ($k in $ExtraEnv.Keys) { $envBlock += "`$env:$k = $(ConvertTo-PSSingleQuoted $ExtraEnv[$k]);" }
+    $argsExpr = ($ScriptArgs | ForEach-Object { ConvertTo-PSSingleQuoted $_ }) -join ' '
+    $scriptPathQ = ConvertTo-PSSingleQuoted $script:ScriptPath
+    $cmd = "$stubBlock$envBlock & $scriptPathQ $argsExpr 2>&1; exit `$LASTEXITCODE"
     $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
     return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
   }
@@ -138,5 +165,32 @@ Describe 'secret-deploy-state.ps1' {
     $h = New-FreshHome
     $r = Invoke-Helper -HomeDir $h -ScriptArgs @('gibberish')
     $r.ExitCode | Should -Be 2
+  }
+}
+
+Describe 'secret-deploy-state.ps1 (PS5.1 $IsWindows guard)' {
+
+  It 'takes the icacls branch and leaves mode empty when $IsWindows is $null (PS5.1 emulation)' {
+    $h = New-FreshHome
+    $f = Join-Path $h '.secret/ps51.txt'
+    New-File -Path $f -Content 'abc'
+    $marker = Join-Path ([System.IO.Path]::GetTempPath()) ("icacls-marker-" + [Guid]::NewGuid().ToString('N') + '.txt')
+
+    try {
+      $r = Invoke-Helper -HomeDir $h -ScriptArgs @('record', 'secretFile', 'ps51', $f) `
+        -ExtraEnv @{ USERNAME = 'testuser' } -SimulatePS51 -IcaclsMarkerPath $marker
+
+      $r.ExitCode | Should -Be 0
+      # Proves the icacls branch ran instead of the pre-fix silent no-op.
+      Test-Path -LiteralPath $marker | Should -BeTrue
+
+      $j = Get-Content -LiteralPath (Get-StateFor -HomeDir $h) -Raw | ConvertFrom-Json
+      $entry = $j.entries | Where-Object { $_.path -eq $f } | Select-Object -First 1
+      $entry             | Should -Not -BeNullOrEmpty
+      # Proves Get-FileMode returned '' instead of shelling out to stat.
+      $entry.mode        | Should -BeNullOrEmpty
+    } finally {
+      Remove-Item -LiteralPath $marker -Force -ErrorAction SilentlyContinue
+    }
   }
 }
