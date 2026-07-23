@@ -123,6 +123,42 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
       $r.Output   | Should -Match '/\.ssh/id_work\.pub'
     }
 
+    It 'commit-ssh alias forwards extra arguments exactly once' {
+      $json = '{ "data": { "git": { "profiles": { "work": { "name": "W", "email": "w@e", "gitdir": "~/w/" } } }, "secret": { "ssh": { "keys": { "p": { "item": "i", "filename": "id_work", "signing_profiles": ["work"] } } } } } }'
+      $r = Invoke-Render $script:ProfilesTmpl $json
+      $r.ExitCode | Should -Be 0
+
+      # The rendered output is the generator *script* source, which
+      # writes the profile gitconfig via a here-string; extract the
+      # here-string body so it can be read as a real gitconfig file.
+      if ($r.Output -notmatch "(?ms)^@'\r?\n(.*?)\r?\n^'@") {
+        throw 'Could not locate the profile here-string in rendered output'
+      }
+      $renderedProfile = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-profile" -f [guid]::NewGuid())
+      Set-Content -Path $renderedProfile -Value $Matches[1] -Encoding utf8NoBOM
+
+      $scratch = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-scratch" -f [guid]::NewGuid())
+      New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+      try {
+        & git -C $scratch init -q
+        & git -C $scratch config user.email 'test@example.com'
+        & git -C $scratch config user.name 'Test'
+
+        $aliasValue = & git config -f $renderedProfile --get alias.commit-ssh
+        & git -C $scratch config alias.commit-ssh $aliasValue
+
+        # Same duplication risk as the global commit-ssh alias: a
+        # stray outer "$@" would forward every argument twice, leaking
+        # "-m" past the first "--" as a bogus pathspec.
+        $out = & git -C $scratch commit-ssh -m msg -- no-such-file.txt 2>&1
+        $LASTEXITCODE | Should -Not -Be 0
+        ($out -join "`n") | Should -Match "pathspec 'no-such-file.txt' did not match"
+        ($out -join "`n") | Should -Not -Match "pathspec '-m'"
+      } finally {
+        Remove-Item -Path $renderedProfile, $scratch -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    }
+
     It 'SSH-only profile (no GPG signingkey) emits ssh format + aliases' {
       $json = '{ "data": { "git": { "profiles": { "work": { "name": "W", "email": "w@e", "gitdir": "~/w/" } } }, "secret": { "ssh": { "keys": { "p": { "item": "i", "filename": "id_work", "signing_profiles": ["work"] } } } } } }'
       $r = Invoke-Render $script:ProfilesTmpl $json
