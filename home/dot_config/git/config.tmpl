@@ -70,9 +70,9 @@
        signing via `commit.gpgsign=true` / `tag.gpgsign=true` so
        they also work in scopes that have no primary signing set. */ -}}
 {{- $sshAbsPath := printf "%s/.ssh/%s.pub" $homeDir $sshFallbackFile }}
-  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f \"$@\""
-  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f \"$@\""
-  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f \"$@\""
+  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f"
+  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f"
+  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f"
 {{- end }}
 [add "interactive"]
   useBuiltin = true
