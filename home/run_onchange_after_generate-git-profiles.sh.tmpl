@@ -51,9 +51,9 @@ cat > "${profiles_dir}/{{ $key }}" << 'PROFILE_EOF'
 {{- end }}
 {{- if $sshFile }}
 [alias]
-  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f \"$@\""
-  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f \"$@\""
-  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f \"$@\""
+  commit-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' commit \"$@\"; }; f"
+  tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f"
+  rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f"
 {{- end }}
 PROFILE_EOF
 {{ end -}}
