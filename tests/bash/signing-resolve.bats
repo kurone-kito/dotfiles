@@ -66,6 +66,38 @@ JSON
   assert_output --partial 'rebase-ssh ='
 }
 
+@test "config: commit-ssh alias forwards extra arguments exactly once" {
+  cat > "$TMP_CFG" <<'JSON'
+{ "data": { "secret": { "ssh": { "keys": {
+  "personal": { "item": "i", "filename": "id_ed25519_personal", "signing_fallback": true }
+} } } } }
+JSON
+  run _render "$CONFIG_TMPL"
+  assert_success
+  local rendered="$BATS_TEST_TMPDIR/rendered-config"
+  echo "$output" > "$rendered"
+
+  local scratch="$BATS_TEST_TMPDIR/scratch"
+  mkdir -p "$scratch"
+  git -C "$scratch" init -q
+  git -C "$scratch" config user.email "test@example.com"
+  git -C "$scratch" config user.name "Test"
+
+  local alias_value
+  alias_value=$(git config -f "$rendered" --get alias.commit-ssh)
+  git -C "$scratch" config alias.commit-ssh "$alias_value"
+
+  # Git's `!`-alias mechanism already forwards extra CLI args by
+  # appending a single "$@" to the alias body; a stray outer "$@" in
+  # the alias itself would forward them a second time. That second
+  # copy lands after the first "--", so "-m" leaks through as a
+  # pathspec instead of being consumed once as the message flag.
+  run git -C "$scratch" commit-ssh -m msg -- no-such-file.txt
+  assert_failure
+  assert_output --partial "pathspec 'no-such-file.txt' did not match"
+  refute_output --partial "pathspec '-m'"
+}
+
 @test "config: GPG fpr + signing_fallback keeps GPG primary, adds SSH aliases" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": {
