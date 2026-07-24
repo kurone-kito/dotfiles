@@ -260,8 +260,10 @@ default below is unchanged.
     later trusted heartbeat; `false` otherwise, including whenever
     `present` is `false`. It is **purely diagnostic**: unlike `stale`, it
     never feeds `claimEligible` or `readiness.startable` below, and it
-    never changes the 24h stale-takeover threshold
-    (`idd-resume-stall.instructions.md` S3). `--with-readiness` adds
+    never changes the `claimTiming.staleAge`
+    <!-- dotfiles-divergence: claim-timing --> stale-takeover threshold
+    (`PT12H` in this repository; upstream distributed default `PT24H`;
+    `idd-resume-stall.instructions.md` S3). `--with-readiness` adds
     `readiness: { ready: boolean, reasons: string[], authoringHeld: boolean,`
     `startable: boolean }` — the A3 startability of each open leaf (dependency
     resolution across visible `Blocked by #N` / `Depends on #N` / task-list refs
