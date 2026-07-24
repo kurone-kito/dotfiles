@@ -1,0 +1,55 @@
+name: IDD advisory-convergence gate
+# Required-check workflow asserting Copilot advisory-review
+# convergence on a PR. Adapted from kurone-kito/idd-skill's
+# idd-template/.github/workflows/idd-advisory-convergence.yml at pin
+# 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. Registered as a required
+# status check on `master` with the maintainer-authorized waiver
+# escape configured in `.github/idd/config.json` `ciGate.*`. See
+# docs/idd-policy.md "CI Gate External Check Waivers" for the waiver
+# path.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to re-check (e.g. after posting a maintainer waiver)
+        required: true
+        type: number
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+jobs:
+  idd-advisory-convergence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Trusted default-branch checkout, not the PR head, for any
+          # trigger type including workflow_dispatch: the assertion
+          # logic and its config (.github/idd/config.json) must be the
+          # trusted copy, not the PR's own -- otherwise a PR could edit
+          # the verdict logic itself to force `ready: true`. The
+          # verdict still correctly evaluates the intended PR: `--pr
+          # <number>` below drives every live GitHub API call
+          # independent of what is checked out locally.
+          # <!-- dotfiles-divergence: master-branch -->
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      # This repository runs the ephemeral-npx helper profile (no
+      # vendored scripts/ directory), so invoke the packaged CLI
+      # rather than upstream's `node scripts/advisory-convergence.mjs`
+      # form. See docs/idd-policy.md "Helper Runtime Profile".
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
+            idd-advisory-convergence --pr ${{ github.event.pull_request.number || inputs.pr_number }} --assert

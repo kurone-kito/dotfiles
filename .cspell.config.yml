@@ -56,6 +56,7 @@ words:
   - MINIMIZABLE
   - MYVIMRC
   - nnoremap
+  - nvmrc
   - onlogon
   - ONNX
   - psmux
