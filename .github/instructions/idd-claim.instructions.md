@@ -86,15 +86,18 @@ already-claimed | stale-reclaimable` with the winning `{claim-id}`:
   stop instead of falling back to Discover, per
   `idd-discover.instructions.md`'s A0-T stop-don't-fallback rule.
 
+<!-- dotfiles-divergence: claim-timing -->
 GitHub issue comments have no compare-and-swap, so this narrows — rather
 than closes — the claim→write TOCTOU window; the 12 h stale-takeover
 and same-second tie-break below remain the race-recovery backstop. If
 the helper is unavailable or malformed, fall back to the written rules
 below, which stay authoritative.
 
+<!-- dotfiles-divergence: claim-timing -->
 Use the `claim-stale-age` policy default from `docs/policy-constants.md`
 for these stale checks (distributed default: `12 h`).
 
+<!-- dotfiles-divergence: claim-timing -->
 - No active claim → unclaimed, proceed.
 - Active claim already uses a `{claim-id}` that this current session had
   recorded before this check and has now verified → already claimed; do
@@ -110,6 +113,7 @@ for these stale checks (distributed default: `12 h`).
 Only the GitHub `created_at` of the latest **valid** `claimed-by`
 comment in the active claim counts toward the stale calculation.
 
+<!-- dotfiles-divergence: claim-timing -->
 If the issue has no trusted new-format `claimed-by` comments but has
 legacy claim comments from trusted marker actors, apply the **Legacy
 claim migration** rules near the end of this file instead of the
@@ -596,6 +600,7 @@ Treat trusted legacy comments as **migration-only** inputs:
   followed by a later trusted legacy `unclaimed-by` comment from the
   same agent. If so, treat the issue as **unclaimed**; skip directly to
   posting a fresh new-format claim with `supersedes: none`.
+<!-- dotfiles-divergence: claim-timing -->
 - Otherwise, compare the latest trusted legacy `claimed-by` comment's
   GitHub `created_at` against the `claim-stale-age` threshold
   (distributed default: `12 h`): younger → claimed by another live

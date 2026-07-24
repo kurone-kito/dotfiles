@@ -6,6 +6,7 @@ definitions (claim format, stale threshold, abort, hold). For full narrative
 detail on each routing branch, see
 [`docs/idd-resume-detail.md`](../../docs/idd-resume-detail.md).
 
+<!-- dotfiles-divergence: claim-timing -->
 Resume stale checks use the `claim-stale-age` policy default from
 `docs/policy-constants.md` (distributed default: `12 h`).
 
@@ -88,6 +89,8 @@ disagrees with live GitHub state, use the written table below and treat
 it as authoritative.
 
 Evaluate in order; take the first matching row.
+
+<!-- dotfiles-divergence: claim-timing -->
 
 | Claim state                                                                                     | Route                                                                                                                         |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |

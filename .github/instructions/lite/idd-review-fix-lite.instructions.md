@@ -49,6 +49,7 @@ those are E4-E8 judgment calls, excluded from every lite profile.
 - E10's critique loop repeats the same Accepted findings for more than
   `critiqueLoop.e10NoProgressHoldAfter` (default 3) passes without
   meaningful progress.
+<!-- dotfiles-divergence: master-branch -->
 - E11 merge conflicts cannot be resolved cleanly, or the PR has
   unresolved review threads, unreplied comments, or a
   `CHANGES_REQUESTED` reviewer and no explicit operator confirmation
@@ -116,6 +117,7 @@ other GitHub side effect, confirm all of the following:
    Medium findings stay blockers until fixed or explicitly redirected
    by a maintainer.
 
+<!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
 
 1. Check for conflicts between the feature branch and `master`.
@@ -124,7 +126,8 @@ other GitHub side effect, confirm all of the following:
    unreplied comments, or a reviewer's latest state is
    `CHANGES_REQUESTED`, get explicit operator confirmation before
    merging — the merge commit will appear in the PR history.
-4. Run `git fetch origin master && git merge origin/master`.
+4. <!-- dotfiles-divergence: master-branch -->
+   Run `git fetch origin master && git merge origin/master`.
 5. On a signed-commit repo whose primary signing is non-interactive
    hostile (GPG pinentry or hardware-touch) but that provides a
    fallback signing wrapper for arbitrary git subcommands (pass
@@ -338,7 +341,8 @@ other GitHub side effect, confirm all of the following:
    do not skip triage.
 5. On failure that is code-caused: fix it, run `fix-validate`, commit
    atomically, then return to E11.
-6. On failure that is infra-flaky or pre-existing (also failing on
+6. <!-- dotfiles-divergence: master-branch -->
+   On failure that is infra-flaky or pre-existing (also failing on
    `master`, unrelated to this branch): apply `ciWait.rerunPolicy`. If it
    authorizes a rerun, rerun once and resume polling. If the failure
    persists after that rerun, or the policy is `hold`, post a hold

@@ -140,6 +140,7 @@ waives the stale-threshold gate in S3.
 
 ### S3 — Stale-threshold gate (ownership transfer gate)
 
+<!-- dotfiles-divergence: claim-timing -->
 Apply the shared stale rule from `idd-overview-core.instructions.md` and
 `claim-stale-age` in `docs/policy-constants.md`:
 takeover is allowed only when the active non-owned claim is stale
@@ -149,6 +150,7 @@ takeover is allowed only when the active non-owned claim is stale
   stale threshold.
 - Claim age `>= 12h`: takeover is eligible; continue to S4.
 
+<!-- dotfiles-divergence: claim-timing -->
 **Heartbeat-overdue is diagnostic only, not a shortcut.** Discovery's
 `activeClaim.heartbeatOverdue` (`claimTiming.heartbeatInterval`, default
 6h) is an expected, human-visible signal worth a glance or a live-status

@@ -54,6 +54,7 @@ unclaimed state are inheritable by the next agent (see
 
 ## Hold / suspend
 
+<!-- dotfiles-divergence: claim-timing -->
 Keep the claim. Post the hold reason and resume condition to the PR or
 issue comment. After re-validating ownership, re-post the claim comment
 with the same `{claim-id}` every 6 h as heartbeat.

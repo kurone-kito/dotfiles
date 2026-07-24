@@ -37,6 +37,7 @@ request, or other GitHub side effect, confirm all of the following:
 4. The worktree-local claim lock is held.
 5. If any check fails, stop.
 
+<!-- dotfiles-divergence: master-branch -->
 ## B1 — Create worktree
 
 1. On the primary worktree, run `git fetch origin master`.
@@ -67,7 +68,8 @@ request, or other GitHub side effect, confirm all of the following:
 13. Define `normalized-branch` as the branch name with each `/` replaced by
     `-`.
 14. Use WorkTrunk if available.
-15. In automation, use `wt switch --create -b <base-branch> <branch-name> -x true`
+15. <!-- dotfiles-divergence: master-branch -->
+    In automation, use `wt switch --create -b <base-branch> <branch-name> -x true`
     (`<base-branch>` is normally `master`).
 16. On Windows, use `git-wt switch --create -b <base-branch> <branch-name> -x true`,
     or the same `wt switch` form if `git-wt` is unavailable.
@@ -75,7 +77,7 @@ request, or other GitHub side effect, confirm all of the following:
 18. If WorkTrunk uses a pre-start install hook, its first command must acquire
     the worktree lock before it installs anything.
 19. If the hook cannot acquire the lock, create the worktree without the hook.
-20. If WorkTrunk is unavailable, use
+20. <!-- dotfiles-divergence: master-branch --> If WorkTrunk is unavailable, use
     `git worktree add <path> -b <branch-name> origin/master` for a fresh claim.
 21. If WorkTrunk is unavailable and this is a takeover, use
     `git worktree add <path> <branch-name>` with the local branch.
@@ -90,7 +92,8 @@ request, or other GitHub side effect, confirm all of the following:
     worktree lock with the profile-selected `claim-lock` helper immediately
     after creation and before any install or other mutation.
 26. Run `install-deps` on the manual/no-hook path.
-27. Verify the primary worktree's HEAD is still on `master`.
+27. <!-- dotfiles-divergence: master-branch -->
+    Verify the primary worktree's HEAD is still on `master`.
 28. Verify `git worktree list` shows the new path.
 29. Verify the current directory is the new sibling worktree.
 30. If any of steps 27-29 fails, the worktree-creation contract is violated:
@@ -100,6 +103,7 @@ request, or other GitHub side effect, confirm all of the following:
     primary worktree, after confirming no work is lost, then recreate the
     sibling worktree from step 12.
 
+<!-- dotfiles-divergence: master-branch -->
 ## B2 — Create and refine plan
 
 1. Run `git fetch origin master`.

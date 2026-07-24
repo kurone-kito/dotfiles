@@ -82,6 +82,7 @@ following:
    fail-closed: stop rather than proceed.
 6. If any check fails, stop.
 
+<!-- dotfiles-divergence: master-branch -->
 ## D1 — Sync master before first push
 
 This section's rebase only applies **before the branch's first push**.
@@ -127,13 +128,13 @@ This section's rebase only applies **before the branch's first push**.
        re-run the helper after a short wait, up to 3 attempts; only a
        result still `"recheck"` after that budget falls through to stop
        per the condition above.
-     - Any other value (`"merge-master"`, `"policy-required-update"`,
+     - Any other value (`"merge-main"`, `"policy-required-update"`,
        `"force-push-exception"`, `"hold-unknown"`, or the helper is
        unavailable, fails, or disagrees with live GitHub state): stop
        per the condition above — this needs either the merge-based
        resync or a closer live-state read this file's mechanical scope
        does not cover.
-2. Run `git fetch origin master`.
+2. <!-- dotfiles-divergence: master-branch --> Run `git fetch origin master`.
 3. If `git merge-base HEAD origin/master` equals `origin/master`, the branch
    already contains every commit on `master` — skip the rebase and go to
    D2.
@@ -143,7 +144,8 @@ This section's rebase only applies **before the branch's first push**.
    and ask before running the rebase at all — replaying even one commit
    needs to re-sign it, and a hostile signing path with no wrapper has
    no safe non-interactive way to do that, conflict or not.
-5. Rebase onto it. On a signed-commit repo where primary signing **is**
+5. <!-- dotfiles-divergence: master-branch -->
+   Rebase onto it. On a signed-commit repo where primary signing **is**
    non-interactive-hostile but the repository **does** provide a
    fallback wrapper for arbitrary git subcommands (for example `-c
    gpg.format=ssh -c user.signingkey=<abs-path> -c commit.gpgsign=true`
@@ -161,7 +163,8 @@ This section's rebase only applies **before the branch's first push**.
    --continue` — the plain form re-signs through the configured primary
    signing and stalls non-interactively right after the conflict is
    already resolved.
-7. After the **entire** rebase completes (not per-conflict, mid-rebase):
+7. <!-- dotfiles-divergence: master-branch -->
+   After the **entire** rebase completes (not per-conflict, mid-rebase):
    if any file was hand-edited during conflict resolution, run
    **fix-validate** now, against the final rebased state, and commit
    any resulting changes before continuing. Then verify both:
@@ -175,6 +178,7 @@ This section's rebase only applies **before the branch's first push**.
    recovery still fails, stop and post a hold note naming the branch
    state.
 
+<!-- dotfiles-divergence: master-branch -->
 Once the branch is pushed, treat it as published review history: a
 later resync merges `master` into the branch through the E-phase review
 loop instead of returning to this D1 rebase path.

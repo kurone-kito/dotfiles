@@ -166,7 +166,9 @@ active claim but whose `{agent-id}` **or `branch:`** differs from the
 active claim is ignored as invalid — it is **not** a heartbeat
 (heartbeat branch invariant; claim-id is public, not a secret). An
 `unclaimed-by` releases only when both
-`{agent-id}` and `{claim-id}` match the active claim. **Stale** =
+`{agent-id}` and `{claim-id}` match the active claim.
+<!-- dotfiles-divergence: claim-timing -->
+**Stale** =
 latest valid `claimed-by`'s GitHub `created_at` is
 ≥ 12 h ago (`claim-stale-age`, default `12 h`). No active claim →
 unclaimed, proceed fresh. Active claim already using a `{claim-id}`
@@ -324,6 +326,7 @@ differently for step 5:
 
 ## Heartbeat posting
 
+<!-- dotfiles-divergence: claim-timing -->
 Only when this session already owns the active claim and is extending
 its stale clock (holding past 6 h, or a phase will exceed 6 h):
 repost using the **same command and body as step 4 above**, with

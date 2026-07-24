@@ -95,6 +95,7 @@ may be the selected roadmap or the deepest completed nested roadmap
 discovered beneath it. Before any such side effect, coordinate on the
 **exact roadmap issue being mutated**:
 
+<!-- dotfiles-divergence: claim-timing -->
 Treat `stale` and `non-stale` in this section using the
 `claim-stale-age` policy default from `docs/policy-constants.md`
 (distributed default: `12 h`).

@@ -470,7 +470,9 @@ order:
   `claimed-by`/`unclaimed-by`. No current bulk helper's
   `--with-claim-state` flag is forced-handoff-aware, so loop the
   single-issue `resume-claim-routing.mjs --fresh-claim-gate` resolver
-  per candidate, or apply the full parsing rules manually. A candidate
+  per candidate, or apply the full parsing rules manually.
+  <!-- dotfiles-divergence: claim-timing -->
+  A candidate
   is **ineligible** when parsing yields an active claim whose latest
   valid `claimed-by` comment has GitHub `created_at` within
   `claim-stale-age` of now (equivalently, `created_at > now -

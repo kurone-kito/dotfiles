@@ -52,6 +52,7 @@ Map helper fields to actions below.
 6. `git worktree list`, local branch existence, worktree `git status`,
    unpushed commits, local HEAD SHA.
 
+<!-- dotfiles-divergence: claim-timing -->
 Use GitHub **server** timestamps only. Stale age default: **12 h**
 (`claim-stale-age` / `claimTiming.staleAge`).
 
@@ -65,6 +66,7 @@ Use GitHub **server** timestamps only. Stale age default: **12 h**
 | Non-owned active claim, no valid forced-handoff                | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
 | Otherwise                                                      | Step 1                                                                 |
 
+<!-- dotfiles-divergence: claim-timing -->
 Quiet-window evidence never bypasses the 12 h stale threshold.
 
 ## Step 1 — Claim state (helper-first)
@@ -86,6 +88,8 @@ only — re-run A1.5, skip worktree creation, STOP after roadmap-side
 effects. Child-issue execution is not locked by that claim.
 
 Written table (`instructions-only` profile only): first matching row.
+
+<!-- dotfiles-divergence: claim-timing -->
 
 | Claim state                                                                                 | Action                                                        |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -117,6 +121,7 @@ agent-id alone.
 | Multiple open PRs for the claim branch  | STOP — ambiguous                                                |
 | No PR, no remote, no local branch       | → B1 fresh worktree                                             |
 
+<!-- dotfiles-divergence: master-branch -->
 Primary worktree must stay on `master`. Never `git switch` the primary onto
 the issue branch.
 

@@ -64,6 +64,7 @@ Helper fields to read: top-level `quiet_window_met`, `reason`,
 
 Quiet window alone never authorizes takeover.
 
+<!-- dotfiles-divergence: claim-timing -->
 ## S3 — Stale threshold (ownership gate)
 
 Takeover only if latest valid trusted `claimed-by` `created_at` is
@@ -81,7 +82,7 @@ gate.
 
 1. Re-run `resume-claim-routing.mjs --issue <N>`.
 2. Active claim still the same non-owned `{claim-id}`.
-3. Still stale (≥ 12 h) now.
+3. <!-- dotfiles-divergence: claim-timing --> Still stale (≥ 12 h) now.
 4. Fresh server `NOW` + re-run quiet-check; if new activity, STOP and
    restart from resume discovery.
 5. Issue still open; PR not merged.

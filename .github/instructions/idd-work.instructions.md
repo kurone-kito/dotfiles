@@ -190,6 +190,7 @@ mechanical file/close-based signal stronger than A4.5's title/
 declaration heuristic (a weak **title-only** match is **not** a hit
 here). Keep it cheap: one fetch plus a bounded merged-PR scan.
 
+<!-- dotfiles-divergence: master-branch -->
 1. `git fetch origin master`.
 2. **Closed-by-a-merged-PR signal**: re-fetch the issue; if it is now closed
    with a linked closing PR, the deliverable already shipped:
