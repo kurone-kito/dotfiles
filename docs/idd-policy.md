@@ -343,10 +343,11 @@ one change that would clear the `ERROR` and let the run pass cleanly:
   tracked as its own follow-up rather than run blind here. Tracked in
   #220.
 - **Unresolved placeholders in `.github/ISSUE_TEMPLATE/idd-task.yml`**
-  (`{{path}}`, `{{outcome}}`, `{{section}}`, `{{evidence}}`): a false
-  positive -- these are GitHub issue-form textarea placeholder hint
-  text, not unresolved IDD import placeholders, and `idd-doctor`'s
-  scanner does not distinguish the two. Tracked in #218.
+  (the `path`, `outcome`, `section`, and `evidence` textarea hints,
+  each double-curly-brace-wrapped): a false positive -- these are
+  GitHub issue-form placeholder hint text, not unresolved IDD import
+  placeholders, and `idd-doctor`'s scanner does not distinguish the
+  two. Tracked in #218.
 
 `checkReleaseTagDrift` and `checkDependencyVersionDrift` stay silent
 in this repository, as expected (no git tags exist here, and there is
