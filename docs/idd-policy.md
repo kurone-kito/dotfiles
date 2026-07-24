@@ -170,9 +170,27 @@ outright. In this repository, no orphan-discovery fallback runs;
 **`worktreeGuard.enabled`**: `true`. **`worktreeGuard.branchPatterns`**:
 not set (distributed default `["issue/*", "roadmap-audit/*"]`).
 
-Enabling this flag alone has no effect until its enforcement consumers
-(idd-doctor --strict, the optional `core.hooksPath` hook) are wired up
-— that is roadmap #144's #148. `.githooks/` was imported inert by #196.
+The shipped `.githooks/` hooks refuse a commit or push made from the
+**primary** worktree while `HEAD` is on an implementation branch
+(`issue/*` or `roadmap-audit/*`), enforcing the B1 disposable-worktree
+rule locally — CI cannot detect this class of violation, since it
+leaves no trace in pushed history and CI checks out a detached `HEAD`.
+
+`core.hooksPath` is local, per-clone git config; it is never committed
+and every clone must wire it once:
+
+```sh
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit .githooks/pre-push
+```
+
+Any environment that starts from a fresh clone per task (a coding
+agent, an ephemeral container, a throwaway checkout) never inherits
+this setting and must run it as an environment-setup step, not a
+one-time human action. Confirm it took effect with `idd-doctor`, which
+reports an **enabled-but-inert** finding when `worktreeGuard.enabled`
+is `true` but `core.hooksPath` is not pointed at `.githooks`. Bypass
+the guard for a single intentional commit or push with `--no-verify`.
 
 ## Advisory Bot Logins
 
