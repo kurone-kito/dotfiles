@@ -117,7 +117,7 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for
 the cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-[`.github/instructions/idd-overview.instructions.md`](.github/instructions/idd-overview.instructions.md).
+[`.github/instructions/idd-overview-core.instructions.md`](.github/instructions/idd-overview-core.instructions.md).
 Open the routed phase file manually when the current step changes.
 
 For the confirmed policy matrix (merge policy, review profile, claim

@@ -1,8 +1,3 @@
----
-applyTo: "**"
-excludeAgent: "code-review"
----
-
 # IDD — Reference and Implementation Appendix
 
 This appendix contains reference content, implementation details, and
@@ -20,39 +15,29 @@ without scanning every phase file.
 ## Live status digest
 
 The optional live status digest is a human-facing issue or pull request
-comment whose first line is `<!-- idd-live-status: current -->`. It may
-summarize phase, claim, branch, last checked time, blockers, and next
-action, but it is never an authority for IDD state transitions.
-
-Agents must continue to make claim, review, advisory, CI, merge, and
-roadmap decisions from trusted operational markers and GitHub state. If
-the digest is missing or stale, repair it only after claim revalidation
-and authoritative state collection. If multiple marked digests exist,
-preserve them, report the duplicate URLs, and do not choose one as
+comment whose first line is `<!-- idd-live-status: current -->`,
+summarizing phase, claim, branch, last-checked time, blockers, and next
+action. It is never an authority for IDD state transitions — keep making
+claim, review, advisory, CI, merge, and roadmap decisions from trusted
+operational markers and GitHub state. If multiple marked digests exist,
+preserve them, report the duplicate URLs, and choose none as
 authoritative during an unattended run. See
-`docs/idd-comment-minimization.md` for the full digest contract.
-When available, the optional helper
-`node scripts/live-status-digest.mjs` may perform the same discovery,
-dry-run, duplicate refusal, and claim-checked upsert; its output remains
-convenience context, not workflow authority.
+`docs/idd-comment-minimization.md` for the full contract (marker
+uniqueness, field table, and the optional
+`node scripts/live-status-digest.mjs` helper, whose output remains
+convenience context, not workflow authority).
 
 Treat every digest create or edit as a GitHub side effect: re-validate
-the active claim first, write fields from the authoritative state just
-collected by the current phase, and set `Authoritative by` to the
-specific claim, review, CI, advisory, PR, or issue evidence used. If the
-claim was lost, do not repair or update the digest. Every digest update
-refreshes `Last checked` to the server-observed or current UTC time of
-that authoritative re-read.
+the active claim first, write fields from the state just collected by
+the current phase, and set `Authoritative by` to the specific evidence
+used. If the claim was lost, do not repair or update the digest.
 
-On pull requests, a digest edit is still PR activity unless a future
-repository helper explicitly classifies it otherwise. Therefore do not
-edit a PR digest between a valid E1 review watermark and an intended F3
-merge pass. Edit it only when the flow leaves merge intent (for example,
-returning to E1, routing from F3 to F1/D4 as blocked, or posting a
-hold/stop), or after F3 has merged. The F3 awaiting-reviewer restart-F2
-path intentionally skips digest edits so that F2 can restart without
-self-invalidating review currency. This keeps digest text from satisfying
-or perturbing review-currency, advisory, CI, or merge gates.
+On pull requests, a digest edit is still PR activity: do not edit a PR
+digest between a valid E1 review watermark and an intended F3 merge pass
+(it would perturb review-currency). Edit it only when leaving merge
+intent (returning to E1, routing F3 to F1/D4 as blocked, or a hold/stop)
+or after F3 has merged; the F3 awaiting-reviewer restart-F2 path skips
+digest edits for the same reason.
 
 ## Abort
 
@@ -69,6 +54,7 @@ unclaimed state are inheritable by the next agent (see
 
 ## Hold / suspend
 
+<!-- dotfiles-divergence: claim-timing -->
 Keep the claim. Post the hold reason and resume condition to the PR or
 issue comment. After re-validating ownership, re-post the claim comment
 with the same `{claim-id}` every 6 h as heartbeat.
@@ -76,6 +62,12 @@ After posting the hold reason, upsert the digest with the hold phase, the
 blocking condition in `Open blockers`, and the resume condition in
 `Next action`. Long holds still need claim heartbeats; the digest does
 not reset the claim stale clock.
+
+<!-- dotfiles-divergence: master-branch -->
+For an externally owned blocker (sibling PR/issue, maintainer-owned
+check, base-branch health), phrase the resume condition as the checkable
+invariant (e.g. a named check passing on master), not the sibling alone —
+the proxy may resolve differently, or never.
 
 ## Roadmap markers
 
@@ -94,6 +86,7 @@ For A0-T, A0-O, A1, A1.5, A3, and A4.5 repo-query rules, see
 `idd-discover.instructions.md` and
 `idd-roadmap-audit.instructions.md`.
 
+<!-- dotfiles-divergence: signing-ladder -->
 ## Commit signing
 
 Follow the project signing fallback ladder documented in
@@ -138,20 +131,44 @@ human-readable note (see `idd-review-snapshot.instructions.md`).
 For the full PATH A / PATH B classification of review items and their
 handling rules, see `idd-review-triage.instructions.md`.
 
+## Project commands
+
+The Project commands table (`fix-validate`, `pre-push-validate`,
+`post-fix-validate`, `install-deps`, `issue-scope`,
+`orphan-first-policy`) and its override rules live in
+[`docs/customization.md` → Project commands reference](../../docs/customization.md#project-commands-reference).
+`.github/idd/config.json` `commands` overrides the table.
+
 ## Critique pass
 
 A **critique pass** is an independent review of a plan or diff that
 produces a list of issues with severity, correctness, and coverage
-assessment. The goal and expected output are the same regardless of
-agent; only the mechanism differs.
+assessment. For the per-agent invocation table (Copilot / Claude Code /
+Codex CLI / Antigravity CLI (formerly Gemini CLI)), see
+[`docs/idd-workflow.md` → Critique pass invocation](../../docs/idd-workflow.md#critique-pass-invocation).
 
-| Agent       | How to run a critique pass                                                                |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| Copilot     | Launch a subagent in Agent mode; use the calling phase's critique checklist as the prompt |
-| Claude Code | `Agent(subagent_type="general-purpose")` with the calling phase's critique checklist      |
-| Codex CLI   | Self-critique: add a "review the above for issues" step in the next response              |
-| Gemini CLI  | Self-critique or use Gemini's native multi-step task mechanism if available               |
+### Mutation / write-side helper lens
 
-When a phase file says "run a critique pass", apply the row for your
-agent above. If no subagent mechanism is available, perform the critique
-as a structured self-review step within the same response.
+When the diff under critique implements a helper that mutates GitHub or
+git state, or performs a merge, also apply the additional write-side
+checks (fail-closed inputs, validate/execute scope parity, unsafe-output
+suppression, schema strictness parity) in
+[`docs/idd-workflow.md` → Mutation / write-side helper lens](../../docs/idd-workflow.md#mutation--write-side-helper-lens).
+
+## Template sync
+
+When this repository is itself the source of a reusable IDD
+distribution (it ships its own `idd-template/` copy for adopters to
+import), `idd-template/` is the canonical source, not the live copy
+below. When modifying any `idd-*.instructions.md` file,
+`docs/idd-workflow.md`, or `docs/customization.md`, edit the
+corresponding file in `idd-template/` first, then regenerate the live
+target with `node scripts/sync-docs.mjs --apply` (`structure`/
+`contains` pairs such as `docs/idd-workflow.md` need the equivalent
+change applied to the live file by hand instead). For the live ↔
+template placeholder mapping and the full rationale, see
+[`docs/customization.md` → Template sync mapping](../../docs/customization.md#template-sync-mapping).
+
+Commits that modify the `idd-template/` source without syncing the
+live target (regenerating or hand-mirroring, per its mode above) are
+incomplete; include both changes in the same atomic commit.

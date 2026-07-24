@@ -6,6 +6,7 @@ definitions (claim format, stale threshold, abort, hold). For full narrative
 detail on each routing branch, see
 [`docs/idd-resume-detail.md`](../../docs/idd-resume-detail.md).
 
+<!-- dotfiles-divergence: claim-timing -->
 Resume stale checks use the `claim-stale-age` policy default from
 `docs/policy-constants.md` (distributed default: `12 h`).
 
@@ -48,6 +49,22 @@ timestamps.
 Quiet-window evidence does not bypass the shared stale threshold.
 If stalled-session routing returns hold/inconclusive, stop.
 
+- Conversational or chat-based operator approval given mid-session never
+  substitutes for the TTY-gated `idd-force-handoff` helper's own `y/N`
+  confirmation — this holds even when the operator explicitly says to
+  proceed.
+- When an operator asks the agent to proceed with forced handoff, the
+  agent's correct action is to report the stalled-claim evidence back,
+  never to author or post the `forced-handoff` marker itself. Where the
+  repository vends a force-handoff helper, hand the operator a
+  concrete, runnable invocation resolved for its configured profile
+  from `docs/idd-helper-scripts.md` (for example
+  `node scripts/force-handoff.mjs` under `vendored-node`, or
+  `npm run idd:force-handoff` under `package-manager`); under
+  `instructions-only` (no helper runtime vended), the operator instead
+  posts the manual consent text and marker documented in
+  `docs/customization.md` themselves.
+
 ## Step 1 — Identify claim state
 
 When helper runtime is enabled, you may collect Step 1 evidence with:
@@ -72,6 +89,8 @@ disagrees with live GitHub state, use the written table below and treat
 it as authoritative.
 
 Evaluate in order; take the first matching row.
+
+<!-- dotfiles-divergence: claim-timing -->
 
 | Claim state                                                                                     | Route                                                                                                                         |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -124,7 +143,8 @@ sub-procedure and run **install-deps** as specified there.
 | no             | no            | clean, unpushed            | → D1     |
 | no             | no            | clean, no unpushed         | → B2     |
 
-Section numbers §W1–§W8 are detail entries in `docs/idd-resume-detail.md`.
+Section numbers §W1–§W8 and §FH are detail entries in
+`docs/idd-resume-detail.md`.
 
 After routing, refresh the digest only when the route materially changes what
 a human should expect next (e.g., `Phase: resume → B3`, `Phase: resume → D1`,

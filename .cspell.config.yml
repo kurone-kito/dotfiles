@@ -34,6 +34,7 @@ words:
   - anomalyco
   - curlrc
   - desync
+  - desynced
   - dorny
   - Esync
   - exrc
@@ -58,9 +59,13 @@ words:
   - rerere
   - sheerun
   - taskrc
+  - TOCTOU
   - tpope
+  - undispositioned
   - unpushed
   - unreplied
+  - unscored
+  - unwaived
   - upserts
   - waivable
   - wgetrc
