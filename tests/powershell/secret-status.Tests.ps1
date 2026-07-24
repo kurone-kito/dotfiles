@@ -8,7 +8,7 @@
 # manifest, which works on any host.
 
 BeforeAll {
-  $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-status.ps1'
+  $script:ScriptPath = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') '..') 'home') 'dot_local') 'bin') 'executable_secret-status.ps1'
   $script:TmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("secret-status-" + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Force -Path $TmpRoot | Out-Null
   $script:HomeDir = Join-Path $TmpRoot 'home'

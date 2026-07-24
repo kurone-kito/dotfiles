@@ -25,15 +25,22 @@ else {
 }
 New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
 
+# [System.IO.File] does not understand PS provider paths (e.g. TestDrive:\...),
+# so resolve to a real filesystem path before using it with .NET I/O below.
+$profilesDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($profilesDir)
+
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+
 $profilePath = Join-Path $profilesDir 'personal'
-@'
+$personalProfile = @'
 [user]
   email = "personal@example.com"
   name = "Personal User"
-'@ | Set-Content -Path $profilePath -Encoding utf8NoBOM
+'@
+[System.IO.File]::WriteAllText($profilePath, $personalProfile, $utf8NoBom)
 
 $profilePath = Join-Path $profilesDir 'work'
-@'
+$workProfile = @'
 [user]
   email = "work@example.com"
   name = "Work User"
@@ -43,7 +50,8 @@ $profilePath = Join-Path $profilesDir 'work'
 [tag]
   forceSignAnnotated = true
   gpgsign = true
-'@ | Set-Content -Path $profilePath -Encoding utf8NoBOM
+'@
+[System.IO.File]::WriteAllText($profilePath, $workProfile, $utf8NoBom)
 
 $validProfiles = @(
   'personal'

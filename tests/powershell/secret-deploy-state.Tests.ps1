@@ -1,7 +1,7 @@
 # Tests for the secret-deploy-state pwsh helper.
 
 BeforeAll {
-  $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-deploy-state.ps1'
+  $script:ScriptPath = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') '..') 'home') 'dot_local') 'bin') 'executable_secret-deploy-state.ps1'
 
   # A real-world path can contain an apostrophe (e.g. a Windows
   # username like O'Connor), which would otherwise break the

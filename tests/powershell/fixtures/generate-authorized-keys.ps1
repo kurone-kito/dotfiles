@@ -13,6 +13,9 @@ $homeDir = if ($env:AUTHORIZED_KEYS_HOME) {
 
 $sshDir = Join-Path $homeDir '.ssh'
 $authorized = Join-Path $sshDir 'authorized_keys'
+# [System.IO.File] does not understand PS provider paths (e.g. TestDrive:\...),
+# so resolve to a real filesystem path before using it with .NET I/O below.
+$authorized = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($authorized)
 $beginMarker = '# >>> chezmoi managed keys >>>'
 $endMarker = '# <<< chezmoi managed keys <<<'
 
@@ -72,7 +75,8 @@ if ($hasValidBlock) {
   $outLines += $endMarker
 }
 
-($outLines -join "`n") + "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+$authorizedContent = ($outLines -join "`n") + "`n"
+[System.IO.File]::WriteAllText($authorized, $authorizedContent, [System.Text.UTF8Encoding]::new($false))
 
 icacls $authorized /inheritance:r `
   /grant:r "${env:USERNAME}:(F)" `

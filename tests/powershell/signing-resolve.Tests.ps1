@@ -7,8 +7,8 @@ BeforeDiscovery {
 }
 
 BeforeAll {
-  $script:RepoHome = Join-Path $PSScriptRoot '..' '..' 'home' | Resolve-Path
-  $script:ConfigTmpl = Join-Path $script:RepoHome 'dot_config' 'git' 'config.tmpl'
+  $script:RepoHome = Join-Path (Join-Path (Join-Path $PSScriptRoot '..') '..') 'home' | Resolve-Path
+  $script:ConfigTmpl = Join-Path (Join-Path $script:RepoHome 'dot_config') (Join-Path 'git' 'config.tmpl')
   $script:ProfilesTmpl = Join-Path $script:RepoHome 'run_onchange_after_generate-git-profiles.ps1.tmpl'
 
   function Invoke-Render {
@@ -19,7 +19,7 @@ BeforeAll {
     $cfg = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}.json" -f [guid]::NewGuid())
     $dest = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-dest" -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    Set-Content -Path $cfg -Value $ConfigJson -Encoding utf8NoBOM
+    [System.IO.File]::WriteAllText($cfg, $ConfigJson, [System.Text.UTF8Encoding]::new($false))
     try {
       $output = & chezmoi execute-template --file $TemplatePath `
         --config $cfg --config-format json `
@@ -135,7 +135,7 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
         throw 'Could not locate the profile here-string in rendered output'
       }
       $renderedProfile = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-profile" -f [guid]::NewGuid())
-      Set-Content -Path $renderedProfile -Value $Matches[1] -Encoding utf8NoBOM
+      [System.IO.File]::WriteAllText($renderedProfile, $Matches[1], [System.Text.UTF8Encoding]::new($false))
 
       $scratch = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-scratch" -f [guid]::NewGuid())
       New-Item -ItemType Directory -Path $scratch -Force | Out-Null

@@ -1,6 +1,6 @@
 BeforeAll {
-  $script:Fixture = Join-Path $PSScriptRoot 'fixtures' '25-deploy-secret-files.ps1'
-  $script:Template = Join-Path $PSScriptRoot '..' '..' 'home' `
+  $script:Fixture = Join-Path (Join-Path $PSScriptRoot 'fixtures') '25-deploy-secret-files.ps1'
+  $script:Template = Join-Path (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') '..') 'home') `
     'run_onchange_after_25-deploy-secret-files.ps1.tmpl'
   $script:TemplateContent = Get-Content -Raw $script:Template
 }
@@ -48,7 +48,7 @@ Describe '25-deploy-secret-files template' {
 
     It 'deploys .aws/credentials with correct content' {
       & $script:Fixture
-      $path = Join-Path $env:DOTFILES_TEST_HOME '.aws' 'credentials'
+      $path = Join-Path (Join-Path $env:DOTFILES_TEST_HOME '.aws') 'credentials'
       $path | Should -Exist
       $content = Get-Content -Raw $path
       $content | Should -Match 'aws_access_key_id = AKIAEXAMPLE'
@@ -56,7 +56,7 @@ Describe '25-deploy-secret-files template' {
 
     It 'deploys .docker/config.json with correct content' {
       & $script:Fixture
-      $path = Join-Path $env:DOTFILES_TEST_HOME '.docker' 'config.json'
+      $path = Join-Path (Join-Path $env:DOTFILES_TEST_HOME '.docker') 'config.json'
       $path | Should -Exist
       $content = Get-Content -Raw $path
       $content | Should -Match '"auths"'

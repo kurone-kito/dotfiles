@@ -136,7 +136,7 @@ function Invoke-Record {
 
   $tmp = "$statePath.tmp.$([System.Guid]::NewGuid().ToString('N'))"
   try {
-    Set-Content -LiteralPath $tmp -Value $merged -Encoding utf8NoBOM -NoNewline
+    [System.IO.File]::WriteAllText($tmp, $merged, [System.Text.UTF8Encoding]::new($false))
     Set-RestrictedAcl -Path $tmp
     Move-Item -LiteralPath $tmp -Destination $statePath -Force
   } catch {
