@@ -182,7 +182,7 @@ so a clone that skips this step stays unenforced even with
 `worktreeGuard.enabled: true`. Every clone must wire it once:
 
 ```sh
-git config core.hooksPath .githooks
+git config --local core.hooksPath .githooks
 chmod +x .githooks/pre-commit .githooks/pre-push
 ```
 
