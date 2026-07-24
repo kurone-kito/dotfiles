@@ -396,7 +396,7 @@ agents. Start with [`docs/idd-workflow.md`](../docs/idd-workflow.md)
 for the cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-[`.github/instructions/idd-overview.instructions.md`](./instructions/idd-overview.instructions.md).
+[`.github/instructions/idd-overview-core.instructions.md`](./instructions/idd-overview-core.instructions.md).
 Open the routed phase file manually when the current step changes.
 The execution loop drives Discover → Claim → Work → PR Submit → CI
 Wait → Review Triage → Review Fix → Merge → Loop through GitHub
@@ -414,7 +414,7 @@ machine-readable mirror lives at
 GitHub Copilot Code Review acts as the advisory reviewer under the
 chosen `copilot-advisory` profile, alongside the existing CodeRabbit
 configuration. `excludeAgent: "code-review"` in
-`idd-overview.instructions.md` keeps the heavy operational workflow
+`idd-overview-core.instructions.md` keeps the heavy operational workflow
 out of Copilot reviewer context; this lightweight file remains the
 primary reviewer-side reference.
 
