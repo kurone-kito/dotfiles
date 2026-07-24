@@ -42,6 +42,25 @@ sequencing, parallel tracks, or multi-session handoff.
 Draft only stable non-ready buckets when the work still depends on a
 human decision, missing asset, or unclear verification.
 
+## Under-clarification stop rule
+
+Before drafting a `ready` issue, confirm you can name a concrete surface
+to edit and an objective verification for it. If, after bounded
+clarification, you still cannot, route the candidate to `needs-decision`
+or ask — do not publish a confidently-vague `ready` issue. Reliability
+over speed.
+
+This is an Intake-phase gate on your own confidence, not a wording
+judgment on an already-written draft — it is distinct from the
+"Under-specified" band in the next section, which assesses a body that
+has already been drafted.
+
+**Example**: "Improve the error handling in the API layer" fails this
+check — no concrete surface, no objective verification — even before
+you consider how detailed to write the body. Ask which endpoint or
+module, and what the observable failure mode is, or route the request
+to `needs-decision` instead of guessing at a plausible-sounding scope.
+
 ## Specificity target
 
 Execution-ready issue drafts should land in a middle band:
@@ -77,6 +96,48 @@ Before you publish a ready issue, confirm:
   while adding more detail would start turning it into a lightweight
   model script
 
+## Mechanical pre-publish gate
+
+Before you publish a drafted **ready orphan, roadmap, or child** body
+(scoped to those ready shapes — non-ready buckets like
+`blocked-by-human` are not audited by this gate), run the
+`audit-authored-issue` linter against it when a helper runtime
+is available. It mechanically catches shape and marker mistakes — a
+missing or duplicated autopilot-suitability footer, a wrong
+markerPrefix, a missing required heading for the declared shape, a
+malformed dependency marker — that a confident narrative can otherwise
+mask:
+
+```sh
+node scripts/audit-authored-issue.mjs --shape orphan \
+  --marker-prefix <resolved-target-prefix> --body-file draft.md
+```
+
+**Always pass `--marker-prefix`** with the prefix resolved under
+[contract.md's Target marker prefix](contract.md#target-marker-prefix):
+without it, the linter falls back to reading
+`.github/idd/config.json` from the current working directory, and
+silently defaults to this source repository's own `idd-skill` prefix
+when that file is missing or unreadable — producing a false pass or
+fail against the wrong prefix instead of an error.
+
+Use `--shape roadmap` or `--shape child` for those shapes, `--stdin`
+instead of `--body-file` when the draft is not yet on disk, and
+`--label <name>` (repeatable) to pass proposed labels for the check
+that a suitability score of `1` carries the configured
+`blocked-by-human` label (default `status:blocked-by-human`; use
+`--config <path>` to point at a policy that overrides the label name —
+this check is also one-directional, it does not flag the reverse, a
+non-`1` score paired with the label). Fix every reported finding and
+re-run before publishing; a `passed: false` report means the draft is
+not ready yet, regardless of how complete the narrative reads.
+
+**No helper runtime available (`instructions-only` profile):** the
+linter cannot run. `instructions-only` is a first-class supported
+fallback, not a waiver — manually re-verify the same checks against
+[contract.md's Mechanical pre-publish gate](contract.md#mechanical-pre-publish-gate)
+before publishing instead.
+
 ## Hidden human-dependency quick check
 
 Before you publish a `ready` issue, confirm:
@@ -92,18 +153,31 @@ Before you publish a `ready` issue, confirm:
 - dependency markers represent true start blockers rather than grouping
   related work
 
+## Codebase-fidelity quick check
+
+Before you publish a `ready` issue, confirm:
+
+- when the issue reuses an existing identifier or field name, the
+  specified value matches that name's established semantics in the
+  codebase — it does not overload a name with a new shape or source
+- values that are mutable at runtime are flagged to specify a live read
+  at the point of use rather than a one-time capture at construction
+
 ## Example orphan issue
 
 - `## Background` or `## Goal`
 - `## Proposed change`
 - `## Acceptance criteria`
 - optional `## Candidate files`
+- an autopilot-suitability footer at the end of the body (visible
+  line + `<!-- <marker-prefix>-autopilot-suitability: N -->` marker)
 
 Use this shape when the work is narrow enough to pass the IDD viability
 gate on its own and the target repository can actually discover orphan
-issues. If the repository keeps the default `issue-scope: roadmap`,
-prefer a one-item roadmap package instead of publishing a standalone
-orphan issue.
+issues (`issue-scope: roadmap-first`, the default, via the orphan
+fallback, or `orphan-first`). If the repository sets
+`issue-scope: roadmap` (roadmap-only), prefer a one-item roadmap package
+instead of publishing a standalone orphan issue.
 
 ## Example roadmap package
 
@@ -114,6 +188,7 @@ Roadmap issue:
 - `## Tracks`
 - `## Success criteria`
 - one `<!-- <marker-prefix>-roadmap-id: ... -->` marker
+- an autopilot-suitability footer at the end of the body
 
 Child issue:
 
@@ -122,6 +197,7 @@ Child issue:
 - `## Proposed change`
 - `## Acceptance criteria`
 - optional dependency line or sequential roadmap marker when needed
+- an autopilot-suitability footer at the end of the body
 
 Keep ready child issues in the roadmap task list rather than grouping
 them with hidden dependency markers.
@@ -197,9 +273,48 @@ This is an artificial split when the three edits form one natural,
 cohesive authoring change. Do not break a single reviewable task into
 multiple sibling issues only to widen parallel execution.
 
-Resolve `<marker-prefix>` from the target repository's onboarding or IDD
-docs before publishing the draft. Use `idd-skill` only when the target
-repository actually configured that prefix.
+### Finalize or verify track that asserts sibling-produced state
+
+Anti-pattern — prose sequencing only:
+
+```md
+#450 — finalize the config, reconcile the docs, verify the combined result
+
+Blocked by #440
+
+_Runs after the wiring tracks #441-#445._
+```
+
+The hard `Blocked by #440` names only the build foundation, and the
+after-the-siblings ordering lives in prose. Once `#440` closes, Discover
+reports `#450` startable and A4.5 passes it (Actionability inspects the body,
+not completability) — but its acceptance criteria assert state that only the
+unmerged `#441`–`#445` produce, so claiming it means failing acceptance or
+doing the siblings' work.
+
+Correct — encode `Blocked by` on each sibling whose output the acceptance
+criteria depend on:
+
+```md
+#450 — finalize the config, reconcile the docs, verify the combined result
+
+Blocked by #440
+Blocked by #441
+Blocked by #442
+Blocked by #443
+Blocked by #444
+Blocked by #445
+```
+
+Now Discover and A4.5 defer `#450` until every sibling merges, so it is
+claimed only when its acceptance criteria can actually pass.
+
+**Prefix-first**: resolve `<marker-prefix>` from the target repository's
+onboarding or IDD docs before emitting any of these markers —
+`roadmap-id`, `blocked-by`, `autopilot-suitability`, or `effort` — not
+just the dependency markers shown above. Never default to `idd-skill`
+in an installed bundle; use it only when the target repository actually
+configured that prefix.
 
 ## Human-dependency isolation examples
 
@@ -374,6 +489,13 @@ not yet ready. Move that criterion to a `blocked-by-human` or
 what the agent can verify independently.
 
 ## Handling duplicates and non-ready outcomes
+
+One source of follow-up issue candidates is the read-only
+`merged-pr-feedback-sweep` helper's JSON output — the unresolved review
+threads and undispositioned advisory feedback it detects on merged PRs.
+Treat each entry as a candidate only: re-verify it against current `main`
+with the reuse-first tree below before drafting, because the feedback may
+already be addressed.
 
 Before publishing an issue, apply a reuse-first decision tree:
 

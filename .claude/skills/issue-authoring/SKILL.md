@@ -20,7 +20,11 @@ Use two stable phases:
    ask only the questions that block safe issue drafting. Keep
    clarification bounded; use the repository-local
    `issueAuthoring.maxClarificationRounds` value when available,
-   otherwise default to 3 rounds.
+   otherwise default to 3 rounds. **Under-clarification stop rule**: if,
+   after bounded clarification, you still cannot name the concrete
+   surface to edit or an objective verification for a candidate task,
+   route it to `needs-decision` or ask — do not publish a
+   confidently-vague `ready` issue. Reliability over speed.
 2. **Decompose and Draft** — restate the request in implementation
    terms, split it into atomic tasks, classify readiness, reuse existing
    issues when safe, and draft the smallest issue shape that preserves
@@ -33,19 +37,26 @@ needs-decision, blocked-by-human, and out-of-scope.
 
 1. Read the bundled contract in
    [references/contract.md](references/contract.md).
-2. Reuse or extend an existing issue before creating a new one.
+2. Reuse or extend an existing issue before creating a new one — but
+   never edit the body of an actively-claimed or open-PR issue (its
+   claimed agent will not pick the change up); cover it with a follow-up
+   issue instead. See the contract's claim-state precondition.
 3. Choose the smallest safe output shape:
    - orphan issue for one ready autonomous task only when the target
-     repository is discoverable through `issue-scope: orphan-first` and
-     any configured `orphan-first-policy` approval step can be completed
+     repository discovers orphans (`issue-scope: roadmap-first`, the
+     default, via the orphan fallback, or `orphan-first`) and any
+     configured `orphan-first-policy` approval step can be completed
      after drafting
    - roadmap plus sub-issues for multi-task or multi-session work
    - stable non-ready buckets for deferred, needs-decision,
      blocked-by-human, or out-of-scope work
-4. Resolve the target repository marker prefix before drafting hidden
-   dependency markers. Use the prefix documented by the target
-   repository's onboarding or IDD docs, and ask the user instead of
-   guessing when the prefix is not discoverable.
+4. **Prefix-first**: resolve the target repository's marker prefix
+   before emitting any authoring marker — `roadmap-id`, `blocked-by`,
+   `autopilot-suitability`, or `effort`. Use the prefix documented by
+   the target repository's onboarding or IDD docs, and ask the user
+   instead of guessing when the prefix is not discoverable. Never
+   default to this source repository's `idd-skill` prefix in an
+   installed bundle.
 5. Keep dependencies machine-readable and minimal:
    - roadmap identity via
      `<!-- <marker-prefix>-roadmap-id: ... -->`
@@ -58,7 +69,14 @@ needs-decision, blocked-by-human, and out-of-scope.
    - keep independent sibling work in roadmap task lists unless a true
      correctness, availability, or ordering constraint requires a
      dependency edge
-6. When the user explicitly authorizes publication, manage the authoring
+6. Before publishing a ready orphan, roadmap, or child body, run the
+   `audit-authored-issue` linter against it as the mechanical
+   pre-publish gate — see
+   [Mechanical pre-publish gate](references/contract.md#mechanical-pre-publish-gate)
+   in the bundled contract, including the manual fallback for
+   `instructions-only` installs with no helper runtime. Resolve every
+   reported failure before treating the issue as ready.
+7. When the user explicitly authorizes publication, manage the authoring
    label for each created or updated issue:
    - resolve `issueAuthoring.authoringLabelName`, defaulting to
      `status:authoring`
@@ -68,13 +86,15 @@ needs-decision, blocked-by-human, and out-of-scope.
    - apply the label before updating an existing issue
    - create new issues with the label when supported, or apply the label
      immediately after creation
-   - if post-create label application fails, close, delete, or otherwise
-     make the created issue undiscoverable before stopping
+   - if post-create label application fails, close the created issue
+     before stopping; deletion needs admin permission the authoring
+     agent typically lacks (and `docs/permissions.md` forbids for normal
+     IDD), so it is not the default path
    - remove the label from all published issues only after the full set is
      published, the user confirms the result, and the user explicitly
      requests release from the authoring hold for IDD execution
    - leave the label in place if publishing is interrupted before release
-7. Stop at the approval boundary. Drafting issues does not authorize
+8. Stop at the approval boundary. Drafting issues does not authorize
    publishing them or starting the IDD execution loop unless the user
    explicitly asked for that.
 
@@ -87,12 +107,13 @@ needs-decision, blocked-by-human, and out-of-scope.
   [references/workflow-boundary.md](references/workflow-boundary.md).
 - For concrete drafting patterns and example prompts: read
   [references/draft-patterns.md](references/draft-patterns.md).
+<!-- dotfiles-divergence: installed-bundle-reference-routing -->
 - This is an installed companion bundle, not the source-repository
   copy. When the upstream bundle changes, re-import from the canonical
   maintenance docs in
-  [`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/docs/issue-authoring-skill.md)
+  [`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d/docs/issue-authoring-skill.md)
   and
-  [`kurone-kito/idd-skill:docs/idd-workflow.md`](https://github.com/kurone-kito/idd-skill/blob/b64eab0d51a79bd3199740505f3b7843bc94a0d4/docs/idd-workflow.md);
+  [`kurone-kito/idd-skill:docs/idd-workflow.md`](https://github.com/kurone-kito/idd-skill/blob/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d/docs/idd-workflow.md);
   the corresponding in-repo copy of the workflow doc is at
   [`../../../docs/idd-workflow.md`](../../../docs/idd-workflow.md).
 
@@ -109,3 +130,12 @@ needs-decision, blocked-by-human, and out-of-scope.
   new issue.
 - Avoid widening drafting output beyond the user request without saying
   so.
+- Run the `audit-authored-issue` linter (or its manual fallback in
+  `instructions-only` installs) against every drafted ready body and
+  resolve every reported failure before publishing.
+- Name a concrete surface to edit and an objective verification for
+  every `ready` candidate; route anything else to `needs-decision` or
+  ask instead of guessing (the under-clarification stop rule).
+- Resolve the target repository's marker prefix before emitting any
+  authoring marker; never assume this source repository's `idd-skill`
+  prefix in an installed bundle (the prefix-first rule).

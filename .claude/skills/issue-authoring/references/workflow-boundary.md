@@ -26,8 +26,10 @@ The issue-authoring bundle fits into a three-phase handoff:
 - For new issues, bundled skill creates the issue with the authoring label
   when the publication command supports that; otherwise it applies the
   label immediately after creation
-- If post-create label application fails, bundled skill closes, deletes,
-  or otherwise makes the created issue undiscoverable before stopping
+- If post-create label application fails, bundled skill closes the created
+  issue before stopping; deletion needs admin permission the authoring
+  agent typically lacks (and `docs/permissions.md` forbids for normal IDD),
+  so it is not the default path
 - User verifies the published issues look correct
 - Bundled skill removes the authoring label from all published issues only
   after the full issue set is published, the user confirms the result, and
@@ -66,9 +68,10 @@ assumptions that did not hold when published may fail A4.5 checks
 waste agent time during work.
 
 **Prevention during drafting**: This bundle is where coherence, safety,
-and uniqueness should be validated **before** publishing. The three
-A4.5 prevention checks (coherence, safety, uniqueness) correspond to
-bucket escalation triggers during drafting:
+and uniqueness should be validated **before** publishing. A4.5 runs
+seven suitability checks; the three that drafting can most directly
+prevent (coherence, safety, uniqueness) correspond to bucket escalation
+triggers during drafting:
 
 - If an issue might be incoherent → escalate to `needs-decision` during
   drafting
@@ -83,8 +86,9 @@ time and report the specific failure (unclear, invalid, duplicate).
 
 ## Use this bundle to
 
-- prepare IDD-ready orphan issues when the target repository supports
-  `issue-scope: orphan-first`, including any required
+- prepare IDD-ready orphan issues when the target repository discovers
+  orphans (`issue-scope: roadmap-first`, the default, via the orphan
+  fallback, or `orphan-first`), including any required
   `orphan-first-policy` approval handoff
 - prepare roadmap packages and child issues when work needs visible
   sequencing or parallel tracks

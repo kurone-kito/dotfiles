@@ -23,6 +23,13 @@ body:
         `issue-authoring` skill first and surface the unresolved part
         as a separate `needs-decision` / `blocked-by-human` issue.
 
+        **Editing an already-claimed issue?** Check whether this issue
+        has an active claim (a recent `claimed-by` comment) or an open
+        PR before editing its body. A working agent snapshots the body
+        into its plan and never re-reads it, so a post-claim body edit
+        is silently lost. Post a comment instead, and cover the change
+        with a follow-up issue if it needs to happen.
+
   - type: input
     id: parent
     attributes:
@@ -74,3 +81,23 @@ body:
     attributes:
       label: Notes
       description: 'Optional. Sequencing, parallelism hints, links to upstream context, or anything else a future claimer should know.'
+
+  - type: textarea
+    id: autopilot_suitability
+    attributes:
+      label: Autopilot suitability
+      description: 'Required footer for the IDD discover phase. Score 1 (human-only) to 5 (autopilot-ideal); scores below the configured floor route to a human instead of autopilot. Enter the visible line and the hidden marker exactly as shown.'
+      placeholder: |
+        Autopilot suitability: 4/5 — {why this score}.
+
+        <!-- dotfiles-autopilot-suitability: 4 -->
+    validations:
+      required: true
+
+  - type: textarea
+    id: effort
+    attributes:
+      label: Effort (optional)
+      description: 'Optional soft tie-breaker for Discover candidate selection. S/M/L, fail-safe on absence.'
+      placeholder: |
+        <!-- dotfiles-effort: S -->
