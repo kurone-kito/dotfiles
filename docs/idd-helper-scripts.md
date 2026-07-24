@@ -1812,7 +1812,8 @@ same as `AW4`/`AW5`.
 - Read-only boundary: the helper performs no minimization, no posting, and no
   issue creation. **Handoff**: the JSON is the input an operator hands to the
   issue-authoring skill, which re-verifies each candidate against current
-  `main` (reuse-first / not-already-fixed) and drafts follow-up issues
+  `master` (reuse-first / not-already-fixed) and drafts follow-up
+  issues
   bucketed by readiness. The helper does deterministic detection; the
   judgment-heavy re-verification, drafting, and publish stay operator-gated.
 - **Operator runbook**: this helper is a **manual spot-check audit**, not a
@@ -1855,8 +1856,10 @@ same as `AW4`/`AW5`.
 ## Signed-Commit Merge Wrapper (Shared Git Procedure)
 
 `idd-review-triage.instructions.md`'s E-phase sync path and
-`idd-review-fix.instructions.md`'s E11 both merge `main` into the feature
-branch with `git fetch origin main && git merge origin/main`. On a repo
+<!-- dotfiles-divergence: master-branch -->
+`idd-review-fix.instructions.md`'s E11 both merge `master` into the
+feature branch with `git fetch origin master && git merge origin/master`.
+On a repo
 whose primary commit signing is non-interactive-hostile (GPG pinentry /
 hardware-touch) and that configures a fallback signing wrapper for
 arbitrary git subcommands, run the **merge** step — including a
@@ -1864,7 +1867,7 @@ arbitrary git subcommands, run the **merge** step — including a
 plain command (`git fetch` creates no commit and needs no signing):
 
 ```sh
-git -c gpg.format=ssh -c user.signingkey=<abs-path> -c commit.gpgsign=true merge origin/main
+git -c gpg.format=ssh -c user.signingkey=<abs-path> -c commit.gpgsign=true merge origin/master
 # resolve conflicts if any, then:
 git -c gpg.format=ssh -c user.signingkey=<abs-path> -c commit.gpgsign=true merge --continue
 ```

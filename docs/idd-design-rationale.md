@@ -233,7 +233,8 @@ no-op.
 kurone-kito/idd-skill#815 named the risk directly: parallel worktrees
 let a `git switch` move a checkout out from under another run, so a
 commit lands on the wrong branch — typically the primary worktree's
-`main`, or another issue's branch. The Claim revalidation gate in
+`master`, or another issue's branch. <!-- dotfiles-divergence: master-branch -->
+The Claim revalidation gate in
 `idd-overview-core.instructions.md` keeps the mechanical steps to a
 one-line pointer to stay inside its byte budget; this page owns the
 full procedure.
@@ -242,8 +243,9 @@ Recover by **cherry-picking** the misplaced commit onto the correct
 issue branch (in its own sibling worktree), then restoring the
 contaminated branch:
 
+<!-- dotfiles-divergence: master-branch -->
 - **Unpushed** contaminated branch (typically the primary worktree's
-  `main`): `git reset --hard` it back to its upstream.
+  `master`): `git reset --hard` it back to its upstream.
 - **Already pushed or shared**: do **not** `git reset --hard` then
   force-push to erase the misplaced commit — that is the forbidden
   force-push. Instead `git revert` the misplaced change, or let the
@@ -295,7 +297,8 @@ implementation guidance (kurone-kito/idd-skill#1238).
 
 A `typecheck`/`lint` failure in a file the current diff never touched
 can look like a bug in the diff itself, when it is really dependency
-drift or a broken `main` baseline — a real incident cost debugging time
+drift or a broken `master` baseline — a real incident cost debugging
+time <!-- dotfiles-divergence: master-branch -->
 this way before the guidance below existed
 (kurone-kito/idd-skill#1164, kurone-kito/idd-skill#1193).
 
@@ -314,15 +317,16 @@ not waive the fix-validate / pre-push-validate requirements themselves.
 
 ## Review triage
 
-### Merge-main livelock under fast-moving `main`
+### Merge-main livelock under fast-moving `master`
 
-Under heavy concurrent-session load, `main` can advance before one
+<!-- dotfiles-divergence: master-branch -->
+Under heavy concurrent-session load, `master` can advance before one
 {sync path → E1 → F1/F2} cycle finishes, re-triggering
 `behind-no-conflict`; naive repetition livelocks, never reaching F3
-while `main` keeps moving. The fix is procedural, not structural: post
+while `master` keeps moving. The fix is procedural, not structural: post
 the `review-watermark` as the last action before F3's
 `idd-merge-execute.mjs --apply` on every pass, so anything that happens
-after — a CI rerun settling, a new disposition reply, another `main`
+after — a CI rerun settling, a new disposition reply, another `master`
 advance — stales it and fails `--apply` closed on `review-currency`
 rather than merging on data the retry has since invalidated.
 

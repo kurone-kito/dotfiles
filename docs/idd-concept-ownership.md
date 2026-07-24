@@ -44,7 +44,7 @@ back as evidence for a gate.
 | Activation-nonce marker | Worker session, alongside every fresh claim activation (A5) | Immutable once posted; superseded implicitly by the next activation's nonce | Claim verification step 5; claim revalidation gate |
 | Heartbeat | Worker session holding the claim, re-posting `claimed-by` with the same `{claim-id}` | Worker session, every ≤ 12 h while holding | Claim-state parsing rule 3.5 (heartbeat branch invariant) |
 | Roadmap task list | Human maintainer (or issue-authoring skill) at roadmap authoring time | Worker session running the A1.5 roadmap-audit claim (adds follow-up links, keeps sequencing current) | A1.5 completion audit |
-| Branch | Worker session, B1 | Worker session (pushes at D2/E12; merge-from-`main` at E-phase sync/E11) | B1 self-check; cwd-vs-claim check in the claim revalidation gate |
+| Branch | Worker session, B1 | Worker session (pushes at D2/E12; merge-from-`master` at E-phase sync/E11 <!-- dotfiles-divergence: master-branch -->) | B1 self-check; cwd-vs-claim check in the claim revalidation gate |
 | Worktree | Worker session, B1 | Worker session (reuse/recreate on takeover) | B1 self-check; worktree-local claim lock |
 | PR title / body | Worker session, D3 | Worker session (D3.5 closing-keyword self-check edits, later E-phase updates) | D3.5 self-check; F2 disposition-evidence check |
 | Closing keyword | Worker session, in the PR body at D3 | Worker session, if D3.5 finds it missing or miswrapped | D3.5 self-check; GitHub platform at F3 merge (mechanical auto-close) |
