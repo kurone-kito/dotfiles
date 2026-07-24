@@ -12,6 +12,13 @@
   "trustedMarkerActors": [
     "kurone-kito"
   ],
+  "advisoryBotLogins": [
+    "copilot-pull-request-reviewer[bot]",
+    "coderabbitai[bot]"
+  ],
+  "workshop": {
+    "exampleRepository": ""
+  },
   "commands": {
     "install-deps": "git submodule update --init --recursive",
     "fix-validate": "npx markdownlint-cli2 --fix && npx markdownlint-cli2",
@@ -21,13 +28,29 @@
   "helperRuntime": {
     "profile": "ephemeral-npx"
   },
-  "issueScope": "roadmap",
+  "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",
   "ciWait": {
     "runningTimeout": "PT10M",
     "generationTimeout": "PT10M",
     "rerunPolicy": "rerun-once"
   },
+  "ciGate": {
+    "externalChecks": {
+      "waivable": [
+        { "selector": "idd-advisory-convergence" }
+      ]
+    },
+    "externalCheckWaivers": {
+      "mode": "maintainer-authorized"
+    }
+  },
   "skipIssueAuthorApprovalGate": true,
-  "maintainerApprovalActorPolicy": "owners-and-maintainers-only"
+  "maintainerApprovalActorPolicy": "owners-and-maintainers-only",
+  "autopilotSuitability": {
+    "floor": 3
+  },
+  "worktreeGuard": {
+    "enabled": true
+  }
 }
