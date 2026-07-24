@@ -167,7 +167,10 @@ When a lightweight-tier model runs any part of this loop:
   `idd-review-triage.instructions.md`.
 - Do not run the autonomous merge phases (F3 onward) on this tier. See
   the merge-policy recommendation for weak-model sessions in
-  [Onboarding Reference — Policy Decisions](onboarding/policy-decisions.md#merge-policy).
+  <!-- dotfiles-divergence: onboarding-doc-trim -->
+  [Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d/idd-template/docs/onboarding/policy-decisions.md#merge-policy)
+  (not vendored locally; this repository links the pinned upstream copy,
+  matching `docs/idd-policy.md`'s own reference).
 - This is additional to, not a replacement for, the uniform C-phase
   objective diff validation floor in
   [Critique pass invocation](#critique-pass-invocation): that floor
