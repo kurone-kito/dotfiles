@@ -1,9 +1,13 @@
 #!/usr/bin/env node
-// idd-generated-from: src/scripts/minimize-superseded-markers.mts
+// dotfiles-divergence: vendored-file-header
 //
-// The scripts/minimize-superseded-markers.mjs copy is generated from the
-// .mts source named above by `pnpm run build`. Edit the .mts source,
-// never the generated .mjs. See docs/typescript-sources.md.
+// Vendored as-is from kurone-kito/idd-skill's
+// idd-template/scripts/minimize-superseded-markers.mjs. Upstream
+// generates this file from a TypeScript source via `pnpm run build`
+// (see its docs/typescript-sources.md); this repository has neither
+// that source nor build step, so edit this file directly, and pick up
+// upstream changes through the same re-import process used to bring
+// it in (see #196).
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
