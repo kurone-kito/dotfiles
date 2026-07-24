@@ -1,12 +1,13 @@
 name: IDD advisory-convergence gate
-# Required-check workflow asserting Copilot advisory-review
-# convergence on a PR. Adapted from kurone-kito/idd-skill's
+# Asserts Copilot advisory-review convergence on a PR, intended to be
+# registered as a required status check on `master` (once this
+# workflow is proven green -- see #149). Adapted from
+# kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. Registered as a required
-# status check on `master` with the maintainer-authorized waiver
-# escape configured in `.github/idd/config.json` `ciGate.*`. See
-# docs/idd-policy.md "CI Gate External Check Waivers" for the waiver
-# path.
+# 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. The maintainer-authorized
+# waiver escape is already configured in `.github/idd/config.json`
+# `ciGate.*`; see docs/idd-policy.md "CI Gate External Check Waivers"
+# for the waiver path.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
