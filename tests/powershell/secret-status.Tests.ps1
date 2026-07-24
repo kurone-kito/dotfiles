@@ -8,7 +8,7 @@
 # manifest, which works on any host.
 
 BeforeAll {
-  $script:ScriptPath = Join-Path $PSScriptRoot '..' '..' 'home' 'dot_local' 'bin' 'executable_secret-status.ps1'
+  $script:ScriptPath = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $PSScriptRoot '..') '..') 'home') 'dot_local') 'bin') 'executable_secret-status.ps1'
   $script:TmpRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("secret-status-" + [Guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Force -Path $TmpRoot | Out-Null
   $script:HomeDir = Join-Path $TmpRoot 'home'
@@ -36,6 +36,11 @@ BeforeAll {
 
   function script:Invoke-Status {
     param([string[]]$ExtraArgs = @())
+    # Windows PowerShell 5.1 wraps a native process's redirected stderr
+    # lines as ErrorRecord objects; GitHub Actions' pwsh/powershell shell
+    # steps default $ErrorActionPreference to Stop, which would otherwise
+    # turn this expected non-zero-exit output into a terminating error.
+    $ErrorActionPreference = 'Continue'
     $stdout = & pwsh -NoLogo -NoProfile -File $script:ScriptPath -Manifest $script:Manifest @ExtraArgs 2>&1
     return @{ Output = ($stdout -join "`n"); ExitCode = $LASTEXITCODE }
   }
@@ -92,7 +97,7 @@ Describe 'secret-status.ps1' {
     @($obj.rows | Where-Object status -eq 'MISSING').Count | Should -BeGreaterThan 0
   }
 
-  It 'secret file present with correct mode is OK' -Skip:($IsWindows -eq $true) {
+  It 'secret file present with correct mode is OK' -Skip:($IsWindows -ne $false) {
     $f = Join-Path $HomeDir 'secret.txt'
     Set-Content -LiteralPath $f -Value 'secret'
     & chmod 600 $f
@@ -107,7 +112,7 @@ Describe 'secret-status.ps1' {
     $r.Output | Should -Match 'OK'
   }
 
-  It 'secret file with wrong mode is WARN' -Skip:($IsWindows -eq $true) {
+  It 'secret file with wrong mode is WARN' -Skip:($IsWindows -ne $false) {
     $f = Join-Path $HomeDir 'secret-bad.txt'
     Set-Content -LiteralPath $f -Value 'secret'
     & chmod 644 $f
@@ -156,7 +161,7 @@ Describe 'secret-status.ps1' {
     $r.Output | Should -Match 'ghq root unresolved'
   }
 
-  It 'env file warns when filename not in .gitignore' -Skip:($IsWindows -eq $true) {
+  It 'env file warns when filename not in .gitignore' -Skip:($IsWindows -ne $false) {
     $repo = Join-Path $HomeDir 'repo-warn'
     New-Item -ItemType Directory -Force -Path (Join-Path $repo '.git') | Out-Null
     $envPath = Join-Path $repo '.env'
@@ -175,7 +180,7 @@ Describe 'secret-status.ps1' {
     $r.Output | Should -Match 'not in .gitignore'
   }
 
-  It 'env file OK when gitignore lists filename' -Skip:($IsWindows -eq $true) {
+  It 'env file OK when gitignore lists filename' -Skip:($IsWindows -ne $false) {
     $repo = Join-Path $HomeDir 'repo-ok'
     New-Item -ItemType Directory -Force -Path (Join-Path $repo '.git') | Out-Null
     $envPath = Join-Path $repo '.env'
@@ -210,7 +215,7 @@ Describe 'secret-status.ps1' {
   }
 }
 
-Describe 'secret-status.ps1 DRIFT detection' -Skip:($IsWindows -eq $true) {
+Describe 'secret-status.ps1 DRIFT detection' -Skip:($IsWindows -ne $false) {
   BeforeAll {
     $script:StatePath = Join-Path $HomeDir '.config/chezmoi/secret-deploy-state.json'
     $script:OrigHome = $env:HOME

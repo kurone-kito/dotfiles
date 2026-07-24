@@ -7,6 +7,21 @@ BeforeAll {
   $script:Fixture = Join-Path $PSScriptRoot 'fixtures/generate-authorized-keys.ps1'
   $script:BeginMarker = '# >>> chezmoi managed keys >>>'
   $script:EndMarker = '# <<< chezmoi managed keys <<<'
+
+  # PS5.1 does not recognize the utf8NoBOM encoding literal accepted by
+  # Set-Content on PS6+, so write test fixtures via .NET directly.
+  function script:Set-TestFileUtf8NoBom {
+    param(
+      [Parameter(Mandatory, ValueFromPipeline)][AllowEmptyString()][string[]]$Value,
+      [Parameter(Mandatory)][string]$Path
+    )
+    begin { $lines = @() }
+    process { $lines += $Value }
+    end {
+      $content = ($lines -join "`n") + "`n"
+      [System.IO.File]::WriteAllText($Path, $content, [System.Text.UTF8Encoding]::new($false))
+    }
+  }
 }
 
 Describe 'generate-authorized-keys' {
@@ -41,9 +56,9 @@ Describe 'generate-authorized-keys' {
 
   It 'creates a managed block from the available public keys' {
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
     'ssh-ed25519 BBBB secondary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'secondary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'secondary.pub')
 
     & $script:Fixture
 
@@ -58,7 +73,7 @@ Describe 'generate-authorized-keys' {
 
   It 'skips missing public keys and keeps the remaining file content' {
     'ssh-ed25519 BBBB secondary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'secondary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'secondary.pub')
 
     & $script:Fixture
 
@@ -77,9 +92,9 @@ Describe 'generate-authorized-keys' {
   }
 
   It 'preserves a foreign line that predates the managed block' {
-    'ssh-rsa FOREIGN from-cloud-provider' | Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    'ssh-rsa FOREIGN from-cloud-provider' | Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     & $script:Fixture
 
@@ -90,9 +105,9 @@ Describe 'generate-authorized-keys' {
 
   It 'does not duplicate a legacy key already present in an unmarked file' {
     @('ssh-ed25519 AAAA primary@test', 'ssh-rsa FOREIGN other-machine') |
-      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     & $script:Fixture
 
@@ -103,15 +118,15 @@ Describe 'generate-authorized-keys' {
 
   It 'preserves foreign lines on both sides of an existing managed block' {
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
     & $script:Fixture
 
     $existing = Get-Content $script:Authorized
     @('ssh-rsa FOREIGN-BEFORE ssh-copy-id') + $existing + @('ssh-rsa FOREIGN-AFTER manually-added') |
-      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path $script:Authorized
 
     'ssh-ed25519 BBBB secondary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'secondary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'secondary.pub')
     & $script:Fixture
 
     $content = Get-Content $script:Authorized
@@ -123,9 +138,9 @@ Describe 'generate-authorized-keys' {
 
   It 'removes a key from the managed block when it disappears from config' {
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
     'ssh-ed25519 BBBB secondary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'secondary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'secondary.pub')
     & $script:Fixture
 
     Remove-Item (Join-Path $script:SshDir.FullName 'primary.pub')
@@ -138,7 +153,7 @@ Describe 'generate-authorized-keys' {
 
   It 'produces no diff when re-run with unchanged keys' {
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
     & $script:Fixture
     $before = Get-Content $script:Authorized -Raw
 
@@ -150,9 +165,9 @@ Describe 'generate-authorized-keys' {
 
   It 'falls back to append instead of dropping content when the end marker is missing' {
     @('ssh-rsa FOREIGN untouched', $script:BeginMarker, 'ssh-rsa STALE stale-key') |
-      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
@@ -168,9 +183,9 @@ Describe 'generate-authorized-keys' {
       $script:BeginMarker, 'ssh-rsa OLD1 old', $script:EndMarker,
       'ssh-rsa FOREIGN between-blocks',
       $script:BeginMarker, 'ssh-rsa OLD2 old', $script:EndMarker
-    ) | Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    ) | Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
@@ -182,7 +197,7 @@ Describe 'generate-authorized-keys' {
 
   It 'does not warn about malformed markers on a normal run' {
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
 
@@ -191,9 +206,9 @@ Describe 'generate-authorized-keys' {
 
   It 'converges on the same block count after repeated runs when the end marker was missing' {
     @('ssh-rsa FOREIGN untouched', $script:BeginMarker, 'ssh-rsa STALE stale-key') |
-      Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     & $script:Fixture | Out-Null
     $countAfterRun1 = (Get-Content $script:Authorized | Where-Object { $_ -eq $script:BeginMarker }).Count
@@ -220,9 +235,9 @@ Describe 'generate-authorized-keys' {
       $script:BeginMarker, 'ssh-rsa OLD1 old', $script:EndMarker,
       'ssh-rsa FOREIGN between-blocks',
       $script:BeginMarker, 'ssh-rsa OLD2 old', $script:EndMarker
-    ) | Set-Content -Path $script:Authorized -Encoding utf8NoBOM
+    ) | Set-TestFileUtf8NoBom -Path $script:Authorized
     'ssh-ed25519 AAAA primary@test' |
-      Set-Content -Path (Join-Path $script:SshDir.FullName 'primary.pub') -Encoding utf8NoBOM
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
 
     & $script:Fixture | Out-Null
     & $script:Fixture | Out-Null

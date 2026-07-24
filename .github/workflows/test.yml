@@ -110,6 +110,54 @@ jobs:
         shell: pwsh
         run: Invoke-Pester tests/powershell/ -Output Detailed
 
+  powershell51-tests:
+    name: PowerShell 5.1 tests (Pester)
+    needs: detect-changes
+    # Advisory only: not registered in the ruleset's required-check set
+    # yet, so a failure here does not block merges (#166). Promotion to
+    # required is a later decision once this leg proves stable.
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Confirm Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.1 (major version 5), got $($PSVersionTable.PSVersion)"
+          }
+      - name: Install Pester if needed
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable Pester |
+              Where-Object { $_.Version -ge [version]'5.0' })) {
+            # PS5.1's .NET default protocol set can exclude TLS 1.2, which
+            # PSGallery requires. Add it without dropping whatever
+            # protocols were already enabled (same pattern as
+            # 55-setup-editors.ps1.tmpl's vim-plug bootstrap).
+            [Net.ServicePointManager]::SecurityProtocol =
+              [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+      - name: Run Pester tests
+        shell: powershell
+        # Force-import Pester 5+ first: PSModulePath can list the inbox
+        # Pester 3.4 module ahead of the CurrentUser-scoped install above,
+        # and plain auto-loading would silently run the suite (or fail)
+        # under the wrong major version.
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          Invoke-Pester tests/powershell/ -Output Detailed
+
   lua-syntax:
     name: Lua syntax check
     needs: detect-changes
