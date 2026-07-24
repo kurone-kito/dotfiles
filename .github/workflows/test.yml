@@ -110,6 +110,40 @@ jobs:
         shell: pwsh
         run: Invoke-Pester tests/powershell/ -Output Detailed
 
+  powershell51-tests:
+    name: PowerShell 5.1 tests (Pester)
+    needs: detect-changes
+    # Advisory only: not registered in the ruleset's required-check set
+    # yet, so a failure here does not block merges (#166). Promotion to
+    # required is a later decision once this leg proves stable.
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (which would satisfy
+    # the required-status-check gate without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Confirm Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.1 (major version 5), got $($PSVersionTable.PSVersion)"
+          }
+      - name: Install Pester if needed
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable Pester |
+              Where-Object { $_.Version -ge [version]'5.0' })) {
+            Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+      - name: Run Pester tests
+        shell: powershell
+        run: Invoke-Pester tests/powershell/ -Output Detailed
+
   lua-syntax:
     name: Lua syntax check
     needs: detect-changes

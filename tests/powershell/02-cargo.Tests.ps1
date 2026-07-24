@@ -9,7 +9,7 @@ BeforeAll {
   ) '02-cargo.ps1'
 }
 
-Describe '02-cargo (Unix pwsh)' -Skip:($IsWindows -eq $true) {
+Describe '02-cargo (Unix pwsh)' -Skip:($IsWindows -ne $false) {
 
   BeforeEach {
     $script:OriginalHome = $HOME
