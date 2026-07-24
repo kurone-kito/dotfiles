@@ -315,15 +315,22 @@ five-check ruleset above is now that required set.
 
 ### `idd-doctor` findings
 
-A full `idd-doctor` run (pinned `ephemeral-npx` spec) currently exits
-non-zero (`result: failed`) and reports these findings -- one `ERROR`
-and five `WARN`s; each is expected, not a defect, and #218 tracks the
-one change that would clear the `ERROR` and let the run pass cleanly:
+A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
+`result: passed` with five `WARN`s and no `ERROR`; each below is
+expected, not a defect. #218 resolved the one finding that was a
+genuine `ERROR` (the `idd-task.yml` placeholder syntax) by
+reformatting it; the remaining findings are accepted noise, recorded
+here so #150's kind of verification sweep does not have to
+rediscover them:
 
 - **Toolchain residue, `markdownlint-cli2`** (two instances: the
   config command table and the overview project-commands table): a
   false-positive pattern match against the pinned upstream commit's
-  own toolchain, which happens to use the same tool. Tracked in #218.
+  own toolchain, which happens to use the same tool, not a residual
+  upstream-marker-prefix string. `idd-doctor`'s toolchain-residue
+  scanner has no per-finding waiver flag (confirmed via `idd-doctor
+  --help` while investigating #218), so this is accepted as permanent
+  noise rather than suppressed.
 - **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
   this environment**: expected on any fresh clone that has not yet run
   the wiring step documented in [Worktree Guard](#worktree-guard) --
@@ -336,18 +343,24 @@ one change that would clear the `ERROR` and let the run pass cleanly:
   distributed default `false` (fail-closed; confirmed deliberately in
   #146), so this surfaces as a warning rather than being silently
   treated as "no protection configured".
-- **Post-merge cleanup backlog** (34 merged PRs lacking F4 cleanup
+- **Post-merge cleanup backlog** (34+ merged PRs lacking F4 cleanup
   evidence): a new-since-the-original-pin check this repository has
   not yet investigated or run against; applying its remediation
   touches GitHub-visible state across many historical PRs, so it is
   tracked as its own follow-up rather than run blind here. Tracked in
   #220.
-- **Unresolved placeholders in `.github/ISSUE_TEMPLATE/idd-task.yml`**
-  (the `path`, `outcome`, `section`, and `evidence` textarea hints,
-  each double-curly-brace-wrapped): a false positive -- these are
-  GitHub issue-form placeholder hint text, not unresolved IDD import
-  placeholders, and `idd-doctor`'s scanner does not distinguish the
-  two. Tracked in #218.
+
+`.github/ISSUE_TEMPLATE/idd-task.yml`'s `proposed_change` and
+`acceptance_criteria` textarea placeholders formerly used
+double-curly-brace hint text (`{{path}}`, `{{outcome}}`, `{{section}}`,
+`{{evidence}}`) that coincidentally matched `idd-doctor`'s unresolved
+IDD-import-placeholder scanner, which does not distinguish a GitHub
+issue-form placeholder hint from a real unresolved template token
+sharing the same `{{...}}` syntax. #218 reformatted the four to
+angle-bracket hints (`<path>`, `<outcome>`, `<section>`, `<evidence>`),
+matching the `acceptance_criteria` field's pre-existing
+`<pattern>` / `<file>` convention in the same file, which clears the
+`ERROR` without changing the hint-text UX.
 
 `checkReleaseTagDrift` and `checkDependencyVersionDrift` stay silent
 in this repository, as expected (no git tags exist here, and there is
