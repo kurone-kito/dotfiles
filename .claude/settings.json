@@ -35,7 +35,7 @@
       "Bash(gh auth status)",
       "Bash(npx markdownlint-cli2*)",
       "Bash(tests/bash/helpers/bats-core/bin/bats*)",
-      "Bash(pwsh*)"
+      "Bash(pwsh -c \"Invoke-Pester*)"
     ],
     "deny": [
       "Bash(git push --force*)",
