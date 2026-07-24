@@ -170,14 +170,16 @@ outright. In this repository, no orphan-discovery fallback runs;
 **`worktreeGuard.enabled`**: `true`. **`worktreeGuard.branchPatterns`**:
 not set (distributed default `["issue/*", "roadmap-audit/*"]`).
 
-The shipped `.githooks/` hooks refuse a commit or push made from the
-**primary** worktree while `HEAD` is on an implementation branch
-(`issue/*` or `roadmap-audit/*`), enforcing the B1 disposable-worktree
-rule locally — CI cannot detect this class of violation, since it
-leaves no trace in pushed history and CI checks out a detached `HEAD`.
+Once a clone wires `core.hooksPath` (below), the shipped `.githooks/`
+hooks refuse a commit or push made from the **primary** worktree while
+`HEAD` is on an implementation branch (`issue/*` or `roadmap-audit/*`),
+enforcing the B1 disposable-worktree rule locally — CI cannot detect
+this class of violation, since it leaves no trace in pushed history
+and CI checks out a detached `HEAD`.
 
-`core.hooksPath` is local, per-clone git config; it is never committed
-and every clone must wire it once:
+`core.hooksPath` is local, per-clone git config; it is never committed,
+so a clone that skips this step stays unenforced even with
+`worktreeGuard.enabled: true`. Every clone must wire it once:
 
 ```sh
 git config core.hooksPath .githooks
