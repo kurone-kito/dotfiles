@@ -313,10 +313,12 @@ required-check set at all, IDD stops and posts a hold for missing
 merge-gate policy evidence rather than silently merging. The
 five-check ruleset above is now that required set.
 
-### `idd-doctor` warnings
+### `idd-doctor` findings
 
-A full `idd-doctor` run (pinned `ephemeral-npx` spec) reports these
-warnings; each is expected, not a defect:
+A full `idd-doctor` run (pinned `ephemeral-npx` spec) currently exits
+non-zero (`result: failed`) and reports these findings -- one `ERROR`
+and five `WARN`s; each is expected, not a defect, and #218 tracks the
+one change that would clear the `ERROR` and let the run pass cleanly:
 
 - **Toolchain residue, `markdownlint-cli2`** (two instances: the
   config command table and the overview project-commands table): a

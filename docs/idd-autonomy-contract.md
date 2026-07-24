@@ -11,12 +11,10 @@ two kinds:
 - **Reversible**: a clean undo command or reversal path exists, named
   in the row. Some reversible mutations still have an eligibility
   precondition (for example, a stale-claim takeover requires the prior
-  claim to be stale under `claim-stale-age`
-  <!-- dotfiles-divergence: claim-timing --> -- this repository's
-  configured value is ≥ 12 h, not upstream's distributed default
-  24 h) — that precondition governs when the action
-  may run, not whether it can be undone afterward, so the row stays
-  Reversible.
+  claim to be stale <!-- dotfiles-divergence: claim-timing --> under
+  this repository's `claim-stale-age` (≥ 12 h; upstream distributed
+  default 24 h) — that precondition governs when the action may run,
+  not whether it can be undone afterward, so the row stays Reversible.
 - **Irreversible**: no clean undo path exists, or the loop only runs
   it after a dedicated, named gate — a merge-readiness checklist, a
   human-gated policy, or (for a small set of GitHub-minimize actions)
