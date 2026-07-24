@@ -51,7 +51,7 @@ body:
     attributes:
       label: Proposed change
       description: 'What the implementing agent should change. Name the concrete file or surface to edit; do not prescribe every line.'
-      placeholder: 'Edit {{path}} so that {{outcome}}. Keep the surrounding {{section}} intact.'
+      placeholder: 'Edit <path> so that <outcome>. Keep the surrounding <section> intact.'
     validations:
       required: true
 
@@ -63,7 +63,7 @@ body:
       placeholder: |
         - `grep -nE '<pattern>' <file>` returns no matches.
         - `tests/bash/helpers/bats-core/bin/bats tests/bash/` passes unchanged.
-        - The PR description records {{evidence}}.
+        - The PR description records <evidence>.
     validations:
       required: true
 
