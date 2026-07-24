@@ -88,7 +88,10 @@ body:
       label: Autopilot suitability
       description: 'Required footer for the IDD discover phase. Score 1 (human-only) to 5 (autopilot-ideal); scores below the configured floor route to a human instead of autopilot. Enter the visible line and the hidden marker exactly as shown.'
       placeholder: |
-        Autopilot suitability: 4/5 — {why this score}.
+        ---
+
+        _Autopilot suitability: 4 / 5 -- higher is more autopilot-suitable;
+        below the configured floor is human-oriented._
 
         <!-- dotfiles-autopilot-suitability: 4 -->
     validations:
@@ -100,4 +103,7 @@ body:
       label: Effort (optional)
       description: 'Optional soft tie-breaker for Discover candidate selection. S/M/L, fail-safe on absence.'
       placeholder: |
+        _Effort: S -- author-estimated size; a soft autopilot selection
+        tie-breaker only._
+
         <!-- dotfiles-effort: S -->
