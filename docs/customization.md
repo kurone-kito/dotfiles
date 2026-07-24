@@ -10,22 +10,29 @@ behavior change too.
 
 ## Customization Surfaces
 
-| Surface                 | Default                                                                                                                                                                                  | Where to customize                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Review policy           | GitHub Copilot advisory review                                                                                                                                                           | Choose a profile in [IDD review policy profiles](idd-review-policy-profiles.md), then edit the listed phase files for any non-default profile.                                                                                                                                                                                                                                                                                                                                                                                            |
-| Advisory reviewer       | Copilot wait and recovery gates                                                                                                                                                          | For `human-required`, `no-advisory`, or `external-bot`, update the review-fix, pre-merge, merge, advisory-wait, snapshot, and triage files named by the selected profile.                                                                                                                                                                                                                                                                                                                                                                 |
-| Review threads          | Agents may resolve handled review threads under the fast default                                                                                                                         | Choose a thread-resolution profile in [IDD review policy profiles](idd-review-policy-profiles.md), then edit the snapshot, triage, review-fix, pre-merge, and merge phase files for stricter profiles.                                                                                                                                                                                                                                                                                                                                    |
-| Policy constants        | Distributed timing, wait, and loop defaults                                                                                                                                              | Review [IDD policy constants](policy-constants.md#configuration-authority-hierarchy) before changing claim ownership timing, advisory waits, CI waits, or critique-loop guardrails. The [Configuration Authority Hierarchy](policy-constants.md#configuration-authority-hierarchy) section maps key settings to the file(s) to update. Record the selected critique-loop profile in onboarding notes before unattended operation.                                                                                                         |
-| Merge policy            | Merge gates after CI, review, freshness, and claim checks; distributed default is `fully_autonomous_merge`                                                                               | Review [Permissions and threat model](permissions.md), record the selected policy in repository docs, and keep or customize the F2.5/F3 handoff gates for non-autonomous profiles.                                                                                                                                                                                                                                                                                                                                                        |
-| Branch synchronization  | Rebase before the first PR-branch push; after publication, default to merge-from-`main`, keep `BEHIND`-only states read-only, and reserve rebase plus force-push for explicit exceptions | Keep `.github/copilot-instructions.md`, `.github/instructions/idd-pr-submit.instructions.md`, [IDD workflow guide](idd-workflow.md#branch-publication-and-synchronization), and [IDD policy constants](policy-constants.md#branch-synchronization-defaults) aligned when local branch-sync policy changes.                                                                                                                                                                                                                                |
-| Stall recovery safety   | 30-minute quiet-window evidence plus 24-hour stale-threshold ownership gate                                                                                                              | Keep `idd-resume-stall.instructions.md` aligned with `idd-overview` claim rules, and customize both files together if local policy changes quiet-window or takeover timing.                                                                                                                                                                                                                                                                                                                                                               |
-| Forced handoff contract | Disabled unless the repository explicitly records a human-gated policy                                                                                                                   | Keep forced handoff separate from trusted marker-author authority. Record the opt-in state, human approval authority, canonical consent text, and marker contract in the repository-local policy block here, then keep the always-loaded overview pointer aligned with those docs.                                                                                                                                                                                                                                                        |
-| CI commands             | Project-specific command rows in the overview file                                                                                                                                       | Set `fix-validate`, `pre-push-validate`, `post-fix-validate`, and `install-deps` in `.github/instructions/idd-overview.instructions.md` during onboarding.                                                                                                                                                                                                                                                                                                                                                                                |
-| Helper runtime          | `instructions-only` by default, with evidence-based helper support proposals that still require explicit operator confirmation during onboarding                                         | Use [IDD template onboarding](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#step-1b--confirm-policy-decisions) together with [IDD helper script evaluation](idd-helper-scripts.md#import-time-selection-order). Auto-propose helper support only when repository evidence shows a real package-manager or Node.js helper path, keep operator confirmation explicit, prefer `package-manager` when supported package-manager evidence exists, and otherwise prefer `vendored-node` before `ephemeral-npx`. |
-| Issue scope             | Roadmap-first discovery                                                                                                                                                                  | Keep `issue-scope` as `roadmap` for roadmap-scoped work, or deliberately choose `orphan-first` when the repository wants unblocked orphan issues to be considered before roadmap traversal.                                                                                                                                                                                                                                                                                                                                               |
-| Orphan-first approval   | No extra gate beyond orphan readiness checks                                                                                                                                             | Keep `orphan-first-policy` as `none`, or opt in to `maintainer-approved` or `public-disabled` when public or community-submitted issues need an explicit maintainer approval layer before A0-O can select them.                                                                                                                                                                                                                                                                                                                           |
-| Issue-author approval   | Secure-by-default target contract; unattended work needs a self-authorizing issue author or explicit approval unless the repository opts out                                             | Record the gate decision, approval actors, freshness rule, approval signals, and opt-out semantics in repository-local policy docs and onboarding. Keep this contract aligned with the discovery/claim behavior that already ships, and update both surfaces together if local policy changes later.                                                                                                                                                                                                                                      |
-| Issue authoring guard   | Discover skips issues carrying the configured authoring label and warns when that label appears stale                                                                                    | Configure `issueAuthoring.authoringLabelName` and `issueAuthoring.authoringStaleAge` in `.github/idd/config.json` when local label naming or timing differs from the distributed defaults. Keep the label available in the target repository and keep `authoringStaleAge` less than `claimTiming.staleAge`; see [IDD policy constants](policy-constants.md#issue-authoring-defaults).                                                                                                                                                     |
+| Surface                             | Default                                                                                                                                                                                                                                                                                                                                                                                               | Where to customize                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Review policy                       | GitHub Copilot advisory review                                                                                                                                                                                                                                                                                                                                                                        | Choose a profile in [IDD review policy profiles](idd-review-policy-profiles.md), then edit the listed phase files for any non-default profile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Advisory reviewer                   | Copilot wait and recovery gates                                                                                                                                                                                                                                                                                                                                                                       | For `human-required`, `no-advisory`, or `external-bot`, update the review-fix, pre-merge, merge, advisory-wait, snapshot, and triage files named by the selected profile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Review threads                      | Agents may resolve handled review threads under the fast default                                                                                                                                                                                                                                                                                                                                      | Choose a thread-resolution profile in [IDD review policy profiles](idd-review-policy-profiles.md), then edit the snapshot, triage, review-fix, pre-merge, and merge phase files for stricter profiles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Policy constants                    | Distributed timing, wait, and loop defaults                                                                                                                                                                                                                                                                                                                                                           | Review [IDD policy constants](policy-constants.md#configuration-authority-hierarchy) before changing claim ownership timing, advisory waits, CI waits, or critique-loop guardrails. The [Configuration Authority Hierarchy](policy-constants.md#configuration-authority-hierarchy) section maps key settings to the file(s) to update. Record the selected critique-loop profile in onboarding notes before unattended operation.                                                                                                                                                                                                                                                                                                                            |
+| Merge policy                        | Merge gates after CI, review, freshness, and claim checks; distributed default is `fully_autonomous_merge`                                                                                                                                                                                                                                                                                            | Review [Permissions and threat model](permissions.md), record the selected policy in repository docs, and keep or customize the F2.5/F3 handoff gates for non-autonomous profiles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Solo-CODEOWNER admin fallback       | `mergeGate.soloCodeownerAdminFallback` distributed default `auto-admin-retry`: F3 retries once with `gh pr merge --admin` when the Gate checklist is fully green, the only merge-command failure is the self-CODEOWNER "base branch policy prohibits the merge" error, and `reviewerStates.codeownerSelfApproval.prAuthorIsSoleEligibleCodeowner` proves the PR author is the sole eligible codeowner | Set `mergeGate.soloCodeownerAdminFallback: "hold-and-report"` in `.github/idd/config.json` to opt into the pre-#1521 unconditional hold-and-report behavior instead. See [`idd-merge.instructions.md`](../.github/instructions/idd-merge.instructions.md) F3 step 5 and [Permissions and threat model](permissions.md)'s "Pull-request-only ruleset bypass" for the full decision tree, and [policy constants](policy-constants.md#merge-policy-defaults) for the schema/default inventory. A genuinely outstanding review from a different, non-author codeowner always reports that field as `false` and falls through to hold-and-report, even when a bypass actor is also configured.                                                                    |
+| Branch synchronization              | Rebase before the first PR-branch push; after publication, default to merge-from-`master` <!-- dotfiles-divergence: master-branch -->, keep `BEHIND`-only states read-only, and reserve rebase plus force-push for explicit exceptions                                                                                                                                                                | Keep `.github/copilot-instructions.md`, `.github/instructions/idd-pr-submit.instructions.md`, [IDD workflow guide](idd-workflow.md#branch-publication-and-synchronization), and [IDD policy constants](policy-constants.md#branch-synchronization-defaults) aligned when local branch-sync policy changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Stall recovery safety               | 30-minute quiet-window evidence plus 24-hour stale-threshold ownership gate                                                                                                                                                                                                                                                                                                                           | Keep `idd-resume-stall.instructions.md` aligned with `idd-overview` claim rules, and customize both files together if local policy changes quiet-window or takeover timing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Forced handoff contract             | Disabled unless the repository explicitly records a human-gated policy                                                                                                                                                                                                                                                                                                                                | Keep forced handoff separate from trusted marker-author authority. Record the opt-in state, human approval authority, canonical consent text, and marker contract in the repository-local policy block here, then keep the always-loaded overview pointer aligned with those docs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| CI commands                         | Project-specific command rows in the overview file                                                                                                                                                                                                                                                                                                                                                    | Set `fix-validate`, `pre-push-validate`, `post-fix-validate`, and `install-deps` in `.github/instructions/idd-overview-core.instructions.md` during onboarding.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Helper runtime                      | `instructions-only` by default, with evidence-based helper support proposals that still require explicit operator confirmation during onboarding                                                                                                                                                                                                                                                      | Use [IDD template onboarding](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#step-1b--confirm-policy-decisions) together with [IDD helper script evaluation](idd-helper-scripts.md#import-time-selection-order). Auto-propose helper support only when repository evidence shows a real package-manager or Node.js helper path, keep operator confirmation explicit, prefer `package-manager` when supported package-manager evidence exists, and otherwise prefer `vendored-node` before `ephemeral-npx`.                                                                                                                                                                                                                    |
+| Issue scope                         | Roadmap-first discovery (roadmap path first, orphan fallback)                                                                                                                                                                                                                                                                                                                                         | Default is `roadmap-first`. Set `issue-scope` to `roadmap` for strict roadmap-only discovery (no orphan fallback), or to `orphan-first` when unblocked orphan issues should be considered before roadmap traversal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Orphan-first approval               | No extra gate beyond orphan readiness checks                                                                                                                                                                                                                                                                                                                                                          | Keep `orphan-first-policy` as `none`, or opt in to `maintainer-approved` or `public-disabled` when public or community-submitted issues need an explicit maintainer approval layer before A0-O can select them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Issue-author approval               | Secure-by-default target contract; unattended work needs a self-authorizing issue author or explicit approval unless the repository opts out                                                                                                                                                                                                                                                          | Record the gate decision, approval actors, freshness rule, approval signals, and opt-out semantics in repository-local policy docs and onboarding. Keep this contract aligned with the discovery/claim behavior that already ships, and update both surfaces together if local policy changes later.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| IDD label names                     | `roadmap`, `status:blocked-by-human`, and `status:needs-decision` drive roadmap identification, human-gate holds, and decision holds                                                                                                                                                                                                                                                                  | Configure `labels.roadmapLabelName`, `labels.blockedByHumanLabelName`, and `labels.needsDecisionLabelName` in `.github/idd/config.json` when the repository already uses a different label taxonomy for these three roles. Migration note: when renaming an existing label, first create the new label and apply it alongside the old one on the affected open issues, then update the config value, then delete the old label — discovery and triage then never pass through a window where hold labels stop matching; keep all three configured labels present in the repository afterward.                                                                                                                                                                |
+| Issue authoring guard               | Discover skips issues carrying the configured authoring label and warns when that label appears stale                                                                                                                                                                                                                                                                                                 | Configure `issueAuthoring.authoringLabelName` and `issueAuthoring.authoringStaleAge` in `.github/idd/config.json` when local label naming or timing differs from the distributed defaults. Keep the label available in the target repository and keep `authoringStaleAge` less than `claimTiming.staleAge`; see [IDD policy constants](policy-constants.md#issue-authoring-defaults).                                                                                                                                                                                                                                                                                                                                                                        |
+| Workshop example repo               | `idd-doctor` checks that the example repository's README back-links to this repo's `docs/workshop/`                                                                                                                                                                                                                                                                                                   | Set `workshop.exampleRepository` in `.github/idd/config.json` to `"<owner>/<repo>"` when this repository publishes a workshop and an external example repository should back-link to it. Leave the field empty / unset to skip the check (default for adopter repos that have not published a workshop).                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Worktree guard                      | Advisory only by default — `idd-doctor` warns on a primary-worktree implementation-branch HEAD but nothing blocks the commit, push, or merge                                                                                                                                                                                                                                                          | This release adds the opt-in config surface only; the enforcing components (`idd-doctor --strict`, its CI step, and the `core.hooksPath` hook) arrive in follow-up roadmap work, so enabling the flag alone has no effect yet. Opt in by setting `worktreeGuard.enabled: true` in `.github/idd/config.json`; once those components are present, an enabled guard makes them fail or reject a primary-worktree `issue/*` / `roadmap-audit/*` HEAD. Override `worktreeGuard.branchPatterns` to change which branch globs count as implementation branches (default `issue/*`, `roadmap-audit/*`). Absent or `false` keeps the historical advisory-only behavior.                                                                                               |
+| Instruction profile (lite)          | Standard phase files for every phase — `instructionProfile` absent or `"standard"`                                                                                                                                                                                                                                                                                                                    | This document records the `instructionProfile` policy-field surface only; schema support for this field and phase-routing enforcement land in a follow-up change. See [Lite instruction profile opt-in](idd-workflow.md#lite-instruction-profile-opt-in) for the recorded convention and phase mapping, and `docs/weak-model-lite-profile-design.md` for the underlying design (present in the source repository only; not distributed via `idd-template/`). **Do not set `instructionProfile` yet**: the policy schema's root object rejects unknown properties, so a repository that validates `.github/idd/config.json` against it (e.g. `idd-doctor`) fails validation outright on this field until the schema follow-up lands — it is not merely inert. |
+| Advisory-convergence required check | Hosting the `idd-advisory-convergence` workflow is itself opt-in; once hosted, it reports on every PR but is **not** registered as a required status check by default                                                                                                                                                                                                                                 | Add the workflow per [IDD template onboarding](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#optional--host-idd-advisory-convergence-as-a-required-check-ci-workflow), then register `idd-advisory-convergence` as a required status check in the repository's branch-protection Ruleset to make Copilot-advisory convergence non-bypassable; see [policy constants](policy-constants.md#advisory-review-defaults). Until registered, the hosted workflow still runs and reports but never blocks a merge.                                                                                                                                                                                                                   |
+| Required-check-read trust           | Fail-closed by default — a `404` on the branch-protection or ruleset reads is treated as unreadable (same hold as a `403`), because none of those endpoints documents `403` as a possible response and GitHub can mask a permission failure as `404`                                                                                                                                                  | Opt in to the pre-`#1377` trusting behavior (a `404` on these reads is genuinely empty) only when the repository operator has verified the automation token carries full read access to these endpoints, by setting `ciGate.trustEmptyProtectionReads: true` in `.github/idd/config.json`. This is a git-committed, human-authorized decision, not a runtime check of the caller's role or token scope. Absent or `false` keeps the fail-closed default; see [`idd-ci.instructions.md`](../.github/instructions/idd-ci.instructions.md) Required-check discovery step 4.                                                                                                                                                                                     |
 
 ## Non-Configurable Safety Invariants
 
@@ -48,6 +55,34 @@ policy knobs. Treat these as hard gates, not local preferences.
 Use the always-loaded overview and the policy constants page as the
 source of truth for these rules. Configuration can tune defaults, but it
 cannot disable the gates above.
+
+## Template Version and Staleness
+
+`iddVersion` in `.github/idd/config.json` records which release of the
+distributed IDD workflow a repository imported.
+
+- **Source-template maintainers** bump `iddVersion` whenever a change to
+  the distributed instruction set, schema, or safety surface — for
+  example a new guardrail, hardening section, or default change — would
+  matter to an adopter who re-syncs. Follow semantic-versioning intent: a
+  new opt-in capability or hardening is a minor bump; a breaking change
+  to existing defaults is a major bump. Keep the template config and this
+  repository's own `.github/idd/config.json` on the same value. Every
+  `iddVersion` bump also requires a matching `CHANGELOG.md` entry in the
+  same pull request, and an annotated `v<iddVersion>` git tag pushed to
+  the source repository after the bump PR merges, so adopters can diff
+  against a concrete release ref instead of a raw commit SHA. The
+  release cadence is milestone-based: cut a release after each merged
+  roadmap. This trigger fires for a merged top-level roadmap only; a
+  merged nested roadmap does not independently trigger a release, and
+  its changes ship with the parent roadmap's release (or the next
+  top-level trigger).
+- **Adopters** can compare their `iddVersion` against the source release
+  to see whether a re-sync is worthwhile. Because the value only moves
+  when maintainers bump it, it is a coarse signal — so `idd-doctor` also
+  runs a content-based stale-import check that warns when the imported
+  files lack the current worktree-hardening sections, catching a missed
+  bump.
 
 ## Helper Runtime Profile
 
@@ -78,16 +113,20 @@ When a repository does opt into helper support, run the manifest helper
 from the target repository root to get the concrete import surface for
 the chosen profile:
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b64eab0d51a79bd3199740505f3b7843bc94a0d4 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
 The tarball URL is pinned to the same upstream commit used as the
 import baseline for this repository's IDD instructions and companion
 bundle, so the helper code never drifts ahead of the checked-in
-phase docs. Replace `--profile ephemeral-npx` with the profile your
-repository actually configured if it differs.
+phase docs. This repository also runs the manifest under
+`--profile ephemeral-npx` rather than upstream's own
+`--profile package-manager` default (see #115 for the rationale).
+Replace `--profile ephemeral-npx` with the profile your repository
+actually configured if it differs.
 
 The manifest auto-detects npm, pnpm, or yarn from the target repository
 when possible. If detection is ambiguous, pass this flag explicitly:
@@ -206,8 +245,9 @@ workers.
 Policy foundation namespaces are available in `.github/idd/config.json`
 for parameterized follow-up work: `stallRecovery`, `forcedHandoff`,
 `markerTrust`, `advisoryWait`, `ciWait`, `ciGate`, `discover`, `claim`,
-`critiqueLoop`, `reviewEscalation`, `approvalSignals`, and
-`issueAuthoring`. Leaving these keys unset keeps distributed behavior.
+`critiqueLoop`, `reviewEscalation`, `approvalSignals`,
+`issueAuthoring`, and `labels`. Leaving these keys unset keeps
+distributed behavior.
 
 For advisory review timing, repositories may now customize
 `advisoryWait.requestCap`, `advisoryWait.pendingWindow`,
@@ -217,11 +257,42 @@ contracts and any instruction text that references the effective wait
 values. The three duration keys accept positive whole-minute ISO 8601
 durations only; zero-length values and second-based values are invalid.
 
+Repositories may also customize `advisoryWait.convergenceScope` in
+`.github/idd/config.json`. The default `all-prs` keeps convergence on
+every PR. `idd-claimed` is opt-in and limits convergence to verified
+IDD-owned PRs. Under `idd-claimed`, PRs without a verified linked claim
+resolve to `not_applicable` instead of opening a new waiver path, so
+claimless/manual dependency PRs stay outside the gate. Invalid values
+are rejected by schema, and runtime normalization falls back to
+`all-prs` for untrusted config reads.
+
+`advisoryWait.primaryBotLogin` selects the advisory bot whose review the
+advisory-wait gate tracks (default Copilot), and
+`advisoryWait.secondaryBotLogin` names an **optional, non-gating** secondary
+bot. When the primary is cap-exhausted or stalled / rate-limited, the
+secondary is requested once per HEAD as a supplement; it never satisfies the
+primary advisory-wait gate, never receives a primary `advisory-wait` marker,
+and its review is ordinary advisory input. Omitting
+`advisoryWait.secondaryBotLogin` (or setting it equal to the primary) disables
+the supplement, keeping behavior identical to a primary-only policy. Configure
+the secondary to a requestable
+reviewer whose request appears on the PR timeline so the once-per-HEAD guard
+can observe it.
+
 `advisoryWait.capExhaustedRoute` is intentionally fail-closed. The
 default `phase-specific` behavior keeps the current E14 skip / F2-F3
 hold split, while `hold` is a stricter override that also stops E14 on
 cap exhaustion. Do not introduce an override that weakens the F2/F3
 merge hold.
+
+`advisoryWait.sameHeadRerollCap` (default 2) bounds AW6's same-HEAD
+advisory reroll carve-out (#1465 / #1511) — the number of fresh
+same-HEAD re-reviews the autonomous loop may request once the primary
+bot's review already covers current HEAD but still carries items every
+one of which triage has already dispositioned. It is scoped per HEAD
+(a new push resets it) and kept deliberately separate from
+`advisoryWait.requestCap`, so raising or lowering one never affects the
+other.
 
 Repositories that need a maintainer-authorized recovery path for stuck
 repo-external checks may record `ciGate.externalChecks.advisory`,
@@ -266,6 +337,49 @@ When enabling this policy surface:
   humans to hand-write raw waiver markers
 - in solo-maintainer repositories, use the helper-generated waiver
   comment instead of PR self-approval as the authorization surface
+
+**Advisory-convergence required check.** Hosting the
+`idd-advisory-convergence` workflow (opt-in; see [IDD template onboarding](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#optional--host-idd-advisory-convergence-as-a-required-check-ci-workflow))
+lets it assert the `advisory-convergence` helper's `--assert` verdict
+as a CI check on every PR. Hosting the workflow alone does not gate
+merges — a maintainer must separately register `idd-advisory-convergence`
+as a **required** status check in the repository's branch-protection
+Ruleset; this is a GitHub-settings action taken outside of IDD
+automation, not something an agent applies on its own. Once
+registered, the check follows the same deadline/waiver escape path as
+any other external check: while the primary advisory bot has not yet
+reviewed the current PR HEAD, `--assert` exits non-zero and the check
+**shows as failing** (GitHub Actions has no separate non-failing
+"pending" check state) — by design, since the check must stay red
+until Copilot reviews the current HEAD; once
+`advisoryWait.convergenceDeadline` (default 24h) elapses from the HEAD
+commit's own timestamp, the only way to turn it green without a fresh
+review is a valid maintainer external-check waiver for that HEAD under
+the selector `idd-advisory-convergence`. That waiver path only exists
+once `ciGate.externalCheckWaivers.mode` is `maintainer-authorized`
+**and** `idd-advisory-convergence` is itself listed under
+`ciGate.externalChecks.waivable` — enabling waiver mode for some other
+external check never silently makes this one waivable too. **Posting a
+waiver comment does not by itself turn the check green**: a waiver is a
+regular PR comment, which is not one of the workflow's triggers
+(`pull_request` push, `pull_request_review` submission, or
+`pull_request_review_comment` created/edited/deleted on a review
+thread), so after posting a waiver a maintainer must also **re-run the
+existing** PR-linked check run **for the current HEAD SHA** — the
+Actions UI "Re-run jobs" button, or `gh run rerun <run-id>` — for the
+required check to actually reflect it. `workflow_dispatch` does
+**not** reliably do this:
+a dispatched run has no `pull_request` context of its own, so GitHub
+associates it with the dispatch ref rather than the PR's HEAD SHA, and
+the resulting run's conclusion can be invisible to that PR's
+required-check rollup. See
+[kurone-kito/idd-skill's own dogfooded copy of `.github/workflows/idd-advisory-convergence.yml`](https://github.com/kurone-kito/idd-skill/blob/main/.github/workflows/idd-advisory-convergence.yml)'s
+header comment for the full finding — this deliberately links the
+upstream source repository's copy, not a relative path to your own
+vendored workflow file, because the fuller investigation prose lives
+only in that dogfooded original; the portable stub this template ships
+as your `.github/workflows/idd-advisory-convergence.yml` is
+intentionally shorter and does not carry it.
 
 ## Phase ID Compatibility Contract
 
@@ -356,7 +470,7 @@ repository policy change, not a copy edit.
 ## CI and Command Placeholders
 
 The `Project commands` table in
-`.github/instructions/idd-overview.instructions.md` is the command
+`.github/instructions/idd-overview-core.instructions.md` is the command
 contract agents follow. During onboarding, replace the template
 placeholders with the target repository's commands:
 
@@ -366,7 +480,12 @@ placeholders with the target repository's commands:
 - `post-fix-validate`: auto-fix and fully verify after review fixes.
 - `install-deps`: prepare dependencies in a fresh worktree. Keep this
   command idempotent so retries, takeovers, and recreated worktrees can
-  rerun it safely without manual cleanup.
+  rerun it safely without manual cleanup. If a package manager has been
+  observed to under-install silently in this repository (exit success
+  with a dependency binary still missing), verify a key post-install
+  artifact and retry the install exactly once before failing loudly —
+  see `scripts/verify-install-deps.mjs` in `docs/idd-helper-scripts.md`
+  for one implementation.
 
 Use `true` only when a command is intentionally a no-op for the target
 repository. If validation is expensive, prefer an explicit lightweight
@@ -376,11 +495,84 @@ When WorkTrunk uses a pre-start install hook, that hook may satisfy
 `install-deps` automatically. The underlying command contract is the
 same: repeated runs must stay safe and predictable.
 
+### Project commands reference
+
+When a phase refers to a named command set, run the corresponding
+commands. **Adapt this table when applying this workflow to a
+different project.**
+
+If `.github/idd/config.json` exists and validates against the canonical
+schema at
+<https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json>,
+its `commands` object overrides the table below. Policy fields such as
+`skipIssueAuthorApprovalGate` and `maintainerApprovalActorPolicy` are
+the recorded machine-readable policy. Absent values keep the gate
+enabled and default approval actors to `owners-and-maintainers-only`.
+
+| Name                    | Commands                                                                                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **fix-validate**        | `npx dprint fmt "**/*.md" && npx markdownlint-cli2 --fix "**/*.md" && npx markdownlint-cli2 "**/*.md"`                                       |
+| **pre-push-validate**   | `npx dprint check "**/*.md" && npx markdownlint-cli2 "**/*.md" && npx cspell lint "**" --no-progress`                                        |
+| **post-fix-validate**   | `npx dprint fmt "**/*.md" && npx markdownlint-cli2 --fix "**/*.md" && npx markdownlint-cli2 "**/*.md" && npx cspell lint "**" --no-progress` |
+| **install-deps**        | `true`                                                                                                                                       |
+| **issue-scope**         | `roadmap-first`                                                                                                                              |
+| **orphan-first-policy** | `none`                                                                                                                                       |
+
+Non-shell rows such as **issue-scope** and **orphan-first-policy** are
+workflow settings. Read them literally, not as commands.
+
+`pre-push-validate` omits auto-fix. If lint fails, run
+**fix-validate**, commit, then re-run **pre-push-validate**.
+
+If **fix-validate** or **post-fix-validate** changes files, stage and
+commit them before any push, rebase, or step that requires a clean
+tree.
+
+`install-deps` must be idempotent. Re-running it in fresh, reused, or
+recreated worktrees must not require manual cleanup and should not leave
+unexpected tracked changes.
+
+**Tool availability**: run commands only when tools exist. For Node.js:
+prefer project scripts; use `npx <tool>` only when `npx` is available
+and no relevant script exists; else use `true`. For other tools, use
+`true` when absent.
+
+### Template sync mapping
+
+When this repository is itself the source of a reusable IDD
+distribution (it ships its own `idd-template/` copy for adopters to
+import), `idd-template/` is the canonical source of the distributed
+IDD template. When modifying any `idd-*.instructions.md` file,
+`docs/idd-workflow.md`, or `docs/customization.md` in that scenario,
+edit the corresponding file in `idd-template/` first, then sync the
+live target following
+[Exception: this repository is the source of a reusable IDD
+distribution](#exception-this-repository-is-the-source-of-a-reusable-idd-distribution).
+Where an `idd-template/` source expresses a project-specific value as
+a `{{placeholder}}`, this table gives the live ↔ template mapping:
+
+| Live value (`.github/instructions/`)                                | Template form (`idd-template/`)  |
+| ------------------------------------------------------------------- | -------------------------------- |
+| `idd-skill` in repo-name contexts                                   | `{{REPO_NAME}}`                  |
+| `idd-skill` in marker-prefix contexts (e.g. `idd-skill-roadmap-id`) | `{{PROJECT_MARKER_PREFIX}}`      |
+| **fix-validate** command string                                     | `{{FIX_VALIDATE_COMMANDS}}`      |
+| **pre-push-validate** command string                                | `{{PRE_PUSH_VALIDATE_COMMANDS}}` |
+| **post-fix-validate** command string                                | `{{POST_FIX_VALIDATE_COMMANDS}}` |
+| **install-deps** command string                                     | `{{INSTALL_DEPS_COMMAND}}`       |
+
+Match by the named command row in the Project commands table, not by
+command prefix, to avoid confusing commands that share the same
+executable.
+
+Commits that modify the `idd-template/` source without syncing the
+live target (regenerating or hand-mirroring, per the Exception section
+above) are incomplete; include both changes in the same atomic commit.
+
 ## Tooling Boundary
 
 IDD workflow files are tooling-agnostic. The only tooling contract is
 the `Project commands` table in
-`.github/instructions/idd-overview.instructions.md`.
+`.github/instructions/idd-overview-core.instructions.md`.
 
 The following policy matrix defines the tooling requirements and
 fallback order for repositories adopting IDD:
@@ -408,7 +600,8 @@ Decision points:
 
 This repository exposes `.github/workflows/pnpm-boundary.yml` as both:
 
-- a normal CI workflow (`push` and `pull_request`)
+- a normal CI workflow (`pull_request`-triggered, so each check runs
+  exactly once per change)
 - a reusable workflow (`workflow_call`) for downstream repositories
 
 The job shape is imported from
@@ -441,16 +634,32 @@ override commands with project-appropriate checks.
 
 ## Issue Scope
 
-The default `issue-scope` is `roadmap`, which keeps discovery inside the
-selected roadmap's explicit task graph. This is the safest mode for
-large initiatives because agents do not silently widen the work queue.
+The default `issue-scope` is `roadmap-first`: Discover runs the roadmap
+task-graph path first and falls back to A0-O orphan discovery only when
+the roadmap path yields no startable candidate. This keeps roadmap work
+prioritized while no longer stranding unblocked orphan issues.
 
-`orphan-first` changes discovery so unblocked orphan issues are
-considered before roadmap traversal. Choose it only when the repository
-intentionally wants small standalone issues to take priority over
-roadmap work. It is a workflow behavior change, so update the overview
-file and record the decision in local onboarding notes or repository
-documentation.
+The three values are:
+
+- `roadmap-first` (default): roadmap path first, orphan fallback when the
+  roadmap path is empty.
+- `roadmap`: roadmap-only — Discover never looks at orphan issues. The
+  safest mode for large initiatives that must not widen the work queue
+  at all.
+- `orphan-first`: the mirror image — unblocked orphan issues first, with
+  the roadmap path as the fallback. Choose it only when small standalone
+  issues should take priority over roadmap work.
+
+Changing `issue-scope` is a workflow behavior change, so update the
+overview file and record the decision in local onboarding notes or
+repository documentation.
+
+**Migration note.** The distributed default changed from `roadmap`
+(roadmap-only) to `roadmap-first`. Repositories that require strict
+roadmap-only discovery must now set `issue-scope: roadmap` explicitly.
+The fallback never widens the auto-claim queue to unapproved authors —
+the A3.5 issue-author approval gate still runs on every surfaced
+candidate.
 
 When `issue-scope` is `orphan-first`, keep `orphan-first-policy` as
 `none` to preserve the distributed default. Public or community-facing
@@ -735,7 +944,7 @@ sources.
 
 - `audit-docs.mjs` enforces synchronization rules defined in
   `sync-manifest.json`
-- Template copies use placeholders like `dotfiles` to support
+- Template copies use placeholders like `{{REPO_NAME}}` to support
   repository-specific values during import
 - The `sync-manifest.json` defines source→target mappings and sync modes
   (exact copy vs placeholder substitution)
@@ -760,29 +969,25 @@ copies.
 - Contributor tooling should guide edits toward canonical sources instead of
   editing mirrors first.
 
+The canonical/generated roles above are described from an **adopter's**
+perspective (IDD imported, no local `idd-template/`). When this repository
+is instead the source of a reusable IDD distribution, those roles reverse
+for the `idd-template/`-sourced pairs — see the exception at the end of
+[Where to Edit](#where-to-edit) below.
+
 ## Where to Edit
 
-**Always edit canonical sources** in `docs/` and `.github/instructions/`, not the
-template copies.
+**Edit canonical sources** in `docs/` and `.github/instructions/`, not the
+template copies. This section assumes an **adopter repository**; see the
+[exception](#exception-this-repository-is-the-source-of-a-reusable-idd-distribution)
+at the end of this section when this repository is itself the source of a
+reusable IDD distribution.
 
-**When editing canonical sources**:
+**When editing canonical sources**, update the file in its canonical
+location:
 
-1. Update the file in its canonical location:
-   - Policy guidance → `docs/customization.md`, `docs/policy-constants.md`, etc.
-   - Instruction files → `.github/instructions/idd-*.md`
-
-2. If the repository distributes IDD as a template (source of a reusable IDD
-   distribution), run the documentation audit check:
-
-   ```sh
-   node scripts/audit-docs.mjs --check
-   ```
-
-   This verifies canonical/template pairs and placeholder substitutions stay
-   consistent.
-
-3. Do **not** edit files in `idd-template/` first. Update canonical sources
-   before mirroring equivalent template changes in the same commit.
+- Policy guidance → `docs/customization.md`, `docs/policy-constants.md`, etc.
+- Instruction files → `.github/instructions/idd-*.instructions.md`
 
 **When working with template imports** (external repositories importing IDD):
 
@@ -792,6 +997,33 @@ template copies.
     canonical sources only
   - Never manually edit idd-template/ files — they represent the source
     template and may be re-imported
+
+### Exception: this repository is the source of a reusable IDD distribution
+
+The guidance above assumes an **adopter repository** — one that has
+imported IDD and has no local `idd-template/` directory, where editing
+`docs/` and `.github/instructions/` directly, as this section instructs,
+is correct.
+
+When this repository **is** the source of a reusable IDD distribution (it
+ships its own `idd-template/` copy for adopters to import),
+`audit/sync-manifest.json` reverses the direction for every pair whose
+`source` sits under
+`idd-template/`: `idd-template/` holds the canonical text, and the
+corresponding `docs/`/`.github/instructions/` file is the generated
+target — matching the `idd-generated-from` banner already present on
+`.github/instructions/idd-*.instructions.md` targets. In that scenario:
+
+1. Edit the `idd-template/` copy, not the `docs/`/`.github/instructions/`
+   target.
+2. For `exact`/`concreted` `audit/sync-manifest.json` pairs, run `node
+   scripts/sync-docs.mjs --apply` to regenerate the target from the
+   edited source. For `structure`/`contains` pairs, `sync-docs.mjs`
+   only checks headings or text presence and does not auto-generate
+   target content, so also apply the equivalent content change to the
+   target file by hand.
+3. Run `node scripts/audit-docs.mjs --check` to confirm the pair is back
+   in sync.
 
 ## Repository-local IDD policy
 
@@ -1012,6 +1244,85 @@ For further details, see:
 
 - `idd-claim.instructions.md` for how `trusted-marker-logins` and
   `collaborator-authored-markers` affect claim validation and parsing.
-- `idd-overview.instructions.md` for the always-loaded pointer that
+- `idd-overview-core.instructions.md` for the always-loaded pointer that
   keeps the forced-handoff policy discoverable to agents.
 - `docs/policy-constants.md` for distributed policy defaults.
+
+## Optional: out-of-band schema migration safety
+
+This is an **optional, adopter-conditional** appendix. It applies **only when
+your schema migrations are versioned by a numeric/monotonic prefix and applied
+out-of-band** — at merge or deploy — rather than by PR CI. If PR CI applies
+your migrations, or you do not use prefix-versioned migrations, skip this
+section entirely: it is **not** part of the default IDD merge gate, and the
+core, stack-neutral workflow does not depend on it.
+
+Under parallel worktrees, two concurrent runs can each author a new migration
+with the **same version prefix**. PR CI usually does not apply migrations, so
+the collision stays invisible until the out-of-band apply fails at deploy — a
+duplicate primary key can wedge the pipeline for hours.
+
+When migrations are applied out-of-band, adopters can add two conditional
+checks as a repository-local convention:
+
+1. **Before authoring a migration**, confirm the latest committed migration
+   version on the integration branch and number the new migration strictly
+   above it (re-check just before pushing, since a sibling run may have landed
+   one meanwhile).
+2. **Before merge**, dry-run the migration inside a transaction that is rolled
+   back, so a version collision or a broken migration is caught locally rather
+   than at out-of-band apply time.
+
+Keep this guidance tool-neutral: it is keyed on "numeric-prefix versioning plus
+out-of-band apply", not on any specific database or migration framework. Do not
+wire it into the default F-phase merge gate.
+
+## Optional: CI cost discipline on billed runners
+
+This is an **optional** appendix for adopters running on metered or private
+GitHub Actions runners. The core, cross-agent workflow does not require it.
+
+<!-- dotfiles-divergence: master-branch -->
+IDD's frequent **master-into-feature re-sync cadence** is the dominant driver of
+CI minutes — every sync re-runs the PR's checks. Uncached container builds and
+per-PR multi-arch builds compound it. Levers to control the cost:
+
+- **Gate heavy jobs behind a paths-filter** so expensive builds run only when
+  the paths they cover actually change.
+- **Cache build layers** (image layer cache, dependency cache) so re-syncs
+  reuse prior work instead of rebuilding from scratch.
+- **Keep multi-arch / publish jobs on integration branch pushes only**, not on
+  every PR head, so per-PR cost stays low.
+- Remember that **re-sync cadence is the main cost lever**: the
+  <!-- dotfiles-divergence: master-branch -->
+  merge-from-`master` freshness model trades CI minutes for merge safety, so
+  tune the heavy jobs rather than loosening the freshness gate.
+
+**Attribute the cost before optimizing.** Rank jobs by
+`runs × billed-minutes` over a representative window before changing
+anything — billing rounds each job up to the whole minute, so a
+frequently-triggered workflow with many short jobs can outweigh one
+long job, and a single slow step or test file often dominates a suite.
+Fix the measured hot spot, not the assumed one.
+
+When the heaviest per-PR job is a **test suite**, the same
+integration branch split applies:
+
+- **Coverage/reporting-only work runs on integration branch pushes,
+  not every PR head** — instrumenting every re-sync is pure overhead
+  when no gate (a coverage threshold, a required check) consumes the
+  result.
+- **Affected-only tests on PR heads, full suite on the integration
+  branch**, when the test runner supports change-based selection and
+  catching an out-of-range regression post-merge is acceptable.
+- **Fake or inject time in retry/backoff/polling tests** rather than
+  sleeping in real time — one real-timer test can dominate suite
+  wall-clock, and the fix is behavior-preserving.
+
+**Right-size the runner to the job**: lightweight automation (label
+hygiene, stale sweeps, advisory gates) on the smallest runner class,
+standard or larger runners reserved for genuinely heavyweight build or
+test jobs.
+
+These are repository-local optimizations; they do not change the IDD merge gate
+or the cross-agent workflow.

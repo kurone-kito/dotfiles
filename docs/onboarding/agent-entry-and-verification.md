@@ -36,7 +36,7 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for the
 cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-`.github/instructions/idd-overview.instructions.md`. Open the routed
+`.github/instructions/idd-overview-core.instructions.md`. Open the routed
 phase file manually when the current step changes.
 ```
 
@@ -65,16 +65,21 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for the
 cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-`.github/instructions/idd-overview.instructions.md`. Open the routed
+`.github/instructions/idd-overview-core.instructions.md`. Open the routed
 phase file manually when the current step changes.
 ```
 
-### AGENTS.md (for Codex CLI)
+### AGENTS.md (for Codex CLI and OpenCode)
+
+`AGENTS.md` is the shared agents.md-standard entry file for both Codex
+CLI and OpenCode: each auto-loads `AGENTS.md` from the repository root
+natively, so this single file covers both runtimes and OpenCode needs
+no dedicated root file of its own.
 
 If `AGENTS.md` already exists, add the shared IDD workflow section and
-keep the wording explicit that Codex CLI agents should manually open
-`.github/instructions/idd-overview.instructions.md` and the routed
-phase file before starting IDD work.
+keep the wording explicit that Codex CLI and OpenCode agents should
+manually open `.github/instructions/idd-overview-core.instructions.md`
+and the routed phase file before starting IDD work.
 
 If `AGENTS.md` does not exist, create a minimal file such as:
 
@@ -96,15 +101,55 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for the
 cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-`.github/instructions/idd-overview.instructions.md`. Open the routed
+`.github/instructions/idd-overview-core.instructions.md`. Open the routed
 phase file manually when the current step changes.
 ```
+
+#### OpenCode: optional `opencode.json` recipe
+
+OpenCode's native `AGENTS.md` auto-load already delivers the IDD
+workflow stub above to every session; the steps below are an
+**optional** Copilot-parity recipe, not a requirement.
+
+- OpenCode's `opencode.json` `instructions` array can point at
+  additional rule files, but every listed file loads
+  **unconditionally** into every session — unlike GitHub Copilot's
+  `applyTo` frontmatter, which OpenCode does not read (frontmatter in
+  a loaded file is inert there). Skip this recipe for weak or local
+  models (see
+  [Weak-model guardrails](../idd-workflow.md#weak-model-guardrails)):
+  the extra context can crowd out task-relevant content instead of
+  helping.
+- When an operator does opt in, list only the shared entry file, not
+  the whole `.github/instructions/` directory, to approximate the
+  Copilot `applyTo` scoping without flooding every session:
+
+  ```json
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "instructions": [".github/instructions/idd-overview-core.instructions.md"]
+  }
+  ```
+
+- If the operator installs the optional `issue-authoring` companion
+  from Step 2 under a directory OpenCode reads natively —
+  `.claude/skills/` or `.opencode/skills/` — it is already available to
+  OpenCode without extra configuration. Step 2 also allows other
+  runtime-specific locations (for example `.github/skills/`); OpenCode
+  does not discover a bundle placed only in one of those, so copy or
+  symlink it into `.claude/skills/` or `.opencode/skills/` as well when
+  OpenCode also needs it.
+- If a target repository runs OpenCode as an autonomous worker under
+  its own GitHub identity (not just an interactive assistant), add
+  that login to `trustedMarkerActors` (and the advisory-bot lists if
+  it also reviews) in `.github/idd/config.json` — a config-values edit
+  only; `schemas/policy.schema.json` stays agent-agnostic.
 
 ### GEMINI.md
 
 If `GEMINI.md` already exists, apply the same IDD workflow section as
-`AGENTS.md`, adapted to Gemini CLI's wording and still pointing to
-`docs/idd-workflow.md`.
+`AGENTS.md`, adapted to the Antigravity CLI (formerly Gemini CLI)
+wording and still pointing to `docs/idd-workflow.md`.
 
 If `GEMINI.md` does not exist, create a minimal file such as:
 
@@ -126,7 +171,7 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for the
 cross-agent entry path and phase routing.
 
 Before starting IDD work, open
-`.github/instructions/idd-overview.instructions.md`. Open the routed
+`.github/instructions/idd-overview-core.instructions.md`. Open the routed
 phase file manually when the current step changes.
 ```
 
@@ -136,7 +181,7 @@ If `.github/copilot-instructions.md` already exists, add a parallel IDD
 workflow section there as well so GitHub Copilot execution surfaces
 receive the same entry path. Keep the
 `excludeAgent: "code-review"` behavior in
-`.github/instructions/idd-overview.instructions.md`; repository-wide
+`.github/instructions/idd-overview-core.instructions.md`; repository-wide
 Copilot guidance may still apply during review.
 
 ## Verification details
@@ -151,10 +196,13 @@ checks, confirm the detailed items below.
       file list is present in `.github/instructions/`.
 - [ ] `docs/getting-started.md`, `docs/concepts.md`,
       `docs/customization.md`, `docs/reference.md`,
-      `docs/idd-workflow.md`,
+      `docs/policy-constants.md`, `docs/idd-workflow.md`,
       `docs/idd-review-policy-profiles.md`,
       `docs/idd-helper-scripts.md`,
-      `docs/idd-comment-minimization.md`, and `docs/permissions.md`
+      `docs/idd-comment-minimization.md`,
+      `docs/idd-resume-detail.md`,
+      `docs/idd-advisory-wait-shell-fallback.md`,
+      `docs/idd-design-rationale.md`, and `docs/permissions.md`
       are present.
 - [ ] `profiles/README.md` and the non-default profile artifacts under
       `profiles/` are present.
@@ -193,11 +241,11 @@ checks, confirm the detailed items below.
 ### Placeholder, marker, and config alignment
 
 - [ ] No `{{...}}` placeholders remain in any copied file.
-- [ ] `.github/instructions/idd-overview.instructions.md` has
+- [ ] `.github/instructions/idd-overview-core.instructions.md` has
       `applyTo: "**"` and `excludeAgent: "code-review"` in its
       frontmatter.
 - [ ] The `Project commands` table in
-      `.github/instructions/idd-overview.instructions.md`
+      `.github/instructions/idd-overview-core.instructions.md`
       contains the correct commands for this project.
 - [ ] If the project chooses `issue-scope: orphan-first`, the
       `orphan-first-policy` value is recorded as `none`,
@@ -206,7 +254,7 @@ checks, confirm the detailed items below.
 - [ ] The `dotfiles-roadmap-id` and
       `dotfiles-blocked-by` marker names in
       `.github/instructions/idd-discover.instructions.md` and
-      `.github/instructions/idd-overview.instructions.md`
+      `.github/instructions/idd-overview-core.instructions.md`
       match the prefix chosen for this project.
 - [ ] If `.github/idd/config.json` is used, it matches the recorded
       `iddVersion`, marker prefix, merge/review/thread policies,
@@ -218,8 +266,15 @@ checks, confirm the detailed items below.
 - [ ] `CLAUDE.md` exists and references `docs/idd-workflow.md`, unless
       the operator explicitly opted out of creating it.
 - [ ] `AGENTS.md` exists and references `docs/idd-workflow.md`, unless
-      the operator explicitly opted out of creating it.
+      the operator explicitly opted out of creating it; this single
+      file covers both Codex CLI and OpenCode.
 - [ ] `GEMINI.md` exists and references `docs/idd-workflow.md`, unless
       the operator explicitly opted out of creating it.
 - [ ] If `.github/copilot-instructions.md` existed before onboarding,
       it now includes the IDD workflow reference as well.
+- [ ] If the operator opted into the optional `opencode.json`
+      Copilot-parity recipe, the target repository's `opencode.json`
+      lists only
+      `.github/instructions/idd-overview-core.instructions.md`.
+- [ ] If the operator did not opt into that recipe, no `opencode.json`
+      file was added to the target repository as part of onboarding.

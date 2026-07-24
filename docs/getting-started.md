@@ -33,6 +33,26 @@ The onboarding guide copies the portable instruction files, asks for
 project-specific command values, and updates agent entry files such as
 `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or Copilot instructions.
 
+### Validate the import with IDD doctor (optional)
+
+After importing IDD, run the doctor script once in a repository that
+has the helper installed to catch common setup drift:
+
+```sh
+node scripts/idd-doctor.mjs
+```
+
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+This repository has no local `scripts/` directory; its
+[Helper Runtime Profile](idd-policy.md#helper-runtime-profile) is
+`ephemeral-npx`, so run the doctor via the pinned `npx` invocation
+documented there instead of the `node scripts/idd-doctor.mjs` form
+above.
+
+The report checks core IDD file presence, unresolved placeholders,
+marker-prefix consistency, command-table sanity, and (when `gh` access
+is available) branch-protection and required-check signals.
+
 ## 2. Choose the Review Policy
 
 Before the first full loop, decide whether the default Copilot advisory
