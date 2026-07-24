@@ -287,10 +287,13 @@ required-check set is partial.
 `master`'s merge gate currently comes from a default-branch ruleset
 matching `~DEFAULT_BRANCH`; classic branch protection is not
 configured today, though the CI wait unions both sources if that
-changes. The ruleset's `required_status_checks` rule lists four
-required check contexts, spanning the Linting and Test workflows:
-`lint`, `Lua syntax check`, `Bash tests (bats)`, and
-`PowerShell tests (Pester)`.
+changes. The ruleset's `required_status_checks` rule lists five
+required check contexts, spanning the Linting and Test workflows plus
+the advisory-convergence gate added by #149: `lint`,
+`Lua syntax check`, `Bash tests (bats)`, `PowerShell tests (Pester)`,
+and `idd-advisory-convergence`. `PowerShell 5.1 tests (Pester)` (#166)
+is deliberately **not** on this list -- advisory only, per that
+issue's explicit scope, while the leg proves stable.
 
 [`#109`](https://github.com/kurone-kito/dotfiles/issues/109) and
 [`#110`](https://github.com/kurone-kito/dotfiles/issues/110) (children
@@ -300,14 +303,55 @@ had already fixed the environmental failures blocking
 promoted (`chezmoi` missing on the Ubuntu runner; 13 Windows-only
 Pester cases), but closed without evidence that the actual promotion
 ran. [`#163`](https://github.com/kurone-kito/dotfiles/issues/163)
-registered all four contexts on the ruleset directly.
+registered the original four contexts on the ruleset directly; #149
+added the fifth.
 
 Per `.github/instructions/idd-ci.instructions.md`, when an IDD run
 reaches the shared CI wait, it builds the required-check set from
 rulesets and branch protection; if neither source yields a
 required-check set at all, IDD stops and posts a hold for missing
 merge-gate policy evidence rather than silently merging. The
-four-check ruleset above is now that required set.
+five-check ruleset above is now that required set.
+
+### `idd-doctor` findings
+
+A full `idd-doctor` run (pinned `ephemeral-npx` spec) currently exits
+non-zero (`result: failed`) and reports these findings -- one `ERROR`
+and five `WARN`s; each is expected, not a defect, and #218 tracks the
+one change that would clear the `ERROR` and let the run pass cleanly:
+
+- **Toolchain residue, `markdownlint-cli2`** (two instances: the
+  config command table and the overview project-commands table): a
+  false-positive pattern match against the pinned upstream commit's
+  own toolchain, which happens to use the same tool. Tracked in #218.
+- **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
+  this environment**: expected on any fresh clone that has not yet run
+  the wiring step documented in [Worktree Guard](#worktree-guard) --
+  `core.hooksPath` is local, per-clone config that #148 could not ship
+  in a commit. Not a repository defect; wire it per-clone as needed.
+- **Branch protection not readable for `kurone-kito/dotfiles:master`**:
+  expected. This repository's merge gate comes from a ruleset, not
+  classic branch protection, so the classic-protection read returns
+  empty/`404`. **`ciGate.trustEmptyProtectionReads`** stays at its
+  distributed default `false` (fail-closed; confirmed deliberately in
+  #146), so this surfaces as a warning rather than being silently
+  treated as "no protection configured".
+- **Post-merge cleanup backlog** (34 merged PRs lacking F4 cleanup
+  evidence): a new-since-the-original-pin check this repository has
+  not yet investigated or run against; applying its remediation
+  touches GitHub-visible state across many historical PRs, so it is
+  tracked as its own follow-up rather than run blind here. Tracked in
+  #220.
+- **Unresolved placeholders in `.github/ISSUE_TEMPLATE/idd-task.yml`**
+  (the `path`, `outcome`, `section`, and `evidence` textarea hints,
+  each double-curly-brace-wrapped): a false positive -- these are
+  GitHub issue-form placeholder hint text, not unresolved IDD import
+  placeholders, and `idd-doctor`'s scanner does not distinguish the
+  two. Tracked in #218.
+
+`checkReleaseTagDrift` and `checkDependencyVersionDrift` stay silent
+in this repository, as expected (no git tags exist here, and there is
+no `pnpm-lock.yaml`).
 
 ### Issue authoring gate
 
