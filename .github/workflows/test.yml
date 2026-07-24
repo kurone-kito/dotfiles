@@ -140,6 +140,12 @@ jobs:
         run: |
           if (-not (Get-Module -ListAvailable Pester |
               Where-Object { $_.Version -ge [version]'5.0' })) {
+            # PS5.1's .NET default protocol set can exclude TLS 1.2, which
+            # PSGallery requires. Add it without dropping whatever
+            # protocols were already enabled (same pattern as
+            # 55-setup-editors.ps1.tmpl's vim-plug bootstrap).
+            [Net.ServicePointManager]::SecurityProtocol =
+              [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
             Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
           }
       - name: Run Pester tests

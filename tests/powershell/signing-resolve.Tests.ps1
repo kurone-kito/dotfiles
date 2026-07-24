@@ -135,7 +135,9 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
         throw 'Could not locate the profile here-string in rendered output'
       }
       $renderedProfile = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-profile" -f [guid]::NewGuid())
-      [System.IO.File]::WriteAllText($renderedProfile, $Matches[1], [System.Text.UTF8Encoding]::new($false))
+      # Preserve the trailing newline Set-Content used to add; WriteAllText
+      # writes $Matches[1] exactly as-is.
+      [System.IO.File]::WriteAllText($renderedProfile, $Matches[1] + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 
       $scratch = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-scratch" -f [guid]::NewGuid())
       New-Item -ItemType Directory -Path $scratch -Force | Out-Null
