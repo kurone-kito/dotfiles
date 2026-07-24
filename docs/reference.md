@@ -12,7 +12,7 @@ or [Core concepts](concepts.md) before using this reference.
 
 | Need                              | Phase  | Authoritative source                                                                        |
 | --------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
-| Shared definitions and commands   | All    | [IDD overview](../.github/instructions/idd-overview.instructions.md)                        |
+| Shared definitions and commands   | All    | [IDD overview](../.github/instructions/idd-overview-core.instructions.md)                   |
 | Select the next issue             | A0-A4  | [Discover](../.github/instructions/idd-discover.instructions.md)                            |
 | Audit roadmap completion          | A1.5   | [Roadmap audit](../.github/instructions/idd-roadmap-audit.instructions.md)                  |
 | Evaluate issue suitability        | A4.5   | [Suitability triage](../.github/instructions/idd-suitability.instructions.md)               |
@@ -41,6 +41,7 @@ or [Core concepts](concepts.md) before using this reference.
 | Safe adopter customization surfaces    | [Customization](customization.md)                           |
 | Live digest and comment cleanup        | [IDD comment minimization](idd-comment-minimization.md)     |
 | Helper-script adoption policy          | [IDD helper script evaluation](idd-helper-scripts.md)       |
+| Reversible vs. gated mutations         | [IDD autonomy contract](idd-autonomy-contract.md)           |
 
 ## Maintainer Note
 

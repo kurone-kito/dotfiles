@@ -32,14 +32,28 @@ forced-handoff if:
 - The evidence `{claim-id}`, branch, or linked PR does not match the live
   active claim or inheritable released branch/PR state — stop and report
   the mismatch; do not claim, push, or mutate review state.
+- The forced-handoff **authorization gate** does not hold. See
+  [`idd-claim.instructions.md` rule 7](../.github/instructions/idd-claim.instructions.md#claim-state-parsing)
+  for the full criteria — apply it in addition to the checks above; it
+  is not restated here.
 
 **Re-claim rule** — Re-claim only after the human-gated handoff mechanism
 has already updated the GitHub claim stream to a released or
 successor-ready state. If the displaced non-stale claim still remains
 active, stop and wait rather than inventing a local superseding claim.
-Once GitHub state reflects the handoff outcome, re-claim via
-`idd-claim.instructions.md` with a fresh `{claim-id}` and the branch named
-in the forced-handoff evidence.
+Once GitHub state reflects the handoff outcome, continue via
+`idd-claim.instructions.md` on the branch named in the forced-handoff evidence.
+The verified `forced-handoff` marker has already set the active claim to its
+pre-recorded `new-agent-id` / `new-claim-id` pair (rule 7), so the successor
+**adopts both verbatim** as its own `{agent-id}` / `{claim-id}` for the rest
+of the run — including `--agent-id` and `--claim-id` at F2/F3's
+`pre-merge-readiness` — rather than minting a claim-id or keeping its own
+agent-id (an invented agent-id silently fails later checks as
+`agent-id-mismatch`; see `idd-claim.instructions.md`'s Claim verification
+section). No separate `claimed-by` post is required for the transfer itself.
+This adopted claim is **sticky** (re-derived on every resolution pass); see
+the same section for the adopt-verbatim vs. release-then-fresh reconciliation
+paths if a fresh claim appears not to take effect.
 
 **Displaced-session guard** — If the forced-handoff evidence names a
 `{claim-id}` that this current session had already verified before this
@@ -48,20 +62,43 @@ Do not push, comment, reply, resolve threads, request reviewers, or merge
 until a maintainer reassigns ownership.
 
 The successor must cite the forced-handoff evidence in its resume report or
-digest `Authoritative by`. It must not silently inherit the old `{claim-id}`.
+digest `Authoritative by`. It must not reuse the displaced old `{claim-id}` as
+its own — always use the marker's assigned `new-claim-id`. (`{agent-id}` may
+legitimately equal the displaced claim's agent-id; only `{claim-id}` must
+always be the fresh marker-assigned value.)
 
 ## §W1 — PR exists (1 match), no worktree
 
-Run `git fetch origin`. If a local branch named `{branch}` exists, check
-for unpushed commits: `git log origin/{branch}..{branch} --oneline`.
+Run `git fetch origin` from the primary worktree (this is a
+HEAD-preserving command and is safe there). If a local branch named
+`{branch}` exists, check for unpushed commits:
+`git log origin/{branch}..{branch} --oneline`.
 
-- **Commits appear**: create the worktree from the existing local branch.
-  If reviews exist on the PR → resume from E11; if no reviews → D1.
-- **No local commits**: reset the branch first:
-  `git branch -f {branch} origin/{branch}`, then create worktree.
+- **Commits appear**: create the sibling worktree from the existing
+  local branch using the B1 naming convention:
+  `git worktree add <sibling-worktree-path> {branch}`. If reviews
+  exist on the PR → resume from E11; if no reviews → D1.
+- **No local commits**: reset the branch first from the primary
+  worktree (HEAD-preserving):
+  `git branch -f {branch} origin/{branch}`, then create the sibling
+  worktree: `git worktree add <sibling-worktree-path> {branch}`.
 
-If no local branch named `{branch}` exists, create from remote:
-`git branch {branch} origin/{branch}`, then create worktree.
+If no local branch named `{branch}` exists, create from remote (still
+from the primary worktree, HEAD-preserving): `git branch {branch}
+origin/{branch}`, then create the sibling worktree:
+`git worktree add <sibling-worktree-path> {branch}`.
+
+`<sibling-worktree-path>` follows the B1 naming convention (sibling
+of the repository root, with `/` in branch name replaced by `-`).
+
+Anti-patterns (do not substitute these for the sequence above):
+
+- `git switch -c {branch} origin/{branch}` — moves the primary
+  worktree's HEAD to the issue branch and skips worktree creation.
+- `git checkout -b {branch} origin/{branch}` — equivalent failure.
+
+See [B1 Anti-patterns](../.github/instructions/idd-work.instructions.md#anti-patterns)
+for the full rule.
 
 ## §W2 — PR exists (1 match), rebase in progress
 
@@ -86,7 +123,8 @@ run **pre-push-validate**, push, then wait for CI
 
 ## §W5 — PR exists (1 match), clean, unpushed
 
-Sync main (D1 rebase) + **pre-push-validate** + push (D2), then go to
+<!-- dotfiles-divergence: master-branch -->
+Sync master (D1 rebase) + **pre-push-validate** + push (D2), then go to
 Step 3.
 
 ## §W6 — PR exists (multiple matches)
@@ -103,8 +141,24 @@ claim ownership:
 
 ## §W7 — No PR, remote branch exists
 
-Fetch remote branch, create local branch and worktree from it, then resume
-from C1. C exits to D1 immediately if the critique pass finds nothing new.
+<!-- dotfiles-divergence: master-branch -->
+From the primary worktree (HEAD stays on `master`):
+
+1. `git fetch origin {branch}` — fetch the remote tip.
+2. `git branch {branch} origin/{branch}` — create the local branch
+   without moving primary HEAD.
+3. `git worktree add <sibling-worktree-path> {branch}` — create the
+   sibling worktree using the B1 naming convention.
+
+Then resume from C1 inside the new worktree. C exits to D1
+immediately if the critique pass finds nothing new.
+
+Anti-patterns (do not substitute these for steps 2–3): `git switch -c
+{branch} origin/{branch}` or `git checkout -b {branch}
+origin/{branch}` — both move the primary worktree's HEAD to the
+issue branch and skip worktree creation. See
+[B1 Anti-patterns](../.github/instructions/idd-work.instructions.md#anti-patterns)
+for the full rule.
 
 ## §W8 — No PR, no remote branch, no worktree, local branch exists
 
