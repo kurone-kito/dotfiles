@@ -126,6 +126,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Confirm Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -142,7 +144,13 @@ jobs:
           }
       - name: Run Pester tests
         shell: powershell
-        run: Invoke-Pester tests/powershell/ -Output Detailed
+        # Force-import Pester 5+ first: PSModulePath can list the inbox
+        # Pester 3.4 module ahead of the CurrentUser-scoped install above,
+        # and plain auto-loading would silently run the suite (or fail)
+        # under the wrong major version.
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          Invoke-Pester tests/powershell/ -Output Detailed
 
   lua-syntax:
     name: Lua syntax check
