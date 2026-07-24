@@ -156,11 +156,14 @@ for the readiness buckets, output chooser, and approval boundary.
 **Policy**: `roadmap-first` (migrated from `roadmap`, confirmed by
 roadmap #144).
 
-Discovery prefers roadmap-linked candidates but falls back to orphan
-discovery (A0-O) when none are ready. **`orphanFirstPolicy`**: `none`
-(distributed default) — the orphan fallback path stays disabled
-outright, so `roadmap-first` currently behaves like `roadmap` in
-practice until this policy is deliberately loosened.
+`roadmap-first`'s upstream-documented semantics prefer roadmap-linked
+candidates and fall back to orphan discovery (A0-O) when none are
+ready — but this repository's **`orphanFirstPolicy`** stays `none`
+(distributed default), which disables the orphan fallback path
+outright. In this repository, no orphan-discovery fallback runs;
+`roadmap-first` behaves identically to `roadmap` until
+`orphanFirstPolicy` is deliberately loosened to
+`maintainer-approved` or `public-disabled`.
 
 ## Worktree Guard
 
@@ -236,9 +239,11 @@ Confirmed at their distributed defaults rather than given an explicit
 ## Divergence Register
 
 Every intentional deviation from the pinned upstream template carries
-a `<!-- dotfiles-divergence: <slug> -->` marker at its point of use, so
-a future re-import can detect and preserve it instead of silently
-reverting to upstream's default. Current slugs:
+a `dotfiles-divergence: <slug>` marker at its point of use -- an HTML
+comment (`<!-- ... -->`) in Markdown/YAML/instruction files, a line
+comment (`// ...`) in JavaScript -- so a future re-import can detect
+and preserve it instead of silently reverting to upstream's default.
+Current slugs:
 
 | Slug                                 | What it marks                                                                                                                                                                                        | Introduced by |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
