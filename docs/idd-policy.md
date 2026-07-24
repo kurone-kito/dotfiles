@@ -316,7 +316,7 @@ five-check ruleset above is now that required set.
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
-`result: passed` with five `WARN`s and no `ERROR`; each below is
+`result: passed` with four `WARN`s and no `ERROR`; each below is
 expected, not a defect. #218 resolved the one finding that was a
 genuine `ERROR` (the `idd-task.yml` placeholder syntax) by
 reformatting it; the remaining findings are accepted noise, recorded
@@ -343,12 +343,24 @@ rediscover them:
   distributed default `false` (fail-closed; confirmed deliberately in
   #146), so this surfaces as a warning rather than being silently
   treated as "no protection configured".
-- **Post-merge cleanup backlog** (34+ merged PRs lacking F4 cleanup
-  evidence): a new-since-the-original-pin check this repository has
-  not yet investigated or run against; applying its remediation
-  touches GitHub-visible state across many historical PRs, so it is
-  tracked as its own follow-up rather than run blind here. Tracked in
-  #220.
+Issue #220 investigated and resolved the **post-merge cleanup
+backlog** check (new since the roadmap's original pin): it flags
+merged PRs missing a `<!-- idd-cleanup-evidence: ... -->` comment,
+which requires running `idd-audit-pr-cleanup` and posting the marker
+regardless of whether the run finds anything to minimize -- a `clean`
+result (no candidates) still needs its own evidence comment, or the
+check keeps flagging the PR. The backlog existed because this
+repository's F4 step is a manual, agent-run part of the merge sequence
+with no server-side backstop, so most of this session's merges skipped
+it. #220 cleared the existing 35-PR backlog by running the pinned
+`ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply --claim-issue
+220 --claim-id <claim-id>` CLI against every flagged PR and posting
+the evidence comment by hand; `idd-doctor` now reports zero backlog
+PRs. This does not prevent regrowth on future merges that skip F4;
+issue #223 tracks adding the server-side `post-merge-cleanup.yml`
+workflow upstream ships for the `vendored-node` profile, adapted for
+`ephemeral-npx` the same way #149 adapted
+`idd-advisory-convergence.yml`.
 
 `.github/ISSUE_TEMPLATE/idd-task.yml`'s `proposed_change` and
 `acceptance_criteria` textarea placeholders formerly used
