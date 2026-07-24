@@ -119,13 +119,15 @@ $RECYCLE.BIN/
 ### THE PROJECT SPECIFIES #################################################
 
 ### AI Agents ###
-# Claude Code local config (settings, cache, etc.) stays local-only,
-# but project-shared resources under .claude/skills, .claude/agents,
-# and .claude/commands ship with the repository.
+# Claude Code local config (settings.local.json, cache, etc.) stays
+# local-only, but project-shared resources under .claude/skills,
+# .claude/agents, .claude/commands, and the curated .claude/settings.json
+# permission baseline ship with the repository.
 .claude/*
 !.claude/skills/
 !.claude/agents/
 !.claude/commands/
+!.claude/settings.json
 
 # OpenAI Codex sandbox
 .codex/
