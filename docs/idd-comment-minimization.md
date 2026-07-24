@@ -128,6 +128,42 @@ not minimize comments that still determine review currency, advisory
 wait state, unresolved-thread state, unreplied-comment state, hold
 state, or a pending maintainer decision.
 
+### Server-side fallback (optional)
+
+The idd-skill source repository ships a
+`.github/workflows/post-merge-cleanup.yml` workflow that triggers
+on `pull_request_target.closed` events filtered to `merged == true`.
+The workflow invokes the helper:
+
+```sh
+node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check --format json
+```
+
+It then parses the report and posts the canonical
+`<!-- idd-cleanup-evidence: ... -->` comment so every actually-merged
+PR receives evidence within a few minutes even when the agent did
+not run F4 manually.
+
+The template (`idd-template/`) does **not** ship this workflow
+because `scripts/audit-pr-cleanup.mjs` is part of the optional
+helper bundle and is not present in default instructions-only
+installs. Adopters who install the helper can copy the source
+workflow file as-is; permissions required are
+`contents: read`, `issues: write`, and `pull-requests: write`, plus
+`pull_request_target` (not `pull_request`) so that fork PRs can
+post comments under a writeable `GITHUB_TOKEN`.
+
+The agent F4 step in `idd-merge.instructions.md` remains the
+canonical, mandatory contract. The server-side workflow is a
+backstop, not a replacement: same helper, same candidate rules,
+same evidence comment shape, non-blocking on errors. Double-posting is
+prevented by the cleanup-evidence record itself, not by Actions
+concurrency: the workflow skips when any `<!-- idd-cleanup-evidence:`
+comment already exists, and the agent F4 step skips its own post when a
+prior success record is already present — including the one the workflow
+posted. The workflow's PR-keyed `concurrency` group only serializes
+workflow runs against each other; it does not gate the agent's local F4.
+
 ## GitHub mechanism
 
 GitHub GraphQL exposes `minimizeComment`:
@@ -217,6 +253,7 @@ wait, or review-currency checks. Candidate prefixes are:
 - `advisory-wait:`
 - `advisory-wait-recovery:`
 - `<!-- advisory-wait:`
+- `advisory-reroll:`
 
 Always skip candidates when any of these are true:
 
@@ -282,8 +319,11 @@ claim may use `--skip-claim-check`, but ordinary IDD agents should not.
 
 During claim verification, the helper ignores `claimed-by` and
 `unclaimed-by` markers whose GitHub author is not trusted. By default,
-trusted marker authors are the current authenticated GitHub actor and
-the logins listed in `IDD_TRUSTED_MARKER_ACTORS`. Set
+trusted marker authors are the current authenticated GitHub actor plus
+the union of the logins listed in `IDD_TRUSTED_MARKER_ACTORS` and the
+`trustedMarkerActors` list in `.github/idd/config.json`; the resolved
+list and its source mix are emitted in the report
+(`trustedMarkerActors`, `trustedMarkerActorsSources`). Set
 `IDD_TRUST_COLLABORATOR_MARKERS=true` only when the repository
 explicitly allows any Write, Maintain, or Admin collaborator to post
 operational markers.
@@ -323,8 +363,18 @@ does not re-block the merge; it is an explicit record only.
 
 Post this comment to the PR after a successful or partial apply. The
 HTML comment token on the first line acts as a stable machine-readable
-marker so a resuming agent can detect whether the evidence was already
-posted:
+marker so a resuming agent — or a concurrent `post-merge-cleanup`
+workflow run — can detect that evidence was already posted. The
+**agent-side** rule keys on the prior **success** record: **skip the
+post when a `<!-- idd-cleanup-evidence:` comment recording a successful
+outcome (`applied` / `clean`) already exists on the PR**, so the agent
+never stacks a duplicate success record — even when this run's own apply
+returned `applied` for residual markers a concurrent `post-merge-cleanup`
+workflow run minimized first; still post when no prior success record
+exists, or to correct an existing `failed` / `incomplete` /
+`permission-blocked` record. The `post-merge-cleanup` workflow instead
+uses a simpler presence-only guard (it skips on any existing marker),
+which suffices for its single-shot post-merge run:
 
 ```markdown
 <!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->

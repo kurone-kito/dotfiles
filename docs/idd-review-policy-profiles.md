@@ -108,6 +108,23 @@ If the external bot can produce blocking `CHANGES_REQUESTED` reviews or
 decision-relevant comments, classify those items as PATH A unless the
 operator explicitly narrows them.
 
+### Configuring a primary and an optional secondary advisory bot
+
+The `advisoryWait.primaryBotLogin` and `advisoryWait.secondaryBotLogin`
+config fields let a profile choose which bot the advisory-wait gate tracks and
+add an **optional, non-gating** fallback. Set
+`advisoryWait.primaryBotLogin` to route the gate to a non-Copilot bot (it
+defaults to Copilot). Set `advisoryWait.secondaryBotLogin` to a second
+requestable review bot when the repository wants a fallback while the primary
+is throttled: IDD then requests the secondary **once per HEAD** only when the
+primary is cap-exhausted or stalled / rate-limited. The secondary is a
+**supplement only** — it never satisfies the primary advisory-wait gate, never
+receives a primary `advisory-wait` marker, and its output is ordinary advisory
+input (classified PATH A / PATH B by the snapshot and triage rules). Leaving
+`advisoryWait.secondaryBotLogin` unset (or equal to the primary) keeps
+single-bot behavior. Pick a secondary whose `--add-reviewer` request appears
+on the PR timeline so the once-per-HEAD guard can observe it.
+
 ## PR Review Profile Edit Surfaces
 
 Use this checklist when a repository records a PR review profile during
@@ -190,6 +207,9 @@ branch protection, and any human review rules configured outside IDD.
 - `.github/instructions/idd-advisory-wait.instructions.md`: mark the
   advisory wait helper unused by this profile, or remove local
   references to it from the customized phase flow.
+- `docs/idd-advisory-wait-shell-fallback.md`: mark the doc unused by
+  this profile, or remove local references to it, matching the
+  `idd-advisory-wait.instructions.md` disposition above.
 - `.github/instructions/idd-pre-merge.instructions.md`: gate on CI,
   branch protection, unresolved conversations, freshness, and claim
   evidence without requiring an advisory reviewer.

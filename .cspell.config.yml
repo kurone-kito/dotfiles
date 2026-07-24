@@ -34,6 +34,7 @@ words:
   - AKIAEXAMPLE
   - anomalyco
   - curlrc
+  - deprioritize
   - desync
   - desynced
   - dorny
@@ -52,17 +53,21 @@ words:
   - luac
   - luks
   - mergo
+  - MINIMIZABLE
   - MYVIMRC
   - nnoremap
   - onlogon
+  - ONNX
   - psmux
   - pylint
+  - qwen
   - rerere
   - sheerun
   - taskrc
   - TOCTOU
   - tpope
   - undispositioned
+  - unioned
   - unpushed
   - unreplied
   - unscored
