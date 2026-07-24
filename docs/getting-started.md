@@ -42,6 +42,13 @@ has the helper installed to catch common setup drift:
 node scripts/idd-doctor.mjs
 ```
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+This repository has no local `scripts/` directory; its
+[Helper Runtime Profile](idd-policy.md#helper-runtime-profile) is
+`ephemeral-npx`, so run the doctor via the pinned `npx` invocation
+documented there instead of the `node scripts/idd-doctor.mjs` form
+above.
+
 The report checks core IDD file presence, unresolved placeholders,
 marker-prefix consistency, command-table sanity, and (when `gh` access
 is available) branch-protection and required-check signals.
