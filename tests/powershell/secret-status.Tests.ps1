@@ -36,6 +36,11 @@ BeforeAll {
 
   function script:Invoke-Status {
     param([string[]]$ExtraArgs = @())
+    # Windows PowerShell 5.1 wraps a native process's redirected stderr
+    # lines as ErrorRecord objects; GitHub Actions' pwsh/powershell shell
+    # steps default $ErrorActionPreference to Stop, which would otherwise
+    # turn this expected non-zero-exit output into a terminating error.
+    $ErrorActionPreference = 'Continue'
     $stdout = & pwsh -NoLogo -NoProfile -File $script:ScriptPath -Manifest $script:Manifest @ExtraArgs 2>&1
     return @{ Output = ($stdout -join "`n"); ExitCode = $LASTEXITCODE }
   }

@@ -43,6 +43,11 @@ BeforeAll {
     $argsExpr = ($ScriptArgs | ForEach-Object { ConvertTo-PSSingleQuoted $_ }) -join ' '
     $scriptPathQ = ConvertTo-PSSingleQuoted $script:ScriptPath
     $cmd = "$stubBlock$envBlock & $scriptPathQ $argsExpr 2>&1; exit `$LASTEXITCODE"
+    # Windows PowerShell 5.1 wraps a native process's redirected stderr
+    # lines as ErrorRecord objects; GitHub Actions' pwsh/powershell shell
+    # steps default $ErrorActionPreference to Stop, which would otherwise
+    # turn this expected non-zero-exit output into a terminating error.
+    $ErrorActionPreference = 'Continue'
     $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
     return @{ Output = ($output -join "`n"); ExitCode = $LASTEXITCODE }
   }
