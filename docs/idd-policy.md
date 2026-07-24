@@ -343,24 +343,24 @@ rediscover them:
   distributed default `false` (fail-closed; confirmed deliberately in
   #146), so this surfaces as a warning rather than being silently
   treated as "no protection configured".
-Issue #220 investigated and resolved the **post-merge cleanup
-backlog** check (new since the roadmap's original pin): it flags
-merged PRs missing a `<!-- idd-cleanup-evidence: ... -->` comment,
-which requires running `idd-audit-pr-cleanup` and posting the marker
-regardless of whether the run finds anything to minimize -- a `clean`
-result (no candidates) still needs its own evidence comment, or the
-check keeps flagging the PR. The backlog existed because this
-repository's F4 step is a manual, agent-run part of the merge sequence
-with no server-side backstop, so most of this session's merges skipped
-it. #220 cleared the existing 35-PR backlog by running the pinned
-`ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply --claim-issue
-220 --claim-id <claim-id>` CLI against every flagged PR and posting
-the evidence comment by hand; `idd-doctor` now reports zero backlog
-PRs. This does not prevent regrowth on future merges that skip F4;
-issue #223 tracks adding the server-side `post-merge-cleanup.yml`
-workflow upstream ships for the `vendored-node` profile, adapted for
-`ephemeral-npx` the same way #149 adapted
-`idd-advisory-convergence.yml`.
+- **Post-merge cleanup backlog** (new since the roadmap's original
+  pin, resolved by #220): the check flags merged PRs missing a
+  `<!-- idd-cleanup-evidence: ... -->` comment, which requires running
+  `idd-audit-pr-cleanup` and posting the marker regardless of whether
+  the run finds anything to minimize -- a `clean` result (no
+  candidates) still needs its own evidence comment, or the check keeps
+  flagging the PR. The backlog existed because this repository's F4
+  step is a manual, agent-run part of the merge sequence with no
+  server-side backstop, so most of this session's merges skipped it.
+  #220 cleared the existing 35-PR backlog by running the pinned
+  `ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply --claim-issue
+  220 --claim-id <claim-id>` CLI against every flagged PR and posting
+  the evidence comment by hand; `idd-doctor` now reports zero backlog
+  PRs. This does not prevent regrowth on future merges that skip F4;
+  issue #223 tracks adding the server-side `post-merge-cleanup.yml`
+  workflow upstream ships for the `vendored-node` profile, adapted for
+  `ephemeral-npx` the same way #149 adapted
+  `idd-advisory-convergence.yml`.
 
 `.github/ISSUE_TEMPLATE/idd-task.yml`'s `proposed_change` and
 `acceptance_criteria` textarea placeholders formerly used
