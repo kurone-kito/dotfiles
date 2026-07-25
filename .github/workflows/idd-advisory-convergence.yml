@@ -16,7 +16,7 @@ name: IDD advisory-convergence gate
 # added alongside pull_request. Several such events can fire in quick
 # succession during review triage (e.g. a batch of disposition
 # replies), so `concurrency:` below debounces them to at most one
-# active run per head SHA instead of several stacked ones -- this
+# active run per pull request instead of several stacked ones -- this
 # exact multi-run pattern is a documented, previously-investigated
 # upstream incident: kurone-kito/idd-skill#1381 (empirically
 # reproduced on that repository's own PR #1383; see that repository's
@@ -26,22 +26,22 @@ name: IDD advisory-convergence gate
 # `cancel-in-progress: true` does not fully close the gap: a stale
 # CANCELLED run can still race a later SUCCESS run for the identical
 # head SHA in the required-check rollup display. When that happens,
-# recover with `gh run rerun <run-id>` on the *specific* stuck run --
-# find it via `gh run list --workflow=idd-advisory-convergence.yml
-# --json databaseId,headSha,conclusion,createdAt` filtered to the
-# current head SHA, matching against `gh pr checks <pr-number>`'s
-# reported `completedAt` for this check. Do not assume the
-# most-recently-completed run among several for that SHA is the stuck
-# one -- if the match is unclear, rerun every run for that head SHA
-# rather than guessing (rerunning an already-successful run is a
-# harmless no-op). Use the plain whole-run `gh run rerun <run-id>`
-# form, not `--failed`: a stale CANCELLED run has no job with a
-# `failure` conclusion for `--failed` to retry, so it would silently
-# do nothing. `workflow_dispatch` does not reliably flip the rollup
-# for its own head SHA either (it has no `pull_request` context of its
-# own), so prefer rerunning an existing pull_request-family-triggered
-# run over dispatching a fresh one whenever one already exists for the
-# current head SHA.
+# recover with `gh run rerun <run-id>` on the run(s) for the current
+# head SHA -- find them via `gh run list
+# --workflow=idd-advisory-convergence.yml --limit 50 --json
+# databaseId,headSha,conclusion` filtered to that exact SHA (raise
+# `--limit` past its default of 20 on a busy PR). If more than one run
+# matches and it is unclear which one the rollup is stuck on, rerun all
+# of them rather than guessing -- rerunning an already-successful run
+# is safe (it just re-confirms the same result; it still consumes
+# runner time, so it is not literally a no-op). Use the plain
+# whole-run `gh run rerun <run-id>` form, not `--failed`: a stale
+# CANCELLED run has no job with a `failure` conclusion for `--failed`
+# to retry, so it would silently do nothing. `workflow_dispatch` does
+# not reliably flip the rollup for its own head SHA either (it has no
+# `pull_request` context of its own), so prefer rerunning an existing
+# pull_request-family-triggered run over dispatching a fresh one
+# whenever one already exists for the current head SHA.
 on:
   pull_request:
     types: [opened, reopened, synchronize]
