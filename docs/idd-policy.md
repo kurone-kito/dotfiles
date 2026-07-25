@@ -233,8 +233,8 @@ upstream.
 
 ## Advisory Bot Logins
 
-**`advisoryBotLogins`**: `["copilot-pull-request-reviewer[bot]",
-"coderabbitai[bot]"]`.
+**`advisoryBotLogins`**:
+`["copilot-pull-request-reviewer[bot]", "coderabbitai[bot]"]`.
 
 Both logins were confirmed against live review events on
 [PR #193](https://github.com/kurone-kito/dotfiles/pull/193), which
@@ -264,9 +264,9 @@ directory).
 ## CI Gate External Check Waivers
 
 **`ciGate.externalCheckWaivers.mode`**: `maintainer-authorized`.
-**`ciGate.externalChecks.waivable`**: `[{ "selector":
-"idd-advisory-convergence" }]`. **`authorityPolicy`** and
-**`maxValidity`** are left unset (distributed defaults
+**`ciGate.externalChecks.waivable`**:
+`[{ "selector": "idd-advisory-convergence" }]`. **`authorityPolicy`**
+and **`maxValidity`** are left unset (distributed defaults
 `owners-and-maintainers-only` and `PT24H`).
 
 This prepares the waiver path for roadmap #144's #149 (hosting the
@@ -365,9 +365,9 @@ rediscover them:
   false-positive pattern match against the pinned upstream commit's
   own toolchain, which happens to use the same tool, not a residual
   upstream-marker-prefix string. `idd-doctor`'s toolchain-residue
-  scanner has no per-finding waiver flag (confirmed via `idd-doctor
-  --help` while investigating #218), so this is accepted as permanent
-  noise rather than suppressed.
+  scanner has no per-finding waiver flag (confirmed via
+  `idd-doctor --help` while investigating #218), so this is accepted
+  as permanent noise rather than suppressed.
 - **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
   this environment**: expected on any fresh clone that has not yet run
   the wiring step documented in [Worktree Guard](#worktree-guard) --
@@ -390,10 +390,10 @@ rediscover them:
   step is a manual, agent-run part of the merge sequence with no
   server-side backstop, so most of this session's merges skipped it.
   #220 cleared the existing 35-PR backlog by running the pinned
-  `ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply --claim-issue
-  220 --claim-id <claim-id>` CLI against every flagged PR and posting
-  the evidence comment by hand; `idd-doctor` now reports zero backlog
-  PRs. #223 closed the regrowth gap by wiring the server-side
+  `ephemeral-npx` `idd-audit-pr-cleanup` CLI in apply mode, under the
+  active claim, against every flagged PR, and posting the evidence
+  comment by hand; `idd-doctor` now reports zero backlog PRs. #223
+  closed the regrowth gap by wiring the server-side
   [`post-merge-cleanup.yml`](#post-merge-cleanup-automation) workflow,
   adapted from upstream's `vendored-node`-profile original for
   `ephemeral-npx` the same way #149 adapted
