@@ -194,10 +194,47 @@ reports an **enabled-but-inert** finding when `worktreeGuard.enabled`
 is `true` but `core.hooksPath` is not pointed at `.githooks`. Bypass
 the guard for a single intentional commit or push with `--no-verify`.
 
+## Post-Merge Cleanup Automation
+
+[`.github/workflows/post-merge-cleanup.yml`](../.github/workflows/post-merge-cleanup.yml)
+(#223) runs the F4 comment-cleanup step server-side on every merged PR,
+via a `pull_request_target: closed` trigger filtered to
+`merged == true` (or an explicit `workflow_dispatch`, additionally
+re-verified against `gh pr view` before it runs `--apply`, since the
+dispatch input itself is not otherwise constrained to a merged PR). It
+invokes the pinned `ephemeral-npx`
+`idd-audit-pr-cleanup --pr <N> --apply --skip-claim-check --format json`
+CLI and posts the same `<!-- idd-cleanup-evidence: ... -->` comment an
+agent's manual F4 step would, skipping the post when a prior evidence
+comment already exists.
+
+This backstops the manual, agent-run F4 step documented under
+[`idd-doctor` findings](#idd-doctor-findings): #220 found that most of
+one session's merges skipped F4 by hand, growing a 35-PR backlog before
+this workflow existed. With the workflow wired, every future merge
+gets cleanup evidence within minutes regardless of whether the merging
+agent ran F4 itself; the agent's own F4 step still runs first when
+present and simply finds nothing left to do (duplicate-success-record
+skip rule in
+[`docs/idd-comment-minimization.md`](idd-comment-minimization.md)).
+
+`runs-on: ubuntu-latest` follows this repository's own
+`idd-advisory-convergence.yml` convention rather than upstream's
+`ubuntu-slim`, matching how this repository already runs its other
+npx+gh workflows. The `actions/checkout` / `actions/setup-node` steps
+keep upstream's pinned-commit-SHA choices rather than this repository's
+usual floating major-version tags, since this workflow's elevated
+`pull_request_target` permissions warrant the same supply-chain
+hardening upstream already applied. The trust-model invariants that
+actually gate those permissions (no `ref:` override, no PR-head
+execution, merged-only guard including the `workflow_dispatch`
+re-verification, least-privilege `permissions:`) are preserved from
+upstream.
+
 ## Advisory Bot Logins
 
-**`advisoryBotLogins`**: `["copilot-pull-request-reviewer[bot]",
-"coderabbitai[bot]"]`.
+**`advisoryBotLogins`**:
+`["copilot-pull-request-reviewer[bot]", "coderabbitai[bot]"]`.
 
 Both logins were confirmed against live review events on
 [PR #193](https://github.com/kurone-kito/dotfiles/pull/193), which
@@ -227,9 +264,9 @@ directory).
 ## CI Gate External Check Waivers
 
 **`ciGate.externalCheckWaivers.mode`**: `maintainer-authorized`.
-**`ciGate.externalChecks.waivable`**: `[{ "selector":
-"idd-advisory-convergence" }]`. **`authorityPolicy`** and
-**`maxValidity`** are left unset (distributed defaults
+**`ciGate.externalChecks.waivable`**:
+`[{ "selector": "idd-advisory-convergence" }]`. **`authorityPolicy`**
+and **`maxValidity`** are left unset (distributed defaults
 `owners-and-maintainers-only` and `PT24H`).
 
 This prepares the waiver path for roadmap #144's #149 (hosting the
@@ -328,9 +365,9 @@ rediscover them:
   false-positive pattern match against the pinned upstream commit's
   own toolchain, which happens to use the same tool, not a residual
   upstream-marker-prefix string. `idd-doctor`'s toolchain-residue
-  scanner has no per-finding waiver flag (confirmed via `idd-doctor
-  --help` while investigating #218), so this is accepted as permanent
-  noise rather than suppressed.
+  scanner has no per-finding waiver flag (confirmed via
+  `idd-doctor --help` while investigating #218), so this is accepted
+  as permanent noise rather than suppressed.
 - **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
   this environment**: expected on any fresh clone that has not yet run
   the wiring step documented in [Worktree Guard](#worktree-guard) --
@@ -353,12 +390,12 @@ rediscover them:
   step is a manual, agent-run part of the merge sequence with no
   server-side backstop, so most of this session's merges skipped it.
   #220 cleared the existing 35-PR backlog by running the pinned
-  `ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply --claim-issue
-  220 --claim-id <claim-id>` CLI against every flagged PR and posting
-  the evidence comment by hand; `idd-doctor` now reports zero backlog
-  PRs. This does not prevent regrowth on future merges that skip F4;
-  issue #223 tracks adding the server-side `post-merge-cleanup.yml`
-  workflow upstream ships for the `vendored-node` profile, adapted for
+  `ephemeral-npx` `idd-audit-pr-cleanup` CLI in apply mode, under the
+  active claim, against every flagged PR, and posting the evidence
+  comment by hand; `idd-doctor` now reports zero backlog PRs. #223
+  closed the regrowth gap by wiring the server-side
+  [`post-merge-cleanup.yml`](#post-merge-cleanup-automation) workflow,
+  adapted from upstream's `vendored-node`-profile original for
   `ephemeral-npx` the same way #149 adapted
   `idd-advisory-convergence.yml`.
 
