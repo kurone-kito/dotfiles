@@ -199,11 +199,14 @@ the guard for a single intentional commit or push with `--no-verify`.
 [`.github/workflows/post-merge-cleanup.yml`](../.github/workflows/post-merge-cleanup.yml)
 (#223) runs the F4 comment-cleanup step server-side on every merged PR,
 via a `pull_request_target: closed` trigger filtered to
-`merged == true` (or an explicit `workflow_dispatch`). It invokes the
-pinned `ephemeral-npx` `idd-audit-pr-cleanup --pr <N> --apply
---skip-claim-check --format json` CLI and posts the same
-`<!-- idd-cleanup-evidence: ... -->` comment an agent's manual F4 step
-would, skipping the post when a prior evidence comment already exists.
+`merged == true` (or an explicit `workflow_dispatch`, additionally
+re-verified against `gh pr view` before it runs `--apply`, since the
+dispatch input itself is not otherwise constrained to a merged PR). It
+invokes the pinned `ephemeral-npx`
+`idd-audit-pr-cleanup --pr <N> --apply --skip-claim-check --format json`
+CLI and posts the same `<!-- idd-cleanup-evidence: ... -->` comment an
+agent's manual F4 step would, skipping the post when a prior evidence
+comment already exists.
 
 This backstops the manual, agent-run F4 step documented under
 [`idd-doctor` findings](#idd-doctor-findings): #220 found that most of
@@ -215,15 +218,18 @@ present and simply finds nothing left to do (duplicate-success-record
 skip rule in
 [`docs/idd-comment-minimization.md`](idd-comment-minimization.md)).
 
-`runs-on: ubuntu-latest` and the `actions/checkout@v7` /
-`actions/setup-node@v4` steps follow this repository's own
-`idd-advisory-convergence.yml` conventions rather than upstream's
-`ubuntu-slim` + pinned-action-SHA choices, to stay consistent with how
-this repository already runs its other npx+gh workflows; the
-trust-model invariants that actually gate the elevated
-`pull_request_target` permissions (no `ref:` override, no PR-head
-execution, merged-only guard, least-privilege `permissions:`) are
-preserved verbatim from upstream.
+`runs-on: ubuntu-latest` follows this repository's own
+`idd-advisory-convergence.yml` convention rather than upstream's
+`ubuntu-slim`, matching how this repository already runs its other
+npx+gh workflows. The `actions/checkout` / `actions/setup-node` steps
+keep upstream's pinned-commit-SHA choices rather than this repository's
+usual floating major-version tags, since this workflow's elevated
+`pull_request_target` permissions warrant the same supply-chain
+hardening upstream already applied. The trust-model invariants that
+actually gate those permissions (no `ref:` override, no PR-head
+execution, merged-only guard including the `workflow_dispatch`
+re-verification, least-privilege `permissions:`) are preserved from
+upstream.
 
 ## Advisory Bot Logins
 

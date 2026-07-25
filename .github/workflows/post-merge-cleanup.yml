@@ -3,40 +3,52 @@
 # forks. That is safe here only because all of the following hold, and any
 # future edit to this file must preserve them:
 #   - No unreviewed PR-head content is ever checked out: the sole
-#     `actions/checkout` step below carries no `ref:` override, so it
-#     resolves to the `pull_request_target` default -- the base branch's
-#     tip at event time. Because the job only proceeds when
+#     `actions/checkout` step below carries no `ref:` override. For the
+#     `pull_request_target` trigger this resolves to the base branch's
+#     tip at event time -- because the job only proceeds when
 #     `merged == true`, that tip already includes this PR's own merge
 #     (this repository merges via merge commits, so it is typically that
 #     merge commit itself) -- it is never the PR's own head SHA, and
 #     never content that has not already passed through the merge
-#     decision.
+#     decision. For `workflow_dispatch`, checkout instead resolves to
+#     whatever ref the dispatch targeted (the default branch, when
+#     dispatched from the Actions UI on that branch) -- this is not
+#     governed by the `pull_request_target` ref rule, but the checked-out
+#     code is never executed either way (see the next point), so this
+#     difference does not widen the trust boundary.
 #   - No PR-head code, workflow, or action is ever executed: the only
 #     script that runs is the pinned `ephemeral-npx` `idd-audit-pr-cleanup`
 #     CLI (see docs/idd-policy.md "Helper Runtime Profile"), invoked with
-#     the PR number as inert numeric data (interpolated into a
-#     single-quoted shell variable, not evaluated).
+#     the PR number passed through `env:` as inert numeric data, never
+#     interpolated into the script body.
 #   - The `cleanup` job only runs when
-#     `github.event.pull_request.merged == true`, or via an explicit,
-#     human-triggered `workflow_dispatch` -- never against an open or
-#     unmerged pull request.
+#     `github.event.pull_request.merged == true`; for `workflow_dispatch`
+#     (human-triggered, but not otherwise constrained by GitHub) the job
+#     additionally re-verifies via `gh pr view` that the given PR number
+#     is actually merged before invoking `--apply`, and refuses to run
+#     otherwise.
 #   - `permissions:` stays least-privilege: `contents: read`,
 #     `issues: write`, `pull-requests: write` -- no `contents: write` and
 #     no elevated or secret-bearing scopes.
 # If a future change adds a `ref:` override on the checkout step, downloads
 # or executes PR-head content, widens `permissions:`, or removes the
-# merged-only guard, re-review this trust model before merging that change.
+# merged-only guard (including the workflow_dispatch re-verification),
+# re-review this trust model before merging that change.
 #
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml at pin
 # 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. This repository runs the
 # ephemeral-npx helper profile (no vendored scripts/ directory), so this
 # invokes the packaged idd-audit-pr-cleanup CLI rather than upstream's
-# `node scripts/audit-pr-cleanup.mjs` form. `runs-on` and the
-# checkout/setup-node steps follow this repository's own
-# idd-advisory-convergence.yml conventions rather than upstream's
-# ubuntu-slim + pinned-SHA choices, to stay consistent with how this
-# repository already runs its other npx+gh workflows.
+# `node scripts/audit-pr-cleanup.mjs` form. `runs-on` follows this
+# repository's own idd-advisory-convergence.yml convention
+# (`ubuntu-latest`) rather than upstream's `ubuntu-slim`, since that is
+# the runner label this repository already uses for its other npx+gh
+# workflows (lint.yml and stale.yml use `ubuntu-slim` for actions-only
+# steps with no npx/gh dependency). The checkout/setup-node action pins
+# are copied verbatim from upstream's own pinned-SHA choices, since this
+# workflow's elevated `pull_request_target` permissions warrant the same
+# supply-chain hardening upstream already applied.
 name: Post-merge cleanup
 on:
   pull_request_target:
@@ -61,24 +73,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: '.nvmrc'
       - name: Run F4 cleanup (server-side fallback)
         id: cleanup
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
         run: |
-          set +e
-          PR_NUMBER='${{ github.event.pull_request.number || github.event.inputs.pr_number }}'
           if [ -z "$PR_NUMBER" ]; then
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # workflow_dispatch is human-triggered but not otherwise
+            # constrained by GitHub to a merged PR, unlike the
+            # pull_request_target trigger's `if:` guard above. Re-verify
+            # directly rather than trusting the dispatch input.
+            MERGED=$(gh pr view "$PR_NUMBER" --json merged --jq '.merged' 2>/dev/null || echo "")
+            if [ "$MERGED" != "true" ]; then
+              echo "::error::PR #$PR_NUMBER is not merged; refusing to run cleanup for a manual dispatch against an unmerged PR"
+              exit 1
+            fi
+          fi
+          set +e
           JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
