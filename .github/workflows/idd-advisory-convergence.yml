@@ -85,7 +85,7 @@ jobs:
           # <!-- dotfiles-divergence: master-branch -->
           ref: master
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
       # This repository runs the ephemeral-npx helper profile (no
