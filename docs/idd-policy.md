@@ -120,9 +120,12 @@ via `idd-doctor` and `idd-helper-bundle-manifest` against this
 repository) so audited helper commands resolve against the same schema
 version this page documents, while `.github/instructions/` and
 `.claude/skills/` themselves stay on the prior 0.4.0-round import until
-roadmap #239's sibling tracks #232/#233 re-import them to the same
-`v0.6.0` baseline. Resolve this skew when those tracks land — the pin
-should track the instructions/skills baseline again once they catch up.
+roadmap #239's sibling tracks re-import them to the same `v0.6.0`
+baseline — #232 for `.github/instructions/`, #235 for the
+`.claude/skills/issue-authoring/` companion bundle (#233 covers the
+remaining docs/profiles/githooks/scripts file set, not `.claude/skills/`).
+Resolve this skew when those tracks land — the pin should track the
+instructions/skills baseline again once they catch up.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -316,13 +319,14 @@ already existed structurally at the pin (only their JSON Schema
 `description` text was added later) and is confirmed unchanged at
 `v0.6.0`. Per the roadmap's confirmed operator decision,
 every key below stays at its distributed default this round — none are
-turned on in `.github/idd/config.json`. `.github/idd/config.json` was
-re-validated against the fetched `v0.6.0` schema with `ajv-cli validate
---spec=draft2020` (passed) and with `idd-doctor` run from the pinned
-`v0.6.0` tarball itself (`result: passed`, `PASS .github/idd/config.json
-validates against policy.schema.json`, the same four pre-existing
-warnings as before) — no correctness break found, so
-`.github/idd/config.json` itself is unchanged by this issue.
+turned on in `.github/idd/config.json`.
+`.github/idd/config.json` was re-validated against the fetched
+`v0.6.0` schema with `ajv-cli validate --spec=draft2020` (passed) and
+with `idd-doctor` run from the pinned `v0.6.0` tarball itself
+(`result: passed`,
+`PASS .github/idd/config.json validates against policy.schema.json`,
+the same four pre-existing warnings as before) — no correctness break
+found, so `.github/idd/config.json` itself is unchanged by this issue.
 
 ### Genuinely new in 0.5.0/0.6.0
 
