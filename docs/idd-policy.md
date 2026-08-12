@@ -10,15 +10,16 @@ The machine-readable mirror lives at
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Pinned upstream commit**: `4e8c7043edcb00dd8447dee83e7a17e5b2604d5d`
-(abbreviated `4e8c704`; `git describe`: `v0.4.0-1242-g4e8c7043`),
-imported by roadmap #144. `iddVersion` in
+**Pinned upstream commit**: `0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`
+(abbreviated `0a9c90d`; tag `v0.6.0`), audited by roadmap #239's
+0.5.0/0.6.0 policy-schema track (#234), which supersedes the 0.4.0-round
+pin imported by roadmap #144. `iddVersion` in
 [`.github/idd/config.json`](../.github/idd/config.json) is bumped
-separately, by #150's final verification sweep.
+separately, by roadmap #239's own final-verification track.
 
 ## Merge Policy
 
@@ -103,16 +104,29 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
-The tarball URL is pinned to the same upstream commit used as the
-import baseline for `.github/instructions/` and `.claude/skills/`, so
-the helper surface never drifts ahead of the checked-in templates.
-Bump that commit deliberately whenever the IDD instructions are
-re-imported; do **not** point the spec at a mutable `refs/heads/main`
-ref. The companion prerequisite #96 pins Node.js 24.15.0 via
+The tarball URL is normally pinned to the same upstream commit used as
+the import baseline for `.github/instructions/` and `.claude/skills/`,
+so the helper surface never drifts ahead of the checked-in templates —
+bump that commit deliberately whenever the IDD instructions are
+re-imported, and do **not** point the spec at a mutable
+`refs/heads/main` ref. This pin currently reflects a **transitional
+exception**: roadmap #239's schema-audit track (#234) bumped it to
+`v0.6.0` (`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`, confirmed working
+via `idd-doctor` and `idd-helper-bundle-manifest` against this
+repository) so audited helper commands resolve against the same schema
+version this page documents, while `.github/instructions/` and
+`.claude/skills/` themselves stay on the prior 0.4.0-round import until
+roadmap #239's sibling tracks re-import them to the same `v0.6.0`
+baseline — #232 for `.github/instructions/`, #235 for the
+`.claude/skills/issue-authoring/` companion bundle (#233 covers the
+remaining docs/profiles/githooks/scripts file set, not `.claude/skills/`).
+Resolve this skew when those tracks land — the pin should track the
+instructions/skills baseline again once they catch up.
+The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
 always resolves in a fresh worktree.
@@ -292,6 +306,114 @@ Confirmed at their distributed defaults rather than given an explicit
   solo-CODEOWNER self-approval deadlock) matches this repository's
   existing autonomous-merge intent. Recorded here as a deliberate
   confirmation, not an oversight.
+
+## New 0.5.0/0.6.0 Schema Keys Left at Default
+
+Audited by roadmap #239's policy-schema track (#234): a structural diff
+of `schemas/policy.schema.json` between the prior 0.4.0-round pin
+(imported by roadmap #144, 1242 commits past the `v0.4.0` tag but still
+376 commits behind the `v0.5.0` tag) and `v0.6.0`
+(`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`) found only three genuinely
+new properties; everything else the issue's starting inventory listed
+already existed structurally at the pin (only their JSON Schema
+`description` text was added later) and is confirmed unchanged at
+`v0.6.0`. Per the roadmap's confirmed operator decision,
+every key below stays at its distributed default this round — none are
+turned on in `.github/idd/config.json`.
+`.github/idd/config.json` was re-validated against the fetched
+`v0.6.0` schema with `ajv-cli validate --spec=draft2020` (passed) and
+with `idd-doctor` run from the pinned `v0.6.0` tarball itself
+(`result: passed`,
+`PASS .github/idd/config.json validates against policy.schema.json`,
+the same four pre-existing warnings as before) — no correctness break
+found, so `.github/idd/config.json` itself is unchanged by this issue.
+
+### Genuinely new in 0.5.0/0.6.0
+
+- **`advisoryWait.exemptBotAuthoredPrs`**: `false` (0.6.0). Opt-in
+  claimless-waiver exemption letting a bot-authored PR with no claim
+  history pass advisory-convergence as `not_applicable` without a
+  per-PR maintainer waiver. Left at default: this repository's
+  dependency-update PRs (Dependabot) are handled by existing merge
+  automation, and enabling a bot-authorship exemption is a deliberate
+  future decision, not something to adopt silently alongside a docs
+  audit.
+- **`ciGate.trustSourcePinnedRequiredChecks`**: `false` (0.5.0,
+  fail-closed by default). Opt-in trust for a required check whose
+  ruleset/branch-protection entry is source-pinned to a specific
+  GitHub App/integration (`app_id`/`integration_id`). This
+  repository's `master` merge gate comes from a default-branch ruleset
+  matching `~DEFAULT_BRANCH` (see
+  [Required status checks on `master`](#required-status-checks-on-master))
+  whose required-check entries are plain name-matched, not
+  source-pinned by `app_id`/`integration_id` — this key's fail-closed
+  downgrade path is not currently reachable here. Recorded as a
+  deliberate confirmation, not an oversight; revisit if the ruleset
+  ever gains a source-pinned entry.
+- **`helperRuntime.packageSpec`**: unset (0.5.0). Optional pinned npm
+  spec/tarball/commit archive overriding the mutable main-archive
+  fallback for `package-manager`/`ephemeral-npx` helper invocations.
+  This repository already pins every helper invocation explicitly per
+  command (see [Helper Runtime Profile](#helper-runtime-profile)) via
+  the `npx --package <tarball-url>` form, so this key would be
+  redundant with the existing per-invocation pinning convention.
+
+### Confirmed pre-existing (unchanged since the 0.4.0-round pin)
+
+The following inventory keys already existed structurally before this
+round; each is documented with its confirmed default in
+[`docs/policy-constants.md`](./policy-constants.md), reconfirmed
+unchanged at `v0.6.0`:
+
+- **`advisoryWait.secondaryBotLogin`**: unset. Already recorded as
+  intentionally unset in [Advisory Bot Logins](#advisory-bot-logins)
+  (0.4.0 round) — reconfirmed here that this decision still holds and
+  applies unchanged at `v0.6.0`.
+- **`advisoryWait.capExhaustedRoute`**: `phase-specific` (schema enum
+  `["phase-specific", "hold"]`; this repository leaves it unset at that
+  default) — E14 skips the wait and proceeds to E15, while F2/F3 still
+  hold for a maintainer. See
+  [Advisory Review Defaults](./policy-constants.md#advisory-review-defaults).
+- **`advisoryWait.requestCap`**: `30`. **`advisoryWait.pendingWindow`**:
+  `PT30M`. **`advisoryWait.settledWindow`**: `PT10M`.
+  **`advisoryWait.pollInterval`**: `PT2M`. See
+  [Advisory Review Defaults](./policy-constants.md#advisory-review-defaults).
+- **`ciGate.externalChecks.advisory`** / **`ciGate.externalChecks.waivable`**:
+  selector lists, both already configurable and already exercised for
+  `waivable` in this repository (see
+  [CI Gate External Check Waivers](#ci-gate-external-check-waivers));
+  `advisory` is unset (empty by default). The 0.6.0 claimless-waiver
+  feature (a claim-id `none` sentinel plus a `--claimless`
+  authoring-CLI flag) is a helper/protocol-level capability, not an
+  additional schema key — its only schema surface is
+  `advisoryWait.exemptBotAuthoredPrs` above.
+- **`discover.activeClaimPreScanBatchSize`**: `10`. See
+  [Concurrent Session Defaults](./policy-constants.md#concurrent-session-defaults).
+- **`claim.verifySettleDelay`**: `PT5S`. See
+  [Critique And Review Loop Defaults](./policy-constants.md#critique-and-review-loop-defaults).
+- **`critiqueLoop.cPhaseLowSeveritySkipAfter`**: `3`.
+  **`critiqueLoop.e10NoProgressHoldAfter`**: `3`. See
+  [Critique And Review Loop Defaults](./policy-constants.md#critique-and-review-loop-defaults).
+- **`reviewEscalation.changesRequestedFirstEscalation`**: `PT24H`.
+  **`reviewEscalation.changesRequestedSecondEscalation`**: `PT48H`.
+  See
+  [Critique And Review Loop Defaults](./policy-constants.md#critique-and-review-loop-defaults).
+
+### Not a schema key this round
+
+- **`instructionProfile`**: confirmed still **not** a property of
+  `schemas/policy.schema.json` at `v0.6.0` — the root schema object
+  keeps `additionalProperties: false` and defines no such key anywhere
+  in the schema tree. This remains not-yet-implemented upstream, not
+  merely "not chosen"; do not set this key (already recorded in
+  [`docs/idd-workflow.md`](./idd-workflow.md#lite-instruction-profile-opt-in)
+  and [`docs/customization.md`](./customization.md)).
+- **`CI_RUNNER_LABEL`**: a repository Actions *variable* consumed by
+  `idd-advisory-convergence.yml`, not a `.github/idd/config.json` /
+  `policy.schema.json` key. No entry needed in this schema-focused
+  section; its actual adoption is deferred to #237 (the
+  workflow-reconciliation track), which owns workflow YAML and
+  repository settings.
 
 ## Divergence Register
 
