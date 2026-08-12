@@ -365,9 +365,10 @@ unchanged at `v0.6.0`:
   intentionally unset in [Advisory Bot Logins](#advisory-bot-logins)
   (0.4.0 round) — reconfirmed here that this decision still holds and
   applies unchanged at `v0.6.0`.
-- **`advisoryWait.capExhaustedRoute`**: no dedicated key — the
-  distributed behavior is phase-specific (E14 skips the wait and
-  proceeds to E15; F2/F3 hold for a maintainer). See
+- **`advisoryWait.capExhaustedRoute`**: `phase-specific` (schema enum
+  `["phase-specific", "hold"]`; this repository leaves it unset at that
+  default) — E14 skips the wait and proceeds to E15, while F2/F3 still
+  hold for a maintainer. See
   [Advisory Review Defaults](./policy-constants.md#advisory-review-defaults).
 - **`advisoryWait.requestCap`**: `30`. **`advisoryWait.pendingWindow`**:
   `PT30M`. **`advisoryWait.settledWindow`**: `PT10M`.
