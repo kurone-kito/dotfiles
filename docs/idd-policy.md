@@ -613,14 +613,17 @@ one more instance #218 missed -- the `background` field's placeholder
 (`{{file or feature}}`, `{{observed state}}`, `{{PR or thread link}}`,
 `{{root cause}}`) -- and reformatted it the same way.
 `.github/ISSUE_TEMPLATE/idd-task.yml` is inside `idd-doctor`'s scanned
-file set (it is not one of the excluded prefixes in
-`checkPlaceholders`); the scanner still missed this instance because
-its regex (`findPlaceholders` in `scripts/idd-doctor.mjs`) only
-matches a single `[A-Za-z0-9_-]+` token between `{{` and `}}` -- the
-same pattern #218's four single-word hints (`{{path}}`, `{{outcome}}`,
-etc.) matched. This field's multi-word hints (`{{file or feature}}`,
-etc.) contain spaces, so the regex never matched them at all,
-independent of which directory the file lives in. A plain
+file set (it is not one of the excluded prefixes in the upstream
+`idd-skill` package's `checkPlaceholders` function -- this repository
+does not vendor `scripts/idd-doctor.mjs` itself under the
+`ephemeral-npx` helper profile, only the compiled binary the pinned
+tarball ships); the scanner still missed this instance because its
+placeholder regex only matches a single `[A-Za-z0-9_-]+` token between
+`{{` and `}}` -- the same pattern #218's four single-word hints
+(`{{path}}`, `{{outcome}}`, etc.) matched. This field's multi-word
+hints (`{{file or feature}}`, etc.) contain spaces, so the regex never
+matched them at all, independent of which directory the file lives
+in. A plain
 repository-wide `{{` grep is still necessary to catch this class
 going forward.
 
