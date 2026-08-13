@@ -169,21 +169,19 @@ backstop, not a replacement: same helper, same candidate rules,
 same evidence comment shape, non-blocking on errors. Double-posting is
 prevented by the cleanup-evidence record itself, not by Actions
 concurrency, and the two consumers use different guards: the workflow
-skips posting when any `<!-- idd-cleanup-evidence:` comment already
-exists on the PR (see the caveat below), while the agent F4 step keys
-on the prior **success** record only — it skips its own post when an
-`applied` / `clean` record already exists (including the one the
-workflow posted), but still posts a correction when the existing
-record is `failed`, `incomplete`, or `permission-blocked` (see
-[Mandatory F4 Cleanup Contract](#mandatory-f4-cleanup-contract)).
-<!-- dotfiles-divergence: cleanup-evidence-untrusted-check-gap -->
-**Caveat (this repository)**: `post-merge-cleanup.yml`'s duplicate
-check matches on the marker prefix alone and does not verify the
-comment author, so an untrusted commenter's marker-prefixed comment
-also suppresses the real evidence post — do not treat this as a
-trusted-author guarantee until that gap is closed. The workflow's
-PR-keyed `concurrency` group only serializes workflow runs against
-each other; it does not gate the agent's local F4.
+skips posting when a **trusted-author** `<!-- idd-cleanup-evidence:`
+comment already exists on the PR — the workflow only counts a prior
+comment as a duplicate when its author is `github-actions[bot]` or a
+login listed in `.github/idd/config.json`'s `trustedMarkerActors`
+(closed by #237; formerly matched on the marker prefix alone,
+regardless of author) — while the agent F4 step keys on the prior
+**success** record only — it skips its own post when an `applied` /
+`clean` record already exists (including the one the workflow
+posted), but still posts a correction when the existing record is
+`failed`, `incomplete`, or `permission-blocked` (see
+[Mandatory F4 Cleanup Contract](#mandatory-f4-cleanup-contract)). The
+workflow's PR-keyed `concurrency` group only serializes workflow runs
+against each other; it does not gate the agent's local F4.
 
 ## GitHub mechanism
 

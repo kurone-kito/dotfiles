@@ -4,8 +4,9 @@ This repository uses the Issue-Driven Development (IDD) workflow
 imported from
 [`kurone-kito/idd-skill`](https://github.com/kurone-kito/idd-skill).
 This page records the policy decisions confirmed during the
-onboarding flow (roadmap #95) and the 0.4.0 re-import (roadmap #144).
-The machine-readable mirror lives at
+onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), and
+the 0.5.0/0.6.0 re-import (roadmap #239). The machine-readable mirror
+lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
@@ -18,8 +19,11 @@ and the upstream template without surprises.
 (abbreviated `0a9c90d`; tag `v0.6.0`), audited by roadmap #239's
 0.5.0/0.6.0 policy-schema track (#234), which supersedes the 0.4.0-round
 pin imported by roadmap #144. `iddVersion` in
-[`.github/idd/config.json`](../.github/idd/config.json) is bumped
-separately, by roadmap #239's own final-verification track.
+[`.github/idd/config.json`](../.github/idd/config.json) is `0.6.0`,
+bumped by roadmap #239's own final-verification track (#238), which
+also re-validated `.github/idd/config.json` against the pinned
+`v0.6.0` `policy.schema.json` (`npx ajv-cli validate --spec=draft2020`:
+valid).
 
 ## Merge Policy
 
@@ -113,19 +117,21 @@ the import baseline for `.github/instructions/` and `.claude/skills/`,
 so the helper surface never drifts ahead of the checked-in templates —
 bump that commit deliberately whenever the IDD instructions are
 re-imported, and do **not** point the spec at a mutable
-`refs/heads/main` ref. This pin currently reflects a **transitional
-exception**: roadmap #239's schema-audit track (#234) bumped it to
-`v0.6.0` (`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`, confirmed working
-via `idd-doctor` and `idd-helper-bundle-manifest` against this
-repository) so audited helper commands resolve against the same schema
-version this page documents, while `.github/instructions/` and
-`.claude/skills/` themselves stay on the prior 0.4.0-round import until
-roadmap #239's sibling tracks re-import them to the same `v0.6.0`
-baseline — #232 for `.github/instructions/`, #235 for the
+`refs/heads/main` ref. Roadmap #239's schema-audit track (#234) bumped
+this pin to `v0.6.0` (`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`,
+confirmed working via `idd-doctor` and `idd-helper-bundle-manifest`
+against this repository) ahead of the instructions/skills re-import
+landing, opening a **transitional skew window** where audited helper
+commands resolved against the `v0.6.0` schema while
+`.github/instructions/` and `.claude/skills/` themselves stayed on the
+prior 0.4.0-round import. That window closed once roadmap #239's
+sibling tracks re-imported both surfaces to the same `v0.6.0` baseline
+— #232 for `.github/instructions/`, #235 for the
 `.claude/skills/issue-authoring/` companion bundle (#233 covers the
-remaining docs/profiles/githooks/scripts file set, not `.claude/skills/`).
-Resolve this skew when those tracks land — the pin should track the
-instructions/skills baseline again once they catch up.
+remaining docs/profiles/githooks/scripts file set, not
+`.claude/skills/`) — so the pin, the instructions, and the skills
+bundle all track `v0.6.0` uniformly as of #238's final verification
+sweep.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -443,17 +449,30 @@ comment (`// ...`) in JavaScript -- so a future re-import can detect
 and preserve it instead of silently reverting to upstream's default.
 Current slugs:
 
-| Slug                                   | What it marks                                                                                                                                                                                                                                                                                               | Introduced by |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `claim-timing`                         | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                | #145, #196    |
-| `cleanup-evidence-untrusted-check-gap` | Caveat on `post-merge-cleanup.yml`'s duplicate-evidence-comment check: it matches on the marker prefix alone without verifying the commenting author, so this repository's actual behavior does not yet carry the trusted-author guarantee upstream's docs describe                                         | #233          |
-| `helper-profile-ephemeral-npx`         | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                           | #196          |
-| `installed-bundle-reference-routing`   | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                 | #147          |
-| `master-branch`                        | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                       | #145, #196    |
-| `onboarding-doc-trim`                  | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead                                                                                                        | #145, #196    |
-| `signing-ladder`                       | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                         | #145          |
-| `vendored-file-header`                 | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                        | #196          |
-| `worktree-guard-wiring-note`           | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step | #233          |
+| Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233       |
+| `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233                   |
+| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235                   |
+| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237 |
+| `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead. `docs/index.md` (a new upstream `v0.6.0` generated page) is also excluded, for the same reason: its generated table links both trimmed onboarding pages, so adopting it verbatim would ship broken relative links | #145, #196, #233             |
+| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232                   |
+| `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233                   |
+| `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233                         |
+
+**Resolved this round**: `cleanup-evidence-untrusted-check-gap`
+(introduced by #233) tracked a caveat that
+`post-merge-cleanup.yml`'s duplicate-evidence-comment check matched on
+the marker prefix alone without verifying the commenting author. #237
+ported upstream's trust-scoped dedup check (an existing
+`<!-- idd-cleanup-evidence: -->` comment now only counts as a
+duplicate when its author is `github-actions[bot]` or a
+`trustedMarkerActors` login), closing the gap and restoring parity
+with upstream's original trusted-author framing. The marker and
+caveat text were removed from
+[`docs/idd-comment-minimization.md`](idd-comment-minimization.md) as
+part of #238's final verification sweep, since the local behavior no
+longer diverges from upstream.
 
 ## Open follow-ups
 
@@ -589,11 +608,51 @@ sharing the same `{{...}}` syntax. #218 reformatted the four to
 angle-bracket hints (`<path>`, `<outcome>`, `<section>`, `<evidence>`),
 matching the `acceptance_criteria` field's pre-existing
 `<pattern>` / `<file>` convention in the same file, which clears the
-`ERROR` without changing the hint-text UX.
+`ERROR` without changing the hint-text UX. #238's residue sweep found
+one more instance #218 missed -- the `background` field's placeholder
+(`{{file or feature}}`, `{{observed state}}`, `{{PR or thread link}}`,
+`{{root cause}}`) -- and reformatted it the same way; `idd-doctor`'s
+scanner never flagged it because `.github/ISSUE_TEMPLATE/` falls
+outside its IDD-managed-files scope, so a plain repository-wide
+`{{` grep is still necessary to catch this class going forward.
 
 `checkReleaseTagDrift` and `checkDependencyVersionDrift` stay silent
 in this repository, as expected (no git tags exist here, and there is
 no `pnpm-lock.yaml`).
+
+### `idd-onboard --verify` findings
+
+A full `idd-onboard --verify` run (pinned `v0.6.0` source tree,
+`--profile ephemeral-npx`) exits `blocking: true` with two finding
+classes; both are expected, not defects, recorded here so a future
+verification sweep does not have to rediscover them:
+
+- **`manifestCompleteness.missingTarget`**: `docs/index.md`,
+  `docs/onboarding/placeholders.md`, and
+  `docs/onboarding/policy-decisions.md`. All three are deliberate
+  exclusions already recorded in the
+  [Divergence Register](#divergence-register)'s `onboarding-doc-trim`
+  entry (the two `onboarding/` pages are self-corrupting once
+  substituted and stay linked to the pinned upstream copies instead;
+  `docs/index.md` was evaluated and skipped by #233 for the same
+  reason -- see that entry).
+- **`placeholderResidue`**: six `{{...}}` hits in
+  `docs/customization.md`, all inside the
+  [placeholder mapping table](customization.md) that documents the
+  onboarding substitution mechanism itself (for example, the table
+  literally shows `{{REPO_NAME}}` as the template-side name for the
+  live `dotfiles` value). `idd-onboard --verify`'s residue scanner
+  matches the seven known placeholder names as plain text and cannot
+  distinguish this documentation-as-example usage from genuine
+  unresolved residue -- the same false-positive shape as the
+  `markdownlint-cli2` toolchain-residue warnings above.
+  `idd-doctor`'s own, separately-scoped placeholder check (`no
+  unresolved {{...}} placeholders in IDD-managed files`) passes
+  clean, and a manual repository-wide grep for the `.github/`,
+  `.claude/`, `docs/`, `scripts/`, and `profiles/` surface found no
+  other unexplained `{{...}}` residue as of this round (see
+  `.github/ISSUE_TEMPLATE/idd-task.yml`'s fix above for the one
+  genuine instance found and fixed).
 
 ### Issue authoring gate
 
