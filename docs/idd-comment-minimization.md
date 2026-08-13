@@ -393,8 +393,10 @@ returned `applied` for residual markers a concurrent `post-merge-cleanup`
 workflow run minimized first; still post when no prior success record
 exists, or to correct an existing `failed` / `incomplete` /
 `permission-blocked` record. The `post-merge-cleanup` workflow instead
-uses a simpler presence-only guard (it skips on any existing marker),
-which suffices for its single-shot post-merge run:
+uses the trust-scoped duplicate-evidence guard described above (it
+skips only on an existing `<!-- idd-cleanup-evidence:` comment from
+`github-actions[bot]` or a `trustedMarkerActors` login), which
+suffices for its single-shot post-merge run:
 
 ```markdown
 <!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
