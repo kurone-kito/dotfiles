@@ -124,7 +124,11 @@ the other files `collectVendoredFiles` manages under the source
 repository's own `scripts/` have an `idd-template/` mirror. Getting the
 **complete** `vendored-node` bundle requires running this from the clone
 (see
-[CLI-assisted onboarding](../../ONBOARDING.md#cli-assisted-onboarding)):
+[CLI-assisted onboarding](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#cli-assisted-onboarding)
+— `idd-template/ONBOARDING.md` is not vendored into this repository
+(a local relative link here would 404); this matches the floating
+`blob/main` convention every other `ONBOARDING.md` reference in this
+doc set already uses):
 
 ```sh
 node scripts/idd-onboard.mjs --import --source <path-to-a-cloned-idd-skill-tree> \
@@ -142,7 +146,7 @@ way Option A fetches every other file:
 ```sh
 mkdir -p scripts
 curl -fsSL \
-  "https://raw.githubusercontent.com/kurone-kito/idd-skill/main/idd-template/scripts/minimize-superseded-markers.mjs" \
+  "https://raw.githubusercontent.com/kurone-kito/idd-skill/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6/idd-template/scripts/minimize-superseded-markers.mjs" \
   -o scripts/minimize-superseded-markers.mjs
 ```
 
