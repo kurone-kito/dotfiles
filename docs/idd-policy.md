@@ -443,15 +443,17 @@ comment (`// ...`) in JavaScript -- so a future re-import can detect
 and preserve it instead of silently reverting to upstream's default.
 Current slugs:
 
-| Slug                                 | What it marks                                                                                                                                                                                        | Introduced by |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                         | #145, #196    |
-| `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                    | #196          |
-| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                          | #147          |
-| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                | #145, #196    |
-| `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead | #145, #196    |
-| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                  | #145          |
-| `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                 | #196          |
+| Slug                                   | What it marks                                                                                                                                                                                                                                                                                               | Introduced by |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `claim-timing`                         | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                | #145, #196    |
+| `cleanup-evidence-untrusted-check-gap` | Caveat on `post-merge-cleanup.yml`'s duplicate-evidence-comment check: it matches on the marker prefix alone without verifying the commenting author, so this repository's actual behavior does not yet carry the trusted-author guarantee upstream's docs describe                                         | #233          |
+| `helper-profile-ephemeral-npx`         | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                           | #196          |
+| `installed-bundle-reference-routing`   | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                 | #147          |
+| `master-branch`                        | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                       | #145, #196    |
+| `onboarding-doc-trim`                  | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead                                                                                                        | #145, #196    |
+| `signing-ladder`                       | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                         | #145          |
+| `vendored-file-header`                 | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                        | #196          |
+| `worktree-guard-wiring-note`           | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step | #233          |
 
 ## Open follow-ups
 
@@ -617,3 +619,31 @@ GitHub Copilot Code Review is empirically active on this repository
 the `copilot-pull-request-reviewer` actor. The default
 `copilot-advisory` profile is therefore satisfiable here; the earlier
 "confirm Copilot Code Review is enabled" needs-decision is closed.
+
+### Upstream template issues deferred to the next re-import
+
+The [`#233`](https://github.com/kurone-kito/dotfiles/issues/233)
+v0.6.0 re-sync carried these two items verbatim from upstream
+(confirmed byte-identical against the pinned
+`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6` source); both are review
+findings this repository chose not to fix ad hoc, since that issue's
+scope is placeholder substitution plus the registered divergence
+hunks, not an editorial rewrite of upstream's own prose or vendored
+code:
+
+- `docs/idd-helper-scripts.md`'s "Package-manager / ephemeral-npx
+  command" sections (claim-approval-gate, claim-lock, branch-name,
+  select-desynced-index, emit-marker, post-idd-marker, and others)
+  show only the `ephemeral-npx` `npx` literal invocation under a
+  heading that also names the `package-manager` profile, which
+  contradicts the `package-manager` profile's own contract elsewhere
+  in the same file ("do not fall back to ad hoc `npx` in this mode").
+  File this ambiguity upstream against `kurone-kito/idd-skill`, or
+  resolve it locally the next time this file is re-imported.
+- `scripts/minimize-superseded-markers.mjs`'s `runGh` error handler
+  (`String(e.stderr?.toString?.() ?? e.message ?? 'unknown error')`)
+  treats an empty-but-defined `stderr` string as present because `??`
+  only falls through on `null`/`undefined`, so a `gh` timeout with no
+  stderr output loses `error.message`'s useful timeout text. File this
+  upstream, or fix it locally the next time this vendored file is
+  re-imported (see the `vendored-file-header` divergence above).
