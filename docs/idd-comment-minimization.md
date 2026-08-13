@@ -169,8 +169,9 @@ backstop, not a replacement: same helper, same candidate rules,
 same evidence comment shape, non-blocking on errors. Double-posting is
 prevented by the cleanup-evidence record itself, not by Actions
 concurrency, and the two consumers use different guards: the workflow
-skips posting when a **trusted-author** `<!-- idd-cleanup-evidence:`
-comment already exists on the PR — the workflow only counts a prior
+skips posting when a **trusted-author**
+`<!-- idd-cleanup-evidence: ... -->` comment already exists on the
+PR — the workflow only counts a prior
 comment as a duplicate when its author is `github-actions[bot]` or a
 login listed in `.github/idd/config.json`'s `trustedMarkerActors`
 (closed by #237; formerly matched on the marker prefix alone,

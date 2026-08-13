@@ -465,7 +465,7 @@ Current slugs:
 `post-merge-cleanup.yml`'s duplicate-evidence-comment check matched on
 the marker prefix alone without verifying the commenting author. #237
 ported upstream's trust-scoped dedup check (an existing
-`<!-- idd-cleanup-evidence: -->` comment now only counts as a
+`<!-- idd-cleanup-evidence: ... -->` comment now only counts as a
 duplicate when its author is `github-actions[bot]` or a
 `trustedMarkerActors` login), closing the gap and restoring parity
 with upstream's original trusted-author framing. The marker and
