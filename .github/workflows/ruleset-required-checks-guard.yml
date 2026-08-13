@@ -5,16 +5,21 @@ name: Ruleset required-checks guard
 # disappeared in its entirety and went undetected for 11 days -- see
 # the "Required status checks on `master`" section of
 # docs/idd-policy.md for the incident writeup. Update the
-# EXPECTED_CONTEXTS list below and that doc section together whenever
-# a required context is added or removed.
+# EXPECTED_SORTED list below and that doc section together whenever a
+# required context is added or removed.
 #
 # Uses the "Get rules for a branch" effective-rules endpoint
-# (`repos/{owner}/{repo}/rules/branches/{branch}`), the same read
-# `.github/instructions/idd-ci.instructions.md` treats as
-# authoritative for required-check discovery -- unlike the
-# `/rulesets` summary/detail endpoints, this one does not require
-# elevated administration permission, so the default `GITHUB_TOKEN`
-# with `contents: read` is sufficient.
+# (`repos/{owner}/{repo}/rules/branches/{branch}`) -- a lighter-weight
+# read than the `/rulesets` summary/detail endpoints
+# `.github/instructions/idd-ci.instructions.md`'s required-check
+# discovery unions with classic branch protection: this endpoint does
+# not require the elevated `administration` permission those need, so
+# the default `GITHUB_TOKEN` with `contents: read` is sufficient. This
+# guard intentionally checks only the ruleset side of that union
+# (classic branch protection is unconfigured on this repository today,
+# per docs/idd-policy.md's `trustEmptyProtectionReads` note); revisit
+# this workflow if branch protection is ever configured on `master`
+# alongside the ruleset.
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -49,7 +54,7 @@ jobs:
             'PowerShell tests (Pester)' \
             'idd-advisory-convergence' \
             'lint' \
-            | sort)
+            | sort -u)
 
           RULES_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/master")
 
@@ -59,7 +64,7 @@ jobs:
             exit 1
           fi
 
-          ACTUAL_SORTED=$(printf '%s' "$RULES_JSON" | jq -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | sort | .[]')
+          ACTUAL_SORTED=$(printf '%s' "$RULES_JSON" | jq -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | unique | .[]')
 
           MISSING=$(comm -23 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))
           EXTRA=$(comm -13 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))

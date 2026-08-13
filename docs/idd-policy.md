@@ -554,13 +554,19 @@ its silent removal and the unrelated IDD run that happened to hit the
 F2 merge-gate hold.
 [`.github/workflows/ruleset-required-checks-guard.yml`](../.github/workflows/ruleset-required-checks-guard.yml)
 closes that gap: a daily scheduled job (plus `workflow_dispatch`) calls
-the same `rules/branches/master` effective-rules read
-`idd-ci.instructions.md` already treats as authoritative, asserts the
-`required_status_checks` rule is present, and fails loudly — naming
-the missing and/or unexpected contexts — if its context set drifts
-from the five contexts listed above. The workflow's own expected-context
-list carries a comment pointing back to this section; update both
-together whenever a required context is added or removed.
+the `rules/branches/master` effective-rules read — a lighter-weight
+endpoint than the `/rulesets` summary/detail pair `idd-ci.instructions.md`'s
+required-check discovery unions with classic branch protection, and one
+that does not require the elevated `administration` permission those
+need — asserts the `required_status_checks` rule is present, and fails
+loudly — naming the missing and/or unexpected contexts — if its context
+set drifts from the five contexts listed above. It intentionally checks
+only the ruleset side of that union; classic branch protection is
+unconfigured on `master` today (see the `trustEmptyProtectionReads`
+note above), so this is not currently a coverage gap. The workflow's
+own expected-context list carries a comment pointing back to this
+section; update both together whenever a required context is added or
+removed.
 
 ### `idd-doctor` findings
 
