@@ -5,7 +5,7 @@ Shared advisory-wait protocol used by **E14**
 and **F3** (`idd-merge.instructions.md`). Policy constants (cap/windows)
 are named in
 [`docs/policy-constants.md`](../../docs/policy-constants.md); this file
-owns behavior.
+owns behavior; `advisoryWait.exemptBotAuthoredPrs` is convergence-only.
 
 ## Scope — Copilot-only settle/wait window
 
@@ -35,8 +35,11 @@ one). Enter the full protocol below **only** when
 Keep the wait itself cheap per the
 [wake-up discipline](idd-ci.instructions.md#wake-up-discipline): a
 single wake at the **expected** completion, or background only if the
-topology-safety condition holds; otherwise wait synchronously. Batch
-all post-wait actions into one turn.
+topology-safety condition holds; otherwise wait synchronously — no
+single `gh` command blocks on Copilot review state; run the protocol
+below (helper-first, AW1-AW5 fallback) as a foreground wait, never
+`run_in_background`, absent the confirmed condition. Batch all
+post-wait actions into one turn.
 
 ## 1. Canonical path (helper-first)
 
@@ -267,11 +270,13 @@ verified HEAD within one pass).
 ### AW3-H — Hide superseded advisory-wait markers
 
 After a new `advisory-wait`/`advisory-wait-recovery` marker is verified
-for the current `PR_HEAD_SHA`, minimize every trusted prior
-`advisory-wait*` marker whose embedded HEAD SHA does **not** match, as
-`OUTDATED` (cuts F4 backlog and review-page noise). Find candidate IDs
-(trusted `advisory-wait*` markers with a differing embedded SHA), then
-call the minimize-markers command:
+for the current `PR_HEAD_SHA`, minimize every trusted prior marker of
+the `advisory-wait:`/`advisory-wait-recovery:`/`advisory-reroll:`
+family whose embedded HEAD SHA does **not** match, as `OUTDATED` (cuts
+F4 backlog and review-page noise — a stale-HEAD `advisory-reroll:`
+marker is exactly as much operational noise as a stale advisory-wait
+one). Find candidate IDs (trusted markers of that family with a
+differing embedded SHA), then call the minimize-markers command:
 [shell fallback AW3-H](../../docs/idd-advisory-wait-shell-fallback.md#aw3-h).
 
 Skip entirely if the new marker was not verified, the candidate set is
@@ -367,8 +372,8 @@ alone never proves `COPILOT_UNAVAILABLE` (see **State**).
 ### Terminal routing (`#1570`)
 
 One `idd-external-check-waiver:` marker (selector
-`idd-advisory-convergence`, current HEAD, active claim) satisfies both
-consumers: the CI check's `terminal` field (its waiver hatch also opens
+`idd-advisory-convergence`, current HEAD, active claim/`none`) satisfies
+both consumers: the CI check's `terminal` field (its waiver hatch opens
 on `COPILOT_UNAVAILABLE` independent of `deadline.passed` — `ready`
 still needs a valid waiver), and F2/F3's `advisoryWait.copilotUnavailable`/
 `copilotUnavailableWaived` (`f3Outcome` unchanged; unwaived adds
@@ -381,8 +386,8 @@ still needs a valid waiver), and F2/F3's `advisoryWait.copilotUnavailable`/
 > recovery cycle is exhausted and the terminal window elapsed with no
 > current-HEAD review. A maintainer must post an
 > `idd-external-check-waiver:` marker for selector
-> `idd-advisory-convergence`, this HEAD, and the active claim before
-> this PR can proceed.
+> `idd-advisory-convergence`, this HEAD, and active claim/`none` before
+> merging.
 
 **Waived**: rerun the existing `idd-advisory-convergence` run (never
 `workflow_dispatch` — see Rerun mechanics below); both fields recompute
