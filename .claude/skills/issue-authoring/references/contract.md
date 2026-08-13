@@ -4,7 +4,7 @@
 This file keeps the `issue-authoring` bundle usable when it is installed
 or copied outside its source repository. It mirrors the canonical
 contract maintained upstream at
-[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d/docs/issue-authoring-skill.md).
+[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6/docs/issue-authoring-skill.md).
 
 ## Target marker prefix
 
@@ -844,7 +844,41 @@ Binding rules:
 Backfill is opportunistic and follows the same claim-state precondition
 as the suitability footer.
 
+## Authoring hold and release
+
+Issue authoring uses a two-stage contract: drafting and publishing
+happen together under an authoring hold; release from that hold is the
+only approval boundary.
+
+- **Stage 1 — author-and-publish.** Once a drafted `ready` body passes
+  the mechanical `audit-authored-issue` gate (see
+  [Mechanical pre-publish gate](#mechanical-pre-publish-gate)) and the
+  critique pass, publish it directly under the configured authoring
+  label (`issueAuthoring.authoringLabelName`, defaulting to
+  `status:authoring`) — no separate user approval of the drafted body
+  is required. The label doubles as the draft marker for the held
+  issue and the claim-suppression lock that keeps Discover from
+  selecting it: held issues ARE the drafts, so in-place edits, roadmap
+  relationship wiring, and re-lint of already-published bodies all
+  happen under that same lock. If a session is interrupted before the
+  set is fully wired, leave the label in place — that alone keeps
+  Discover from selecting the unfinished set until a later session
+  finishes the work.
+- **Stage 2 — release.** Before removing the authoring label, run a
+  release checklist: every child issue is referenced from its parent
+  roadmap's `## Tracks` list; no unsubstituted placeholder remains in
+  any published body; the `audit-authored-issue` linter (or its manual
+  fallback) is green on every published body in the set. Remove the
+  label only after that checklist passes and the user explicitly
+  requests release from the authoring hold. Release is a human action;
+  nothing in this bundle auto-releases a held issue set.
+
 ## Publication boundary
 
-Drafting issues does not authorize publishing them or starting the IDD
-execution loop unless the user explicitly asked for that next step.
+Publishing a drafted `ready` body under the authoring hold does not
+need a separate user approval once it passes the mechanical
+`audit-authored-issue` gate and the critique pass — see
+[Authoring hold and release](#authoring-hold-and-release) above for the
+full two-stage contract. Removing the authoring label and starting the
+IDD execution loop both require the user's explicit hold-release
+request; nothing else authorizes either.
