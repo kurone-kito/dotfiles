@@ -1,6 +1,11 @@
 # Reconciled against the idd-template v0.6.0 dictionary (2026-08-13,
 # issue #236); no additional words were genuinely IDD-relevant beyond
-# what this list already covers.
+# what this list already covers. #238's full-repository `npx cspell
+# lint "**"` sweep (broader than the incremental-only scan
+# `cspell-action@v8` runs in CI by default) separately found 23
+# pre-existing false positives outside the IDD surface -- proper
+# nouns, real flags/identifiers, and escape-sequence tokenizer
+# artifacts across home/, tests/, and .vscode/ -- and added them here.
 allowCompoundWords: true
 dictionaries:
   - cpp-compound-words
@@ -36,39 +41,59 @@ version: '0.2'
 words:
   - AKIAEXAMPLE
   - anomalyco
+  - bbwe
+  - bufnr
+  - catppuccin
   - curlrc
+  - DECRQCRA
   - dedup
   - deprioritize
   - desync
   - desynced
+  - dimsu
   - dorny
   - Esync
   - exrc
+  - fghq
+  - fgpg
   - Fira
   - gdefault
+  - Gdiffsplit
   - gpgconf
-  - hlsearch
+  - Gvdiffsplit
   - HKLM
+  - hlsearch
   - inputrc
   - inshellisense
+  - jsonls
   - junegunn
   - keepassxc
   - kito
+  - kylechui
+  - lspconfig
   - luac
   - luks
   - mergo
+  - mfussenegger
   - MINIMIZABLE
   - MYVIMRC
+  - netrw
+  - Nlcjpw
   - nnoremap
   - nvmrc
   - onlogon
   - ONNX
+  - osascript
+  - psfzf
   - psmux
+  - pstoprc
   - pylint
   - qwen
+  - rafamadriz
   - rerere
   - rollup
   - sheerun
+  - tabdo
   - taskrc
   - TOCTOU
   - tpope
@@ -79,13 +104,16 @@ words:
   - unscored
   - unwaived
   - upserts
-  - waivable
-  - wgetrc
   - viml
   - vimrc
   - virtiofs
+  - waivable
+  - warnf
+  - wekyb
+  - wgetrc
   - WORKFPR
   - xclip
+  - xlong
   - zcompdump
   - zdharma
   - zdiff3

@@ -5,9 +5,9 @@ name: IDD advisory-convergence gate
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
 # 0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 (v0.6.0; reconciled from the
-# prior 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d pin by #237, which
-# also keeps this file's helper pin in sync with the rest of the
-# repository's ephemeral-npx invocations -- see docs/idd-policy.md
+# prior 0.4.0-round pin by #237, which also keeps this file's helper
+# pin in sync with the rest of the repository's ephemeral-npx
+# invocations -- see docs/idd-policy.md
 # "Helper Runtime Profile"). The maintainer-authorized waiver escape is
 # already configured in `.github/idd/config.json` `ciGate.*`; see
 # docs/idd-policy.md "CI Gate External Check Waivers" for the waiver
