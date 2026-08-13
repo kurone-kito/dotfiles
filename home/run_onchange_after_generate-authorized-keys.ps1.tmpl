@@ -88,7 +88,12 @@ if ($hasValidBlock) {
   $outLines += $endMarker
 }
 
-($outLines -join "`n") + "`n" | Set-Content -Path $authorized -Encoding utf8NoBOM -NoNewline
+# PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+# BOM-less UTF-8 bytes directly instead. The joined content already
+# carries its own trailing newline, matching the prior -NoNewline call.
+$authorizedContent = ($outLines -join "`n") + "`n"
+[System.IO.File]::WriteAllText($authorized, $authorizedContent,
+  [System.Text.UTF8Encoding]::new($false))
 
 # Keep the file private, but still readable by the LocalSystem sshd
 # service when Windows OpenSSH is configured to use per-user keys.
