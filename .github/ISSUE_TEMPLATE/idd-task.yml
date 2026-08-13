@@ -42,7 +42,7 @@ body:
     attributes:
       label: Background
       description: 'Why this task exists. Cite the file, doc, or PR thread that motivates the change.'
-      placeholder: 'The {{file or feature}} currently {{observed state}}. The IDD workflow or a reviewer flagged this on {{PR or thread link}} because {{root cause}}.'
+      placeholder: 'The <file or feature> currently <observed state>. The IDD workflow or a reviewer flagged this on <PR or thread link> because <root cause>.'
     validations:
       required: true
 

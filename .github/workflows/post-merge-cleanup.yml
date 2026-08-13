@@ -38,7 +38,7 @@
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml at pin
 # 0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 (v0.6.0; reconciled from the
-# prior 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d pin by #237). This
+# prior 0.4.0-round pin by #237). This
 # repository runs the ephemeral-npx helper profile (no vendored
 # scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
 # CLI rather than upstream's `node scripts/audit-pr-cleanup.mjs` form --
