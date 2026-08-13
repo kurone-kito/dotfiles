@@ -56,7 +56,12 @@ jobs:
             'lint' \
             | sort -u)
 
-          RULES_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/master")
+          # --paginate --slurp + flatten: the endpoint defaults to 30
+          # rules per page, and this repository's ruleset already
+          # returns 6 -- comfortably below that today, but an
+          # unpaginated call would silently drop later pages once
+          # more rules accumulate.
+          RULES_JSON=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/rules/branches/master" | jq 'flatten')
 
           RULE_COUNT=$(printf '%s' "$RULES_JSON" | jq '[.[] | select(.type == "required_status_checks")] | length')
           if [ "$RULE_COUNT" -eq 0 ]; then
