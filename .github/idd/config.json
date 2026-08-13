@@ -43,7 +43,8 @@
     },
     "externalCheckWaivers": {
       "mode": "maintainer-authorized"
-    }
+    },
+    "trustSourcePinnedRequiredChecks": true
   },
   "skipIssueAuthorApprovalGate": true,
   "maintainerApprovalActorPolicy": "owners-and-maintainers-only",
