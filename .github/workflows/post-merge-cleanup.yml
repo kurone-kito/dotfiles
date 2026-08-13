@@ -37,18 +37,26 @@
 #
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml at pin
-# 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. This repository runs the
-# ephemeral-npx helper profile (no vendored scripts/ directory), so this
-# invokes the packaged idd-audit-pr-cleanup CLI rather than upstream's
-# `node scripts/audit-pr-cleanup.mjs` form. `runs-on` follows this
-# repository's own idd-advisory-convergence.yml convention
+# 0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 (v0.6.0; reconciled from the
+# prior 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d pin by #237). This
+# repository runs the ephemeral-npx helper profile (no vendored
+# scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
+# CLI rather than upstream's `node scripts/audit-pr-cleanup.mjs` form --
+# a pinned tarball URL rather than upstream's generic multi-profile
+# resolution (which falls back to a mutable default archive URL under
+# ephemeral-npx when `helperRuntime.packageSpec` is unset), so this copy
+# is not exposed to that wider fetch-at-run-time surface. `runs-on`
+# follows this repository's own idd-advisory-convergence.yml convention
 # (`ubuntu-latest`) rather than upstream's `ubuntu-slim`, since that is
 # the runner label this repository already uses for its other npx+gh
 # workflows (lint.yml and stale.yml use `ubuntu-slim` for actions-only
 # steps with no npx/gh dependency). The checkout/setup-node action pins
 # are copied verbatim from upstream's own pinned-SHA choices, since this
 # workflow's elevated `pull_request_target` permissions warrant the same
-# supply-chain hardening upstream already applied.
+# supply-chain hardening upstream already applied. The duplicate
+# evidence-comment check below is trust-scoped to match upstream's
+# v0.6.0 hardening (#237): an untrusted commenter's marker-prefixed
+# comment must never suppress the genuine evidence post.
 name: Post-merge cleanup
 on:
   pull_request_target:
@@ -102,7 +110,7 @@ jobs:
             fi
           fi
           set +e
-          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
+          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
             --apply \
@@ -157,17 +165,44 @@ jobs:
           # only serialises this workflow's own runs; an agent F4 (or a
           # maintainer rerunning workflow_dispatch on the same PR) can
           # still have posted an evidence comment outside this run. Skip
-          # if any <!-- idd-cleanup-evidence: ... --> comment is already
-          # on the PR.
-          ALL_MATCHES=$(gh api --paginate \
+          # if a <!-- idd-cleanup-evidence: ... --> comment already on the
+          # PR was posted by a trusted author -- this workflow's own posts
+          # are authored by `github-actions[bot]` (the GITHUB_TOKEN actor),
+          # and an agent's local F4 post is authored by a configured
+          # `trustedMarkerActors` login. An untrusted commenter pre-posting
+          # this marker prefix must never suppress the genuine evidence
+          # post or be treated as a completed cleanup record (this is the
+          # same trust-scoping every other IDD operational marker already
+          # applies).
+          # `|| true` keeps a missing/unreadable config.json a soft "no
+          # extra trusted logins" read instead of aborting this step under
+          # the default `bash -eo pipefail`.
+          TRUSTED_LOGINS=$(
+            {
+              jq -r '(.trustedMarkerActors // [])[]' .github/idd/config.json 2>/dev/null || true
+              echo 'github-actions[bot]'
+            } | tr '[:upper:]' '[:lower:]'
+          )
+          # Capture into a variable (not process substitution): a failure
+          # inside `< <(gh api ...)` does not reliably propagate to this
+          # shell's default `-e`/`pipefail`, which could leave EXISTING
+          # empty and post a duplicate evidence comment on a transient
+          # `gh api` failure (rate limit/network). A plain command
+          # substitution assignment does trip `-e` on failure.
+          COMMENTS_TSV=$(gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | .id')
-          # Capture first, then head; piping gh api directly into head can
-          # SIGPIPE gh once head exits early, which fails the pipeline
-          # under this shell's default `bash -eo pipefail`.
-          EXISTING=$(printf '%s\n' "$ALL_MATCHES" | head -n1)
+            --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login] | @tsv')
+          EXISTING=""
+          while IFS=$'\t' read -r candidate_id candidate_login; do
+            [ -z "$candidate_id" ] && continue
+            lower_login=$(printf '%s' "$candidate_login" | tr '[:upper:]' '[:lower:]')
+            if printf '%s\n' "$TRUSTED_LOGINS" | grep -Fxq "$lower_login"; then
+              EXISTING="$candidate_id"
+              break
+            fi
+          done <<< "$COMMENTS_TSV"
           if [ -n "$EXISTING" ]; then
-            echo "::notice::PR #${PR_NUMBER} already has an idd-cleanup-evidence comment (id: ${EXISTING}); skipping workflow post."
+            echo "::notice::PR #${PR_NUMBER} already has a trusted-author idd-cleanup-evidence comment (id: ${EXISTING}); skipping workflow post."
             exit 0
           fi
           BODY=$(printf '%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
