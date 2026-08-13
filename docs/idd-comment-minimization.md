@@ -168,9 +168,14 @@ canonical, mandatory contract. The server-side workflow is a
 backstop, not a replacement: same helper, same candidate rules,
 same evidence comment shape, non-blocking on errors. Double-posting is
 prevented by the cleanup-evidence record itself, not by Actions
-concurrency: both the workflow and the agent F4 step skip posting
-their own evidence when any `<!-- idd-cleanup-evidence:` comment
-already exists on the PR — including the one the workflow posted.
+concurrency, and the two consumers use different guards: the workflow
+skips posting when any `<!-- idd-cleanup-evidence:` comment already
+exists on the PR (see the caveat below), while the agent F4 step keys
+on the prior **success** record only — it skips its own post when an
+`applied` / `clean` record already exists (including the one the
+workflow posted), but still posts a correction when the existing
+record is `failed`, `incomplete`, or `permission-blocked` (see
+[Mandatory F4 Cleanup Contract](#mandatory-f4-cleanup-contract)).
 <!-- dotfiles-divergence: cleanup-evidence-untrusted-check-gap -->
 **Caveat (this repository)**: `post-merge-cleanup.yml`'s duplicate
 check matches on the marker prefix alone and does not verify the
