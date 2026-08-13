@@ -42,7 +42,6 @@ or [Core concepts](concepts.md) before using this reference.
 | Live digest and comment cleanup        | [IDD comment minimization](idd-comment-minimization.md)                                                               |
 | Helper-script adoption policy          | [IDD helper script evaluation](idd-helper-scripts.md)                                                                 |
 | Reversible vs. gated mutations         | [IDD autonomy contract](idd-autonomy-contract.md)                                                                     |
-| Docs bundle frontmatter convention     | [Customizing IDD § Docs Bundle Frontmatter Convention (OKF)](customization.md#docs-bundle-frontmatter-convention-okf) |
 
 ## Maintainer Note
 
