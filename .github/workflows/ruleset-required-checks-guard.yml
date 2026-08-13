@@ -28,7 +28,7 @@ permissions:
   contents: read
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   guard:
     runs-on: ubuntu-latest
