@@ -112,12 +112,12 @@ This section's rebase only applies **before the branch's first push**.
      package-manager-profile `idd:branch-conflict-state` command
      (resolve the exact command from `docs/idd-helper-scripts.md` if
      unsure). This is the same helper `idd-review-triage.instructions.md`
-     uses for its own branch-sync check (the standard `idd-pr-submit.
-     instructions.md` file does not reference it directly, since D1 there
-     only covers the pre-first-push case), so it already accounts for
-     whether a merely-`BEHIND` head actually needs a resync (branch
-     protection requiring an up-to-date head) rather than treating every
-     non-`CLEAN` state the same:
+     uses for its own branch-sync check (the standard
+     `idd-pr-submit.instructions.md` file does not reference it directly,
+     since D1 there only covers the pre-first-push case), so it already
+     accounts for whether a merely-`BEHIND` head actually needs a resync
+     (branch protection requiring an up-to-date head) rather than treating
+     every non-`CLEAN` state the same:
      - `syncRecommendation: "none"`: D1-D3 already happened in an
        earlier session. Run D3.5's closing-keyword check first — it is
        idempotent even if an earlier session already verified it, and
@@ -379,7 +379,8 @@ than the run it supersedes. Once both have completed, the later
    finished — and resume polling. If it is `hold`, or the timeout
    recurs after a rerun, stop per the condition above and post a hold
    note.
-7. **`success`**: proceed to `idd-review-snapshot.instructions.md` (E1).
+7. **`success`**: proceed to `idd-review-snapshot-lite.instructions.md`
+   (E1).
 8. **Exception**: if `idd-advisory-convergence` is the only
    non-passing required check, and that check's own run-log JSON verdict
    reports `pending: false` with outstanding review reasons (thread
