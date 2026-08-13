@@ -318,15 +318,21 @@ new properties; everything else the issue's starting inventory listed
 already existed structurally at the pin (only their JSON Schema
 `description` text was added later) and is confirmed unchanged at
 `v0.6.0`. Per the roadmap's confirmed operator decision,
-every key below stays at its distributed default this round — none are
-turned on in `.github/idd/config.json`.
+every key below stayed at its distributed default as of #234 itself —
+`.github/idd/config.json` was unchanged by that issue. **One exception
+landed immediately afterward**: `ciGate.trustSourcePinnedRequiredChecks`
+was flipped to `true` in a same-day follow-up once the `master` ruleset
+gained a source-pinned entry (see
+[Required status checks on `master`](#required-status-checks-on-master)
+for the incident and its own entry below for the rationale) — every
+other key in this section remains at its distributed default.
 `.github/idd/config.json` was re-validated against the fetched
 `v0.6.0` schema with `ajv-cli validate --spec=draft2020` (passed) and
 with `idd-doctor` run from the pinned `v0.6.0` tarball itself
 (`result: passed`,
 `PASS .github/idd/config.json validates against policy.schema.json`,
 the same four pre-existing warnings as before) — no correctness break
-found, so `.github/idd/config.json` itself is unchanged by this issue.
+found as part of #234's own audit.
 
 ### Genuinely new in 0.5.0/0.6.0
 
@@ -338,18 +344,21 @@ found, so `.github/idd/config.json` itself is unchanged by this issue.
   automation, and enabling a bot-authorship exemption is a deliberate
   future decision, not something to adopt silently alongside a docs
   audit.
-- **`ciGate.trustSourcePinnedRequiredChecks`**: `false` (0.5.0,
-  fail-closed by default). Opt-in trust for a required check whose
-  ruleset/branch-protection entry is source-pinned to a specific
-  GitHub App/integration (`app_id`/`integration_id`). This
-  repository's `master` merge gate comes from a default-branch ruleset
-  matching `~DEFAULT_BRANCH` (see
-  [Required status checks on `master`](#required-status-checks-on-master))
-  whose required-check entries are plain name-matched, not
-  source-pinned by `app_id`/`integration_id` — this key's fail-closed
-  downgrade path is not currently reachable here. Recorded as a
-  deliberate confirmation, not an oversight; revisit if the ruleset
-  ever gains a source-pinned entry.
+- **`ciGate.trustSourcePinnedRequiredChecks`**: `true` (0.5.0 key;
+  changed from the `false` default during this round — see
+  [Required status checks on `master`](#required-status-checks-on-master)
+  for the incident that made this reachable). Opt-in trust for a
+  required check whose ruleset/branch-protection entry is source-pinned
+  to a specific GitHub App/integration (`app_id`/`integration_id`).
+  After the `master` ruleset's `required_status_checks` rule was
+  restored following an accidental removal (see below), every entry
+  came back pinned to `integration_id: 15368`. The operator verified
+  out-of-band via `gh api app/15368` and live check-run `app.id` fields
+  on a merged PR that `15368` is GitHub's own `github-actions` App —
+  the sole producer of every workflow-based check this repository
+  requires — so this key was flipped to `true` per the schema's
+  documented human-authorized-decision path, rather than left at the
+  fail-closed default.
 - **`helperRuntime.packageSpec`**: unset (0.5.0). Optional pinned npm
   spec/tarball/commit archive overriding the mutable main-archive
   fallback for `package-manager`/`ephemeral-npx` helper invocations.
@@ -471,6 +480,22 @@ rulesets and branch protection; if neither source yields a
 required-check set at all, IDD stops and posts a hold for missing
 merge-gate policy evidence rather than silently merging. The
 five-check ruleset above is now that required set.
+
+**2026-08-12 incident.** The ruleset's `required_status_checks` rule
+was found entirely absent (all five contexts gone; the other four
+ruleset rules — `deletion`, `non_fast_forward`, `pull_request`,
+`copilot_code_review` — were untouched) while #234's PR was in D4/F2.
+Ruleset history (`gh api repos/{owner}/{repo}/rulesets/18861545/history`)
+showed the rule present through the 2026-07-25 version and gone as of
+2026-08-02T02:31:54+09:00, roughly a minute before an unrelated PR
+merged — most likely an editing side effect while consolidating
+branch-protection settings into the ruleset, not a deliberate policy
+change. The maintainer restored it via the GitHub UI the same day.
+The **restored** rule differs from the original in one respect: every
+entry now carries `integration_id: 15368` (source-pinned to a specific
+GitHub App), which the original bare-context rule did not have — see
+`ciGate.trustSourcePinnedRequiredChecks` above for how this repository
+resolved the resulting fail-closed gate ambiguity.
 
 ### `idd-doctor` findings
 
