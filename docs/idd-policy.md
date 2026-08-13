@@ -291,18 +291,15 @@ matches anything, so no waiver can be issued or consumed.
 ## New 0.4.0 Schema Keys Left at Default
 
 Confirmed at their distributed defaults rather than given an explicit
-`.github/idd/config.json` entry (roadmap #144):
+`.github/idd/config.json` entry (roadmap #144). **One post-#146
+exception**: `ciGate.trustEmptyProtectionReads` was confirmed at its
+`false` default here but has since been flipped to an explicit `true`
+— see the note immediately after this list, not the bullets below.
 
 - **`advisoryWait.convergenceScope`**: `all-prs`
 - **`advisoryWait.sameHeadRerollCap`**: `2`
 - **`advisoryWait.recoveryCycleCap`**: `2`
 - **`advisoryWait.terminalWindow`**: `PT12H`
-- **`ciGate.trustEmptyProtectionReads`**: `false` as of #146 — **since
-  changed to `true`**; see
-  [Required status checks on `master`](#required-status-checks-on-master)
-  for why the fail-closed default became unworkable once
-  `idd-ci.instructions.md` started treating an untrusted `404` on the
-  classic branch-protection read the same as a `403`.
 - **`mergeGate.soloCodeownerAdminFallback`**: `auto-admin-retry` — this
   repository is solo-maintainer (`trustedMarkerActors: ["kurone-kito"]`
   only) with `mergePolicy: fully_autonomous_merge`, exactly the
@@ -311,6 +308,14 @@ Confirmed at their distributed defaults rather than given an explicit
   solo-CODEOWNER self-approval deadlock) matches this repository's
   existing autonomous-merge intent. Recorded here as a deliberate
   confirmation, not an oversight.
+
+**Post-#146 exception: `ciGate.trustEmptyProtectionReads`.** Confirmed
+at its `false` default in #146, but now set to `true` in
+`.github/idd/config.json` — see
+[Required status checks on `master`](#required-status-checks-on-master)
+for why the fail-closed default became unworkable once
+`idd-ci.instructions.md` started treating an untrusted `404` on the
+classic branch-protection read the same as a `403`.
 
 ## New 0.5.0/0.6.0 Schema Keys Left at Default
 
