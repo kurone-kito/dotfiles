@@ -318,15 +318,21 @@ new properties; everything else the issue's starting inventory listed
 already existed structurally at the pin (only their JSON Schema
 `description` text was added later) and is confirmed unchanged at
 `v0.6.0`. Per the roadmap's confirmed operator decision,
-every key below stays at its distributed default this round — none are
-turned on in `.github/idd/config.json`.
+every key below stayed at its distributed default as of #234 itself —
+`.github/idd/config.json` was unchanged by that issue. **One exception
+landed immediately afterward**: `ciGate.trustSourcePinnedRequiredChecks`
+was flipped to `true` in a same-day follow-up once the `master` ruleset
+gained a source-pinned entry (see
+[Required status checks on `master`](#required-status-checks-on-master)
+for the incident and its own entry below for the rationale) — every
+other key in this section remains at its distributed default.
 `.github/idd/config.json` was re-validated against the fetched
 `v0.6.0` schema with `ajv-cli validate --spec=draft2020` (passed) and
 with `idd-doctor` run from the pinned `v0.6.0` tarball itself
 (`result: passed`,
 `PASS .github/idd/config.json validates against policy.schema.json`,
 the same four pre-existing warnings as before) — no correctness break
-found, so `.github/idd/config.json` itself is unchanged by this issue.
+found as part of #234's own audit.
 
 ### Genuinely new in 0.5.0/0.6.0
 
