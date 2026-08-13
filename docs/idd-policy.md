@@ -298,8 +298,9 @@ matches anything, so no waiver can be issued or consumed.
 
 Confirmed at their distributed defaults rather than given an explicit
 `.github/idd/config.json` entry (roadmap #144), except where the
-Status column below records an explicit override. The Notes column is
-the single place a future status flip needs to change.
+Status column below records an explicit override. Each key's row
+(Status and, where relevant, Notes) is the single place a future
+status flip needs to change.
 
 | Key | Status | Notes |
 | --- | --- | --- |
@@ -322,10 +323,11 @@ already existed structurally at the pin (only their JSON Schema
 `description` text was added later) and is confirmed unchanged at
 `v0.6.0`. Per the roadmap's confirmed operator decision, every key
 below stayed at its distributed default as of #234 itself —
-`.github/idd/config.json` was unchanged by that issue. The Status
-column in the table below is the single place a later status flip
-needs to change; see the [0.4.0 section](#new-040-schema-keys-left-at-default)
-above for the same convention. `.github/idd/config.json` was
+`.github/idd/config.json` was unchanged by that issue. Each key's row
+in the table below (Status and, where relevant, Notes) is the single
+place a later status flip needs to change; see the
+[0.4.0 section](#new-040-schema-keys-left-at-default) above for the
+same convention. `.github/idd/config.json` was
 re-validated against the fetched `v0.6.0` schema with `ajv-cli validate
 --spec=draft2020` (passed) and with `idd-doctor` run from the pinned
 `v0.6.0` tarball itself (`result: passed`,
