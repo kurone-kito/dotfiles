@@ -297,31 +297,18 @@ matches anything, so no waiver can be issued or consumed.
 ## New 0.4.0 Schema Keys Left at Default
 
 Confirmed at their distributed defaults rather than given an explicit
-`.github/idd/config.json` entry (roadmap #144). **One post-#146
-exception**: `ciGate.trustEmptyProtectionReads` was confirmed at its
-`false` default here but has since been flipped to an explicit `true`
-— see the note immediately after this list, not the bullets below.
+`.github/idd/config.json` entry (roadmap #144), except where the
+Status column below records an explicit override. The Notes column is
+the single place a future status flip needs to change.
 
-- **`advisoryWait.convergenceScope`**: `all-prs`
-- **`advisoryWait.sameHeadRerollCap`**: `2`
-- **`advisoryWait.recoveryCycleCap`**: `2`
-- **`advisoryWait.terminalWindow`**: `PT12H`
-- **`mergeGate.soloCodeownerAdminFallback`**: `auto-admin-retry` — this
-  repository is solo-maintainer (`trustedMarkerActors: ["kurone-kito"]`
-  only) with `mergePolicy: fully_autonomous_merge`, exactly the
-  topology this key governs, and the distributed default (F3 retries
-  once with `gh pr merge --admin` when the sole blocker is the
-  solo-CODEOWNER self-approval deadlock) matches this repository's
-  existing autonomous-merge intent. Recorded here as a deliberate
-  confirmation, not an oversight.
-
-**Post-#146 exception: `ciGate.trustEmptyProtectionReads`.** Confirmed
-at its `false` default in #146, but now set to `true` in
-`.github/idd/config.json` — see
-[Required status checks on `master`](#required-status-checks-on-master)
-for why the fail-closed default became unworkable once
-`idd-ci.instructions.md` started treating an untrusted `404` on the
-classic branch-protection read the same as a `403`.
+| Key | Status | Notes |
+| --- | --- | --- |
+| `advisoryWait.convergenceScope` | default: `all-prs` | |
+| `advisoryWait.sameHeadRerollCap` | default: `2` | |
+| `advisoryWait.recoveryCycleCap` | default: `2` | |
+| `advisoryWait.terminalWindow` | default: `PT12H` | |
+| `mergeGate.soloCodeownerAdminFallback` | default: `auto-admin-retry` | This repository is solo-maintainer (`trustedMarkerActors: ["kurone-kito"]` only) with `mergePolicy: fully_autonomous_merge`, exactly the topology this key governs, and the distributed default (F3 retries once with `gh pr merge --admin` when the sole blocker is the solo-CODEOWNER self-approval deadlock) matches this repository's existing autonomous-merge intent. Recorded here as a deliberate confirmation, not an oversight. |
+| `ciGate.trustEmptyProtectionReads` | **explicit: `true`** (was default `false` at #146) | Confirmed at its `false` default in #146, but now set to `true` in `.github/idd/config.json` — see [Required status checks on `master`](#required-status-checks-on-master) for why the fail-closed default became unworkable once `idd-ci.instructions.md` started treating an untrusted `404` on the classic branch-protection read the same as a `403` (post-#146 exception). |
 
 ## New 0.5.0/0.6.0 Schema Keys Left at Default
 
@@ -333,55 +320,26 @@ of `schemas/policy.schema.json` between the prior 0.4.0-round pin
 new properties; everything else the issue's starting inventory listed
 already existed structurally at the pin (only their JSON Schema
 `description` text was added later) and is confirmed unchanged at
-`v0.6.0`. Per the roadmap's confirmed operator decision,
-every key below stayed at its distributed default as of #234 itself —
-`.github/idd/config.json` was unchanged by that issue. **One exception
-landed immediately afterward**: `ciGate.trustSourcePinnedRequiredChecks`
-was flipped to `true` in a same-day follow-up once the `master` ruleset
-gained a source-pinned entry (see
-[Required status checks on `master`](#required-status-checks-on-master)
-for the incident and its own entry below for the rationale) — every
-other key in this section remains at its distributed default.
-`.github/idd/config.json` was re-validated against the fetched
-`v0.6.0` schema with `ajv-cli validate --spec=draft2020` (passed) and
-with `idd-doctor` run from the pinned `v0.6.0` tarball itself
-(`result: passed`,
+`v0.6.0`. Per the roadmap's confirmed operator decision, every key
+below stayed at its distributed default as of #234 itself —
+`.github/idd/config.json` was unchanged by that issue. The Status
+column in the table below is the single place a later status flip
+needs to change; see the [0.4.0 section](#new-040-schema-keys-left-at-default)
+above for the same convention. `.github/idd/config.json` was
+re-validated against the fetched `v0.6.0` schema with `ajv-cli validate
+--spec=draft2020` (passed) and with `idd-doctor` run from the pinned
+`v0.6.0` tarball itself (`result: passed`,
 `PASS .github/idd/config.json validates against policy.schema.json`,
 the same four pre-existing warnings as before) — no correctness break
 found as part of #234's own audit.
 
 ### Genuinely new in 0.5.0/0.6.0
 
-- **`advisoryWait.exemptBotAuthoredPrs`**: `false` (0.6.0). Opt-in
-  claimless-waiver exemption letting a bot-authored PR with no claim
-  history pass advisory-convergence as `not_applicable` without a
-  per-PR maintainer waiver. Left at default: this repository's
-  dependency-update PRs (Dependabot) are handled by existing merge
-  automation, and enabling a bot-authorship exemption is a deliberate
-  future decision, not something to adopt silently alongside a docs
-  audit.
-- **`ciGate.trustSourcePinnedRequiredChecks`**: `true` (0.5.0 key;
-  changed from the `false` default during this round — see
-  [Required status checks on `master`](#required-status-checks-on-master)
-  for the incident that made this reachable). Opt-in trust for a
-  required check whose ruleset/branch-protection entry is source-pinned
-  to a specific GitHub App/integration (`app_id`/`integration_id`).
-  After the `master` ruleset's `required_status_checks` rule was
-  restored following an accidental removal (see below), every entry
-  came back pinned to `integration_id: 15368`. The operator verified
-  out-of-band via `gh api app/15368` and live check-run `app.id` fields
-  on a merged PR that `15368` is GitHub's own `github-actions` App —
-  the sole producer of every workflow-based check this repository
-  requires — so this key was flipped to `true` per the schema's
-  documented human-authorized-decision path, rather than left at the
-  fail-closed default.
-- **`helperRuntime.packageSpec`**: unset (0.5.0). Optional pinned npm
-  spec/tarball/commit archive overriding the mutable main-archive
-  fallback for `package-manager`/`ephemeral-npx` helper invocations.
-  This repository already pins every helper invocation explicitly per
-  command (see [Helper Runtime Profile](#helper-runtime-profile)) via
-  the `npx --package <tarball-url>` form, so this key would be
-  redundant with the existing per-invocation pinning convention.
+| Key | Status | Notes |
+| --- | --- | --- |
+| `advisoryWait.exemptBotAuthoredPrs` | default: `false` (0.6.0) | Opt-in claimless-waiver exemption letting a bot-authored PR with no claim history pass advisory-convergence as `not_applicable` without a per-PR maintainer waiver. Left at default: this repository's dependency-update PRs (Dependabot) are handled by existing merge automation, and enabling a bot-authorship exemption is a deliberate future decision, not something to adopt silently alongside a docs audit. |
+| `ciGate.trustSourcePinnedRequiredChecks` | **explicit: `true`** (was default `false`; 0.5.0 key, flipped in a same-day follow-up) | Changed from the `false` default during this round — see [Required status checks on `master`](#required-status-checks-on-master) for the incident that made this reachable. Opt-in trust for a required check whose ruleset/branch-protection entry is source-pinned to a specific GitHub App/integration (`app_id`/`integration_id`). After the `master` ruleset's `required_status_checks` rule was restored following an accidental removal (see below), every entry came back pinned to `integration_id: 15368`. The operator verified out-of-band via `gh api app/15368` and live check-run `app.id` fields on a merged PR that `15368` is GitHub's own `github-actions` App — the sole producer of every workflow-based check this repository requires — so this key was flipped to `true` per the schema's documented human-authorized-decision path, rather than left at the fail-closed default. |
+| `helperRuntime.packageSpec` | default: unset (0.5.0) | Optional pinned npm spec/tarball/commit archive overriding the mutable main-archive fallback for `package-manager`/`ephemeral-npx` helper invocations. This repository already pins every helper invocation explicitly per command (see [Helper Runtime Profile](#helper-runtime-profile)) via the `npx --package <tarball-url>` form, so this key would be redundant with the existing per-invocation pinning convention. |
 
 ### Confirmed pre-existing (unchanged since the 0.4.0-round pin)
 
