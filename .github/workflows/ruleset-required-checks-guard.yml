@@ -1,0 +1,78 @@
+name: Ruleset required-checks guard
+# Periodically re-verifies that the `master` branch ruleset still
+# enforces a `required_status_checks` rule with the expected context
+# set. Added after a 2026-08-02 incident where that rule silently
+# disappeared in its entirety and went undetected for 11 days -- see
+# the "Required status checks on `master`" section of
+# docs/idd-policy.md for the incident writeup. Update the
+# EXPECTED_CONTEXTS list below and that doc section together whenever
+# a required context is added or removed.
+#
+# Uses the "Get rules for a branch" effective-rules endpoint
+# (`repos/{owner}/{repo}/rules/branches/{branch}`), the same read
+# `.github/instructions/idd-ci.instructions.md` treats as
+# authoritative for required-check discovery -- unlike the
+# `/rulesets` summary/detail endpoints, this one does not require
+# elevated administration permission, so the default `GITHUB_TOKEN`
+# with `contents: read` is sufficient.
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Assert required_status_checks rule matches expected contexts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Force byte-order sorting regardless of the runner's locale,
+          # so the shell `sort` below and jq's (always byte-order)
+          # `sort` agree -- otherwise a locale-aware sort (which orders
+          # case-insensitively) can silently desync from jq's output
+          # and make `comm` misreport drift or matches.
+          export LC_ALL=C
+
+          # Keep in sync with docs/idd-policy.md's "Required status
+          # checks on `master`" section.
+          EXPECTED_SORTED=$(printf '%s\n' \
+            'Bash tests (bats)' \
+            'Lua syntax check' \
+            'PowerShell tests (Pester)' \
+            'idd-advisory-convergence' \
+            'lint' \
+            | sort)
+
+          RULES_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/master")
+
+          RULE_COUNT=$(printf '%s' "$RULES_JSON" | jq '[.[] | select(.type == "required_status_checks")] | length')
+          if [ "$RULE_COUNT" -eq 0 ]; then
+            echo "::error::master ruleset has no required_status_checks rule (expected contexts: $(printf '%s' "$EXPECTED_SORTED" | paste -sd, -))"
+            exit 1
+          fi
+
+          ACTUAL_SORTED=$(printf '%s' "$RULES_JSON" | jq -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | sort | .[]')
+
+          MISSING=$(comm -23 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))
+          EXTRA=$(comm -13 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))
+
+          if [ -n "$MISSING" ] || [ -n "$EXTRA" ]; then
+            echo "::error::master ruleset required_status_checks context set has drifted from the expected set."
+            if [ -n "$MISSING" ]; then
+              echo "::error::Missing context(s): $(printf '%s' "$MISSING" | paste -sd, -)"
+            fi
+            if [ -n "$EXTRA" ]; then
+              echo "::error::Unexpected extra context(s): $(printf '%s' "$EXTRA" | paste -sd, -)"
+            fi
+            exit 1
+          fi
+
+          echo "master ruleset required_status_checks contexts match the expected set."
