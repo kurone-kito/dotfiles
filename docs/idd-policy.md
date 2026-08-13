@@ -619,3 +619,31 @@ GitHub Copilot Code Review is empirically active on this repository
 the `copilot-pull-request-reviewer` actor. The default
 `copilot-advisory` profile is therefore satisfiable here; the earlier
 "confirm Copilot Code Review is enabled" needs-decision is closed.
+
+### Upstream template issues deferred to the next re-import
+
+The [`#233`](https://github.com/kurone-kito/dotfiles/issues/233)
+v0.6.0 re-sync carried these two items verbatim from upstream
+(confirmed byte-identical against the pinned
+`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6` source); both are review
+findings this repository chose not to fix ad hoc, since that issue's
+scope is placeholder substitution plus the registered divergence
+hunks, not an editorial rewrite of upstream's own prose or vendored
+code:
+
+- `docs/idd-helper-scripts.md`'s "Package-manager / ephemeral-npx
+  command" sections (claim-approval-gate, claim-lock, branch-name,
+  select-desynced-index, emit-marker, post-idd-marker, and others)
+  show only the `ephemeral-npx` `npx` literal invocation under a
+  heading that also names the `package-manager` profile, which
+  contradicts the `package-manager` profile's own contract elsewhere
+  in the same file ("do not fall back to ad hoc `npx` in this mode").
+  File this ambiguity upstream against `kurone-kito/idd-skill`, or
+  resolve it locally the next time this file is re-imported.
+- `scripts/minimize-superseded-markers.mjs`'s `runGh` error handler
+  (`String(e.stderr?.toString?.() ?? e.message ?? 'unknown error')`)
+  treats an empty-but-defined `stderr` string as present because `??`
+  only falls through on `null`/`undefined`, so a `gh` timeout with no
+  stderr output loses `error.message`'s useful timeout text. File this
+  upstream, or fix it locally the next time this vendored file is
+  re-imported (see the `vendored-file-header` divergence above).
