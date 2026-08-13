@@ -648,19 +648,21 @@ verification sweep does not have to rediscover them:
   `docs/index.md` was evaluated and skipped by #233 for the same
   reason -- see that entry).
 - **`placeholderResidue`**: six known-placeholder tokens, seven raw
-  `{{...}}` occurrences, in `docs/customization.md` -- five inside the
+  `{{...}}` occurrences, in `docs/customization.md` -- one occurrence
+  of each of the six tokens is inside the
   [placeholder mapping table](customization.md) that documents the
   onboarding substitution mechanism itself (for example, the table
   literally shows `{{REPO_NAME}}` as the template-side name for the
-  live `dotfiles` value), plus one more `{{REPO_NAME}}` mention outside
-  the table, in a synchronization-example sentence ("Template copies
-  use placeholders like `{{REPO_NAME}}` to support ..."). Both forms
-  are the same documentation-as-example usage, just in prose instead
-  of a table cell. `idd-onboard --verify`'s residue scanner matches
-  the seven known placeholder names as plain text anywhere in the
-  file and cannot distinguish either usage from genuine unresolved
-  residue -- the same false-positive shape as the `markdownlint-cli2`
-  toolchain-residue warnings above.
+  live `dotfiles` value; six table rows, six occurrences), plus a
+  seventh, second `{{REPO_NAME}}` occurrence outside the table, in a
+  synchronization-example sentence ("Template copies use placeholders
+  like `{{REPO_NAME}}` to support ..."). Both forms are the same
+  documentation-as-example usage, just in prose instead of a table
+  cell. `idd-onboard --verify`'s residue scanner matches the seven
+  raw `{{...}}` occurrences (six distinct token names) as plain text
+  anywhere in the file and cannot distinguish either usage from
+  genuine unresolved residue -- the same false-positive shape as the
+  `markdownlint-cli2` toolchain-residue warnings above.
   `idd-doctor`'s own, separately-scoped placeholder check (`no
   unresolved {{...}} placeholders in IDD-managed files`) passes
   clean, and a manual repository-wide grep for the `.github/`,
