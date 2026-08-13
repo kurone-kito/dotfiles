@@ -16,11 +16,14 @@ chooser for output shapes.
 ## Output chooser
 
 Draft an orphan issue only when one autonomous task can finish the work
-and the target repository is discoverable through `issue-scope:
-orphan-first`. If the repository uses `orphan-first-policy:
-maintainer-approved`, include a post-publication approval step after the
-final issue content is stable. If a public repository uses
-`orphan-first-policy: public-disabled`, draft a roadmap package instead.
+and the target repository discovers orphans (default
+`issue-scope: roadmap-first`, via the orphan fallback, or
+`issue-scope: orphan-first`). If the repository uses
+`orphan-first-policy: maintainer-approved`, include a post-publication
+approval step after the final issue content is stable. If the
+repository sets `issue-scope: roadmap` (roadmap-only) or a public
+repository uses `orphan-first-policy: public-disabled`, draft a
+roadmap package instead.
 
 If the repository keeps the broader secure-by-default issue-author
 approval gate, use the same post-publication approval note whenever the
@@ -588,9 +591,15 @@ verification shape, not a rigid edit order.
 
 ## Publication boundary
 
-If the user asked for drafts only, stop after reporting the issue set,
-assumptions, and non-ready buckets.
+Publish each `ready` body directly under the authoring hold once it
+passes the mechanical gate and the critique pass — this is the default
+outcome of drafting, and it needs no separate publish approval. Stop
+after publishing (and applying/creating the authoring label) unless
+the user also separately requests release from the authoring hold —
+release is what authorizes starting the IDD execution loop, so a
+request phrased as "start the IDD execution loop" counts as that same
+release request, not a separate path around it.
 
-If the user explicitly asked to publish issues, create or update them
-and then stop unless they also separately asked to start the IDD
-execution loop.
+If the user asked for drafts only (a preview before anything is
+created), honor that instead: stop after reporting the issue set,
+assumptions, and non-ready buckets, without publishing.
