@@ -22,7 +22,10 @@ name: Ruleset required-checks guard
 # alongside the ruleset.
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # Off the start of the hour and away from midnight UTC: GitHub's
+    # own docs warn that schedules clustered at popular times (:00 in
+    # particular) can be delayed or dropped during high load.
+    - cron: '17 6 * * *'
   workflow_dispatch:
 permissions:
   contents: read
