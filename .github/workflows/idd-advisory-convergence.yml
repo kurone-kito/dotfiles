@@ -4,10 +4,21 @@ name: IDD advisory-convergence gate
 # workflow is proven green -- see #149). Adapted from
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d. The maintainer-authorized
-# waiver escape is already configured in `.github/idd/config.json`
-# `ciGate.*`; see docs/idd-policy.md "CI Gate External Check Waivers"
-# for the waiver path.
+# 0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 (v0.6.0; reconciled from the
+# prior 4e8c7043edcb00dd8447dee83e7a17e5b2604d5d pin by #237, which
+# also keeps this file's helper pin in sync with the rest of the
+# repository's ephemeral-npx invocations -- see docs/idd-policy.md
+# "Helper Runtime Profile"). The maintainer-authorized waiver escape is
+# already configured in `.github/idd/config.json` `ciGate.*`; see
+# docs/idd-policy.md "CI Gate External Check Waivers" for the waiver
+# path.
+#
+# Runner override: `runs-on` below reads the `CI_RUNNER_LABEL`
+# repository variable, falling back to `ubuntu-latest` when unset (as
+# it is today -- no such variable is configured, so behavior is
+# unchanged). This only imports the override mechanism upstream added
+# in v0.6.0; adopting a non-default runner is a separate, deliberate
+# decision this reconciliation does not make.
 #
 # CI topology: convergence can change WITHOUT a new push -- when
 # Copilot submits its review (pull_request_review), or when a
@@ -68,8 +79,14 @@ concurrency:
   # context either, so it falls back to its own inputs.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr_number }}
 jobs:
+  # The job id `idd-advisory-convergence` is the exact check-run context
+  # consumed by the rerun helper, advisory-wait policy, required status
+  # check, and external-check waiver selector. Adding a `name:` display-name
+  # key or changing the job id changes that literal context. This warning is
+  # preventive; no observed incident yet. If either edit is intentional,
+  # update every consumer to the new literal context together.
   idd-advisory-convergence:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -94,6 +111,12 @@ jobs:
       # form. See docs/idd-policy.md "Helper Runtime Profile".
       - env:
           GH_TOKEN: ${{ github.token }}
+          # workflow_dispatch's `pr_number` input is `type: number` in the
+          # UI, but that constraint is not strictly enforced for direct API
+          # dispatches, so route it through env: and reference it as a
+          # quoted shell variable rather than interpolating the `${{ }}`
+          # expression directly into the run: script.
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/4e8c7043edcb00dd8447dee83e7a17e5b2604d5d \
-            idd-advisory-convergence --pr ${{ github.event.pull_request.number || inputs.pr_number }} --assert
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
+            idd-advisory-convergence --pr "$PR_NUMBER" --assert
