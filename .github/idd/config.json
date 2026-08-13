@@ -44,7 +44,8 @@
     "externalCheckWaivers": {
       "mode": "maintainer-authorized"
     },
-    "trustSourcePinnedRequiredChecks": true
+    "trustSourcePinnedRequiredChecks": true,
+    "trustEmptyProtectionReads": true
   },
   "skipIssueAuthorApprovalGate": true,
   "maintainerApprovalActorPolicy": "owners-and-maintainers-only",

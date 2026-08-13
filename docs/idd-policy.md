@@ -291,13 +291,15 @@ matches anything, so no waiver can be issued or consumed.
 ## New 0.4.0 Schema Keys Left at Default
 
 Confirmed at their distributed defaults rather than given an explicit
-`.github/idd/config.json` entry (roadmap #144):
+`.github/idd/config.json` entry (roadmap #144). **One post-#146
+exception**: `ciGate.trustEmptyProtectionReads` was confirmed at its
+`false` default here but has since been flipped to an explicit `true`
+— see the note immediately after this list, not the bullets below.
 
 - **`advisoryWait.convergenceScope`**: `all-prs`
 - **`advisoryWait.sameHeadRerollCap`**: `2`
 - **`advisoryWait.recoveryCycleCap`**: `2`
 - **`advisoryWait.terminalWindow`**: `PT12H`
-- **`ciGate.trustEmptyProtectionReads`**: `false`
 - **`mergeGate.soloCodeownerAdminFallback`**: `auto-admin-retry` — this
   repository is solo-maintainer (`trustedMarkerActors: ["kurone-kito"]`
   only) with `mergePolicy: fully_autonomous_merge`, exactly the
@@ -306,6 +308,14 @@ Confirmed at their distributed defaults rather than given an explicit
   solo-CODEOWNER self-approval deadlock) matches this repository's
   existing autonomous-merge intent. Recorded here as a deliberate
   confirmation, not an oversight.
+
+**Post-#146 exception: `ciGate.trustEmptyProtectionReads`.** Confirmed
+at its `false` default in #146, but now set to `true` in
+`.github/idd/config.json` — see
+[Required status checks on `master`](#required-status-checks-on-master)
+for why the fail-closed default became unworkable once
+`idd-ci.instructions.md` started treating an untrusted `404` on the
+classic branch-protection read the same as a `403`.
 
 ## New 0.5.0/0.6.0 Schema Keys Left at Default
 
@@ -497,6 +507,26 @@ GitHub App), which the original bare-context rule did not have — see
 `ciGate.trustSourcePinnedRequiredChecks` above for how this repository
 resolved the resulting fail-closed gate ambiguity.
 
+**Same-day follow-up: `trustEmptyProtectionReads`.** Once the ruleset
+gate above was fixed, the very next roadmap #239 track (#235) hit a
+second, independent fail-closed gate at F2: `idd-ci.instructions.md`'s
+required-check discovery treats an untrusted `404` on the classic
+branch-protection read (`GET
+/repos/{owner}/{repo}/branches/master/protection`) the same as a
+`403` and refuses to proceed unless
+`ciGate.trustEmptyProtectionReads: true` is set. This repository has
+never configured classic branch protection — the `404` reads
+`{"message":"Branch not protected"}`, and the repository is public
+with the querying token holding `ADMIN` permission, so there is no
+plausible permission-hiding explanation for the `404`; it is
+genuinely empty. #146 (0.4.0 round) left this key at its `false`
+default without anticipating that a later `idd-ci.instructions.md`
+hardening pass would turn the classic-protection read into a hard F2
+blocker rather than an `idd-doctor` warning. This round flips it to
+`true`, which is why the [New 0.4.0 Schema Keys Left at
+Default](#new-040-schema-keys-left-at-default) entry above now
+records the change instead of the original `false`.
+
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
@@ -523,10 +553,11 @@ rediscover them:
 - **Branch protection not readable for `kurone-kito/dotfiles:master`**:
   expected. This repository's merge gate comes from a ruleset, not
   classic branch protection, so the classic-protection read returns
-  empty/`404`. **`ciGate.trustEmptyProtectionReads`** stays at its
-  distributed default `false` (fail-closed; confirmed deliberately in
-  #146), so this surfaces as a warning rather than being silently
-  treated as "no protection configured".
+  empty/`404`. **`ciGate.trustEmptyProtectionReads`** is now `true`
+  (changed from the `false` default confirmed in #146 — see
+  [Required status checks on `master`](#required-status-checks-on-master)
+  for why), so this read is trusted as genuinely empty rather than
+  failing closed.
 - **Post-merge cleanup backlog** (new since the roadmap's original
   pin, resolved by #220): the check flags merged PRs missing a
   `<!-- idd-cleanup-evidence: ... -->` comment, which requires running
