@@ -35,9 +35,10 @@ A collection of configuration files that we use.
 
 - [Git](https://git-scm.com/) — aliases, LFS, GPG signing, multi-profile
 - [delta](https://github.com/dandavison/delta) — diff viewer, installed
-  via mise; pinned to `0.18.2` on Intel Mac since upstream dropped
-  `x86_64-apple-darwin` builds after v0.19.0, while Apple Silicon Mac,
-  Linux, and Windows track `latest` (revisit around 2028-12)
+  via mise; pinned to `0.18.2` on macOS since upstream dropped
+  `x86_64-apple-darwin` builds after v0.19.0 (mise has no per-arch
+  restriction, so the pin covers Apple Silicon too), while Linux and
+  Windows track `latest` (revisit around 2028-12)
 
 ### Editors & terminal
 
@@ -72,7 +73,8 @@ input line editing
 ### CLI tools (via mise)
 
 - [fastfetch](https://github.com/fastfetch-cli/fastfetch) — system
-  information display
+  information display (the first `mise install` may time out fetching
+  the upstream release list; re-run it if that happens)
 - [jq](https://jqlang.org/) — JSON processor
 - [mkcert](https://github.com/FiloSottile/mkcert) — local TLS
   certificates
