@@ -82,15 +82,17 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
 
   AfterEach {
     # TestDrive: persists for the whole Pester session, not just this
-    # Describe — remove any GitHub.cli_* directory a test created
-    # (before $env:LOCALAPPDATA below is restored to its real value)
-    # so it cannot leak into a later file's assumptions. Uses the
-    # TestDrive-rooted path captured in BeforeEach rather than
+    # Describe — remove any GitHub.cli_*/twpayne.chezmoi_* directory a
+    # test created (before $env:LOCALAPPDATA below is restored to its
+    # real value) so it cannot leak into a later file's assumptions.
+    # Uses the TestDrive-rooted path captured in BeforeEach rather than
     # re-reading $env:LOCALAPPDATA, so a partially-failed BeforeEach
     # can never point this cleanup at a real %LOCALAPPDATA%.
     if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
-      Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      foreach ($filter in @('GitHub.cli_*', 'twpayne.chezmoi_*')) {
+        Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter $filter -ErrorAction SilentlyContinue |
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      }
     }
 
     Set-Variable -Name HOME -Value $script:OriginalHome -Scope Global -Force
@@ -141,6 +143,37 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $registerManagedPaths = @($desiredManagedPaths)
 
     $confDManagedPaths | Should -Contain $binDir
+    $registerManagedPaths | Should -Be $confDManagedPaths
+  }
+
+  It 'computes the identical managed-path set on both surfaces with the twpayne.chezmoi default declared' {
+    # chezmoi.exe sits directly in its package directory (no bin
+    # subpath — see the shipped default's empty "bin" below).
+    $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    $chezmoiDir = Join-Path $packagesRoot 'twpayne.chezmoi_Microsoft.Winget.Source_test'
+    New-Item -ItemType Directory -Path $chezmoiDir -Force | Out-Null
+
+    # Literal output of `chezmoi execute-template` against
+    # winget-user-path-packages.json.tmpl with no user declarations —
+    # kept identical to the assertion in
+    # winget-user-path-packages-tmpl.Tests.ps1's "produces the exact
+    # deterministic JSON..." case, so this exercises the actual
+    # rendered-manifest shape (both shipped defaults) rather than an
+    # independently hand-written fixture. Keep both in sync.
+    $manifestPath = 'TestDrive:\winget-manifest-chezmoi.json'
+    Set-Content -Path $manifestPath -Value (
+      '[{"bin":"","enabled":true,"id":"twpayne.chezmoi","label":"chezmoi"},' +
+      '{"bin":"mise/bin","enabled":true,"id":"jdx.mise","label":"mise"}]'
+    )
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
+
+    . $script:ConfDScript
+    $confDManagedPaths = @($desiredManagedPaths)
+
+    . $script:RegisterFixture 6>&1 | Out-Null
+    $registerManagedPaths = @($desiredManagedPaths)
+
+    $confDManagedPaths | Should -Contain $chezmoiDir
     $registerManagedPaths | Should -Be $confDManagedPaths
   }
 }
