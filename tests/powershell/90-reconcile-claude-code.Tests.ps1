@@ -251,7 +251,12 @@ Describe '90-reconcile-claude-code' {
 
       $output = & $script:Fixture *>&1 | Out-String
       $LASTEXITCODE | Should -Be 1
-      $output | Should -Match "differs from 'env' only by letter case"
+      # \s+ rather than literal spaces: Windows PowerShell 5.1's
+      # console-host error formatting wraps a long Write-Error message
+      # across multiple lines with inserted indentation, so an
+      # exact-space match can fail there even though the expected
+      # error was genuinely emitted.
+      $output | Should -Match "differs\s+from\s+'env'\s+only\s+by\s+letter\s+case"
       $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
       $after.Hash | Should -Be $before.Hash
     }
@@ -269,7 +274,14 @@ Describe '90-reconcile-claude-code' {
 
       $output = & $script:Fixture *>&1 | Out-String
       $LASTEXITCODE | Should -Be 1
-      $output | Should -Match "differs from 'env\.DISABLE_AUTOUPDATER' only by letter case"
+      # \s+ rather than literal spaces: Windows PowerShell 5.1's
+      # console-host error formatting wraps a long Write-Error message
+      # (this one is long, since it embeds the full settings.json
+      # path) across multiple lines with inserted indentation, so an
+      # exact-space match can fail between "from" and the quoted
+      # identifier even though the expected error was genuinely
+      # emitted.
+      $output | Should -Match "differs\s+from\s+'env\.DISABLE_AUTOUPDATER'\s+only\s+by\s+letter\s+case"
       $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
       $after.Hash | Should -Be $before.Hash
     }
