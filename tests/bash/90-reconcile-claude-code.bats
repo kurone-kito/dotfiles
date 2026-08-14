@@ -1,0 +1,207 @@
+#!/usr/bin/env bats
+# Tests for run_after_90-reconcile-claude-code.sh.tmpl.
+# Exercises: env.DISABLE_AUTOUPDATER JSON merge-patch reconciliation on
+# ~/.claude/settings.json (create/preserve/idempotent/fail-loudly-on-
+# invalid-JSON), and the stray mise-managed-Node @anthropic-ai/claude-code
+# copy detection/removal (only when the mise-managed npm copy is
+# confirmed present).
+#
+# The fixture under test has zero go-template directives, so it is run
+# directly from home/ rather than via a hand-maintained pre-rendered
+# fixture (avoids drift between the fixture and the shipped script).
+#
+# SAFETY: every test overrides HOME to a bats tmpdir and mocks `mise`
+# (and, where relevant, `jq`) via a PATH-prepended bin dir. setup()
+# asserts both overrides actually took effect before any test body
+# runs, so a broken mock can never fall through to the real machine's
+# ~/.claude/settings.json or real mise-managed node_modules.
+
+bats_require_minimum_version 1.5.0
+
+setup() {
+  # Captured before any override below: this is the real, unmodified
+  # HOME of the process running bats. Used only by the preflight guard.
+  _REAL_HOME="$HOME"
+
+  load 'helpers/bats-support/load'
+  load 'helpers/bats-assert/load'
+  load 'helpers/bats-file/load'
+
+  export HOME="$BATS_TEST_TMPDIR/home"
+  mkdir -p "$HOME"
+  FIXTURE="$BATS_TEST_DIRNAME/../../home/run_after_90-reconcile-claude-code.sh.tmpl"
+
+  BIN_DIR="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$BIN_DIR"
+  _ORIG_PATH="$PATH"
+  export PATH="$BIN_DIR:$PATH"
+
+  NODE_DIR="$BATS_TEST_TMPDIR/node"
+  MANAGED_DIR="$BATS_TEST_TMPDIR/managed"
+  mkdir -p "$NODE_DIR/lib/node_modules" "$NODE_DIR/bin" "$MANAGED_DIR"
+
+  # Preflight guard: fail fast rather than silently touching the real
+  # machine if the HOME override did not take effect (e.g. an empty
+  # BATS_TEST_TMPDIR would make this a no-op override).
+  [ -n "$BATS_TEST_TMPDIR" ]
+  [ "$HOME" = "$BATS_TEST_TMPDIR/home" ]
+  [ "$HOME" != "$_REAL_HOME" ]
+}
+
+teardown() {
+  export PATH="$_ORIG_PATH"
+}
+
+write_mise_mock() {
+  # $1: 0 or 1 -> whether `mise where npm:@anthropic-ai/claude-code`
+  #     resolves successfully (default: 1, resolves)
+  local managed_resolves="${1:-1}"
+  cat > "$BIN_DIR/mise" << MOCK
+#!/bin/bash
+if [ "\$1" = "where" ] && [ "\$2" = "node" ]; then
+  echo "$NODE_DIR"
+  exit 0
+fi
+if [ "\$1" = "where" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+  if [ "$managed_resolves" = "1" ]; then
+    echo "$MANAGED_DIR"
+    exit 0
+  else
+    exit 1
+  fi
+fi
+exit 1
+MOCK
+  chmod +x "$BIN_DIR/mise"
+  # Preflight guard: confirm the mock actually wins PATH resolution.
+  [ "$(command -v mise)" = "$BIN_DIR/mise" ]
+}
+
+write_stray_copy() {
+  mkdir -p "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code/bin"
+  touch "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+  ln -sf '../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' "$NODE_DIR/bin/claude"
+}
+
+@test "mise absent: whole script no-ops without touching settings.json" {
+  export PATH="/usr/bin:/bin"
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "mise not found; skipping Claude Code autoupdater repair."
+  assert_file_not_exists "$HOME/.claude/settings.json"
+}
+
+@test "settings.json absent: created with env.DISABLE_AUTOUPDATER=1" {
+  write_mise_mock
+  run bash "$FIXTURE"
+  assert_success
+  assert_file_exists "$HOME/.claude/settings.json"
+  run jq -e '.env.DISABLE_AUTOUPDATER == "1"' "$HOME/.claude/settings.json"
+  assert_success
+}
+
+@test "existing settings.json: only env.DISABLE_AUTOUPDATER changes, other keys preserved" {
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  cat > "$HOME/.claude/settings.json" << 'JSON'
+{
+  "permissions": { "allow": ["Bash(git:*)"] },
+  "env": { "OTHER_VAR": "keep-me" }
+}
+JSON
+  run bash "$FIXTURE"
+  assert_success
+  run jq -e '.env.DISABLE_AUTOUPDATER == "1"' "$HOME/.claude/settings.json"
+  assert_success
+  run jq -e '.env.OTHER_VAR == "keep-me"' "$HOME/.claude/settings.json"
+  assert_success
+  run jq -e '.permissions.allow == ["Bash(git:*)"]' "$HOME/.claude/settings.json"
+  assert_success
+}
+
+@test "already \"1\": no write occurs (byte-identical file)" {
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{"env":{"DISABLE_AUTOUPDATER":"1"}}' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "already set to \"1\""
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+}
+
+@test "invalid JSON: fails loudly, non-zero exit, file left untouched" {
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{not valid json' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  run bash "$FIXTURE"
+  assert_failure
+  assert_output --partial "invalid JSON"
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+}
+
+@test "non-object env key: fails loudly, non-zero exit" {
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{"env": "not-an-object"}' > "$HOME/.claude/settings.json"
+  run bash "$FIXTURE"
+  assert_failure
+}
+
+@test "jq absent: settings reconciliation skipped, stray-copy check still runs" {
+  write_mise_mock
+  # Build a PATH scoped to only the mise mock plus symlinks to the
+  # handful of coreutils the script needs (mkdir/mktemp/mv/rm), with
+  # jq deliberately excluded -- regardless of where the host's real jq
+  # binary happens to live, it cannot be resolved from this PATH.
+  local bash_bin
+  bash_bin="$(command -v bash)"
+  JQLESS_DIR="$BATS_TEST_TMPDIR/jqless-bin"
+  mkdir -p "$JQLESS_DIR"
+  for cmd in mkdir mktemp mv rm; do
+    ln -sf "$(command -v "$cmd")" "$JQLESS_DIR/$cmd"
+  done
+  export PATH="$BIN_DIR:$JQLESS_DIR"
+  ! command -v jq &>/dev/null || {
+    echo "test setup bug: jq still resolvable after PATH scoping" >&2
+    return 1
+  }
+
+  run "$bash_bin" "$FIXTURE"
+  assert_success
+  assert_output --partial "jq not found; skipping"
+  assert_file_not_exists "$HOME/.claude/settings.json"
+}
+
+@test "no stray copy: no-op, idempotent" {
+  write_mise_mock
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "No stray @anthropic-ai/claude-code copy found"
+  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+}
+
+@test "stray copy + managed copy present: dir and bin shim both removed" {
+  write_mise_mock 1
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
+  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_not_exists "$NODE_DIR/bin/claude"
+  # Never touches the mise-managed copy itself.
+  assert_dir_exists "$MANAGED_DIR"
+}
+
+@test "stray copy present, managed copy unresolvable: stray copy left in place" {
+  write_mise_mock 0
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "leaving the stray copy in place"
+  assert_dir_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NODE_DIR/bin/claude"
+}

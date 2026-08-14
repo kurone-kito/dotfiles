@@ -1,0 +1,160 @@
+#!/usr/bin/env pwsh
+# chezmoi run_after script: reconcile env.DISABLE_AUTOUPDATER into
+# ~/.claude/settings.json (JSON merge-patch on that one key only) and
+# remove any stray @anthropic-ai/claude-code copy that Claude Code's
+# own background autoupdater may have written directly into
+# mise-managed Node.js's global node_modules, shadowing the
+# mise-managed npm:@anthropic-ai/claude-code install. Runs after mise
+# tool installation so `mise where node` / `mise where
+# npm:@anthropic-ai/claude-code` are resolvable. See issue #258.
+$ErrorActionPreference = 'Stop'
+
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping Claude Code autoupdater repair.'
+  exit 0
+}
+
+$settingsDir = Join-Path $HOME '.claude'
+$settingsFile = Join-Path $settingsDir 'settings.json'
+
+function Write-Utf8NoBom {
+  param(
+    [Parameter(Mandatory)] [string] $Path,
+    [Parameter(Mandatory)] [AllowEmptyString()] [string] $Content
+  )
+  # PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+  # BOM-less UTF-8 bytes directly instead, matching the pattern in
+  # run_once_before_10-import-gpg-keys.ps1.tmpl.
+  [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Write-FatalError {
+  param([Parameter(Mandatory)] [string] $Message)
+  # Write-Error under the script-wide $ErrorActionPreference = 'Stop'
+  # throws a terminating error instead of writing to the error stream,
+  # so 'exit 1' right after it would never run. Swap EAP to 'Continue'
+  # for just this call so the message actually lands on the error
+  # stream (capturable by callers via 2>&1 / *>&1), then restore it.
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  Write-Error $Message
+  $ErrorActionPreference = $previousEap
+}
+
+function Merge-ClaudeSettings {
+  if (-not (Test-Path -LiteralPath $settingsDir)) {
+    New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+  }
+  if (-not (Test-Path -LiteralPath $settingsFile)) {
+    Write-Utf8NoBom -Path $settingsFile -Content '{}'
+  }
+
+  $raw = Get-Content -LiteralPath $settingsFile -Raw
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    Write-FatalError "error: $settingsFile is empty; refusing to treat that as valid JSON. Fix or remove it manually, then re-run 'chezmoi apply'."
+    exit 1
+  }
+
+  try {
+    $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    Write-FatalError "error: $settingsFile contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    exit 1
+  }
+
+  if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
+    Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    exit 1
+  }
+
+  $envProp = $parsed.PSObject.Properties['env']
+  if ($envProp -and $null -ne $envProp.Value -and
+      $envProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+    Write-FatalError "error: $settingsFile has a non-object 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    exit 1
+  }
+
+  if ($envProp -and $envProp.Value) {
+    $existing = $envProp.Value.PSObject.Properties['DISABLE_AUTOUPDATER']
+    if ($existing -and $existing.Value -is [string] -and $existing.Value -ceq '1') {
+      Write-Host "env.DISABLE_AUTOUPDATER already set to `"1`" in $settingsFile; nothing to do."
+      return
+    }
+  }
+
+  if (-not $envProp -or $null -eq $envProp.Value) {
+    if ($envProp) {
+      $envProp.Value = [PSCustomObject]@{ DISABLE_AUTOUPDATER = '1' }
+    } else {
+      $parsed | Add-Member -NotePropertyName 'env' `
+        -NotePropertyValue ([PSCustomObject]@{ DISABLE_AUTOUPDATER = '1' })
+    }
+  } else {
+    $target = $envProp.Value
+    $existingProp = $target.PSObject.Properties['DISABLE_AUTOUPDATER']
+    if ($existingProp) {
+      $existingProp.Value = '1'
+    } else {
+      $target | Add-Member -NotePropertyName 'DISABLE_AUTOUPDATER' -NotePropertyValue '1'
+    }
+  }
+
+  $json = $parsed | ConvertTo-Json -Depth 100
+  Write-Utf8NoBom -Path $settingsFile -Content ($json + [System.Environment]::NewLine)
+  Write-Host "Set env.DISABLE_AUTOUPDATER=`"1`" in $settingsFile."
+}
+
+Merge-ClaudeSettings
+
+function Remove-StrayClaudeCodeCopy {
+  $nodeDir = (mise where node 2>$null)
+  if (-not $nodeDir) {
+    Write-Host 'mise-managed Node.js not resolvable; skipping stray @anthropic-ai/claude-code check.'
+    return
+  }
+
+  if ($IsWindows -ne $false) {
+    # Windows npm global layout: <prefix>\node_modules\<pkg> (no `lib`
+    # segment), matching a standard npm-on-Windows global install.
+    $strayDir = Join-Path $nodeDir (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+  } else {
+    $strayDir = Join-Path $nodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
+  }
+
+  if (-not (Test-Path -LiteralPath $strayDir)) {
+    Write-Host 'No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up.'
+    return
+  }
+
+  $managedDir = (mise where npm:@anthropic-ai/claude-code 2>$null)
+  if (-not $managedDir -or -not (Test-Path -LiteralPath $managedDir)) {
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    return
+  }
+
+  # Remove the bin shim(s) before the directory they point into: a
+  # mid-operation interruption then still finds the stray directory on
+  # the next 'chezmoi apply' (the check above) and retries cleanly.
+  if ($IsWindows -ne $false) {
+    # Windows npm global installs place claude, claude.cmd, and
+    # claude.ps1 shims at the prefix root (not in a bin/ subfolder).
+    foreach ($name in @('claude.cmd', 'claude.ps1', 'claude')) {
+      $shim = Join-Path $nodeDir $name
+      if (Test-Path -LiteralPath $shim) {
+        Remove-Item -LiteralPath $shim -Force
+      }
+    }
+  } else {
+    $shim = Join-Path $nodeDir (Join-Path 'bin' 'claude')
+    if (Test-Path -LiteralPath $shim) {
+      Remove-Item -LiteralPath $shim -Force
+    }
+  }
+
+  Remove-Item -LiteralPath $strayDir -Recurse -Force
+  Write-Host "Removed stray @anthropic-ai/claude-code copy at $strayDir (mise-managed copy confirmed at $managedDir)."
+}
+
+Remove-StrayClaudeCodeCopy
+
+exit 0
