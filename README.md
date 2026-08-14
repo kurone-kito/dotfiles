@@ -35,8 +35,8 @@ A collection of configuration files that we use.
 
 - [Git](https://git-scm.com/) — aliases, LFS, GPG signing, multi-profile
 - [delta](https://github.com/dandavison/delta) — diff viewer, installed
-  via mise; pinned to `0.18.2` on macOS since upstream dropped
-  `x86_64-apple-darwin` builds after v0.19.0 (mise has no per-arch
+  via mise; pinned to `0.18.2` on macOS since upstream stopped shipping
+  `x86_64-apple-darwin` builds at v0.19.0 (mise has no per-arch
   restriction, so the pin covers Apple Silicon too), while Linux and
   Windows track `latest` (revisit around 2028-12)
 
