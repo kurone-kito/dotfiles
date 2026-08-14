@@ -3,6 +3,23 @@ dotnet = "latest"
 node = "latest"
 pnpm = "latest"
 
+# dandavison/delta stopped shipping x86_64-apple-darwin builds at
+# v0.19.0 (aarch64-apple-darwin is still published). Pin macOS to the
+# last version with an Intel build; other platforms track latest.
+# Revisit dropping this pin around 2028-12, once Intel Mac support is
+# expected to be broadly moot (~3 years past the macOS Tahoe cycle).
+delta = [
+  { version = "0.18.2", os = "macos" },
+  { version = "latest", os = ["linux", "windows"] },
+]
+fastfetch = "latest"
+fzf = "latest"
+jq = "latest"
+mkcert = "latest"
+tealdeer = "latest"
+terraform = "latest"
+yq = "latest"
+
 "aqua:anomalyco/opencode" = "latest"
 
 "npm:@anthropic-ai/claude-code" = { version = "latest", npm_args = "--ignore-scripts=false" }
