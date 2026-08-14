@@ -122,3 +122,13 @@ a local or RDP interactive session instead. Either way, only the very
 first `chezmoi apply` on a given machine needs this workaround — every
 apply after that resolves `chezmoi.exe` through the managed User PATH
 like any other declared package.
+
+That first apply only updates the **persisted registry** User PATH
+(`run_onchange_after_35-register-path.ps1.tmpl`); it does not modify
+the already-running session's `$env:PATH` (only
+`conf.d/01-path.ps1`, which runs on profile load, does that). If you
+ran the bootstrap command from an existing SSH shell, reconnect (or
+otherwise start a fresh session) before relying on plain `chezmoi`
+commands by name — the current shell still can't resolve `chezmoi`
+by name until then, even though the registry is already fixed for
+every future session.
