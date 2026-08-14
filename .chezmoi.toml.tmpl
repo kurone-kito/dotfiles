@@ -91,7 +91,9 @@ mise_trust = {{ dig "mise_trust" false $clone }}
      with enabled = false doesn't require restating id/bin).
      Mirrored in winget-user-path-packages.json.tmpl — keep both in
      sync. */ -}}
-{{- $wingetDefaultPackages := dict "mise" (dict "id" "jdx.mise" "bin" "mise/bin") -}}
+{{- $wingetDefaultPackages := dict
+      "mise"    (dict "id" "jdx.mise" "bin" "mise/bin")
+      "chezmoi" (dict "id" "twpayne.chezmoi") -}}
 {{- range $key, $pkg := (merge (dig "wingetUserPath" "packages" dict .) $wingetDefaultPackages) }}
 
 [data.wingetUserPath.packages."{{ $key }}"]
