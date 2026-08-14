@@ -256,6 +256,47 @@ JSON
   assert_failure
 }
 
+@test "jq present, iconv absent, python3 available: routes to python3 for strict UTF-8" {
+  # Regression test: the jq backend's UTF-8 strictness depends on
+  # iconv, an optional PATH entry -- without this routing, a host with
+  # jq but no iconv would silently fall back to jq's weaker
+  # merely-syntactically-valid guarantee and rewrite a settings.json
+  # containing invalid UTF-8 bytes instead of rejecting it. Scope PATH
+  # to jq + python3 + coreutils with iconv deliberately excluded, and
+  # confirm the invalid-UTF-8 case is still rejected -- provable only
+  # because python3 (not jq) is doing the write here.
+  write_mise_mock
+  local bash_bin jq_bin python3_bin sha256sum_bin
+  bash_bin="$(command -v bash)"
+  jq_bin="$(command -v jq || true)"
+  python3_bin="$(command -v python3 || true)"
+  sha256sum_bin="$(command -v sha256sum)"
+  if [ -z "${jq_bin}" ] || [ -z "${python3_bin}" ]; then
+    skip "jq and/or python3 not available on this host; cannot exercise this routing path"
+  fi
+  NO_ICONV_DIR="$BATS_TEST_TMPDIR/no-iconv-bin"
+  mkdir -p "$NO_ICONV_DIR"
+  for cmd in mkdir mktemp mv rm; do
+    ln -sf "$(command -v "$cmd")" "$NO_ICONV_DIR/$cmd"
+  done
+  ln -sf "${jq_bin}" "$NO_ICONV_DIR/jq"
+  ln -sf "${python3_bin}" "$NO_ICONV_DIR/python3"
+  export PATH="$BIN_DIR:$NO_ICONV_DIR"
+  ! command -v iconv &>/dev/null || {
+    echo "test setup bug: iconv still resolvable after PATH scoping" >&2
+    return 1
+  }
+  mkdir -p "$HOME/.claude"
+  printf '{"note":"\xff"}' > "$HOME/.claude/settings.json"
+  before_hash="$("${sha256sum_bin}" "$HOME/.claude/settings.json")"
+
+  run "$bash_bin" "$FIXTURE"
+  assert_failure
+  assert_output --partial "invalid JSON"
+  after_hash="$("${sha256sum_bin}" "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+}
+
 @test "settings.json is a symlink: fails loudly, symlink left untouched" {
   # Regression test: the atomic-replace pattern (mktemp + mv, or
   # Python's os.replace) replaces whatever inode sits at the

@@ -34,9 +34,13 @@ reconcile_settings_jq() {
   # jq/python3/mkdir/mv themselves) first, mirroring the python
   # backend below: its `open(..., encoding="utf-8")` already raises
   # UnicodeDecodeError (a ValueError subclass) on the same input,
-  # caught by the existing `except ValueError`. If iconv itself isn't
-  # on PATH, skip this extra check rather than failing outright -- no
-  # worse than the behavior before this check existed.
+  # caught by the existing `except ValueError`. The caller
+  # (reconcile_settings) already routes to the python backend instead
+  # of here whenever iconv is missing and python3 is available, so
+  # reaching this function with iconv absent only happens when python3
+  # is unavailable too -- skip this extra check in that narrow case
+  # rather than refusing to reconcile settings.json at all; no worse
+  # than the behavior before this check existed.
   if command -v iconv >/dev/null 2>&1; then
     if ! iconv -f UTF-8 -t UTF-8 "${settings_file}" >/dev/null 2>&1; then
       echo "error: ${settings_file} is not valid UTF-8; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
@@ -202,15 +206,31 @@ reconcile_settings() {
   if [ -z "${jq_bin}" ]; then
     jq_bin="$(command -v jq 2>/dev/null)" || jq_bin=""
   fi
-  if [ -n "${jq_bin}" ]; then
-    reconcile_settings_jq "${jq_bin}"
-    return $?
-  fi
-
   python_bin="$(mise which python3 2>/dev/null)" || python_bin=""
   if [ -z "${python_bin}" ]; then
     python_bin="$(command -v python3 2>/dev/null)" || python_bin=""
   fi
+
+  if [ -n "${jq_bin}" ]; then
+    if command -v iconv >/dev/null 2>&1 || [ -z "${python_bin}" ]; then
+      # Either iconv is available, so the jq backend can enforce its
+      # own strict UTF-8 check below; or python3 isn't available
+      # either, so falling through would gain nothing -- run jq as
+      # usual (its check-skipped guarantee is still strictly better
+      # than refusing to reconcile settings.json at all).
+      reconcile_settings_jq "${jq_bin}"
+      return $?
+    fi
+    # jq is available but iconv -- the only strict UTF-8 check the jq
+    # backend has -- is not, and python3 (which enforces strict UTF-8
+    # unconditionally via its own `encoding="utf-8"` reader, no
+    # optional dependency involved) is available. Prefer python3 for
+    # this invocation over silently falling back to jq's weaker
+    # merely-syntactically-valid guarantee.
+    reconcile_settings_python "${python_bin}"
+    return $?
+  fi
+
   if [ -n "${python_bin}" ]; then
     reconcile_settings_python "${python_bin}"
     return $?
