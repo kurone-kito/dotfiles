@@ -68,6 +68,7 @@ words:
   - jsonls
   - junegunn
   - keepassxc
+  - kislyuk
   - kito
   - kylechui
   - lspconfig
@@ -75,6 +76,7 @@ words:
   - luks
   - mergo
   - mfussenegger
+  - mikefarah
   - MINIMIZABLE
   - MYVIMRC
   - netrw
