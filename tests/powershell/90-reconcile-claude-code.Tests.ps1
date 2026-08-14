@@ -303,6 +303,33 @@ Describe '90-reconcile-claude-code' {
       (Get-Item -LiteralPath $settingsFile -Force).Target | Should -Be $realTarget
     }
 
+    It 'fails loudly on a dangling settings.json symlink without creating its target' {
+      # Regression test: Test-Path on a *dangling* symlink follows the
+      # link and reports the missing target as absent, so a naive
+      # ordering (seed-if-absent, then check for a symlink) would let
+      # the seed write follow the link and create its target before
+      # the symlink check ever runs. The reparse-point check must run
+      # first so a dangling link produces zero side effects, not just
+      # a same-outcome error after already creating the target.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      $danglingTarget = Join-Path $TestDrive ("dangling-settings-{0}.json" -f [guid]::NewGuid())
+      try {
+        New-Item -ItemType SymbolicLink -Path $settingsFile -Target $danglingTarget -ErrorAction Stop | Out-Null
+      } catch {
+        Set-ItResult -Skipped -Because "symlink creation not permitted in this environment: $_"
+        return
+      }
+      $danglingTarget | Should -Not -Exist
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match 'is a symlink'
+      $danglingTarget | Should -Not -Exist
+      (Get-Item -LiteralPath $settingsFile -Force).LinkType | Should -Be 'SymbolicLink'
+    }
+
     It 'does not write when env.DISABLE_AUTOUPDATER is already "1" (byte-identical)' {
       $settingsDir = Join-Path $HOME '.claude'
       New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null

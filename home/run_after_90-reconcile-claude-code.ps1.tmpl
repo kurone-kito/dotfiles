@@ -94,18 +94,27 @@ function Merge-ClaudeSettings {
   if (-not (Test-Path -LiteralPath $settingsDir)) {
     New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
   }
-  if (-not (Test-Path -LiteralPath $settingsFile)) {
-    Write-Utf8NoBom -Path $settingsFile -Content '{}'
-  }
 
-  # The atomic-replace pattern below (temp file + Move-Item) replaces
-  # whatever item currently sits at $settingsFile -- if that path is
-  # itself a symlink or other reparse point, the replace severs the
-  # link and puts a plain file there instead of updating the link's
-  # target. Fail loudly up front rather than doing that silently.
+  # Checked before the seed-if-absent step below, not after: Test-Path
+  # on a *dangling* symlink follows the link and reports the missing
+  # target as absent, which would otherwise let the seed write follow
+  # the link and create the target file before this check ever runs --
+  # a real side effect despite the "left untouched" guarantee in the
+  # error message. Test-ReparsePoint itself does not have this problem
+  # (Get-Item -Force finds the link even when its target is missing).
+  # The atomic-replace pattern later in this function (temp file +
+  # Move-Item) replaces whatever item currently sits at $settingsFile
+  # -- if that path is itself a symlink or other reparse point, the
+  # replace severs the link and puts a plain file there instead of
+  # updating the link's target. Fail loudly up front rather than doing
+  # that silently.
   if (Test-ReparsePoint -Path $settingsFile) {
     Write-FatalError "error: $settingsFile is a symlink or reparse point; refusing to modify it in place (an atomic replace would sever the link). Point it at a regular file, or reconcile its target manually, then re-run 'chezmoi apply'."
     return 1
+  }
+
+  if (-not (Test-Path -LiteralPath $settingsFile)) {
+    Write-Utf8NoBom -Path $settingsFile -Content '{}'
   }
 
   # Read explicitly as UTF-8 (matching Write-Utf8NoBom's writer), not
