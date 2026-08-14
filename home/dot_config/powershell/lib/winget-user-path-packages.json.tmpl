@@ -8,7 +8,9 @@
      as managed and remove it from PATH if present; only the
      PATH-add side skips disabled entries. See
      docs/winget-user-path.md. */ -}}
-{{- $wingetDefaultPackages := dict "mise" (dict "id" "jdx.mise" "bin" "mise/bin") -}}
+{{- $wingetDefaultPackages := dict
+      "mise"    (dict "id" "jdx.mise" "bin" "mise/bin")
+      "chezmoi" (dict "id" "twpayne.chezmoi") -}}
 {{- $packages := list -}}
 {{- range $label, $pkg := (merge (dig "wingetUserPath" "packages" dict .) $wingetDefaultPackages) -}}
 {{- $packages = append $packages (dict "label" $label "id" (dig "id" "" $pkg) "bin" (dig "bin" "" $pkg) "enabled" (dig "enabled" true $pkg)) -}}

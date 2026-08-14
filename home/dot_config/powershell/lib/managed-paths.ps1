@@ -13,9 +13,8 @@
 # see docs/winget-user-path.md) are discovered via the deployed
 # winget-user-path-packages.json manifest (Get-WingetUserPath*) and
 # placed ahead of WinGet\Links in $desiredManagedPaths. The repo
-# ships one such declaration as a default (see
-# docs/winget-user-path.md) — there is no hardcoded special case for
-# any specific package here.
+# ships such declarations as defaults (see docs/winget-user-path.md)
+# — there is no hardcoded special case for any specific package here.
 
 $sep = [IO.Path]::PathSeparator
 
