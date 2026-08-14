@@ -41,6 +41,20 @@ function Write-FatalError {
   $ErrorActionPreference = $previousEap
 }
 
+function Test-ReparsePoint {
+  param([Parameter(Mandatory)] [string] $Path)
+  # Works for symlinks, junctions, and other reparse points uniformly,
+  # via the underlying .IO.FileAttributes flag rather than any
+  # version-specific symlink API -- reliable on both PS5.1 (.NET
+  # Framework) and PS7+ (.NET). -Force so a hidden item, or a symlink
+  # whose target is missing, is still found and inspected.
+  $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  if (-not $item) {
+    return $false
+  }
+  return [bool]($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+}
+
 function Resolve-ExactCaseProperty {
   param(
     [Parameter(Mandatory)] $InputObject,
@@ -82,6 +96,16 @@ function Merge-ClaudeSettings {
   }
   if (-not (Test-Path -LiteralPath $settingsFile)) {
     Write-Utf8NoBom -Path $settingsFile -Content '{}'
+  }
+
+  # The atomic-replace pattern below (temp file + Move-Item) replaces
+  # whatever item currently sits at $settingsFile -- if that path is
+  # itself a symlink or other reparse point, the replace severs the
+  # link and puts a plain file there instead of updating the link's
+  # target. Fail loudly up front rather than doing that silently.
+  if (Test-ReparsePoint -Path $settingsFile) {
+    Write-FatalError "error: $settingsFile is a symlink or reparse point; refusing to modify it in place (an atomic replace would sever the link). Point it at a regular file, or reconcile its target manually, then re-run 'chezmoi apply'."
+    return 1
   }
 
   # Read explicitly as UTF-8 (matching Write-Utf8NoBom's writer), not
@@ -355,7 +379,17 @@ function Remove-StrayClaudeCodeCopy {
     }
   }
 
-  Remove-Item -LiteralPath $strayDir -Recurse -Force
+  # On Windows PowerShell 5.1, Remove-Item -Recurse on a reparse point
+  # (e.g. a directory symlink/junction left by `npm link` or a damaged
+  # install) can traverse into the link's target and delete its
+  # contents instead of just unlinking the reparse point itself.
+  # Unlink without recursion in that case; recurse only into a real
+  # directory.
+  if (Test-ReparsePoint -Path $strayDir) {
+    Remove-Item -LiteralPath $strayDir -Force
+  } else {
+    Remove-Item -LiteralPath $strayDir -Recurse -Force
+  }
   Write-Host "Removed stray @anthropic-ai/claude-code copy at $strayDir (mise-managed copy confirmed at $managedDir)."
 }
 

@@ -329,20 +329,21 @@ active, which resolves to mise-managed Node.js's own global install
 location — not the isolated copy mise manages at
 `npm:@anthropic-ai/claude-code`. Left unchecked, the autoupdater writes
 a second, mise-invisible copy of `@anthropic-ai/claude-code` directly
-into that global install location (on POSIX, `lib/node_modules` under
-the mise-managed Node.js directory; on Windows, wherever the
-mise-managed `npm` itself reports as its configured prefix — resolved
-via `npm config get prefix` rather than assumed to be the Node.js
-install directory, since npm's Windows prefix defaults to
-`%AppData%\npm` and can also be overridden by a user-level `.npmrc` or
-`NPM_CONFIG_PREFIX`), and PATH ordering makes that stray copy win over
-the mise-managed one — so `claude --version` and `mise ls --current`
-can silently disagree. The same `chezmoi apply` also detects and
-removes that stray copy when it finds one, but only once the
-mise-managed `npm:@anthropic-ai/claude-code` copy is confirmed present
-and resolvable, so a repair can never leave `claude` non-functional. On
-Windows, if the npm prefix itself cannot be resolved, the stray-copy
-check is skipped entirely rather than guessing a path.
+into that global install location — wherever the mise-managed `npm`
+itself reports as its configured prefix (`npm config get prefix`),
+resolved on both POSIX and Windows rather than assumed to equal the
+Node.js install directory, since a user-level `.npmrc` or
+`NPM_CONFIG_PREFIX` can override it on either platform, and npm's
+Windows default (`%AppData%\npm`) diverges from the Node.js install
+directory even without any override — and PATH ordering makes that
+stray copy win over the mise-managed one — so `claude --version` and
+`mise ls --current` can silently disagree. The same `chezmoi apply`
+also detects and removes that stray copy when it finds one, but only
+once the mise-managed `npm:@anthropic-ai/claude-code` copy is
+confirmed present, resolvable, and actually runs (`claude --version`
+succeeds through it), so a repair can never leave `claude`
+non-functional. If the npm prefix itself cannot be resolved, the
+stray-copy check is skipped entirely rather than guessing a path.
 
 `DISABLE_AUTOUPDATER` disables only the background autoupdate check;
 manual `claude update` keeps working. The stronger `DISABLE_UPDATES`

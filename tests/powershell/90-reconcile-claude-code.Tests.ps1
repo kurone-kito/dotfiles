@@ -274,6 +274,35 @@ Describe '90-reconcile-claude-code' {
       $after.Hash | Should -Be $before.Hash
     }
 
+    It 'fails loudly when settings.json is a symlink, symlink left untouched' {
+      # Regression test: the atomic-replace pattern (temp file +
+      # Move-Item) replaces whatever item sits at the destination path
+      # -- if settings.json is itself a symlink, that would silently
+      # sever the link and put a plain file there instead of updating
+      # the link's target.
+      #
+      # Creating a symlink can require elevated privileges or Developer
+      # Mode on Windows; skip gracefully rather than fail the suite on
+      # an environment limitation unrelated to the script under test.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      $realTarget = Join-Path $TestDrive ("real-settings-{0}.json" -f [guid]::NewGuid())
+      [System.IO.File]::WriteAllText($realTarget, '{}', [System.Text.UTF8Encoding]::new($false))
+      try {
+        New-Item -ItemType SymbolicLink -Path $settingsFile -Target $realTarget -ErrorAction Stop | Out-Null
+      } catch {
+        Set-ItResult -Skipped -Because "symlink creation not permitted in this environment: $_"
+        return
+      }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match 'is a symlink'
+      (Get-Item -LiteralPath $settingsFile -Force).LinkType | Should -Be 'SymbolicLink'
+      (Get-Item -LiteralPath $settingsFile -Force).Target | Should -Be $realTarget
+    }
+
     It 'does not write when env.DISABLE_AUTOUPDATER is already "1" (byte-identical)' {
       $settingsDir = Join-Path $HOME '.claude'
       New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null

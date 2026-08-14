@@ -218,6 +218,23 @@ JSON
   [ "$before_hash" = "$after_hash" ]
 }
 
+@test "settings.json is a symlink: fails loudly, symlink left untouched" {
+  # Regression test: the atomic-replace pattern (mktemp + mv, or
+  # Python's os.replace) replaces whatever inode sits at the
+  # destination path -- if settings.json is itself a symlink, that
+  # would silently sever the link and put a plain file there instead
+  # of updating the link's target.
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  real_target="$BATS_TEST_TMPDIR/real-settings.json"
+  printf '{}' > "$real_target"
+  ln -s "$real_target" "$HOME/.claude/settings.json"
+  run bash "$FIXTURE"
+  assert_failure
+  assert_output --partial "is a symlink"
+  assert_symlink_to "$real_target" "$HOME/.claude/settings.json"
+}
+
 @test "jq absent, python3 available: falls back to python3 and succeeds" {
   write_mise_mock
   # Build a PATH scoped to only the mise mock plus symlinks to the
