@@ -25,6 +25,25 @@ reconcile_settings_jq() {
     printf '{}' > "${settings_file}"
   fi
 
+  # jq's JSON parser normalizes invalid UTF-8 byte sequences to U+FFFD
+  # (the replacement character) instead of rejecting them, so `jq -e .`
+  # below would silently accept -- and then rewrite -- a settings.json
+  # containing corrupted bytes, permanently destroying the original
+  # content. Validate strict UTF-8 with iconv (a POSIX-mandated
+  # utility, so assuming its presence here is no less portable than
+  # jq/python3/mkdir/mv themselves) first, mirroring the python
+  # backend below: its `open(..., encoding="utf-8")` already raises
+  # UnicodeDecodeError (a ValueError subclass) on the same input,
+  # caught by the existing `except ValueError`. If iconv itself isn't
+  # on PATH, skip this extra check rather than failing outright -- no
+  # worse than the behavior before this check existed.
+  if command -v iconv >/dev/null 2>&1; then
+    if ! iconv -f UTF-8 -t UTF-8 "${settings_file}" >/dev/null 2>&1; then
+      echo "error: ${settings_file} is not valid UTF-8; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
+      return 1
+    fi
+  fi
+
   if ! "${jq_bin}" -e . "${settings_file}" >/dev/null 2>&1; then
     echo "error: ${settings_file} contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
     return 1

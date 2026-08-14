@@ -218,6 +218,26 @@ JSON
   [ "$before_hash" = "$after_hash" ]
 }
 
+@test "invalid UTF-8 bytes: fails loudly, not silently replaced with U+FFFD and rewritten" {
+  # Regression test: jq's JSON parser normalizes invalid UTF-8 byte
+  # sequences to U+FFFD instead of rejecting them, so `jq -e .` alone
+  # would silently accept -- and then rewrite -- a settings.json
+  # containing corrupted bytes, permanently destroying the original
+  # content instead of failing loudly like the invalid-JSON case above.
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{"note":"\xff"}' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  run bash "$FIXTURE"
+  assert_failure
+  assert_output --partial "not valid UTF-8"
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+  # No temp file left behind either.
+  run bash -c "compgen -G \"$HOME/.claude/.settings.json.*\""
+  assert_failure
+}
+
 @test "settings.json is a symlink: fails loudly, symlink left untouched" {
   # Regression test: the atomic-replace pattern (mktemp + mv, or
   # Python's os.replace) replaces whatever inode sits at the
