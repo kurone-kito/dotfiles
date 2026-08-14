@@ -286,13 +286,20 @@ Describe '90-reconcile-claude-code' {
       # A non-ASCII value that would be corrupted if this file were
       # ever read via the active ANSI code page instead of UTF-8 (the
       # PS5.1 Get-Content -Raw default when no encoding is given).
-      $existing = '{"someKey":"日本語のテスト値","env":{"OTHER_VAR":"keep-me"}}'
+      # Built from code points rather than a literal non-ASCII string:
+      # this source file has no BOM (matching every other .Tests.ps1 in
+      # this repo), and Windows PowerShell 5.1 reads BOM-less .ps1
+      # source via the active console code page, not UTF-8 -- a literal
+      # non-ASCII string here previously broke PS5.1's *discovery* of
+      # this entire file with a ParseException, not just this one test.
+      $nonAsciiValue = [string]::new([char[]](0x65E5, 0x672C, 0x8A9E, 0x306E, 0x30C6, 0x30B9, 0x30C8, 0x5024))
+      $existing = '{{"someKey":"{0}","env":{{"OTHER_VAR":"keep-me"}}}}' -f $nonAsciiValue
       [System.IO.File]::WriteAllText($settingsFile, $existing, [System.Text.UTF8Encoding]::new($false))
 
       & $script:Fixture | Out-Null
       $LASTEXITCODE | Should -Be 0
       $parsed = Get-Content -Raw $settingsFile -Encoding UTF8 | ConvertFrom-Json
-      $parsed.someKey | Should -Be '日本語のテスト値'
+      $parsed.someKey | Should -Be $nonAsciiValue
       $parsed.env.DISABLE_AUTOUPDATER | Should -Be '1'
       $parsed.env.OTHER_VAR | Should -Be 'keep-me'
     }
