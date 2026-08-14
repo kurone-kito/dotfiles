@@ -208,7 +208,15 @@ remove_stray_claude_code_copy() {
   # value Claude Code's own autoupdater consults when it runs `npm
   # install -g`. Fail closed -- skip the check rather than falling
   # back to a guessed path -- if the prefix can't be resolved.
-  npm_prefix="$("${node_dir}/bin/npm" config get prefix 2>/dev/null)" || npm_prefix=""
+  #
+  # `bin/npm` is itself a script with a `#!/usr/bin/env node` shebang,
+  # which resolves via the *ambient* PATH, not necessarily this
+  # specific node_dir -- and, per the note above, a freshly-installed
+  # mise tool isn't guaranteed to be on this script's own PATH yet.
+  # Prepend node_dir/bin for just this invocation so `env node` in the
+  # shebang resolves to the mise-managed node, not whatever else (an
+  # older system node, say) might otherwise be found first.
+  npm_prefix="$(PATH="${node_dir}/bin:${PATH}" "${node_dir}/bin/npm" config get prefix 2>/dev/null)" || npm_prefix=""
   if [ -z "${npm_prefix}" ]; then
     echo "mise-managed npm global prefix not resolvable; skipping stray @anthropic-ai/claude-code check."
     return 0

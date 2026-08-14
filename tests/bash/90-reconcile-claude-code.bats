@@ -310,6 +310,61 @@ JSON
   assert_output --partial "npm global prefix not resolvable"
 }
 
+@test "npm prefix resolution uses the mise-managed node, not an earlier PATH decoy" {
+  # Regression test: bin/npm is itself a script with a
+  # '#!/usr/bin/env node' shebang, which resolves via the *ambient*
+  # PATH -- not necessarily node_dir specifically. Without prepending
+  # node_dir/bin to PATH for that one invocation, an unrelated 'node'
+  # earlier on PATH (e.g. an older system install) would run instead,
+  # and the resolved prefix would reflect *that* node, not the
+  # mise-managed one.
+  #
+  # Real npm's shebang is honored by making $NODE_DIR/bin/npm a script
+  # whose #!/usr/bin/env node line genuinely goes through PATH lookup;
+  # since the interpreter it resolves to only needs to *execute*, not
+  # actually be Node.js, two decoy "node" interpreters (one on the
+  # pre-existing PATH, one at node_dir/bin) each just print a
+  # distinguishable, hardcoded prefix so the test can tell which one
+  # actually ran.
+  write_mise_mock
+
+  decoy_node_dir="$BATS_TEST_TMPDIR/decoy-node-bin"
+  mkdir -p "$decoy_node_dir"
+  cat > "$decoy_node_dir/node" << 'DECOY'
+#!/bin/bash
+echo "/decoy/wrong/prefix"
+DECOY
+  chmod +x "$decoy_node_dir/node"
+  # Ahead of $NODE_DIR/bin (never itself added to PATH by the script)
+  # on the ambient PATH used to run the fixture, simulating an
+  # unrelated system/older node found first.
+  export PATH="$decoy_node_dir:$PATH"
+
+  cat > "$NODE_DIR/bin/node" << CORRECT
+#!/bin/bash
+echo "$NPM_PREFIX_DIR"
+CORRECT
+  chmod +x "$NODE_DIR/bin/node"
+  cat > "$NODE_DIR/bin/npm" << 'REALNPM'
+#!/usr/bin/env node
+console.log("unused: the fake node interpreter above ignores this file's content entirely");
+REALNPM
+  chmod +x "$NODE_DIR/bin/npm"
+
+  # Planted at the *correct* resolved prefix. If the buggy decoy node
+  # ran instead, the script would look under /decoy/wrong/prefix/...,
+  # never find this, and wrongly report "no stray copy found" even
+  # though one exists -- exactly the failure mode described.
+  write_stray_copy
+
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
+  refute_output --partial "No stray @anthropic-ai/claude-code copy found"
+  refute_output --partial "/decoy/wrong/prefix"
+  assert_dir_not_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+}
+
 @test "no stray copy: no-op, idempotent" {
   write_mise_mock
   run bash "$FIXTURE"
