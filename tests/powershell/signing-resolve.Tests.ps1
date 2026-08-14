@@ -131,7 +131,16 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
       # The rendered output is the generator *script* source, which
       # writes the profile gitconfig via a here-string; extract the
       # here-string body so it can be read as a real gitconfig file.
-      if ($r.Output -notmatch "(?ms)^@'\r?\n(.*?)\r?\n^'@") {
+      # `@'` may be preceded on the same line by a variable assignment
+      # (e.g. `$profileContent = @'`) now that the generator captures
+      # the here-string into a variable before writing it via
+      # [System.IO.File]::WriteAllText (PS5.1-compatible BOM-less
+      # UTF-8; see run_onchange_after_generate-git-profiles.ps1.tmpl).
+      # The opener prefix uses [^\r\n]* (not .*) so it stays confined
+      # to one line under (?s) dot-matches-newline: a greedy .* would
+      # span every profile in a multi-profile render and capture the
+      # LAST here-string instead of the first.
+      if ($r.Output -notmatch "(?ms)^[^\r\n]*@'\r?\n(.*?)\r?\n^'@") {
         throw 'Could not locate the profile here-string in rendered output'
       }
       $renderedProfile = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-profile" -f [guid]::NewGuid())

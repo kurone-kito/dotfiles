@@ -31,9 +31,14 @@ $privateKey = Join-Path $sshDir '{{ $sshKey.filename }}'
 $publicKey = Join-Path $sshDir '{{ $sshKey.filename }}.pub'
 
 if (-not (Test-Path $privateKey)) {
-  @'
+  $privateKeyContent = @'
 {{ template "get-ssh-key" dict "item" $sshKey.item "type" "private" "ctx" $ }}
-'@ | Set-Content -Path $privateKey -Encoding utf8NoBOM -NoNewline
+'@
+  # PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+  # BOM-less UTF-8 bytes directly instead. No trailing newline is added,
+  # matching the prior -NoNewline call.
+  [System.IO.File]::WriteAllText($privateKey, $privateKeyContent,
+    [System.Text.UTF8Encoding]::new($false))
   # Restrict to current user only (icacls works without elevation)
   icacls $privateKey /inheritance:r /grant:r "${env:USERNAME}:(F)" 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) {
@@ -46,9 +51,14 @@ if (-not (Test-Path $privateKey)) {
 }
 
 if (-not (Test-Path $publicKey)) {
-  @'
+  $publicKeyContent = @'
 {{ template "get-ssh-key" dict "item" $sshKey.item "type" "public" "ctx" $ }}
-'@ | Set-Content -Path $publicKey -Encoding utf8NoBOM -NoNewline
+'@
+  # PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+  # BOM-less UTF-8 bytes directly instead. No trailing newline is added,
+  # matching the prior -NoNewline call.
+  [System.IO.File]::WriteAllText($publicKey, $publicKeyContent,
+    [System.Text.UTF8Encoding]::new($false))
   Write-Host '  Public key written.'
   Record-State -Category 'sshKey' -Name '{{ $key }}.pub' -Path $publicKey
 } else {

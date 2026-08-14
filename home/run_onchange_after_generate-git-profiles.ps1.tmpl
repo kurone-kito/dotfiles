@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
 {{- $sshAbsPath := "" -}}
 {{- if $sshFile -}}{{ $sshAbsPath = printf "%s/.ssh/%s.pub" $homeDir $sshFile -}}{{- end }}
 $profilePath = Join-Path $profilesDir '{{ $key }}'
-@'
+$profileContent = @'
 {{- if eq $format "ssh" }}
 [gpg]
   format = ssh
@@ -53,7 +53,13 @@ $profilePath = Join-Path $profilesDir '{{ $key }}'
   tag-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'tag.gpgsign=true' tag \"$@\"; }; f"
   rebase-ssh = "!f() { git -c 'gpg.format=ssh' -c 'user.signingkey={{ $sshAbsPath }}' -c 'commit.gpgsign=true' rebase \"$@\"; }; f"
 {{- end }}
-'@ | Set-Content -Path $profilePath -Encoding utf8NoBOM
+'@
+# PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+# BOM-less UTF-8 bytes directly instead. Set-Content's default (no
+# -NoNewline) behavior appends one platform newline after the content,
+# so replicate that explicitly to preserve prior byte-for-byte output.
+[System.IO.File]::WriteAllText($profilePath, $profileContent + [System.Environment]::NewLine,
+  [System.Text.UTF8Encoding]::new($false))
 {{- end }}
 
 $validProfiles = @(
