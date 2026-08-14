@@ -218,6 +218,24 @@ JSON
   [ "$before_hash" = "$after_hash" ]
 }
 
+@test "concatenated JSON documents: fails loudly, not silently accepted as a stream" {
+  # Regression test: jq (without -s) parses its input as a stream of
+  # concatenated JSON values, so a naive `jq -e .` validity check
+  # accepts a file like `{} {}` even though it is not one valid JSON
+  # document -- and every filter downstream then runs once per value,
+  # so the file gets rewritten as two concatenated documents instead
+  # of the write being rejected like other invalid-JSON cases above.
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{} {}' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  run bash "$FIXTURE"
+  assert_failure
+  assert_output --partial "invalid JSON"
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+}
+
 @test "invalid UTF-8 bytes: fails loudly, not silently replaced with U+FFFD and rewritten" {
   # Regression test: jq's JSON parser normalizes invalid UTF-8 byte
   # sequences to U+FFFD instead of rejecting them, so `jq -e .` alone

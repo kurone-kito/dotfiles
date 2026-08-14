@@ -44,7 +44,18 @@ reconcile_settings_jq() {
     fi
   fi
 
-  if ! "${jq_bin}" -e . "${settings_file}" >/dev/null 2>&1; then
+  # `jq -e .` (no `-s`) parses its input as a stream of concatenated
+  # JSON values rather than requiring exactly one -- a file like
+  # `{} {}` passes that check, and every filter below then runs once
+  # per value, so the final write still ends up as two concatenated
+  # documents instead of failing loudly as "invalid JSON" like it
+  # should. `-s`/slurp mode always produces exactly one JSON array
+  # over all top-level input values, so its length is the true
+  # top-level document count regardless of how many values (zero, one,
+  # or more) the input actually held.
+  local doc_count
+  doc_count="$("${jq_bin}" -s 'length' "${settings_file}" 2>/dev/null)" || doc_count=""
+  if [ "${doc_count}" != "1" ]; then
     echo "error: ${settings_file} contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
     return 1
   fi
