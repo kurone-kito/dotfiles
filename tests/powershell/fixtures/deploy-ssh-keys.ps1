@@ -32,8 +32,12 @@ $sshKeys = [ordered]@{
   }
   secondary = @{
     filename = 'id_secondary'
-    private  = 'TEST-ONLY-PRIVATE-KEY-CONTENT-secondary'
-    public   = 'ssh-ed25519 AAAASECONDARY secondary@test'
+    # A real SSH key secret, as commonly stored by a secret manager or
+    # read from a PEM/OpenSSH-format file, conventionally ends with a
+    # trailing newline. Model that shape here to verify it survives
+    # the write untouched -- with no *additional* newline appended.
+    private  = "TEST-ONLY-PRIVATE-KEY-CONTENT-secondary`n"
+    public   = "ssh-ed25519 AAAASECONDARY secondary@test`n"
   }
 }
 

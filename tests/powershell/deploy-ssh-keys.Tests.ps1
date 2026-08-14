@@ -50,11 +50,14 @@ Describe 'deploy-ssh-keys' {
       $publicBytes[1] -eq 0xBB -and $publicBytes[2] -eq 0xBF) | Should -BeFalse
   }
 
-  It 'writes exact byte-for-byte content with no added trailing newline' {
+  It 'preserves a secret''s own trailing newline exactly, with no additional newline added' {
     & $script:Fixture | Out-Null
 
-    $expectedPrivate = 'TEST-ONLY-PRIVATE-KEY-CONTENT-secondary'
-    $expectedPublic = 'ssh-ed25519 AAAASECONDARY secondary@test'
+    # secondary's fixture content already ends with "`n" (mirroring a
+    # real SSH key secret's conventional trailing newline) -- this
+    # must survive untouched, and no *second* newline may be appended.
+    $expectedPrivate = "TEST-ONLY-PRIVATE-KEY-CONTENT-secondary`n"
+    $expectedPublic = "ssh-ed25519 AAAASECONDARY secondary@test`n"
     $expectedPrivateBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($expectedPrivate)
     $expectedPublicBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($expectedPublic)
 
@@ -62,6 +65,21 @@ Describe 'deploy-ssh-keys' {
     $actualPublicBytes = [System.IO.File]::ReadAllBytes((Join-Path $script:SshDirReal 'id_secondary.pub'))
 
     [System.Linq.Enumerable]::SequenceEqual($actualPrivateBytes, $expectedPrivateBytes) | Should -BeTrue
+    [System.Linq.Enumerable]::SequenceEqual($actualPublicBytes, $expectedPublicBytes) | Should -BeTrue
+  }
+
+  It 'writes exact byte-for-byte content with no added trailing newline when the secret has none' {
+    & $script:Fixture | Out-Null
+
+    # primary's fixture content has no trailing newline at all -- the
+    # multi-line-content case below covers this shape; here we assert
+    # the same no-addition guarantee on the simpler single-line public
+    # key, which also has no trailing newline in the fixture.
+    $expectedPublic = 'ssh-ed25519 AAAAPRIMARY primary@test'
+    $expectedPublicBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($expectedPublic)
+
+    $actualPublicBytes = [System.IO.File]::ReadAllBytes((Join-Path $script:SshDirReal 'id_primary.pub'))
+
     [System.Linq.Enumerable]::SequenceEqual($actualPublicBytes, $expectedPublicBytes) | Should -BeTrue
   }
 
