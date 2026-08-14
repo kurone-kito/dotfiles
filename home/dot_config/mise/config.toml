@@ -38,14 +38,22 @@ yq = "latest"
 "github:cli/cli" = "latest"
 "github:anatawa12/git-vrc" = "latest"
 
+# mise's ubi backend is deprecated (scheduled for removal in mise
+# 2027.1.0), so this uses the github backend instead. Upstream was
+# transferred from marlocarlo/pstop to psmux/pstop (GitHub redirects the
+# old name; `mise ls-remote` returns the same latest version for both).
 # pstop's only release archive is pstop-windows-x86_64.zip (plus a
 # .sha256 checksum file; Windows-only upstream), so os restricts install
 # attempts to Windows. The archive also ships htop.exe next to pstop.exe
-# (mirrors WinGet's marlocarlo.pstop two-link behavior), so extract_all
-# shims both binaries. Upstream was transferred from marlocarlo/pstop to
-# psmux/pstop; the identifier below stays marlocarlo/pstop, which GitHub
-# still resolves via redirect.
-"ubi:marlocarlo/pstop" = { version = "latest", os = ["windows"], extract_all = true }
+# (mirrors WinGet's marlocarlo.pstop two-link behavior) directly at the
+# archive root, with no bin/ subdirectory; the github backend's default
+# bin lookup falls back to the extraction root and shims every
+# executable found there when no bin/ dir exists, so both binaries are
+# expected to shim without bin_path/extract_all (a ubi-only option with
+# no github-backend equivalent). Not yet confirmed on real Windows
+# hardware — if the default lookup misses a binary, add filter_bins or
+# bin_path explicitly.
+"github:psmux/pstop" = { version = "latest", os = ["windows"] }
 
 [settings]
 idiomatic_version_file_enable_tools = ["node", "python"]
