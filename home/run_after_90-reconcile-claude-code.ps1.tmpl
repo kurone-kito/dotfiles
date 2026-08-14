@@ -147,8 +147,20 @@ function Merge-ClaudeSettings {
 # reintroducing the same "settings failure skips the unrelated
 # stray-copy repair" bug already fixed on the bash side). Capture its
 # return status, always run the stray-copy check regardless, then
-# exit with the settings-side status at the very end.
-$settingsStatus = Merge-ClaudeSettings
+# exit with the settings-side status at the very end. Also wrap the
+# call itself: under $ErrorActionPreference = 'Stop', an unhandled I/O
+# error inside Merge-ClaudeSettings that isn't caught by one of its own
+# internal try/catch blocks (e.g. the initial '{}' seed write, or the
+# UTF-8 read, hitting a permission or disk error) would otherwise
+# become a terminating error here too, silently reintroducing the same
+# skip-the-cleanup bug through an uncaught-exception path instead of an
+# explicit exit/return path.
+try {
+  $settingsStatus = Merge-ClaudeSettings
+} catch {
+  Write-FatalError "error: unexpected failure while reconciling $settingsFile`: $_"
+  $settingsStatus = 1
+}
 
 function Invoke-MiseWhere {
   param([Parameter(Mandatory)] [string[]] $Arguments)

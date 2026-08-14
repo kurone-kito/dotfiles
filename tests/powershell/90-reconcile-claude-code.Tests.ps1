@@ -407,6 +407,30 @@ Describe '90-reconcile-claude-code' {
       $strayDir | Should -Not -Exist
       $shim | Should -Not -Exist
     }
+
+    It 'still runs the stray-copy cleanup even when settings reconciliation throws an unhandled exception (regression: uncaught I/O errors must not skip cleanup)' {
+      # Regression test: an I/O failure that Merge-ClaudeSettings does
+      # not itself catch (e.g. the initial '{}' seed write) would
+      # otherwise propagate as a terminating error under
+      # $ErrorActionPreference = 'Stop' and crash the whole script
+      # before Remove-StrayClaudeCodeCopy runs -- the call site itself
+      # needs its own try/catch, not just Merge-ClaudeSettings's
+      # internal ones. Force this by making .claude a *file* instead
+      # of a directory, so the seed write's parent path segment isn't
+      # a real directory and WriteAllText throws.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType File -Path $settingsDir -Force | Out-Null
+      $strayDir = Write-TestStrayCopy
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match 'unexpected failure'
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $strayDir | Should -Not -Exist
+      $shim | Should -Not -Exist
+    }
   }
 
   Context 'stray claude-code copy cleanup (Windows layout)' -Skip:($IsWindows -eq $false) {
