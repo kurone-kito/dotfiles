@@ -320,9 +320,12 @@ chezmoi init <your-repo-or-local-path> --apply
 
 ### Claude Code autoupdater vs. mise
 
-`chezmoi apply` sets `env.DISABLE_AUTOUPDATER = "1"` in
-`~/.claude/settings.json` (merging only that one key; any other settings
-already there are left untouched). This is necessary because Claude
+When `mise` is on `PATH`, `chezmoi apply` sets
+`env.DISABLE_AUTOUPDATER = "1"` in `~/.claude/settings.json` (merging
+only that one key; any other settings already there are left
+untouched) — this whole reconciliation step is skipped, with no
+changes to `settings.json`, on systems where `mise` is unavailable.
+This is necessary because Claude
 Code's own background autoupdater runs `npm install -g
 @anthropic-ai/claude-code@latest` against whatever `npm` is currently
 active, which resolves to mise-managed Node.js's own global install
