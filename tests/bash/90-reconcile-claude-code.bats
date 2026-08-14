@@ -172,12 +172,12 @@ JSON
   # binary happens to live, it cannot be resolved from this PATH.
   local bash_bin
   bash_bin="$(command -v bash)"
-  JQLESS_DIR="$BATS_TEST_TMPDIR/jqless-bin"
-  mkdir -p "$JQLESS_DIR"
+  NO_JQ_DIR="$BATS_TEST_TMPDIR/no-jq-bin"
+  mkdir -p "$NO_JQ_DIR"
   for cmd in mkdir mktemp mv rm; do
-    ln -sf "$(command -v "$cmd")" "$JQLESS_DIR/$cmd"
+    ln -sf "$(command -v "$cmd")" "$NO_JQ_DIR/$cmd"
   done
-  export PATH="$BIN_DIR:$JQLESS_DIR"
+  export PATH="$BIN_DIR:$NO_JQ_DIR"
   ! command -v jq &>/dev/null || {
     echo "test setup bug: jq still resolvable after PATH scoping" >&2
     return 1
