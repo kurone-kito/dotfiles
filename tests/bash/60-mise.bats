@@ -171,6 +171,14 @@ MOCK
   assert_output --partial 'os = ["windows"]'
 }
 
+@test "shims both binaries shipped in the pstop release archive" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '"ubi:marlocarlo/pstop"' "$config"
+  assert_success
+  assert_output --partial 'extract_all = true'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
