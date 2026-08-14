@@ -318,6 +318,29 @@ If it is not this repository, re-initialize source and apply again:
 chezmoi init <your-repo-or-local-path> --apply
 ```
 
+### Claude Code autoupdater vs. mise
+
+`chezmoi apply` sets `env.DISABLE_AUTOUPDATER = "1"` in
+`~/.claude/settings.json` (merging only that one key; any other settings
+already there are left untouched). This is necessary because Claude
+Code's own background autoupdater runs `npm install -g
+@anthropic-ai/claude-code@latest` against whatever `npm` is currently
+active, which resolves to mise-managed Node.js's own global install
+location — not the isolated copy mise manages at
+`npm:@anthropic-ai/claude-code`. Left unchecked, the autoupdater writes
+a second, mise-invisible copy of `@anthropic-ai/claude-code` directly
+into mise's Node.js `lib/node_modules`, and PATH ordering makes that
+stray copy win over the mise-managed one — so `claude --version` and
+`mise ls --current` can silently disagree. The same `chezmoi apply` also
+detects and removes that stray copy when it finds one, but only once the
+mise-managed `npm:@anthropic-ai/claude-code` copy is confirmed present
+and resolvable, so a repair can never leave `claude` non-functional.
+
+`DISABLE_AUTOUPDATER` disables only the background autoupdate check;
+manual `claude update` keeps working. The stronger `DISABLE_UPDATES`
+(which also blocks manual updates) is deliberately not used, so you can
+still update Claude Code by hand when needed.
+
 ## Testing
 
 Platform-specific unit tests verify the profile generation scripts.
