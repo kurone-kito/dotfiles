@@ -38,7 +38,14 @@ setup() {
 
   NODE_DIR="$BATS_TEST_TMPDIR/node"
   MANAGED_DIR="$BATS_TEST_TMPDIR/managed"
-  mkdir -p "$NODE_DIR/lib/node_modules" "$NODE_DIR/bin" "$MANAGED_DIR"
+  # Deliberately a directory distinct from NODE_DIR: npm's resolved
+  # global prefix is not guaranteed to equal the Node.js install
+  # directory (a user-level .npmrc or NPM_CONFIG_PREFIX can override
+  # it), so the fixtures must prove the script follows the *resolved*
+  # prefix rather than silently falling back to NODE_DIR.
+  NPM_PREFIX_DIR="$BATS_TEST_TMPDIR/npm-prefix"
+  mkdir -p "$NODE_DIR/lib/node_modules" "$NODE_DIR/bin" "$MANAGED_DIR" \
+    "$NPM_PREFIX_DIR/lib/node_modules" "$NPM_PREFIX_DIR/bin"
 
   # Preflight guard: fail fast rather than silently touching the real
   # machine if the HOME override did not take effect (e.g. an empty
@@ -86,12 +93,34 @@ MOCK
   chmod +x "$BIN_DIR/mise"
   # Preflight guard: confirm the mock actually wins PATH resolution.
   [ "$(command -v mise)" = "$BIN_DIR/mise" ]
+
+  write_npm_mock 1
+}
+
+write_npm_mock() {
+  # $1: 0 or 1 -> whether `npm config get prefix` resolves successfully
+  #     (default: 1, resolves to NPM_PREFIX_DIR)
+  local prefix_resolves="${1:-1}"
+  mkdir -p "$NODE_DIR/bin"
+  cat > "$NODE_DIR/bin/npm" << MOCK
+#!/bin/bash
+if [ "\$1" = "config" ] && [ "\$2" = "get" ] && [ "\$3" = "prefix" ]; then
+  if [ "$prefix_resolves" = "1" ]; then
+    echo "$NPM_PREFIX_DIR"
+    exit 0
+  else
+    exit 1
+  fi
+fi
+exit 1
+MOCK
+  chmod +x "$NODE_DIR/bin/npm"
 }
 
 write_stray_copy() {
-  mkdir -p "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code/bin"
-  touch "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-  ln -sf '../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' "$NODE_DIR/bin/claude"
+  mkdir -p "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code/bin"
+  touch "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+  ln -sf '../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' "$NPM_PREFIX_DIR/bin/claude"
 }
 
 @test "mise absent: whole script no-ops without touching settings.json" {
@@ -251,12 +280,25 @@ JSON
   assert_output --partial "No stray @anthropic-ai/claude-code copy found"
 }
 
+@test "npm global prefix not resolvable: stray-copy check skipped (fail-closed)" {
+  # Regression test: npm's resolved global prefix is not guaranteed to
+  # equal the Node.js install directory (a user-level .npmrc or
+  # NPM_CONFIG_PREFIX can override it, like on Windows). When the
+  # prefix can't be resolved, the check must be skipped entirely
+  # rather than falling back to a guessed (and potentially wrong) path.
+  write_mise_mock
+  write_npm_mock 0
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "npm global prefix not resolvable"
+}
+
 @test "no stray copy: no-op, idempotent" {
   write_mise_mock
   run bash "$FIXTURE"
   assert_success
   assert_output --partial "No stray @anthropic-ai/claude-code copy found"
-  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_dir_not_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
 }
 
 @test "stray copy + managed copy present: dir and bin shim both removed" {
@@ -265,8 +307,8 @@ JSON
   run bash "$FIXTURE"
   assert_success
   assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
-  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
-  assert_file_not_exists "$NODE_DIR/bin/claude"
+  assert_dir_not_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_not_exists "$NPM_PREFIX_DIR/bin/claude"
   # Never touches the mise-managed copy itself.
   assert_dir_exists "$MANAGED_DIR"
 }
@@ -283,8 +325,8 @@ JSON
   assert_success
   assert_output --partial "does not appear to work"
   assert_output --partial "leaving the stray copy in place"
-  assert_dir_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
-  assert_file_exists "$NODE_DIR/bin/claude"
+  assert_dir_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
 }
 
 @test "settings failure does not skip stray-copy cleanup (both effects observable in one run)" {
@@ -300,8 +342,8 @@ JSON
   assert_failure
   assert_output --partial "invalid JSON"
   assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
-  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
-  assert_file_not_exists "$NODE_DIR/bin/claude"
+  assert_dir_not_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_not_exists "$NPM_PREFIX_DIR/bin/claude"
 }
 
 @test "stray copy present, managed copy unresolvable: stray copy left in place" {
@@ -310,6 +352,6 @@ JSON
   run bash "$FIXTURE"
   assert_success
   assert_output --partial "leaving the stray copy in place"
-  assert_dir_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
-  assert_file_exists "$NODE_DIR/bin/claude"
+  assert_dir_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
 }

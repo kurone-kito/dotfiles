@@ -231,6 +231,49 @@ Describe '90-reconcile-claude-code' {
       $parsed.permissions.allow | Should -Be @('Bash(git:*)')
     }
 
+    It 'fails loudly on a differently-cased existing "ENV" key, file left untouched' {
+      # Regression test: PSObject.Properties's index-by-name lookup is
+      # case-insensitive, but JSON object keys are not. A naive lookup
+      # would silently match "ENV" here and mutate it instead of the
+      # exact "env" key Claude Code actually reads, while still
+      # reporting success. The correct fix cannot instead silently
+      # create a *new* exact-case "env" key alongside the existing
+      # "ENV" one either: PowerShell's PSCustomObject member model is
+      # itself case-insensitive (Add-Member refuses to add "env" when
+      # "ENV" already exists), so the only safe behavior is to fail
+      # loudly and leave the file for the user to fix by hand.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      $existing = '{"ENV":{"SOME_OTHER_VAR":"keep-me"}}'
+      [System.IO.File]::WriteAllText($settingsFile, $existing, [System.Text.UTF8Encoding]::new($false))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match "differs from 'env' only by letter case"
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
+    }
+
+    It 'fails loudly on a differently-cased existing "env.disable_autoupdater" key, file left untouched' {
+      # Same case-collision hazard as the top-level 'env' key, one
+      # level down: an exact-case "env" object already exists, but its
+      # own DISABLE_AUTOUPDATER key is present under different casing.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      $existing = '{"env":{"disable_autoupdater":"0"}}'
+      [System.IO.File]::WriteAllText($settingsFile, $existing, [System.Text.UTF8Encoding]::new($false))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match "differs from 'env\.DISABLE_AUTOUPDATER' only by letter case"
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
+    }
+
     It 'does not write when env.DISABLE_AUTOUPDATER is already "1" (byte-identical)' {
       $settingsDir = Join-Path $HOME '.claude'
       New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null

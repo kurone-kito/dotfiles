@@ -180,14 +180,27 @@ settings_status=0
 reconcile_settings || settings_status=$?
 
 remove_stray_claude_code_copy() {
-  local node_dir stray_dir managed_dir bin_shim
+  local node_dir npm_prefix stray_dir managed_dir bin_shim
   node_dir="$(mise where node 2>/dev/null)" || node_dir=""
   if [ -z "${node_dir}" ]; then
     echo "mise-managed Node.js not resolvable; skipping stray @anthropic-ai/claude-code check."
     return 0
   fi
 
-  stray_dir="${node_dir}/lib/node_modules/@anthropic-ai/claude-code"
+  # npm's effective global prefix is not reliably "wherever node
+  # lives": like on Windows, a POSIX user-level .npmrc or
+  # NPM_CONFIG_PREFIX can override it too. Ask the mise-managed npm
+  # itself (rather than assuming node_dir) so this matches the exact
+  # value Claude Code's own autoupdater consults when it runs `npm
+  # install -g`. Fail closed -- skip the check rather than falling
+  # back to a guessed path -- if the prefix can't be resolved.
+  npm_prefix="$("${node_dir}/bin/npm" config get prefix 2>/dev/null)" || npm_prefix=""
+  if [ -z "${npm_prefix}" ]; then
+    echo "mise-managed npm global prefix not resolvable; skipping stray @anthropic-ai/claude-code check."
+    return 0
+  fi
+
+  stray_dir="${npm_prefix}/lib/node_modules/@anthropic-ai/claude-code"
   if [ ! -d "${stray_dir}" ]; then
     echo "No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up."
     return 0
@@ -215,7 +228,7 @@ remove_stray_claude_code_copy() {
   # stray directory (the check above) and retries cleanly, whereas a
   # dir-first order could leave a dangling shim that a rerun would
   # never notice (the "does the stray dir exist" check would say no).
-  bin_shim="${node_dir}/bin/claude"
+  bin_shim="${npm_prefix}/bin/claude"
   if [ -e "${bin_shim}" ] || [ -L "${bin_shim}" ]; then
     rm -f "${bin_shim}"
   fi

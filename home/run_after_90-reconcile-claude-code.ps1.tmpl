@@ -41,6 +41,41 @@ function Write-FatalError {
   $ErrorActionPreference = $previousEap
 }
 
+function Resolve-ExactCaseProperty {
+  param(
+    [Parameter(Mandatory)] $InputObject,
+    [Parameter(Mandatory)] [string] $Name
+  )
+  # JSON object keys are case-sensitive, but PSObject.Properties's
+  # index-by-name lookup ($obj.PSObject.Properties['env']) is not: a
+  # differently-cased existing key (e.g. "ENV" instead of "env") would
+  # otherwise be silently matched and mutated instead of the exact key
+  # Claude Code actually reads, while this script still reports
+  # success. Enumerate explicitly and compare with -ceq instead.
+  #
+  # A differently-cased match with no exact-case sibling is flagged as
+  # a Collision: PowerShell's PSCustomObject member model is itself
+  # case-insensitive (Add-Member refuses to create an exact-case
+  # property when a differently-cased one already exists, and
+  # ConvertFrom-Json itself refuses to parse JSON where two sibling
+  # keys differ only by case), so there is no safe way to add the
+  # exact key this script needs alongside it -- callers must fail
+  # loudly on Collision rather than let Add-Member throw.
+  $exact = $null
+  foreach ($prop in $InputObject.PSObject.Properties) {
+    if ($prop.Name -ceq $Name) {
+      $exact = $prop
+      break
+    }
+  }
+  $caseInsensitiveMatch = $InputObject.PSObject.Properties[$Name]
+  return [PSCustomObject]@{
+    Property      = $exact
+    Collision     = [bool]($caseInsensitiveMatch -and -not $exact)
+    CollidingName = if ($caseInsensitiveMatch) { $caseInsensitiveMatch.Name } else { $null }
+  }
+}
+
 function Merge-ClaudeSettings {
   if (-not (Test-Path -LiteralPath $settingsDir)) {
     New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
@@ -92,15 +127,26 @@ function Merge-ClaudeSettings {
     return 1
   }
 
-  $envProp = $parsed.PSObject.Properties['env']
+  $envResolved = Resolve-ExactCaseProperty -InputObject $parsed -Name 'env'
+  if ($envResolved.Collision) {
+    Write-FatalError "error: $settingsFile has a '$($envResolved.CollidingName)' key that differs from 'env' only by letter case; refusing to modify it (PowerShell cannot safely add an exact 'env' key alongside it). Rename the key to exactly 'env' manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+  $envProp = $envResolved.Property
   if ($envProp -and $null -ne $envProp.Value -and
       $envProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
     Write-FatalError "error: $settingsFile has a non-object 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
     return 1
   }
 
+  $disableResolved = $null
   if ($envProp -and $envProp.Value) {
-    $existing = $envProp.Value.PSObject.Properties['DISABLE_AUTOUPDATER']
+    $disableResolved = Resolve-ExactCaseProperty -InputObject $envProp.Value -Name 'DISABLE_AUTOUPDATER'
+    if ($disableResolved.Collision) {
+      Write-FatalError "error: $settingsFile has an 'env.$($disableResolved.CollidingName)' key that differs from 'env.DISABLE_AUTOUPDATER' only by letter case; refusing to modify it (PowerShell cannot safely add an exact 'DISABLE_AUTOUPDATER' key alongside it). Rename the key to exactly 'DISABLE_AUTOUPDATER' manually, then re-run 'chezmoi apply'."
+      return 1
+    }
+    $existing = $disableResolved.Property
     if ($existing -and $existing.Value -is [string] -and $existing.Value -ceq '1') {
       Write-Host "env.DISABLE_AUTOUPDATER already set to `"1`" in $settingsFile; nothing to do."
       return 0
@@ -116,7 +162,10 @@ function Merge-ClaudeSettings {
     }
   } else {
     $target = $envProp.Value
-    $existingProp = $target.PSObject.Properties['DISABLE_AUTOUPDATER']
+    # $disableResolved is guaranteed set here: this branch is only
+    # reached when ($envProp -and $envProp.Value), the same condition
+    # already evaluated above.
+    $existingProp = $disableResolved.Property
     if ($existingProp) {
       $existingProp.Value = '1'
     } else {
