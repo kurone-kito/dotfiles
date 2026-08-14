@@ -358,6 +358,28 @@ Describe '90-reconcile-claude-code' {
       $after.Hash | Should -Be $before.Hash
     }
 
+    It 'fails loudly on invalid UTF-8 bytes, not silently replaced with U+FFFD and rewritten' {
+      # Regression test: the one-argument UTF8Encoding constructor does
+      # not set throwOnInvalidBytes, so malformed UTF-8 bytes decode
+      # silently as U+FFFD replacement characters instead of failing --
+      # the file could then parse as valid JSON with corrupted
+      # unrelated content baked in, and get rewritten that way.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      $prefix = [System.Text.Encoding]::ASCII.GetBytes('{"note":"')
+      $invalidByte = [byte[]]@(0xFF)
+      $suffix = [System.Text.Encoding]::ASCII.GetBytes('"}')
+      [System.IO.File]::WriteAllBytes($settingsFile, ($prefix + $invalidByte + $suffix))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match 'not valid UTF-8'
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
+    }
+
     It 'fails loudly on a single-element top-level JSON array, not silently treated as an object' {
       # Regression test: ConvertFrom-Json's output is enumerated onto
       # the pipeline, so a single-element array such as "[{}]"

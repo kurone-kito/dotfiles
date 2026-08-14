@@ -150,7 +150,19 @@ function Merge-ClaudeSettings {
   # though this script only ever intends to touch env.DISABLE_AUTOUPDATER.
   # ReadAllText still honors an actual BOM if present (auto-detected),
   # so this is correct for both BOM-less and BOM'd input.
-  $raw = [System.IO.File]::ReadAllText($settingsFile, [System.Text.UTF8Encoding]::new($false))
+  #
+  # The one-argument UTF8Encoding constructor does not set
+  # throwOnInvalidBytes, so malformed UTF-8 bytes decode silently as
+  # U+FFFD replacement characters instead of failing -- the file could
+  # then parse as valid JSON with corrupted unrelated content baked in,
+  # and get rewritten that way. Use the strict two-argument constructor
+  # so invalid input is rejected instead.
+  try {
+    $raw = [System.IO.File]::ReadAllText($settingsFile, [System.Text.UTF8Encoding]::new($false, $true))
+  } catch {
+    Write-FatalError "error: $settingsFile is not valid UTF-8; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
   if ([string]::IsNullOrWhiteSpace($raw)) {
     Write-FatalError "error: $settingsFile is empty; refusing to treat that as valid JSON. Fix or remove it manually, then re-run 'chezmoi apply'."
     return 1
@@ -237,12 +249,30 @@ function Merge-ClaudeSettings {
   # bash implementation's mktemp+mv: writing $settingsFile directly
   # would let an I/O failure (e.g. a full disk) mid-write truncate or
   # partially overwrite the user's pre-existing Claude settings.
+  #
+  # Move-Item -Force is not a true atomic replace on the Windows
+  # filesystem provider: overwriting an existing destination can
+  # delete it before the move completes, so an interruption in that
+  # gap could leave settings.json missing entirely. $settingsFile is
+  # always seeded to exist by this point (the check above), and
+  # $tmpFile is always in the same directory, so [System.IO.File]::
+  # Replace's true replace-in-place semantics apply unconditionally
+  # here.
   $tmpFile = Join-Path $settingsDir (".settings.json.{0}" -f [System.IO.Path]::GetRandomFileName())
+  # File.Replace's backup-path parameter is documented as
+  # null-acceptable ("no backup file is created") on Windows .NET, but
+  # empirically throws "value cannot be an empty string" under .NET
+  # Core on non-Windows -- passing an explicit backup path instead
+  # works identically on every platform this repo tests on, avoiding
+  # that discrepancy entirely.
+  $backupFile = Join-Path $settingsDir (".settings.json.bak.{0}" -f [System.IO.Path]::GetRandomFileName())
   try {
     Write-Utf8NoBom -Path $tmpFile -Content ($json + [System.Environment]::NewLine)
-    Move-Item -LiteralPath $tmpFile -Destination $settingsFile -Force
+    [System.IO.File]::Replace($tmpFile, $settingsFile, $backupFile)
+    Remove-Item -LiteralPath $backupFile -Force -ErrorAction SilentlyContinue
   } catch {
     Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $backupFile -Force -ErrorAction SilentlyContinue
     Write-FatalError "error: failed to write $settingsFile; leaving it untouched."
     return 1
   }
