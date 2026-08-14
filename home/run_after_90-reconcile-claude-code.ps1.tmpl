@@ -364,13 +364,44 @@ function Test-MiseManagedClaudeWorks {
   # A resolvable install directory alone does not prove the managed
   # copy actually works: an interrupted or failed npm-backend install
   # can leave the directory in place without a functional binary.
-  # Delegate to `mise exec` rather than guessing at the managed
-  # install's internal bin/ layout -- it already knows how to
-  # correctly activate that exact tool's binaries on PATH.
+  #
+  # `mise exec ... -- claude --version` is NOT safe here: mise exec
+  # prepends the managed tool's bin directory to PATH but does not
+  # otherwise isolate command lookup from the *existing* PATH, so if
+  # the managed install is missing its own 'claude' shim (a
+  # corrupted/partial install), it would silently fall through to and
+  # run the stray shim Remove-StrayClaudeCodeCopy is about to delete
+  # instead -- reporting success and then deleting the only copy that
+  # actually worked. The npm global bin directory (where the stray
+  # shim lives) is realistically already on a real user's ambient
+  # PATH -- that's how 'claude' becomes invokable at all -- so this is
+  # not a contrived edge case. Resolve the managed tool's exact bin
+  # directory (mise bin-paths, not mise exec) and invoke that specific
+  # executable directly instead, bypassing PATH lookup (and therefore
+  # the ambient stray shim) entirely.
+  $binPathOutput = Invoke-MiseWhere -Arguments @('bin-paths', 'npm:@anthropic-ai/claude-code')
+  if (-not $binPathOutput) {
+    return $false
+  }
+  $binPath = @($binPathOutput)[0]
+  # npm places a POSIX shell shim ('claude') and, on Windows, also
+  # 'claude.cmd'/'claude.ps1' wrappers in the same bin directory. The
+  # POSIX shim isn't directly invokable from Windows; '.cmd' is
+  # invokable via '&' without any execution-policy consideration
+  # (unlike '.ps1'), matching how the stray-copy removal code already
+  # treats 'claude.cmd' as the Windows-invokable shim.
+  $claudeExe = if ($IsWindows -ne $false) {
+    Join-Path $binPath 'claude.cmd'
+  } else {
+    Join-Path $binPath 'claude'
+  }
+  if (-not (Test-Path -LiteralPath $claudeExe)) {
+    return $false
+  }
   $previousEap = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    & mise 'exec' 'npm:@anthropic-ai/claude-code' '--' 'claude' '--version' *>$null
+    & $claudeExe '--version' *>$null
     return $LASTEXITCODE -eq 0
   } catch {
     return $false

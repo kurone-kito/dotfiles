@@ -54,6 +54,27 @@ BeforeAll {
     $global:MockManagedResolves = $ManagedResolves
     $global:MockManagedWorks = $ManagedWorks
 
+    # Test-MiseManagedClaudeWorks no longer goes through `mise exec`
+    # (which prepends the managed bin dir to PATH but does not isolate
+    # command lookup from the rest of it -- see the fixture's own
+    # comment) -- it resolves `mise bin-paths` and invokes that exact
+    # executable directly, so the mock needs a real file on disk
+    # there, not just a LASTEXITCODE toggle.
+    $managedBinDir = Join-Path $ManagedDir 'bin'
+    New-Item -ItemType Directory -Path $managedBinDir -Force | Out-Null
+    $claudeExeName = if ($IsWindows -ne $false) { 'claude.cmd' } else { 'claude' }
+    $managedClaudePath = Join-Path $managedBinDir $claudeExeName
+    Remove-Item -LiteralPath $managedClaudePath -Force -ErrorAction SilentlyContinue
+    if ($ManagedWorks) {
+      if ($IsWindows -ne $false) {
+        [System.IO.File]::WriteAllText($managedClaudePath, "@echo off`r`necho managed-claude-version`r`n", [System.Text.ASCIIEncoding]::new())
+      } else {
+        [System.IO.File]::WriteAllText($managedClaudePath, "#!/bin/bash`necho managed-claude-version`nexit 0`n", [System.Text.ASCIIEncoding]::new())
+        & chmod +x $managedClaudePath
+      }
+    }
+    $global:MockManagedBinDir = $managedBinDir
+
     function global:mise {
       $a = $args
       if ($a.Count -ge 2 -and $a[0] -eq 'where' -and $a[1] -eq 'node') {
@@ -74,8 +95,13 @@ BeforeAll {
         }
         return
       }
-      if ($a.Count -ge 2 -and $a[0] -eq 'exec' -and $a[1] -eq 'npm:@anthropic-ai/claude-code') {
-        $global:LASTEXITCODE = if ($global:MockManagedWorks) { 0 } else { 1 }
+      if ($a.Count -ge 2 -and $a[0] -eq 'bin-paths' -and $a[1] -eq 'npm:@anthropic-ai/claude-code') {
+        if ($global:MockManagedResolves -and $global:MockManagedBinDir) {
+          Write-Output $global:MockManagedBinDir
+          $global:LASTEXITCODE = 0
+        } else {
+          $global:LASTEXITCODE = 1
+        }
         return
       }
       $global:LASTEXITCODE = 1
@@ -84,7 +110,7 @@ BeforeAll {
 
   function global:Remove-TestMiseMock {
     Remove-Item Function:\mise -ErrorAction SilentlyContinue
-    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks, MockManagedBinDir -Scope Global -ErrorAction SilentlyContinue
   }
 
   function global:Set-TestNpmPrefixMock {
@@ -563,6 +589,43 @@ Describe '90-reconcile-claude-code' {
       $shim | Should -Exist
     }
 
+    It 'managed copy resolves but lacks its own claude shim: does not fall through to a working stray shim on ambient PATH' {
+      # Regression test: `mise exec ... -- claude --version` prepends
+      # the managed tool's bin directory to PATH but does not
+      # otherwise isolate command lookup from the *existing* PATH --
+      # so if the managed install is missing its own 'claude' shim (a
+      # corrupted/partial npm install), it can silently fall through
+      # to and run the stray shim this function is about to delete
+      # instead, report success, and delete the only copy that
+      # actually worked. The npm global bin directory is realistically
+      # already on a real user's PATH (that's how 'claude' becomes
+      # invokable at all), so prepend it to $env:PATH here to
+      # reproduce that exact condition.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false
+      $strayDir = Write-TestStrayCopy
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+      # Make the stray shim a real, working executable
+      # (Write-TestStrayCopy's default is an empty file, not runnable)
+      # so it could deceptively pass a naive PATH-based "does claude
+      # --version succeed" check.
+      [System.IO.File]::WriteAllText($shim, "#!/bin/bash`necho stray-claude-version`nexit 0`n", [System.Text.ASCIIEncoding]::new())
+      & chmod +x $shim
+
+      $shimDir = Join-Path $script:NodeDir 'bin'
+      $originalPath = $env:PATH
+      try {
+        $env:PATH = "$shimDir$([IO.Path]::PathSeparator)$env:PATH"
+        $output = & $script:Fixture *>&1 | Out-String
+      } finally {
+        $env:PATH = $originalPath
+      }
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      $shim | Should -Exist
+    }
+
     It 'still runs the stray-copy cleanup even when settings reconciliation fails (regression: exit must not short-circuit cleanup)' {
       # Regression test: Merge-ClaudeSettings previously called `exit 1`
       # directly on failure, which terminates the whole script before
@@ -748,6 +811,41 @@ Describe '90-reconcile-claude-code' {
       foreach ($shim in $shims) {
         $shim | Should -Exist
       }
+    }
+
+    It 'managed copy resolves but lacks its own claude shim: does not fall through to a working stray shim on ambient PATH' {
+      # Regression test: `mise exec ... -- claude --version` prepends
+      # the managed tool's bin directory to PATH but does not
+      # otherwise isolate command lookup from the *existing* PATH --
+      # so if the managed install is missing its own 'claude' shim (a
+      # corrupted/partial npm install), it can silently fall through
+      # to and run the stray shim this function is about to delete
+      # instead, report success, and delete the only copy that
+      # actually worked. The npm global prefix directory is
+      # realistically already on a real user's PATH (that's how
+      # 'claude' becomes invokable at all), so prepend it to
+      # $env:PATH here to reproduce that exact condition.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false
+      $strayDir = Write-TestStrayCopy
+      $strayShim = Join-Path $script:NpmPrefixDir 'claude.cmd'
+      # Make the stray claude.cmd a real, working executable
+      # (Write-TestStrayCopy's default is an empty file, not runnable)
+      # so it could deceptively pass a naive PATH-based "does claude
+      # --version succeed" check.
+      [System.IO.File]::WriteAllText($strayShim, "@echo off`r`necho stray-claude-version`r`n", [System.Text.ASCIIEncoding]::new())
+
+      $originalPath = $env:PATH
+      try {
+        $env:PATH = "$script:NpmPrefixDir$([IO.Path]::PathSeparator)$env:PATH"
+        $output = & $script:Fixture *>&1 | Out-String
+      } finally {
+        $env:PATH = $originalPath
+      }
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      $strayShim | Should -Exist
     }
 
     It 'skips the stray-copy check (fail-closed) when the mise-managed npm global prefix is not resolvable' {

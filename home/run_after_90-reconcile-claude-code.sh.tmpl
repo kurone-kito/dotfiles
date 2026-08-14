@@ -297,7 +297,24 @@ remove_stray_claude_code_copy() {
   # Confirm the managed 'claude' command actually runs before removing
   # anything, so this repair can never leave the user without a
   # working 'claude' even in that scenario.
-  if ! mise exec "npm:@anthropic-ai/claude-code" -- claude --version >/dev/null 2>&1; then
+  #
+  # `mise exec ... -- claude --version` is NOT safe here: mise exec
+  # prepends the managed tool's bin directory to PATH but does not
+  # otherwise isolate command lookup from the *existing* PATH, so if
+  # the managed install is missing its own 'claude' shim (a
+  # corrupted/partial install), it would silently fall through to and
+  # run the stray shim this function is about to delete instead --
+  # reporting success and then deleting the only copy that actually
+  # worked. The npm global bin directory (where the stray shim lives)
+  # is realistically already on a real user's ambient PATH -- that's
+  # how 'claude' becomes invokable at all -- so this is not a
+  # contrived edge case. Resolve the managed tool's exact bin
+  # directory and invoke that specific executable directly instead,
+  # bypassing PATH lookup (and therefore the ambient stray shim)
+  # entirely.
+  local managed_bin_path
+  managed_bin_path="$(mise bin-paths "npm:@anthropic-ai/claude-code" 2>/dev/null | head -n1)" || managed_bin_path=""
+  if [ -z "${managed_bin_path}" ] || [ ! -x "${managed_bin_path}/claude" ] || ! "${managed_bin_path}/claude" --version >/dev/null 2>&1; then
     echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
     return 0
   fi

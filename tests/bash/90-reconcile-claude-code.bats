@@ -60,13 +60,24 @@ teardown() {
 }
 
 write_mise_mock() {
-  # $1: 0 or 1 -> whether `mise where npm:@anthropic-ai/claude-code`
-  #     resolves successfully (default: 1, resolves)
-  # $2: 0 or 1 -> whether `mise exec npm:@anthropic-ai/claude-code --
-  #     claude --version` succeeds, i.e. the managed copy actually
-  #     works (default: 1, works)
+  # $1: 0 or 1 -> whether `mise where`/`mise bin-paths
+  #     npm:@anthropic-ai/claude-code` resolve successfully
+  #     (default: 1, resolves)
+  # $2: 0 or 1 -> whether the managed copy's own claude executable
+  #     (at the bin-paths-resolved directory) actually works when
+  #     invoked directly (default: 1, works)
   local managed_resolves="${1:-1}"
   local managed_works="${2:-1}"
+  mkdir -p "$MANAGED_DIR/bin"
+  rm -f "$MANAGED_DIR/bin/claude"
+  if [ "$managed_works" = "1" ]; then
+    cat > "$MANAGED_DIR/bin/claude" << 'MANAGEDCLAUDE'
+#!/bin/bash
+echo "managed-claude-version"
+exit 0
+MANAGEDCLAUDE
+    chmod +x "$MANAGED_DIR/bin/claude"
+  fi
   cat > "$BIN_DIR/mise" << MOCK
 #!/bin/bash
 if [ "\$1" = "where" ] && [ "\$2" = "node" ]; then
@@ -81,8 +92,9 @@ if [ "\$1" = "where" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
     exit 1
   fi
 fi
-if [ "\$1" = "exec" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
-  if [ "$managed_works" = "1" ]; then
+if [ "\$1" = "bin-paths" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+  if [ "$managed_resolves" = "1" ]; then
+    echo "$MANAGED_DIR/bin"
     exit 0
   else
     exit 1
@@ -494,6 +506,43 @@ REALNPM
   # the stray copy in that case (it could be the only working one).
   write_mise_mock 1 0
   write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "does not appear to work"
+  assert_output --partial "leaving the stray copy in place"
+  assert_dir_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
+}
+
+@test "managed copy resolves but lacks its own claude shim: does not fall through to a working stray shim on ambient PATH" {
+  # Regression test: `mise exec ... -- claude --version` prepends the
+  # managed tool's bin directory to PATH but does not otherwise
+  # isolate command lookup from the *existing* PATH -- so if the
+  # managed install is missing its own 'claude' shim (a
+  # corrupted/partial npm install), it can silently fall through to
+  # and run the stray shim this function is about to delete instead,
+  # report success, and delete the only copy that actually worked.
+  # The npm global bin directory is realistically already on a real
+  # user's PATH (that's how 'claude' becomes invokable at all), so
+  # export it here to reproduce that exact condition.
+  write_mise_mock 1
+  write_stray_copy
+  # Make the stray shim a real, working executable (write_stray_copy's
+  # default is an empty touched file, not runnable) so it could
+  # deceptively pass a naive PATH-based "does claude --version
+  # succeed" check.
+  cat > "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" << 'STRAYCLAUDE'
+#!/bin/bash
+echo "stray-claude-version"
+exit 0
+STRAYCLAUDE
+  chmod +x "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+  # Managed install directory resolves, but its own bin/claude is
+  # deliberately absent (corrupted/partial install) -- write_mise_mock
+  # already created it since managed_works defaults to 1; remove it.
+  rm -f "$MANAGED_DIR/bin/claude"
+  export PATH="$NPM_PREFIX_DIR/bin:$PATH"
+
   run bash "$FIXTURE"
   assert_success
   assert_output --partial "does not appear to work"
