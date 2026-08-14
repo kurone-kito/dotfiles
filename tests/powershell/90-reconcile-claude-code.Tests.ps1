@@ -476,6 +476,50 @@ Describe '90-reconcile-claude-code' {
       $script:ManagedDir | Should -Exist
     }
 
+    It 'detects and removes a dangling symlink at the stray-copy path itself' {
+      # Sanity/coverage test, NOT proof of the fix on this platform:
+      # on Windows PowerShell 5.1 (.NET Framework), Test-Path follows a
+      # reparse point and checks its *target*, so a dangling
+      # symlink/junction at the exact stray-copy path (target missing)
+      # reads as absent and the existence check would wrongly report
+      # "no stray copy found". Empirically confirmed this does NOT
+      # reproduce under pwsh 7+ (.NET Core) on this Linux dev session --
+      # Test-Path here already reports a dangling reparse point's own
+      # existence as present, so this test passes identically with or
+      # without the Test-ReparsePoint fallback added alongside it. The
+      # Windows-layout Context below carries the equivalent,
+      # authoritative-on-Windows version of this test; this copy still
+      # exercises the removal machinery end-to-end on this platform
+      # (Remove-DirectoryTreeSafely correctly unlinking a dangling
+      # reparse point via Get-Item -Force once reached) so it remains
+      # useful as a basic regression guard even though it cannot prove
+      # the Test-Path-ambiguity fix itself the way the other tests in
+      # this file prove their fixes.
+      #
+      # Creating a symlink can require elevated privileges or Developer
+      # Mode on Windows; skip gracefully rather than fail the suite on
+      # an environment limitation unrelated to the script under test.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $strayDir = Join-Path $script:NodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
+      New-Item -ItemType Directory -Path (Split-Path -Parent $strayDir) -Force | Out-Null
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+      New-Item -ItemType File -Path $shim -Force | Out-Null
+      $danglingTarget = Join-Path $TestDrive ("nonexistent-target-{0}" -f [guid]::NewGuid())
+      try {
+        New-Item -ItemType SymbolicLink -Path $strayDir -Target $danglingTarget -ErrorAction Stop | Out-Null
+      } catch {
+        Set-ItResult -Skipped -Because "symlink creation not permitted in this environment: $_"
+        return
+      }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $output | Should -Not -Match 'No stray @anthropic-ai/claude-code copy found'
+      $strayDir | Should -Not -Exist
+      $shim | Should -Not -Exist
+    }
+
     It 'leaves the stray copy in place when the managed copy is not resolvable' {
       Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedResolves $false
       $strayDir = Write-TestStrayCopy
@@ -620,6 +664,49 @@ Describe '90-reconcile-claude-code' {
         $shim | Should -Not -Exist
       }
       $script:ManagedDir | Should -Exist
+    }
+
+    It 'detects and removes a dangling symlink at the stray-copy path itself' {
+      # Regression test: on Windows PowerShell 5.1 (.NET Framework),
+      # Test-Path follows a reparse point and checks its *target*, so
+      # a dangling symlink/junction at the exact stray-copy path
+      # (target missing) reads as absent and the existence check would
+      # wrongly report "no stray copy found" -- leaving any shadowing
+      # Claude shim in place indefinitely. This does not reproduce
+      # under pwsh 7+ (.NET Core), where Test-Path already reports a
+      # dangling reparse point's own existence correctly -- so this
+      # test is authoritative only on the real Windows PS5.1 leg (see
+      # the file-level comment at the top of this file), matching
+      # Remove-DirectoryTreeSafely, which already handles a dangling
+      # reparse point correctly once reached (Test-ReparsePoint uses
+      # Get-Item -Force, which finds it regardless of .NET runtime).
+      #
+      # Creating a symlink can require elevated privileges or Developer
+      # Mode on Windows; skip gracefully rather than fail the suite on
+      # an environment limitation unrelated to the script under test.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $strayDir = Join-Path $script:NpmPrefixDir (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+      New-Item -ItemType Directory -Path (Split-Path -Parent $strayDir) -Force | Out-Null
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NpmPrefixDir $_ }
+      foreach ($shim in $shims) {
+        New-Item -ItemType File -Path $shim -Force | Out-Null
+      }
+      $danglingTarget = Join-Path $TestDrive ("nonexistent-target-{0}" -f [guid]::NewGuid())
+      try {
+        New-Item -ItemType SymbolicLink -Path $strayDir -Target $danglingTarget -ErrorAction Stop | Out-Null
+      } catch {
+        Set-ItResult -Skipped -Because "symlink creation not permitted in this environment: $_"
+        return
+      }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $output | Should -Not -Match 'No stray @anthropic-ai/claude-code copy found'
+      $strayDir | Should -Not -Exist
+      foreach ($shim in $shims) {
+        $shim | Should -Not -Exist
+      }
     }
 
     It 'leaves the stray copy and shims in place when the managed copy is not resolvable' {

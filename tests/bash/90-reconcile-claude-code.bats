@@ -452,6 +452,28 @@ REALNPM
   assert_dir_not_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
 }
 
+@test "stray copy is a dangling symlink: still detected and removed" {
+  # Regression test: `-d` follows a symlink and checks its *target*,
+  # so a dangling symlink at the stray-copy path (target missing)
+  # reads as "not a directory" and the existence check would wrongly
+  # report "no stray copy found" -- leaving any shadowing bin/claude
+  # shim in place indefinitely. `rm -rf` on a symlink unlinks it
+  # without traversing into its (missing) target, so removal itself
+  # needs no change once the existence check correctly detects it.
+  write_mise_mock 1
+  mkdir -p "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai" "$NPM_PREFIX_DIR/bin"
+  ln -s "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/nonexistent-target" \
+    "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  ln -sf '../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' "$NPM_PREFIX_DIR/bin/claude"
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
+  refute_output --partial "No stray @anthropic-ai/claude-code copy found"
+  [ ! -e "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code" ]
+  [ ! -L "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code" ]
+  assert_file_not_exists "$NPM_PREFIX_DIR/bin/claude"
+}
+
 @test "stray copy + managed copy present: dir and bin shim both removed" {
   write_mise_mock 1
   write_stray_copy

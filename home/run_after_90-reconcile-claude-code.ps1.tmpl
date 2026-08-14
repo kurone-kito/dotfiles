@@ -406,7 +406,14 @@ function Remove-StrayClaudeCodeCopy {
     $strayDir = Join-Path $nodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
   }
 
-  if (-not (Test-Path -LiteralPath $strayDir)) {
+  # Test-Path follows reparse points and checks their *target*, so a
+  # dangling symlink/junction at this exact path (target missing)
+  # reads as absent and this check would wrongly report "no stray
+  # copy" -- leaving a shadowing Claude shim in place indefinitely
+  # even though Remove-DirectoryTreeSafely below already handles a
+  # dangling reparse point correctly once reached. Test-ReparsePoint
+  # uses Get-Item -Force, which finds a dangling reparse point too.
+  if (-not (Test-Path -LiteralPath $strayDir) -and -not (Test-ReparsePoint -Path $strayDir)) {
     Write-Host 'No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up.'
     return
   }

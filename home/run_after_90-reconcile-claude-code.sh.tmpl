@@ -273,7 +273,14 @@ remove_stray_claude_code_copy() {
   fi
 
   stray_dir="${npm_prefix}/lib/node_modules/@anthropic-ai/claude-code"
-  if [ ! -d "${stray_dir}" ]; then
+  # `-d` follows a symlink and checks its *target*, so a dangling
+  # symlink at this exact path (target missing) reads as "not a
+  # directory" and this check would wrongly report "no stray copy" --
+  # leaving a shadowing bin/claude shim in place indefinitely. `-L`
+  # catches the symlink itself regardless of whether its target
+  # exists; `rm -rf` below already unlinks a symlink without
+  # traversing into its target, so no change is needed there.
+  if [ ! -d "${stray_dir}" ] && [ ! -L "${stray_dir}" ]; then
     echo "No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up."
     return 0
   fi
