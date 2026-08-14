@@ -229,6 +229,37 @@ Describe '90-reconcile-claude-code' {
       $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
       $after.Hash | Should -Be $before.Hash
     }
+
+    It 'fails loudly on env:false (JSON false), not silently treated as empty object' {
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      [System.IO.File]::WriteAllText($settingsFile, '{"env":false}', [System.Text.UTF8Encoding]::new($false))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+
+      & $script:Fixture 2>&1 | Out-Null
+      $LASTEXITCODE | Should -Be 1
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
+    }
+
+    It 'round-trips non-ASCII content in unrelated keys unchanged (PS5.1 encoding regression)' {
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      # A non-ASCII value that would be corrupted if this file were
+      # ever read via the active ANSI code page instead of UTF-8 (the
+      # PS5.1 Get-Content -Raw default when no encoding is given).
+      $existing = '{"someKey":"日本語のテスト値","env":{"OTHER_VAR":"keep-me"}}'
+      [System.IO.File]::WriteAllText($settingsFile, $existing, [System.Text.UTF8Encoding]::new($false))
+
+      & $script:Fixture | Out-Null
+      $LASTEXITCODE | Should -Be 0
+      $parsed = Get-Content -Raw $settingsFile -Encoding UTF8 | ConvertFrom-Json
+      $parsed.someKey | Should -Be '日本語のテスト値'
+      $parsed.env.DISABLE_AUTOUPDATER | Should -Be '1'
+      $parsed.env.OTHER_VAR | Should -Be 'keep-me'
+    }
   }
 
   Context 'stray claude-code copy cleanup (POSIX layout)' -Skip:($IsWindows -ne $false) {

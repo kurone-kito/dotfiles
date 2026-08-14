@@ -17,24 +17,8 @@ command -v mise &>/dev/null || { echo "mise not found; skipping Claude Code auto
 settings_dir="${HOME}/.claude"
 settings_file="${settings_dir}/settings.json"
 
-reconcile_settings() {
-  # Resolve jq via `mise which` first: jq is itself mise-managed
-  # (dot_config/mise/config.toml), and this repo activates mise for
-  # POSIX shells rather than using shims mode, so a jq installed by
-  # run_onchange_after_50-install-mise-tools earlier in this same
-  # `chezmoi apply` is not guaranteed to be on this script's own PATH
-  # yet -- mirrors the `mise which ghq`/`mise which gh` pattern in
-  # run_onchange_after_60-clone-ghq-repos.sh.tmpl. Falls back to a
-  # plain PATH lookup for a non-mise-managed jq.
-  local jq_bin
-  jq_bin="$(mise which jq 2>/dev/null)" || jq_bin=""
-  if [ -z "${jq_bin}" ]; then
-    jq_bin="$(command -v jq 2>/dev/null)" || jq_bin=""
-  fi
-  if [ -z "${jq_bin}" ]; then
-    echo "jq not found; skipping ~/.claude/settings.json reconciliation."
-    return 0
-  fi
+reconcile_settings_jq() {
+  local jq_bin="$1"
 
   mkdir -p "${settings_dir}"
   if [ ! -f "${settings_file}" ]; then
@@ -46,7 +30,12 @@ reconcile_settings() {
     return 1
   fi
 
-  if ! "${jq_bin}" -e '(type == "object") and ((.env // {}) | type == "object")' \
+  # NOTE: `//` substitutes for both `null` and `false`, so a naive
+  # `.env // {}` would silently treat an existing `"env": false` as an
+  # empty object instead of rejecting it below. Use an explicit
+  # null-only check so every non-null, non-object `env` value
+  # (`false`, a string, a number, an array) is correctly rejected.
+  if ! "${jq_bin}" -e '(type == "object") and ((if .env == null then {} else .env end) | type == "object")' \
     "${settings_file}" >/dev/null 2>&1; then
     echo "error: ${settings_file} is not a JSON object with an object-typed 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
     return 1
@@ -59,13 +48,136 @@ reconcile_settings() {
 
   local tmp_file
   tmp_file="$(mktemp "${settings_dir}/.settings.json.XXXXXX")"
-  "${jq_bin}" '.env = ((.env // {}) + {"DISABLE_AUTOUPDATER": "1"})' \
-    "${settings_file}" > "${tmp_file}"
-  mv "${tmp_file}" "${settings_file}"
+  # NOTE: this whole function runs under `reconcile_settings || ...` in
+  # the caller, which suppresses `set -e` for everything inside this
+  # call (bash exempts errexit for every command in a `||`/`&&` list
+  # except the last, transitively through nested function calls). A
+  # jq write failure (e.g. disk full) must therefore be checked
+  # explicitly, not left to errexit, or `mv` could install a
+  # truncated tmp file over the real settings.json.
+  if ! "${jq_bin}" '.env = ((if .env == null then {} else .env end) + {"DISABLE_AUTOUPDATER": "1"})' \
+    "${settings_file}" > "${tmp_file}"; then
+    rm -f "${tmp_file}"
+    echo "error: failed to write ${settings_file}; leaving it untouched." >&2
+    return 1
+  fi
+  if ! mv "${tmp_file}" "${settings_file}"; then
+    rm -f "${tmp_file}"
+    echo "error: failed to replace ${settings_file}; leaving it untouched." >&2
+    return 1
+  fi
   echo "Set env.DISABLE_AUTOUPDATER=\"1\" in ${settings_file}."
 }
 
-reconcile_settings
+reconcile_settings_python() {
+  local python_bin="$1"
+  "${python_bin}" - "${settings_file}" << 'PYEOF'
+import json
+import os
+import sys
+import tempfile
+
+path = sys.argv[1]
+settings_dir = os.path.dirname(path)
+os.makedirs(settings_dir, exist_ok=True)
+
+if not os.path.isfile(path):
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("{}")
+
+try:
+    # The read is inside this try, not just json.loads: a
+    # non-UTF-8-encoded file raises UnicodeDecodeError (a ValueError
+    # subclass, so the except below already catches it too), and is
+    # exactly as "invalid" for this script's purposes as malformed
+    # JSON -- both failure sources should land on the identical clean
+    # message instead of a raw traceback.
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = fh.read()
+    data = json.loads(raw)
+except ValueError:
+    print(
+        f"error: {path} contains invalid JSON; refusing to modify it. "
+        "Fix or remove it manually, then re-run 'chezmoi apply'.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+env = data.get("env") if isinstance(data, dict) else None
+env_ok = isinstance(data, dict) and (env is None or isinstance(env, dict))
+if not env_ok:
+    print(
+        f"error: {path} is not a JSON object with an object-typed 'env' "
+        "key; refusing to modify it. Fix or remove it manually, then "
+        "re-run 'chezmoi apply'.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if isinstance(env, dict) and env.get("DISABLE_AUTOUPDATER") == "1":
+    print(f'env.DISABLE_AUTOUPDATER already set to "1" in {path}; nothing to do.')
+    sys.exit(0)
+
+env = dict(env) if isinstance(env, dict) else {}
+env["DISABLE_AUTOUPDATER"] = "1"
+data["env"] = env
+
+fd, tmp_path = tempfile.mkstemp(prefix=".settings.json.", dir=settings_dir)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        # ensure_ascii=False: keep non-ASCII values in unrelated keys
+        # as literal UTF-8, matching the jq path's output byte-for-byte
+        # instead of \uXXXX-escaping them (semantically identical JSON
+        # either way, but this avoids an unnecessary divergence).
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    os.replace(tmp_path, path)
+except BaseException:
+    os.unlink(tmp_path)
+    raise
+
+print(f'Set env.DISABLE_AUTOUPDATER="1" in {path}.')
+PYEOF
+}
+
+reconcile_settings() {
+  # Resolve jq via `mise which` first: jq is itself mise-managed
+  # (dot_config/mise/config.toml), and this repo activates mise for
+  # POSIX shells rather than using shims mode, so a jq installed by
+  # run_onchange_after_50-install-mise-tools earlier in this same
+  # `chezmoi apply` is not guaranteed to be on this script's own PATH
+  # yet -- mirrors the `mise which ghq`/`mise which gh` pattern in
+  # run_onchange_after_60-clone-ghq-repos.sh.tmpl. Falls back to a
+  # plain PATH lookup for a non-mise-managed jq, then to python3
+  # (mirroring executable_secret-status's jq-then-python3 fallback) --
+  # this reconciliation must not silently no-op just because jq is
+  # momentarily unavailable, since that would leave the autoupdater
+  # enabled with no loud signal.
+  local jq_bin python_bin
+  jq_bin="$(mise which jq 2>/dev/null)" || jq_bin=""
+  if [ -z "${jq_bin}" ]; then
+    jq_bin="$(command -v jq 2>/dev/null)" || jq_bin=""
+  fi
+  if [ -n "${jq_bin}" ]; then
+    reconcile_settings_jq "${jq_bin}"
+    return $?
+  fi
+
+  python_bin="$(mise which python3 2>/dev/null)" || python_bin=""
+  if [ -z "${python_bin}" ]; then
+    python_bin="$(command -v python3 2>/dev/null)" || python_bin=""
+  fi
+  if [ -n "${python_bin}" ]; then
+    reconcile_settings_python "${python_bin}"
+    return $?
+  fi
+
+  echo "error: neither jq nor python3 found; cannot reconcile ${settings_file}. Install one of them and re-run 'chezmoi apply'." >&2
+  return 1
+}
+
+settings_status=0
+reconcile_settings || settings_status=$?
 
 remove_stray_claude_code_copy() {
   local node_dir stray_dir managed_dir bin_shim
@@ -102,4 +214,4 @@ remove_stray_claude_code_copy() {
 
 remove_stray_claude_code_copy
 
-exit 0
+exit "${settings_status}"

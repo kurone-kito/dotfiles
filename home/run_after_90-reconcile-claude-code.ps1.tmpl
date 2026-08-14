@@ -49,7 +49,14 @@ function Merge-ClaudeSettings {
     Write-Utf8NoBom -Path $settingsFile -Content '{}'
   }
 
-  $raw = Get-Content -LiteralPath $settingsFile -Raw
+  # Read explicitly as UTF-8 (matching Write-Utf8NoBom's writer), not
+  # plain Get-Content -Raw: PS5.1 decodes a BOM-less file with the
+  # active ANSI code page when no encoding is given, which would
+  # corrupt any non-ASCII value elsewhere in this UTF-8 file even
+  # though this script only ever intends to touch env.DISABLE_AUTOUPDATER.
+  # ReadAllText still honors an actual BOM if present (auto-detected),
+  # so this is correct for both BOM-less and BOM'd input.
+  $raw = [System.IO.File]::ReadAllText($settingsFile, [System.Text.UTF8Encoding]::new($false))
   if ([string]::IsNullOrWhiteSpace($raw)) {
     Write-FatalError "error: $settingsFile is empty; refusing to treat that as valid JSON. Fix or remove it manually, then re-run 'chezmoi apply'."
     exit 1

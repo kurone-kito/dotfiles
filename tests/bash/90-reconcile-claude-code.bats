@@ -164,30 +164,79 @@ JSON
   [ "$before_hash" = "$after_hash" ]
 }
 
-@test "jq absent: settings reconciliation skipped, stray-copy check still runs" {
+@test "env:false (JSON false, not string): fails loudly, not silently treated as empty object" {
+  # Regression test: jq's `//` operator substitutes for both `null`
+  # and `false`, so a naive `.env // {}` would silently treat this as
+  # an empty object and overwrite it instead of rejecting it.
+  write_mise_mock
+  mkdir -p "$HOME/.claude"
+  printf '{"env": false}' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  run bash "$FIXTURE"
+  assert_failure
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
+}
+
+@test "jq absent, python3 available: falls back to python3 and succeeds" {
   write_mise_mock
   # Build a PATH scoped to only the mise mock plus symlinks to the
-  # handful of coreutils the script needs (mkdir/mktemp/mv/rm), with
+  # coreutils the script needs (mkdir/mktemp/mv/rm) and python3, with
   # jq deliberately excluded -- regardless of where the host's real jq
   # binary happens to live, it cannot be resolved from this PATH.
-  local bash_bin
+  local bash_bin python3_bin
   bash_bin="$(command -v bash)"
+  python3_bin="$(command -v python3 || true)"
+  if [ -z "${python3_bin}" ]; then
+    skip "python3 not available on this host; cannot exercise the fallback path"
+  fi
   NO_JQ_DIR="$BATS_TEST_TMPDIR/no-jq-bin"
   mkdir -p "$NO_JQ_DIR"
   for cmd in mkdir mktemp mv rm; do
     ln -sf "$(command -v "$cmd")" "$NO_JQ_DIR/$cmd"
   done
+  ln -sf "${python3_bin}" "$NO_JQ_DIR/python3"
   export PATH="$BIN_DIR:$NO_JQ_DIR"
   ! command -v jq &>/dev/null || {
     echo "test setup bug: jq still resolvable after PATH scoping" >&2
     return 1
   }
+  mkdir -p "$HOME/.claude"
+  printf '{"permissions":{"allow":["x"]},"env":{"OTHER":"keep-me"}}' > "$HOME/.claude/settings.json"
 
   run "$bash_bin" "$FIXTURE"
   assert_success
-  assert_output --partial "jq not found; skipping"
+  assert_output --partial "Set env.DISABLE_AUTOUPDATER=\"1\""
+  # The stray-copy check does not depend on jq/python3 and must still run.
+  assert_output --partial "No stray @anthropic-ai/claude-code copy found"
+  run python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['env']['DISABLE_AUTOUPDATER']=='1'; assert d['env']['OTHER']=='keep-me'; assert d['permissions']['allow']==['x']" "$HOME/.claude/settings.json"
+  assert_success
+}
+
+@test "neither jq nor python3 available: fails loudly, stray-copy check still runs" {
+  write_mise_mock
+  local bash_bin
+  bash_bin="$(command -v bash)"
+  NONE_DIR="$BATS_TEST_TMPDIR/no-jq-no-python3-bin"
+  mkdir -p "$NONE_DIR"
+  for cmd in mkdir mktemp mv rm; do
+    ln -sf "$(command -v "$cmd")" "$NONE_DIR/$cmd"
+  done
+  export PATH="$BIN_DIR:$NONE_DIR"
+  ! command -v jq &>/dev/null || {
+    echo "test setup bug: jq still resolvable after PATH scoping" >&2
+    return 1
+  }
+  ! command -v python3 &>/dev/null || {
+    echo "test setup bug: python3 still resolvable after PATH scoping" >&2
+    return 1
+  }
+
+  run "$bash_bin" "$FIXTURE"
+  assert_failure
+  assert_output --partial "neither jq nor python3 found"
   assert_file_not_exists "$HOME/.claude/settings.json"
-  # The stray-copy check does not depend on jq and must still run.
+  # The stray-copy check does not depend on jq/python3 and must still run.
   assert_output --partial "No stray @anthropic-ai/claude-code copy found"
 }
 
