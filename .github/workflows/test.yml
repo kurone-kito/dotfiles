@@ -97,8 +97,31 @@ jobs:
       always() &&
       (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: windows-latest
+    env:
+      CHEZMOI_VERSION: v2.71.0
     steps:
       - uses: actions/checkout@v7
+      # Some tests (e.g. signing-resolve.Tests.ps1,
+      # winget-user-path-packages-tmpl.Tests.ps1) render real chezmoi
+      # templates via `chezmoi execute-template` and self-skip when
+      # chezmoi is unavailable -- install it here (mirrors bash-tests'
+      # pinned install) so those suites actually execute on Windows CI
+      # instead of always reporting Skipped.
+      - name: Cache chezmoi binary
+        id: cache-chezmoi
+        uses: actions/cache@v6
+        with:
+          path: ~/bin/chezmoi.exe
+          key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
+      - name: Install chezmoi
+        if: steps.cache-chezmoi.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $installer = Invoke-RestMethod 'https://get.chezmoi.io/ps1'
+          & ([scriptblock]::Create($installer)) -BinDir "$HOME\bin" -Tag $env:CHEZMOI_VERSION
+      - name: Ensure chezmoi on PATH
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $HOME 'bin')
       - name: Install Pester if needed
         shell: pwsh
         run: |
@@ -124,6 +147,8 @@ jobs:
       always() &&
       (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: windows-latest
+    env:
+      CHEZMOI_VERSION: v2.71.0
     steps:
       - uses: actions/checkout@v7
         with:
@@ -135,6 +160,32 @@ jobs:
           if ($PSVersionTable.PSVersion.Major -ne 5) {
             throw "Expected Windows PowerShell 5.1 (major version 5), got $($PSVersionTable.PSVersion)"
           }
+      # Some tests (e.g. signing-resolve.Tests.ps1,
+      # winget-user-path-packages-tmpl.Tests.ps1) render real chezmoi
+      # templates via `chezmoi execute-template` and self-skip when
+      # chezmoi is unavailable -- install it here (mirrors bash-tests'
+      # pinned install) so those suites actually execute on Windows CI
+      # instead of always reporting Skipped.
+      - name: Cache chezmoi binary
+        id: cache-chezmoi
+        uses: actions/cache@v6
+        with:
+          path: ~/bin/chezmoi.exe
+          key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
+      - name: Install chezmoi
+        if: steps.cache-chezmoi.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          # PS5.1's .NET default protocol set can exclude TLS 1.2, which
+          # get.chezmoi.io requires -- same fix as the PSGallery install
+          # below.
+          [Net.ServicePointManager]::SecurityProtocol =
+            [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+          $installer = Invoke-RestMethod 'https://get.chezmoi.io/ps1'
+          & ([scriptblock]::Create($installer)) -BinDir "$HOME\bin" -Tag $env:CHEZMOI_VERSION
+      - name: Ensure chezmoi on PATH
+        shell: powershell
+        run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $HOME 'bin')
       - name: Install Pester if needed
         shell: powershell
         run: |
