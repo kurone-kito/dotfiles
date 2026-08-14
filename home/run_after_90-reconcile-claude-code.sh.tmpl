@@ -1,0 +1,337 @@
+#!/bin/bash
+# chezmoi run_after script: reconcile env.DISABLE_AUTOUPDATER into
+# ~/.claude/settings.json (JSON merge-patch on that one key only) and
+# remove any stray @anthropic-ai/claude-code copy that Claude Code's
+# own background autoupdater may have written directly into
+# mise-managed Node.js's global node_modules, shadowing the
+# mise-managed npm:@anthropic-ai/claude-code install. Runs after mise
+# tool installation so `mise where node` / `mise where
+# npm:@anthropic-ai/claude-code` are resolvable. See issue #258.
+set -euo pipefail
+
+# See run_after_99-secret-status-summary.sh.tmpl for rationale.
+exec </dev/null
+
+command -v mise &>/dev/null || { echo "mise not found; skipping Claude Code autoupdater repair."; exit 0; }
+
+settings_dir="${HOME}/.claude"
+settings_file="${settings_dir}/settings.json"
+
+reconcile_settings_jq() {
+  local jq_bin="$1"
+
+  mkdir -p "${settings_dir}"
+  if [ ! -f "${settings_file}" ]; then
+    printf '{}' > "${settings_file}"
+  fi
+
+  # jq's JSON parser normalizes invalid UTF-8 byte sequences to U+FFFD
+  # (the replacement character) instead of rejecting them, so `jq -e .`
+  # below would silently accept -- and then rewrite -- a settings.json
+  # containing corrupted bytes, permanently destroying the original
+  # content. Validate strict UTF-8 with iconv (a POSIX-mandated
+  # utility, so assuming its presence here is no less portable than
+  # jq/python3/mkdir/mv themselves) first, mirroring the python
+  # backend below: its `open(..., encoding="utf-8")` already raises
+  # UnicodeDecodeError (a ValueError subclass) on the same input,
+  # caught by the existing `except ValueError`. The caller
+  # (reconcile_settings) already routes to the python backend instead
+  # of here whenever iconv is missing and python3 is available, so
+  # reaching this function with iconv absent only happens when python3
+  # is unavailable too -- skip this extra check in that narrow case
+  # rather than refusing to reconcile settings.json at all; no worse
+  # than the behavior before this check existed.
+  if command -v iconv >/dev/null 2>&1; then
+    if ! iconv -f UTF-8 -t UTF-8 "${settings_file}" >/dev/null 2>&1; then
+      echo "error: ${settings_file} is not valid UTF-8; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
+      return 1
+    fi
+  fi
+
+  # `jq -e .` (no `-s`) parses its input as a stream of concatenated
+  # JSON values rather than requiring exactly one -- a file like
+  # `{} {}` passes that check, and every filter below then runs once
+  # per value, so the final write still ends up as two concatenated
+  # documents instead of failing loudly as "invalid JSON" like it
+  # should. `-s`/slurp mode always produces exactly one JSON array
+  # over all top-level input values, so its length is the true
+  # top-level document count regardless of how many values (zero, one,
+  # or more) the input actually held.
+  local doc_count
+  doc_count="$("${jq_bin}" -s 'length' "${settings_file}" 2>/dev/null)" || doc_count=""
+  if [ "${doc_count}" != "1" ]; then
+    echo "error: ${settings_file} contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
+    return 1
+  fi
+
+  # NOTE: `//` substitutes for both `null` and `false`, so a naive
+  # `.env // {}` would silently treat an existing `"env": false` as an
+  # empty object instead of rejecting it below. Use an explicit
+  # null-only check so every non-null, non-object `env` value
+  # (`false`, a string, a number, an array) is correctly rejected.
+  if ! "${jq_bin}" -e '(type == "object") and ((if .env == null then {} else .env end) | type == "object")' \
+    "${settings_file}" >/dev/null 2>&1; then
+    echo "error: ${settings_file} is not a JSON object with an object-typed 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'." >&2
+    return 1
+  fi
+
+  if "${jq_bin}" -e '(.env.DISABLE_AUTOUPDATER // null) == "1"' "${settings_file}" >/dev/null 2>&1; then
+    echo "env.DISABLE_AUTOUPDATER already set to \"1\" in ${settings_file}; nothing to do."
+    return 0
+  fi
+
+  local tmp_file
+  tmp_file="$(mktemp "${settings_dir}/.settings.json.XXXXXX")"
+  # NOTE: this whole function runs under `reconcile_settings || ...` in
+  # the caller, which suppresses `set -e` for everything inside this
+  # call (bash exempts errexit for every command in a `||`/`&&` list
+  # except the last, transitively through nested function calls). A
+  # jq write failure (e.g. disk full) must therefore be checked
+  # explicitly, not left to errexit, or `mv` could install a
+  # truncated tmp file over the real settings.json.
+  if ! "${jq_bin}" '.env = ((if .env == null then {} else .env end) + {"DISABLE_AUTOUPDATER": "1"})' \
+    "${settings_file}" > "${tmp_file}"; then
+    rm -f "${tmp_file}"
+    echo "error: failed to write ${settings_file}; leaving it untouched." >&2
+    return 1
+  fi
+  if ! mv "${tmp_file}" "${settings_file}"; then
+    rm -f "${tmp_file}"
+    echo "error: failed to replace ${settings_file}; leaving it untouched." >&2
+    return 1
+  fi
+  echo "Set env.DISABLE_AUTOUPDATER=\"1\" in ${settings_file}."
+}
+
+reconcile_settings_python() {
+  local python_bin="$1"
+  "${python_bin}" - "${settings_file}" << 'PYEOF'
+import json
+import os
+import sys
+import tempfile
+
+path = sys.argv[1]
+settings_dir = os.path.dirname(path)
+os.makedirs(settings_dir, exist_ok=True)
+
+if not os.path.isfile(path):
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("{}")
+
+try:
+    # The read is inside this try, not just json.loads: a
+    # non-UTF-8-encoded file raises UnicodeDecodeError (a ValueError
+    # subclass, so the except below already catches it too), and is
+    # exactly as "invalid" for this script's purposes as malformed
+    # JSON -- both failure sources should land on the identical clean
+    # message instead of a raw traceback.
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = fh.read()
+    data = json.loads(raw)
+except ValueError:
+    print(
+        f"error: {path} contains invalid JSON; refusing to modify it. "
+        "Fix or remove it manually, then re-run 'chezmoi apply'.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+env = data.get("env") if isinstance(data, dict) else None
+env_ok = isinstance(data, dict) and (env is None or isinstance(env, dict))
+if not env_ok:
+    print(
+        f"error: {path} is not a JSON object with an object-typed 'env' "
+        "key; refusing to modify it. Fix or remove it manually, then "
+        "re-run 'chezmoi apply'.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if isinstance(env, dict) and env.get("DISABLE_AUTOUPDATER") == "1":
+    print(f'env.DISABLE_AUTOUPDATER already set to "1" in {path}; nothing to do.')
+    sys.exit(0)
+
+env = dict(env) if isinstance(env, dict) else {}
+env["DISABLE_AUTOUPDATER"] = "1"
+data["env"] = env
+
+fd, tmp_path = tempfile.mkstemp(prefix=".settings.json.", dir=settings_dir)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        # ensure_ascii=False: keep non-ASCII values in unrelated keys
+        # as literal UTF-8, matching the jq path's output byte-for-byte
+        # instead of \uXXXX-escaping them (semantically identical JSON
+        # either way, but this avoids an unnecessary divergence).
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    os.replace(tmp_path, path)
+except BaseException:
+    os.unlink(tmp_path)
+    raise
+
+print(f'Set env.DISABLE_AUTOUPDATER="1" in {path}.')
+PYEOF
+}
+
+reconcile_settings() {
+  # The atomic-replace pattern used below (mktemp + mv, or Python's
+  # os.replace) replaces whatever inode currently sits at
+  # settings_file -- if that path is itself a symlink, the replace
+  # severs the link and puts a plain file there instead, instead of
+  # updating the link's target. Fail loudly up front rather than doing
+  # that silently; checked once here so neither backend needs to
+  # duplicate it. `-L` reports true even for a broken symlink (dangling
+  # target), which is intentional: there's no correct target to write
+  # through in that case either.
+  if [ -L "${settings_file}" ]; then
+    echo "error: ${settings_file} is a symlink; refusing to modify it in place (an atomic replace would sever the link). Point it at a regular file, or reconcile its target manually, then re-run 'chezmoi apply'." >&2
+    return 1
+  fi
+
+  # Resolve jq via `mise which` first: jq is itself mise-managed
+  # (dot_config/mise/config.toml), and this repo activates mise for
+  # POSIX shells rather than using shims mode, so a jq installed by
+  # run_onchange_after_50-install-mise-tools earlier in this same
+  # `chezmoi apply` is not guaranteed to be on this script's own PATH
+  # yet -- mirrors the `mise which ghq`/`mise which gh` pattern in
+  # run_onchange_after_60-clone-ghq-repos.sh.tmpl. Falls back to a
+  # plain PATH lookup for a non-mise-managed jq, then to python3
+  # (mirroring executable_secret-status's jq-then-python3 fallback) --
+  # this reconciliation must not silently no-op just because jq is
+  # momentarily unavailable, since that would leave the autoupdater
+  # enabled with no loud signal.
+  local jq_bin python_bin
+  jq_bin="$(mise which jq 2>/dev/null)" || jq_bin=""
+  if [ -z "${jq_bin}" ]; then
+    jq_bin="$(command -v jq 2>/dev/null)" || jq_bin=""
+  fi
+  python_bin="$(mise which python3 2>/dev/null)" || python_bin=""
+  if [ -z "${python_bin}" ]; then
+    python_bin="$(command -v python3 2>/dev/null)" || python_bin=""
+  fi
+
+  if [ -n "${jq_bin}" ]; then
+    if command -v iconv >/dev/null 2>&1 || [ -z "${python_bin}" ]; then
+      # Either iconv is available, so the jq backend can enforce its
+      # own strict UTF-8 check below; or python3 isn't available
+      # either, so falling through would gain nothing -- run jq as
+      # usual (its check-skipped guarantee is still strictly better
+      # than refusing to reconcile settings.json at all).
+      reconcile_settings_jq "${jq_bin}"
+      return $?
+    fi
+    # jq is available but iconv -- the only strict UTF-8 check the jq
+    # backend has -- is not, and python3 (which enforces strict UTF-8
+    # unconditionally via its own `encoding="utf-8"` reader, no
+    # optional dependency involved) is available. Prefer python3 for
+    # this invocation over silently falling back to jq's weaker
+    # merely-syntactically-valid guarantee.
+    reconcile_settings_python "${python_bin}"
+    return $?
+  fi
+
+  if [ -n "${python_bin}" ]; then
+    reconcile_settings_python "${python_bin}"
+    return $?
+  fi
+
+  echo "error: neither jq nor python3 found; cannot reconcile ${settings_file}. Install one of them and re-run 'chezmoi apply'." >&2
+  return 1
+}
+
+settings_status=0
+reconcile_settings || settings_status=$?
+
+remove_stray_claude_code_copy() {
+  local node_dir npm_prefix stray_dir managed_dir bin_shim
+  node_dir="$(mise where node 2>/dev/null)" || node_dir=""
+  if [ -z "${node_dir}" ]; then
+    echo "mise-managed Node.js not resolvable; skipping stray @anthropic-ai/claude-code check."
+    return 0
+  fi
+
+  # npm's effective global prefix is not reliably "wherever node
+  # lives": like on Windows, a POSIX user-level .npmrc or
+  # NPM_CONFIG_PREFIX can override it too. Ask the mise-managed npm
+  # itself (rather than assuming node_dir) so this matches the exact
+  # value Claude Code's own autoupdater consults when it runs `npm
+  # install -g`. Fail closed -- skip the check rather than falling
+  # back to a guessed path -- if the prefix can't be resolved.
+  #
+  # `bin/npm` is itself a script with a `#!/usr/bin/env node` shebang,
+  # which resolves via the *ambient* PATH, not necessarily this
+  # specific node_dir -- and, per the note above, a freshly-installed
+  # mise tool isn't guaranteed to be on this script's own PATH yet.
+  # Prepend node_dir/bin for just this invocation so `env node` in the
+  # shebang resolves to the mise-managed node, not whatever else (an
+  # older system node, say) might otherwise be found first.
+  npm_prefix="$(PATH="${node_dir}/bin:${PATH}" "${node_dir}/bin/npm" config get prefix 2>/dev/null)" || npm_prefix=""
+  if [ -z "${npm_prefix}" ]; then
+    echo "mise-managed npm global prefix not resolvable; skipping stray @anthropic-ai/claude-code check."
+    return 0
+  fi
+
+  stray_dir="${npm_prefix}/lib/node_modules/@anthropic-ai/claude-code"
+  # `-d` follows a symlink and checks its *target*, so a dangling
+  # symlink at this exact path (target missing) reads as "not a
+  # directory" and this check would wrongly report "no stray copy" --
+  # leaving a shadowing bin/claude shim in place indefinitely. `-L`
+  # catches the symlink itself regardless of whether its target
+  # exists; `rm -rf` below already unlinks a symlink without
+  # traversing into its target, so no change is needed there.
+  if [ ! -d "${stray_dir}" ] && [ ! -L "${stray_dir}" ]; then
+    echo "No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up."
+    return 0
+  fi
+
+  managed_dir="$(mise where npm:@anthropic-ai/claude-code 2>/dev/null)" || managed_dir=""
+  if [ -z "${managed_dir}" ] || [ ! -d "${managed_dir}" ]; then
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    return 0
+  fi
+
+  # A resolvable install directory alone does not prove the managed
+  # copy actually works: an interrupted or failed npm-backend install
+  # can leave the directory in place without a functional binary.
+  # Confirm the managed 'claude' command actually runs before removing
+  # anything, so this repair can never leave the user without a
+  # working 'claude' even in that scenario.
+  #
+  # `mise exec ... -- claude --version` is NOT safe here: mise exec
+  # prepends the managed tool's bin directory to PATH but does not
+  # otherwise isolate command lookup from the *existing* PATH, so if
+  # the managed install is missing its own 'claude' shim (a
+  # corrupted/partial install), it would silently fall through to and
+  # run the stray shim this function is about to delete instead --
+  # reporting success and then deleting the only copy that actually
+  # worked. The npm global bin directory (where the stray shim lives)
+  # is realistically already on a real user's ambient PATH -- that's
+  # how 'claude' becomes invokable at all -- so this is not a
+  # contrived edge case. Resolve the managed tool's exact bin
+  # directory and invoke that specific executable directly instead,
+  # bypassing PATH lookup (and therefore the ambient stray shim)
+  # entirely.
+  local managed_bin_path
+  managed_bin_path="$(mise bin-paths "npm:@anthropic-ai/claude-code" 2>/dev/null | head -n1)" || managed_bin_path=""
+  if [ -z "${managed_bin_path}" ] || [ ! -x "${managed_bin_path}/claude" ] || ! "${managed_bin_path}/claude" --version >/dev/null 2>&1; then
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+    return 0
+  fi
+
+  # Remove the bin shim before the directory it points into: if this
+  # gets interrupted between the two removals, a rerun still finds the
+  # stray directory (the check above) and retries cleanly, whereas a
+  # dir-first order could leave a dangling shim that a rerun would
+  # never notice (the "does the stray dir exist" check would say no).
+  bin_shim="${npm_prefix}/bin/claude"
+  if [ -e "${bin_shim}" ] || [ -L "${bin_shim}" ]; then
+    rm -f "${bin_shim}"
+  fi
+  rm -rf "${stray_dir}"
+  echo "Removed stray @anthropic-ai/claude-code copy at ${stray_dir} (mise-managed copy confirmed at ${managed_dir})."
+}
+
+remove_stray_claude_code_copy
+
+exit "${settings_status}"

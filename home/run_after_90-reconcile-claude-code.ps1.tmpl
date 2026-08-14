@@ -1,0 +1,499 @@
+#!/usr/bin/env pwsh
+# chezmoi run_after script: reconcile env.DISABLE_AUTOUPDATER into
+# ~/.claude/settings.json (JSON merge-patch on that one key only) and
+# remove any stray @anthropic-ai/claude-code copy that Claude Code's
+# own background autoupdater may have written directly into
+# mise-managed Node.js's global node_modules, shadowing the
+# mise-managed npm:@anthropic-ai/claude-code install. Runs after mise
+# tool installation so `mise where node` / `mise where
+# npm:@anthropic-ai/claude-code` are resolvable. See issue #258.
+$ErrorActionPreference = 'Stop'
+
+if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
+  Write-Host 'mise not found; skipping Claude Code autoupdater repair.'
+  exit 0
+}
+
+$settingsDir = Join-Path $HOME '.claude'
+$settingsFile = Join-Path $settingsDir 'settings.json'
+
+function Write-Utf8NoBom {
+  param(
+    [Parameter(Mandatory)] [string] $Path,
+    [Parameter(Mandatory)] [AllowEmptyString()] [string] $Content
+  )
+  # PS5.1 rejects the utf8NoBOM encoding literal (PS6+ only); write the
+  # BOM-less UTF-8 bytes directly instead, matching the pattern in
+  # run_once_before_10-import-gpg-keys.ps1.tmpl.
+  [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Write-FatalError {
+  param([Parameter(Mandatory)] [string] $Message)
+  # Write-Error under the script-wide $ErrorActionPreference = 'Stop'
+  # throws a terminating error instead of writing to the error stream,
+  # so 'exit 1' right after it would never run. Swap EAP to 'Continue'
+  # for just this call so the message actually lands on the error
+  # stream (capturable by callers via 2>&1 / *>&1), then restore it.
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  Write-Error $Message
+  $ErrorActionPreference = $previousEap
+}
+
+function Test-ReparsePoint {
+  param([Parameter(Mandatory)] [string] $Path)
+  # Works for symlinks, junctions, and other reparse points uniformly,
+  # via the underlying .IO.FileAttributes flag rather than any
+  # version-specific symlink API -- reliable on both PS5.1 (.NET
+  # Framework) and PS7+ (.NET). -Force so a hidden item, or a symlink
+  # whose target is missing, is still found and inspected.
+  $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  if (-not $item) {
+    return $false
+  }
+  return [bool]($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+}
+
+function Remove-DirectoryTreeSafely {
+  param([Parameter(Mandatory)] [string] $Path)
+  # Recursively removes a directory tree without ever traversing into
+  # a nested reparse point (a symlink/junction/hardlink dir a few
+  # levels down, e.g. left by `npm link` or a damaged install): a
+  # naive Remove-Item -Recurse on PS5.1 can follow such a reparse
+  # point and delete its target's contents instead of just unlinking
+  # it, even when the top-level $Path itself is a real directory.
+  # Recurses one level at a time (never Get-ChildItem -Recurse or
+  # Remove-Item -Recurse) so every item is Test-ReparsePoint-checked
+  # before it is ever descended into.
+  if (Test-ReparsePoint -Path $Path) {
+    Remove-Item -LiteralPath $Path -Force
+    return
+  }
+  $children = Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  foreach ($child in $children) {
+    if ($child.PSIsContainer) {
+      Remove-DirectoryTreeSafely -Path $child.FullName
+    } else {
+      Remove-Item -LiteralPath $child.FullName -Force
+    }
+  }
+  Remove-Item -LiteralPath $Path -Force
+}
+
+function Resolve-ExactCaseProperty {
+  param(
+    [Parameter(Mandatory)] $InputObject,
+    [Parameter(Mandatory)] [string] $Name
+  )
+  # JSON object keys are case-sensitive, but PSObject.Properties's
+  # index-by-name lookup ($obj.PSObject.Properties['env']) is not: a
+  # differently-cased existing key (e.g. "ENV" instead of "env") would
+  # otherwise be silently matched and mutated instead of the exact key
+  # Claude Code actually reads, while this script still reports
+  # success. Enumerate explicitly and compare with -ceq instead.
+  #
+  # A differently-cased match with no exact-case sibling is flagged as
+  # a Collision: PowerShell's PSCustomObject member model is itself
+  # case-insensitive (Add-Member refuses to create an exact-case
+  # property when a differently-cased one already exists, and
+  # ConvertFrom-Json itself refuses to parse JSON where two sibling
+  # keys differ only by case), so there is no safe way to add the
+  # exact key this script needs alongside it -- callers must fail
+  # loudly on Collision rather than let Add-Member throw.
+  $exact = $null
+  foreach ($prop in $InputObject.PSObject.Properties) {
+    if ($prop.Name -ceq $Name) {
+      $exact = $prop
+      break
+    }
+  }
+  $caseInsensitiveMatch = $InputObject.PSObject.Properties[$Name]
+  return [PSCustomObject]@{
+    Property      = $exact
+    Collision     = [bool]($caseInsensitiveMatch -and -not $exact)
+    CollidingName = if ($caseInsensitiveMatch) { $caseInsensitiveMatch.Name } else { $null }
+  }
+}
+
+function Merge-ClaudeSettings {
+  if (-not (Test-Path -LiteralPath $settingsDir)) {
+    New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+  }
+
+  # Checked before the seed-if-absent step below, not after: Test-Path
+  # on a *dangling* symlink follows the link and reports the missing
+  # target as absent, which would otherwise let the seed write follow
+  # the link and create the target file before this check ever runs --
+  # a real side effect despite the "left untouched" guarantee in the
+  # error message. Test-ReparsePoint itself does not have this problem
+  # (Get-Item -Force finds the link even when its target is missing).
+  # The atomic-replace pattern later in this function (temp file +
+  # Move-Item) replaces whatever item currently sits at $settingsFile
+  # -- if that path is itself a symlink or other reparse point, the
+  # replace severs the link and puts a plain file there instead of
+  # updating the link's target. Fail loudly up front rather than doing
+  # that silently.
+  if (Test-ReparsePoint -Path $settingsFile) {
+    Write-FatalError "error: $settingsFile is a symlink or reparse point; refusing to modify it in place (an atomic replace would sever the link). Point it at a regular file, or reconcile its target manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  if (-not (Test-Path -LiteralPath $settingsFile)) {
+    Write-Utf8NoBom -Path $settingsFile -Content '{}'
+  }
+
+  # Read explicitly as UTF-8 (matching Write-Utf8NoBom's writer), not
+  # plain Get-Content -Raw: PS5.1 decodes a BOM-less file with the
+  # active ANSI code page when no encoding is given, which would
+  # corrupt any non-ASCII value elsewhere in this UTF-8 file even
+  # though this script only ever intends to touch env.DISABLE_AUTOUPDATER.
+  # ReadAllText still honors an actual BOM if present (auto-detected),
+  # so this is correct for both BOM-less and BOM'd input.
+  #
+  # The one-argument UTF8Encoding constructor does not set
+  # throwOnInvalidBytes, so malformed UTF-8 bytes decode silently as
+  # U+FFFD replacement characters instead of failing -- the file could
+  # then parse as valid JSON with corrupted unrelated content baked in,
+  # and get rewritten that way. Use the strict two-argument constructor
+  # so invalid input is rejected instead.
+  try {
+    $raw = [System.IO.File]::ReadAllText($settingsFile, [System.Text.UTF8Encoding]::new($false, $true))
+  } catch {
+    Write-FatalError "error: $settingsFile is not valid UTF-8; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    Write-FatalError "error: $settingsFile is empty; refusing to treat that as valid JSON. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  # A top-level JSON array with exactly one object element (e.g.
+  # "[{}]") would otherwise slip past the PSCustomObject check below:
+  # ConvertFrom-Json's output is enumerated onto the pipeline, so a
+  # single-element array collapses to its bare element by the time
+  # `$parsed = ... | ConvertFrom-Json` finishes assigning -- the same
+  # unwrapping PowerShell applies to any single-item pipeline output,
+  # independent of the `|` syntax. Reject on the raw top-level token
+  # instead of relying on the parsed shape, since only a JSON object's
+  # first non-whitespace character can be '{'.
+  if ($raw.TrimStart() -notlike '{*') {
+    Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  try {
+    $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    Write-FatalError "error: $settingsFile contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  # Defense in depth: should be unreachable now that the raw-token
+  # check above rejects every non-object top-level shape, but keeps
+  # this invariant explicit rather than silently relying on the check
+  # above never regressing.
+  if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
+    Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  $envResolved = Resolve-ExactCaseProperty -InputObject $parsed -Name 'env'
+  if ($envResolved.Collision) {
+    Write-FatalError "error: $settingsFile has a '$($envResolved.CollidingName)' key that differs from 'env' only by letter case; refusing to modify it (PowerShell cannot safely add an exact 'env' key alongside it). Rename the key to exactly 'env' manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+  $envProp = $envResolved.Property
+  if ($envProp -and $null -ne $envProp.Value -and
+      $envProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
+    Write-FatalError "error: $settingsFile has a non-object 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
+  $disableResolved = $null
+  if ($envProp -and $envProp.Value) {
+    $disableResolved = Resolve-ExactCaseProperty -InputObject $envProp.Value -Name 'DISABLE_AUTOUPDATER'
+    if ($disableResolved.Collision) {
+      Write-FatalError "error: $settingsFile has an 'env.$($disableResolved.CollidingName)' key that differs from 'env.DISABLE_AUTOUPDATER' only by letter case; refusing to modify it (PowerShell cannot safely add an exact 'DISABLE_AUTOUPDATER' key alongside it). Rename the key to exactly 'DISABLE_AUTOUPDATER' manually, then re-run 'chezmoi apply'."
+      return 1
+    }
+    $existing = $disableResolved.Property
+    if ($existing -and $existing.Value -is [string] -and $existing.Value -ceq '1') {
+      Write-Host "env.DISABLE_AUTOUPDATER already set to `"1`" in $settingsFile; nothing to do."
+      return 0
+    }
+  }
+
+  if (-not $envProp -or $null -eq $envProp.Value) {
+    if ($envProp) {
+      $envProp.Value = [PSCustomObject]@{ DISABLE_AUTOUPDATER = '1' }
+    } else {
+      $parsed | Add-Member -NotePropertyName 'env' `
+        -NotePropertyValue ([PSCustomObject]@{ DISABLE_AUTOUPDATER = '1' })
+    }
+  } else {
+    $target = $envProp.Value
+    # $disableResolved is guaranteed set here: this branch is only
+    # reached when ($envProp -and $envProp.Value), the same condition
+    # already evaluated above.
+    $existingProp = $disableResolved.Property
+    if ($existingProp) {
+      $existingProp.Value = '1'
+    } else {
+      $target | Add-Member -NotePropertyName 'DISABLE_AUTOUPDATER' -NotePropertyValue '1'
+    }
+  }
+
+  $json = $parsed | ConvertTo-Json -Depth 100
+  # Atomic replace (same-directory temp file + move), matching the
+  # bash implementation's mktemp+mv: writing $settingsFile directly
+  # would let an I/O failure (e.g. a full disk) mid-write truncate or
+  # partially overwrite the user's pre-existing Claude settings.
+  #
+  # Move-Item -Force is not a true atomic replace on the Windows
+  # filesystem provider: overwriting an existing destination can
+  # delete it before the move completes, so an interruption in that
+  # gap could leave settings.json missing entirely. $settingsFile is
+  # always seeded to exist by this point (the check above), and
+  # $tmpFile is always in the same directory, so [System.IO.File]::
+  # Replace's true replace-in-place semantics apply unconditionally
+  # here.
+  $tmpFile = Join-Path $settingsDir (".settings.json.{0}" -f [System.IO.Path]::GetRandomFileName())
+  # File.Replace's backup-path parameter is documented as
+  # null-acceptable ("no backup file is created") on Windows .NET, but
+  # empirically throws "value cannot be an empty string" under .NET
+  # Core on non-Windows -- passing an explicit backup path instead
+  # works identically on every platform this repo tests on, avoiding
+  # that discrepancy entirely.
+  $backupFile = Join-Path $settingsDir (".settings.json.bak.{0}" -f [System.IO.Path]::GetRandomFileName())
+  try {
+    Write-Utf8NoBom -Path $tmpFile -Content ($json + [System.Environment]::NewLine)
+    [System.IO.File]::Replace($tmpFile, $settingsFile, $backupFile)
+    Remove-Item -LiteralPath $backupFile -Force -ErrorAction SilentlyContinue
+  } catch {
+    Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $backupFile -Force -ErrorAction SilentlyContinue
+    Write-FatalError "error: failed to write $settingsFile; leaving it untouched."
+    return 1
+  }
+  Write-Host "Set env.DISABLE_AUTOUPDATER=`"1`" in $settingsFile."
+  return 0
+}
+
+# NOTE: do not call `exit` from inside Merge-ClaudeSettings (it would
+# terminate the whole script before Remove-StrayClaudeCodeCopy runs,
+# reintroducing the same "settings failure skips the unrelated
+# stray-copy repair" bug already fixed on the bash side). Capture its
+# return status, always run the stray-copy check regardless, then
+# exit with the settings-side status at the very end. Also wrap the
+# call itself: under $ErrorActionPreference = 'Stop', an unhandled I/O
+# error inside Merge-ClaudeSettings that isn't caught by one of its own
+# internal try/catch blocks (e.g. the initial '{}' seed write, or the
+# UTF-8 read, hitting a permission or disk error) would otherwise
+# become a terminating error here too, silently reintroducing the same
+# skip-the-cleanup bug through an uncaught-exception path instead of an
+# explicit exit/return path.
+try {
+  $settingsStatus = Merge-ClaudeSettings
+} catch {
+  Write-FatalError "error: unexpected failure while reconciling $settingsFile`: $_"
+  $settingsStatus = 1
+}
+
+function Invoke-MiseWhere {
+  param([Parameter(Mandatory)] [string[]] $Arguments)
+  # Native-command stderr redirected under $ErrorActionPreference =
+  # 'Stop' can be wrapped into a terminating error on some PowerShell
+  # versions (notably PS5.1) instead of the graceful "not resolvable"
+  # skip a non-zero `mise where` exit is meant to signal here. Swap
+  # EAP to 'Continue' and catch, so a resolution failure always comes
+  # back as $null rather than crashing the script.
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & mise @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+      return $null
+    }
+    return $output
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
+function Resolve-MiseNpmPrefix {
+  param([Parameter(Mandatory)] [string] $NodeDir)
+  # npm's effective global prefix is NOT reliably "wherever node.exe
+  # lives": npm's own docs say the Windows default is %AppData%\npm,
+  # and either platform's default can be overridden by a user-level
+  # .npmrc or NPM_CONFIG_PREFIX. Asking the mise-managed npm itself
+  # (rather than assuming a location) matches the exact value Claude
+  # Code's own autoupdater consults when it runs `npm install -g`, so
+  # this is correct under every override scenario, not just the
+  # documented defaults.
+  if ($IsWindows -ne $false) {
+    $npmBin = Join-Path $NodeDir 'npm.cmd'
+  } else {
+    $npmBin = Join-Path $NodeDir (Join-Path 'bin' 'npm')
+  }
+  if (-not (Test-Path -LiteralPath $npmBin)) {
+    return $null
+  }
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & $npmBin 'config' 'get' 'prefix' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+      return $null
+    }
+    $prefix = ($output | Select-Object -Last 1).ToString().Trim()
+    if (-not $prefix) {
+      return $null
+    }
+    return $prefix
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
+function Test-MiseManagedClaudeWorks {
+  # A resolvable install directory alone does not prove the managed
+  # copy actually works: an interrupted or failed npm-backend install
+  # can leave the directory in place without a functional binary.
+  #
+  # `mise exec ... -- claude --version` is NOT safe here: mise exec
+  # prepends the managed tool's bin directory to PATH but does not
+  # otherwise isolate command lookup from the *existing* PATH, so if
+  # the managed install is missing its own 'claude' shim (a
+  # corrupted/partial install), it would silently fall through to and
+  # run the stray shim Remove-StrayClaudeCodeCopy is about to delete
+  # instead -- reporting success and then deleting the only copy that
+  # actually worked. The npm global bin directory (where the stray
+  # shim lives) is realistically already on a real user's ambient
+  # PATH -- that's how 'claude' becomes invokable at all -- so this is
+  # not a contrived edge case. Resolve the managed tool's exact bin
+  # directory (mise bin-paths, not mise exec) and invoke that specific
+  # executable directly instead, bypassing PATH lookup (and therefore
+  # the ambient stray shim) entirely.
+  $binPathOutput = Invoke-MiseWhere -Arguments @('bin-paths', 'npm:@anthropic-ai/claude-code')
+  if (-not $binPathOutput) {
+    return $false
+  }
+  $binPath = @($binPathOutput)[0]
+  # npm places a POSIX shell shim ('claude') and, on Windows, also
+  # 'claude.cmd'/'claude.ps1' wrappers in the same bin directory. The
+  # POSIX shim isn't directly invokable from Windows; '.cmd' is
+  # invokable via '&' without any execution-policy consideration
+  # (unlike '.ps1'), matching how the stray-copy removal code already
+  # treats 'claude.cmd' as the Windows-invokable shim.
+  $claudeExe = if ($IsWindows -ne $false) {
+    Join-Path $binPath 'claude.cmd'
+  } else {
+    Join-Path $binPath 'claude'
+  }
+  if (-not (Test-Path -LiteralPath $claudeExe)) {
+    return $false
+  }
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & $claudeExe '--version' *>$null
+    return $LASTEXITCODE -eq 0
+  } catch {
+    return $false
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
+function Remove-StrayClaudeCodeCopy {
+  $nodeDir = Invoke-MiseWhere -Arguments @('where', 'node')
+  if (-not $nodeDir) {
+    Write-Host 'mise-managed Node.js not resolvable; skipping stray @anthropic-ai/claude-code check.'
+    return
+  }
+
+  if ($IsWindows -ne $false) {
+    # Derive the stray-copy path from npm's own resolved prefix rather
+    # than $nodeDir: on Windows the two are not guaranteed to match
+    # (see Resolve-MiseNpmPrefix). Fail closed -- skip with a warning
+    # rather than falling back to a guessed path, since a wrong guess
+    # here is a worse outcome than skipping the check entirely (it
+    # could leave a stray shim undetected, or in principle target the
+    # wrong directory).
+    $npmPrefix = Resolve-MiseNpmPrefix -NodeDir $nodeDir
+    if (-not $npmPrefix) {
+      Write-Host 'mise-managed npm global prefix not resolvable; skipping stray @anthropic-ai/claude-code check on Windows.'
+      return
+    }
+    # Windows npm global layout: <prefix>\node_modules\<pkg> (no `lib`
+    # segment), matching a standard npm-on-Windows global install.
+    $strayDir = Join-Path $npmPrefix (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+  } else {
+    $strayDir = Join-Path $nodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
+  }
+
+  # Test-Path follows reparse points and checks their *target*, so a
+  # dangling symlink/junction at this exact path (target missing)
+  # reads as absent and this check would wrongly report "no stray
+  # copy" -- leaving a shadowing Claude shim in place indefinitely
+  # even though Remove-DirectoryTreeSafely below already handles a
+  # dangling reparse point correctly once reached. Test-ReparsePoint
+  # uses Get-Item -Force, which finds a dangling reparse point too.
+  if (-not (Test-Path -LiteralPath $strayDir) -and -not (Test-ReparsePoint -Path $strayDir)) {
+    Write-Host 'No stray @anthropic-ai/claude-code copy found under mise-managed Node.js; nothing to clean up.'
+    return
+  }
+
+  $managedDir = Invoke-MiseWhere -Arguments @('where', 'npm:@anthropic-ai/claude-code')
+  if (-not $managedDir -or -not (Test-Path -LiteralPath $managedDir)) {
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    return
+  }
+
+  if (-not (Test-MiseManagedClaudeWorks)) {
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+    return
+  }
+
+  # Remove the bin shim(s) before the directory they point into: a
+  # mid-operation interruption then still finds the stray directory on
+  # the next 'chezmoi apply' (the check above) and retries cleanly.
+  if ($IsWindows -ne $false) {
+    # Windows npm global installs place claude, claude.cmd, and
+    # claude.ps1 shims at the prefix root (not in a bin/ subfolder).
+    # $npmPrefix is guaranteed set here: this branch is only reached
+    # once $strayDir (itself derived from $npmPrefix) was confirmed to
+    # exist above.
+    foreach ($name in @('claude.cmd', 'claude.ps1', 'claude')) {
+      $shim = Join-Path $npmPrefix $name
+      if (Test-Path -LiteralPath $shim) {
+        Remove-Item -LiteralPath $shim -Force
+      }
+    }
+  } else {
+    $shim = Join-Path $nodeDir (Join-Path 'bin' 'claude')
+    if (Test-Path -LiteralPath $shim) {
+      Remove-Item -LiteralPath $shim -Force
+    }
+  }
+
+  # On Windows PowerShell 5.1, Remove-Item -Recurse on a reparse point
+  # -- whether $strayDir itself, or a nested one a few levels down
+  # inside an otherwise-real directory tree (e.g. left by `npm link`
+  # or a damaged install) -- can traverse into the link's target and
+  # delete its contents instead of just unlinking the reparse point.
+  # Remove-DirectoryTreeSafely checks every item at every level before
+  # descending into it, so this is safe regardless of where in the
+  # tree a reparse point appears.
+  Remove-DirectoryTreeSafely -Path $strayDir
+  Write-Host "Removed stray @anthropic-ai/claude-code copy at $strayDir (mise-managed copy confirmed at $managedDir)."
+}
+
+Remove-StrayClaudeCodeCopy
+
+exit $settingsStatus
