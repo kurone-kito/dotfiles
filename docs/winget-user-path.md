@@ -56,13 +56,15 @@ already exist in your `chezmoi.toml` on every `chezmoi init`/re-init,
 so per-machine entries you add persist across re-inits the same way
 `data.ghq.clone` or `data.secret.ssh.keys` entries do.
 
-The repository ships one default entry, labeled `mise`
-(`id = "jdx.mise"`, `bin = "mise/bin"`), merged underneath whatever
-you declare: a field you set on the same label (e.g. `enabled` or a
-different `bin`) overrides the repo default field-by-field, so you
-never need to restate `id`/`bin` just to disable it or add other
-packages alongside it. A label you don't touch at all falls back to
-the shipped default in full.
+The repository ships two default entries, labeled `mise`
+(`id = "jdx.mise"`, `bin = "mise/bin"`) and `chezmoi`
+(`id = "twpayne.chezmoi"`, no `bin` — `chezmoi.exe` sits directly in
+its package directory), merged underneath whatever you declare: a
+field you set on the same label (e.g. `enabled` or a different `bin`)
+overrides the repo default field-by-field, so you never need to
+restate `id`/`bin` just to disable it or add other packages alongside
+it. A label you don't touch at all falls back to the shipped default
+in full.
 
 Both `.chezmoi.toml.tmpl` (which persists the effective declaration
 into your `chezmoi.toml` on `chezmoi init`/re-init) and
@@ -93,3 +95,30 @@ outright. Deleting the entry directly skips that step: once it is
 gone from the manifest, its `<id>_*` pattern is no longer recognized,
 so any directory already added to `PATH` for it is left in place
 rather than cleaned up.
+
+## Bootstrapping chezmoi itself over SSH
+
+chezmoi is itself installed via WinGet's portable `twpayne.chezmoi`
+package, so it is subject to the exact symlink problem this mechanism
+solves — `chezmoi.exe`'s only PATH-resolvable location is normally the
+`WinGet\Links` symlink, which does not resolve from an inbound SSH
+session. The `chezmoi` default entry above fixes this, but only takes
+effect once `chezmoi apply` has already run at least once (it is the
+apply run that registers the package's real directory in the managed
+User PATH).
+
+This leaves a one-time bootstrapping gap: a machine that has never run
+`chezmoi apply` still cannot run its very first apply over SSH, since
+nothing has registered `chezmoi.exe`'s real path yet. For that first
+run only, invoke the package's real path directly instead of relying
+on `PATH`:
+
+```powershell
+& (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\twpayne.chezmoi_*\chezmoi.exe")[0].FullName init --apply kurone-kito
+```
+
+Run this from the SSH session itself, or complete the first apply from
+a local or RDP interactive session instead. Either way, only the very
+first `chezmoi apply` on a given machine needs this workaround — every
+apply after that resolves `chezmoi.exe` through the managed User PATH
+like any other declared package.
