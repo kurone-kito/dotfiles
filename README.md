@@ -24,7 +24,8 @@ A collection of configuration files that we use.
 
 ### Development tools
 
-- [fzf](https://junegunn.github.io/fzf/) — fuzzy finder with key bindings
+- [fzf](https://junegunn.github.io/fzf/) — fuzzy finder with key bindings,
+  installed via mise
 - [Homebrew](https://brew.sh/) — package manager PATH setup
 - [mise](https://mise.jdx.dev/) — polyglot runtime manager
 - [thefuck](https://github.com/nvbn/thefuck) — command correction
@@ -32,8 +33,11 @@ A collection of configuration files that we use.
 
 ### Git
 
-- [Git](https://git-scm.com/) — aliases, delta, LFS, GPG signing,
-  multi-profile
+- [Git](https://git-scm.com/) — aliases, LFS, GPG signing, multi-profile
+- [delta](https://github.com/dandavison/delta) — diff viewer, installed
+  via mise; pinned to `0.18.2` on Intel Mac since upstream dropped
+  `x86_64-apple-darwin` builds after v0.19.0, while Apple Silicon Mac,
+  Linux, and Windows track `latest` (revisit around 2028-12)
 
 ### Editors & terminal
 
@@ -64,6 +68,19 @@ input line editing
 - [GitHub CLI](https://cli.github.com/) — GitHub from the terminal
 - [gwq](https://github.com/d-kuro/gwq) — Git worktree manager
 - [Taskwarrior](https://taskwarrior.org/) — task management
+
+### CLI tools (via mise)
+
+- [fastfetch](https://github.com/fastfetch-cli/fastfetch) — system
+  information display
+- [jq](https://jqlang.org/) — JSON processor
+- [mkcert](https://github.com/FiloSottile/mkcert) — local TLS
+  certificates
+- [tealdeer](https://github.com/tealdeer-rs/tealdeer) — `tldr` client
+  (the installed command is `tldr`, not `tealdeer`)
+- [Terraform](https://www.terraform.io/) — infrastructure as code
+- [yq](https://github.com/mikefarah/yq) — YAML/JSON/XML processor
+  (`mikefarah/yq`; not the unrelated Python `kislyuk/yq`)
 
 ### AI coding assistants (via mise)
 
