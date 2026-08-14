@@ -260,6 +260,23 @@ JSON
   assert_dir_exists "$MANAGED_DIR"
 }
 
+@test "settings failure does not skip stray-copy cleanup (both effects observable in one run)" {
+  # Regression test: the settings-reconciliation and stray-copy-cleanup
+  # steps are independent and must both run even when the first one
+  # fails loudly (verifies the settings_status pattern, not just that
+  # each step works in isolation).
+  write_mise_mock 1
+  mkdir -p "$HOME/.claude"
+  printf '{not valid json' > "$HOME/.claude/settings.json"
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_failure
+  assert_output --partial "invalid JSON"
+  assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
+  assert_dir_not_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_not_exists "$NODE_DIR/bin/claude"
+}
+
 @test "stray copy present, managed copy unresolvable: stray copy left in place" {
   write_mise_mock 0
   write_stray_copy

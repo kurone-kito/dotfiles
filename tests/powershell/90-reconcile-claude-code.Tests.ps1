@@ -81,6 +81,26 @@ BeforeAll {
     Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves -Scope Global -ErrorAction SilentlyContinue
   }
 
+  function global:Set-TestNpmPrefixMock {
+    # Windows-only: the fixture resolves npm's global prefix by
+    # invoking "$NodeDir\npm.cmd config get prefix" directly (see
+    # Resolve-MiseNpmPrefix), not via the `mise` mock -- so this needs
+    # a real, executable .cmd file on disk rather than a PowerShell
+    # function mock.
+    param(
+      [Parameter(Mandatory)] [string] $NodeDir,
+      [string] $PrefixDir,
+      [bool] $Resolves = $true
+    )
+    $npmCmdPath = Join-Path $NodeDir 'npm.cmd'
+    if ($Resolves) {
+      $content = "@echo off`r`necho $PrefixDir`r`n"
+    } else {
+      $content = "@echo off`r`nexit /b 1`r`n"
+    }
+    [System.IO.File]::WriteAllText($npmCmdPath, $content, [System.Text.ASCIIEncoding]::new())
+  }
+
   function global:Assert-TestSafetyPreflight {
     # Fail fast rather than silently touching the real machine if
     # either override did not take effect.
@@ -97,11 +117,15 @@ BeforeAll {
     # below can share one writer that always matches the layout the
     # script itself expects on whichever platform this actually runs.
     if ($IsWindows -ne $false) {
-      $strayDir = Join-Path $script:NodeDir (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+      # Stray dir and shims live under the resolved npm prefix, not
+      # $script:NodeDir -- these are not guaranteed to be the same
+      # directory (see Resolve-MiseNpmPrefix in the fixture).
+      $strayBase = if ($script:NpmPrefixDir) { $script:NpmPrefixDir } else { $script:NodeDir }
+      $strayDir = Join-Path $strayBase (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
       New-Item -ItemType Directory -Path $strayDir -Force | Out-Null
       New-Item -ItemType File -Path (Join-Path $strayDir 'package.json') -Force | Out-Null
       foreach ($name in @('claude.cmd', 'claude.ps1', 'claude')) {
-        New-Item -ItemType File -Path (Join-Path $script:NodeDir $name) -Force | Out-Null
+        New-Item -ItemType File -Path (Join-Path $strayBase $name) -Force | Out-Null
       }
     } else {
       $strayDir = Join-Path $script:NodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
@@ -123,9 +147,16 @@ Describe '90-reconcile-claude-code' {
 
     $script:NodeDir = Join-Path $TestDrive ([guid]::NewGuid())
     $script:ManagedDir = Join-Path $TestDrive ([guid]::NewGuid())
+    # Used only by the Windows-layout Context: the npm global prefix is
+    # now resolved via the mise-managed npm itself (Resolve-MiseNpmPrefix)
+    # rather than assumed to equal $script:NodeDir, so tests must be able
+    # to point it somewhere genuinely different to prove the fix isn't
+    # accidentally still reading $script:NodeDir under the hood.
+    $script:NpmPrefixDir = Join-Path $TestDrive ([guid]::NewGuid())
     New-Item -ItemType Directory -Path (Join-Path $script:NodeDir (Join-Path 'lib' 'node_modules')) -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $script:NodeDir 'bin') -Force | Out-Null
     New-Item -ItemType Directory -Path $script:ManagedDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $script:NpmPrefixDir -Force | Out-Null
 
     Remove-TestMiseMock
   }
@@ -172,6 +203,11 @@ Describe '90-reconcile-claude-code' {
       $settingsFile | Should -Exist
       $parsed = Get-Content -Raw $settingsFile | ConvertFrom-Json
       $parsed.env.DISABLE_AUTOUPDATER | Should -Be '1'
+      # The atomic write (temp file + move) must not leave its temp
+      # file behind on a successful run.
+      $settingsDir = Split-Path -Parent $settingsFile
+      Get-ChildItem -LiteralPath $settingsDir -Filter '.settings.json.*' -Force |
+        Should -BeNullOrEmpty
     }
 
     It 'preserves other keys, including other env.* keys, when reconciling an existing file' {
@@ -298,6 +334,28 @@ Describe '90-reconcile-claude-code' {
       $strayDir | Should -Exist
       $shim | Should -Exist
     }
+
+    It 'still runs the stray-copy cleanup even when settings reconciliation fails (regression: exit must not short-circuit cleanup)' {
+      # Regression test: Merge-ClaudeSettings previously called `exit 1`
+      # directly on failure, which terminates the whole script before
+      # Remove-StrayClaudeCodeCopy ever runs. Both effects -- the
+      # settings-side failure AND the unrelated stray-copy cleanup --
+      # must be observable from a single invocation.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      [System.IO.File]::WriteAllText($settingsFile, '{not valid json', [System.Text.UTF8Encoding]::new($false))
+      $strayDir = Write-TestStrayCopy
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 1
+      $output | Should -Match 'invalid JSON'
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $strayDir | Should -Not -Exist
+      $shim | Should -Not -Exist
+    }
   }
 
   Context 'stray claude-code copy cleanup (Windows layout)' -Skip:($IsWindows -eq $false) {
@@ -307,6 +365,9 @@ Describe '90-reconcile-claude-code' {
     # see the file-level comment at the top of this file.
     BeforeEach {
       Assert-TestSafetyPreflight
+      # The prefix mock defaults to "resolves"; the fail-closed test
+      # below overrides this with its own -Resolves:$false call.
+      Set-TestNpmPrefixMock -NodeDir $script:NodeDir -PrefixDir $script:NpmPrefixDir
     }
 
     It 'no-ops idempotently when no stray copy exists' {
@@ -319,7 +380,7 @@ Describe '90-reconcile-claude-code' {
     It 'removes the directory and all three shims (claude, claude.cmd, claude.ps1) when the managed copy is confirmed present' {
       Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
       $strayDir = Write-TestStrayCopy
-      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NodeDir $_ }
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NpmPrefixDir $_ }
 
       $output = & $script:Fixture *>&1 | Out-String
       $LASTEXITCODE | Should -Be 0
@@ -334,7 +395,7 @@ Describe '90-reconcile-claude-code' {
     It 'leaves the stray copy and shims in place when the managed copy is not resolvable' {
       Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedResolves $false
       $strayDir = Write-TestStrayCopy
-      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NodeDir $_ }
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NpmPrefixDir $_ }
 
       $output = & $script:Fixture *>&1 | Out-String
       $LASTEXITCODE | Should -Be 0
@@ -343,6 +404,19 @@ Describe '90-reconcile-claude-code' {
       foreach ($shim in $shims) {
         $shim | Should -Exist
       }
+    }
+
+    It 'skips the stray-copy check (fail-closed) when the mise-managed npm global prefix is not resolvable' {
+      # Regression test for deriving the stray-copy path from the
+      # resolved npm prefix rather than assuming it equals $NodeDir:
+      # when the prefix itself cannot be resolved, the script must
+      # skip the check rather than fall back to a guessed path.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      Set-TestNpmPrefixMock -NodeDir $script:NodeDir -Resolves $false
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'npm global prefix not resolvable'
     }
   }
 }

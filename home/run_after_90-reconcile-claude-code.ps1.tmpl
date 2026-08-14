@@ -59,33 +59,33 @@ function Merge-ClaudeSettings {
   $raw = [System.IO.File]::ReadAllText($settingsFile, [System.Text.UTF8Encoding]::new($false))
   if ([string]::IsNullOrWhiteSpace($raw)) {
     Write-FatalError "error: $settingsFile is empty; refusing to treat that as valid JSON. Fix or remove it manually, then re-run 'chezmoi apply'."
-    exit 1
+    return 1
   }
 
   try {
     $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
   } catch {
     Write-FatalError "error: $settingsFile contains invalid JSON; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
-    exit 1
+    return 1
   }
 
   if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
     Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
-    exit 1
+    return 1
   }
 
   $envProp = $parsed.PSObject.Properties['env']
   if ($envProp -and $null -ne $envProp.Value -and
       $envProp.Value -isnot [System.Management.Automation.PSCustomObject]) {
     Write-FatalError "error: $settingsFile has a non-object 'env' key; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
-    exit 1
+    return 1
   }
 
   if ($envProp -and $envProp.Value) {
     $existing = $envProp.Value.PSObject.Properties['DISABLE_AUTOUPDATER']
     if ($existing -and $existing.Value -is [string] -and $existing.Value -ceq '1') {
       Write-Host "env.DISABLE_AUTOUPDATER already set to `"1`" in $settingsFile; nothing to do."
-      return
+      return 0
     }
   }
 
@@ -107,11 +107,30 @@ function Merge-ClaudeSettings {
   }
 
   $json = $parsed | ConvertTo-Json -Depth 100
-  Write-Utf8NoBom -Path $settingsFile -Content ($json + [System.Environment]::NewLine)
+  # Atomic replace (same-directory temp file + move), matching the
+  # bash implementation's mktemp+mv: writing $settingsFile directly
+  # would let an I/O failure (e.g. a full disk) mid-write truncate or
+  # partially overwrite the user's pre-existing Claude settings.
+  $tmpFile = Join-Path $settingsDir (".settings.json.{0}" -f [System.IO.Path]::GetRandomFileName())
+  try {
+    Write-Utf8NoBom -Path $tmpFile -Content ($json + [System.Environment]::NewLine)
+    Move-Item -LiteralPath $tmpFile -Destination $settingsFile -Force
+  } catch {
+    Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
+    Write-FatalError "error: failed to write $settingsFile; leaving it untouched."
+    return 1
+  }
   Write-Host "Set env.DISABLE_AUTOUPDATER=`"1`" in $settingsFile."
+  return 0
 }
 
-Merge-ClaudeSettings
+# NOTE: do not call `exit` from inside Merge-ClaudeSettings (it would
+# terminate the whole script before Remove-StrayClaudeCodeCopy runs,
+# reintroducing the same "settings failure skips the unrelated
+# stray-copy repair" bug already fixed on the bash side). Capture its
+# return status, always run the stray-copy check regardless, then
+# exit with the settings-side status at the very end.
+$settingsStatus = Merge-ClaudeSettings
 
 function Invoke-MiseWhere {
   param([Parameter(Mandatory)] [string[]] $Arguments)
@@ -136,6 +155,43 @@ function Invoke-MiseWhere {
   }
 }
 
+function Resolve-MiseNpmPrefix {
+  param([Parameter(Mandatory)] [string] $NodeDir)
+  # npm's effective global prefix is NOT reliably "wherever node.exe
+  # lives": npm's own docs say the Windows default is %AppData%\npm,
+  # and either platform's default can be overridden by a user-level
+  # .npmrc or NPM_CONFIG_PREFIX. Asking the mise-managed npm itself
+  # (rather than assuming a location) matches the exact value Claude
+  # Code's own autoupdater consults when it runs `npm install -g`, so
+  # this is correct under every override scenario, not just the
+  # documented defaults.
+  if ($IsWindows -ne $false) {
+    $npmBin = Join-Path $NodeDir 'npm.cmd'
+  } else {
+    $npmBin = Join-Path $NodeDir (Join-Path 'bin' 'npm')
+  }
+  if (-not (Test-Path -LiteralPath $npmBin)) {
+    return $null
+  }
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & $npmBin 'config' 'get' 'prefix' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+      return $null
+    }
+    $prefix = ($output | Select-Object -Last 1).ToString().Trim()
+    if (-not $prefix) {
+      return $null
+    }
+    return $prefix
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
 function Remove-StrayClaudeCodeCopy {
   $nodeDir = Invoke-MiseWhere -Arguments @('where', 'node')
   if (-not $nodeDir) {
@@ -144,9 +200,21 @@ function Remove-StrayClaudeCodeCopy {
   }
 
   if ($IsWindows -ne $false) {
+    # Derive the stray-copy path from npm's own resolved prefix rather
+    # than $nodeDir: on Windows the two are not guaranteed to match
+    # (see Resolve-MiseNpmPrefix). Fail closed -- skip with a warning
+    # rather than falling back to a guessed path, since a wrong guess
+    # here is a worse outcome than skipping the check entirely (it
+    # could leave a stray shim undetected, or in principle target the
+    # wrong directory).
+    $npmPrefix = Resolve-MiseNpmPrefix -NodeDir $nodeDir
+    if (-not $npmPrefix) {
+      Write-Host 'mise-managed npm global prefix not resolvable; skipping stray @anthropic-ai/claude-code check on Windows.'
+      return
+    }
     # Windows npm global layout: <prefix>\node_modules\<pkg> (no `lib`
     # segment), matching a standard npm-on-Windows global install.
-    $strayDir = Join-Path $nodeDir (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+    $strayDir = Join-Path $npmPrefix (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
   } else {
     $strayDir = Join-Path $nodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
   }
@@ -168,8 +236,11 @@ function Remove-StrayClaudeCodeCopy {
   if ($IsWindows -ne $false) {
     # Windows npm global installs place claude, claude.cmd, and
     # claude.ps1 shims at the prefix root (not in a bin/ subfolder).
+    # $npmPrefix is guaranteed set here: this branch is only reached
+    # once $strayDir (itself derived from $npmPrefix) was confirmed to
+    # exist above.
     foreach ($name in @('claude.cmd', 'claude.ps1', 'claude')) {
-      $shim = Join-Path $nodeDir $name
+      $shim = Join-Path $npmPrefix $name
       if (Test-Path -LiteralPath $shim) {
         Remove-Item -LiteralPath $shim -Force
       }
@@ -187,4 +258,4 @@ function Remove-StrayClaudeCodeCopy {
 
 Remove-StrayClaudeCodeCopy
 
-exit 0
+exit $settingsStatus
