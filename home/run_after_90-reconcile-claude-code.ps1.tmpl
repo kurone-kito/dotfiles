@@ -55,6 +55,32 @@ function Test-ReparsePoint {
   return [bool]($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
 }
 
+function Remove-DirectoryTreeSafely {
+  param([Parameter(Mandatory)] [string] $Path)
+  # Recursively removes a directory tree without ever traversing into
+  # a nested reparse point (a symlink/junction/hardlink dir a few
+  # levels down, e.g. left by `npm link` or a damaged install): a
+  # naive Remove-Item -Recurse on PS5.1 can follow such a reparse
+  # point and delete its target's contents instead of just unlinking
+  # it, even when the top-level $Path itself is a real directory.
+  # Recurses one level at a time (never Get-ChildItem -Recurse or
+  # Remove-Item -Recurse) so every item is Test-ReparsePoint-checked
+  # before it is ever descended into.
+  if (Test-ReparsePoint -Path $Path) {
+    Remove-Item -LiteralPath $Path -Force
+    return
+  }
+  $children = Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  foreach ($child in $children) {
+    if ($child.PSIsContainer) {
+      Remove-DirectoryTreeSafely -Path $child.FullName
+    } else {
+      Remove-Item -LiteralPath $child.FullName -Force
+    }
+  }
+  Remove-Item -LiteralPath $Path -Force
+}
+
 function Resolve-ExactCaseProperty {
   param(
     [Parameter(Mandatory)] $InputObject,
@@ -389,16 +415,14 @@ function Remove-StrayClaudeCodeCopy {
   }
 
   # On Windows PowerShell 5.1, Remove-Item -Recurse on a reparse point
-  # (e.g. a directory symlink/junction left by `npm link` or a damaged
-  # install) can traverse into the link's target and delete its
-  # contents instead of just unlinking the reparse point itself.
-  # Unlink without recursion in that case; recurse only into a real
-  # directory.
-  if (Test-ReparsePoint -Path $strayDir) {
-    Remove-Item -LiteralPath $strayDir -Force
-  } else {
-    Remove-Item -LiteralPath $strayDir -Recurse -Force
-  }
+  # -- whether $strayDir itself, or a nested one a few levels down
+  # inside an otherwise-real directory tree (e.g. left by `npm link`
+  # or a damaged install) -- can traverse into the link's target and
+  # delete its contents instead of just unlinking the reparse point.
+  # Remove-DirectoryTreeSafely checks every item at every level before
+  # descending into it, so this is safe regardless of where in the
+  # tree a reparse point appears.
+  Remove-DirectoryTreeSafely -Path $strayDir
   Write-Host "Removed stray @anthropic-ai/claude-code copy at $strayDir (mise-managed copy confirmed at $managedDir)."
 }
 
