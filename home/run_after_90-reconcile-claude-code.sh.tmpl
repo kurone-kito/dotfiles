@@ -199,6 +199,17 @@ remove_stray_claude_code_copy() {
     return 0
   fi
 
+  # A resolvable install directory alone does not prove the managed
+  # copy actually works: an interrupted or failed npm-backend install
+  # can leave the directory in place without a functional binary.
+  # Confirm the managed 'claude' command actually runs before removing
+  # anything, so this repair can never leave the user without a
+  # working 'claude' even in that scenario.
+  if ! mise exec "npm:@anthropic-ai/claude-code" -- claude --version >/dev/null 2>&1; then
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+    return 0
+  fi
+
   # Remove the bin shim before the directory it points into: if this
   # gets interrupted between the two removals, a rerun still finds the
   # stray directory (the check above) and retries cleanly, whereas a

@@ -55,7 +55,11 @@ teardown() {
 write_mise_mock() {
   # $1: 0 or 1 -> whether `mise where npm:@anthropic-ai/claude-code`
   #     resolves successfully (default: 1, resolves)
+  # $2: 0 or 1 -> whether `mise exec npm:@anthropic-ai/claude-code --
+  #     claude --version` succeeds, i.e. the managed copy actually
+  #     works (default: 1, works)
   local managed_resolves="${1:-1}"
+  local managed_works="${2:-1}"
   cat > "$BIN_DIR/mise" << MOCK
 #!/bin/bash
 if [ "\$1" = "where" ] && [ "\$2" = "node" ]; then
@@ -65,6 +69,13 @@ fi
 if [ "\$1" = "where" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
   if [ "$managed_resolves" = "1" ]; then
     echo "$MANAGED_DIR"
+    exit 0
+  else
+    exit 1
+  fi
+fi
+if [ "\$1" = "exec" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+  if [ "$managed_works" = "1" ]; then
     exit 0
   else
     exit 1
@@ -258,6 +269,22 @@ JSON
   assert_file_not_exists "$NODE_DIR/bin/claude"
   # Never touches the mise-managed copy itself.
   assert_dir_exists "$MANAGED_DIR"
+}
+
+@test "stray copy present, managed dir resolves but claude does not work: stray copy left in place" {
+  # Regression test: a resolvable mise-managed install directory alone
+  # does not prove the managed 'claude' actually works -- an
+  # interrupted or failed npm-backend install can leave the directory
+  # in place without a functional binary. The repair must not delete
+  # the stray copy in that case (it could be the only working one).
+  write_mise_mock 1 0
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "does not appear to work"
+  assert_output --partial "leaving the stray copy in place"
+  assert_dir_exists "$NODE_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NODE_DIR/bin/claude"
 }
 
 @test "settings failure does not skip stray-copy cleanup (both effects observable in one run)" {

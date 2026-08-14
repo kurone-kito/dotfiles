@@ -39,7 +39,8 @@ BeforeAll {
     param(
       [string] $NodeDir,
       [string] $ManagedDir,
-      [bool] $ManagedResolves = $true
+      [bool] $ManagedResolves = $true,
+      [bool] $ManagedWorks = $true
     )
     # NOTE: these must be $global:, not $script:. The mock function
     # below is invoked from inside the externally-invoked fixture
@@ -51,6 +52,7 @@ BeforeAll {
     $global:MockNodeDir = $NodeDir
     $global:MockManagedDir = $ManagedDir
     $global:MockManagedResolves = $ManagedResolves
+    $global:MockManagedWorks = $ManagedWorks
 
     function global:mise {
       $a = $args
@@ -72,13 +74,17 @@ BeforeAll {
         }
         return
       }
+      if ($a.Count -ge 2 -and $a[0] -eq 'exec' -and $a[1] -eq 'npm:@anthropic-ai/claude-code') {
+        $global:LASTEXITCODE = if ($global:MockManagedWorks) { 0 } else { 1 }
+        return
+      }
       $global:LASTEXITCODE = 1
     }
   }
 
   function global:Remove-TestMiseMock {
     Remove-Item Function:\mise -ErrorAction SilentlyContinue
-    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks -Scope Global -ErrorAction SilentlyContinue
   }
 
   function global:Set-TestNpmPrefixMock {
@@ -253,6 +259,25 @@ Describe '90-reconcile-claude-code' {
       $after.Hash | Should -Be $before.Hash
     }
 
+    It 'fails loudly on a single-element top-level JSON array, not silently treated as an object' {
+      # Regression test: ConvertFrom-Json's output is enumerated onto
+      # the pipeline, so a single-element array such as "[{}]"
+      # collapses to its bare object element by the time
+      # `$parsed = ... | ConvertFrom-Json` finishes assigning -- a
+      # naive post-parse "is this a PSCustomObject" check alone would
+      # accept this and silently rewrite an array as an object.
+      $settingsDir = Join-Path $HOME '.claude'
+      New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+      $settingsFile = Join-Path $settingsDir 'settings.json'
+      [System.IO.File]::WriteAllText($settingsFile, '[{}]', [System.Text.UTF8Encoding]::new($false))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+
+      & $script:Fixture 2>&1 | Out-Null
+      $LASTEXITCODE | Should -Be 1
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
+    }
+
     It 'fails loudly on a non-object env key, file left untouched' {
       $settingsDir = Join-Path $HOME '.claude'
       New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
@@ -342,6 +367,25 @@ Describe '90-reconcile-claude-code' {
       $shim | Should -Exist
     }
 
+    It 'leaves the stray copy in place when the managed directory resolves but claude does not work' {
+      # Regression test: a resolvable mise-managed install directory
+      # alone does not prove the managed 'claude' actually works -- an
+      # interrupted or failed npm-backend install can leave the
+      # directory in place without a functional binary. The repair
+      # must not delete the stray copy in that case (it could be the
+      # only working one).
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false
+      $strayDir = Write-TestStrayCopy
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      $shim | Should -Exist
+    }
+
     It 'still runs the stray-copy cleanup even when settings reconciliation fails (regression: exit must not short-circuit cleanup)' {
       # Regression test: Merge-ClaudeSettings previously called `exit 1`
       # directly on failure, which terminates the whole script before
@@ -406,6 +450,21 @@ Describe '90-reconcile-claude-code' {
 
       $output = & $script:Fixture *>&1 | Out-String
       $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      foreach ($shim in $shims) {
+        $shim | Should -Exist
+      }
+    }
+
+    It 'leaves the stray copy and shims in place when the managed directory resolves but claude does not work' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false
+      $strayDir = Write-TestStrayCopy
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NpmPrefixDir $_ }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
       $output | Should -Match 'leaving the stray copy in place'
       $strayDir | Should -Exist
       foreach ($shim in $shims) {

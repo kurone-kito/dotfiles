@@ -62,6 +62,20 @@ function Merge-ClaudeSettings {
     return 1
   }
 
+  # A top-level JSON array with exactly one object element (e.g.
+  # "[{}]") would otherwise slip past the PSCustomObject check below:
+  # ConvertFrom-Json's output is enumerated onto the pipeline, so a
+  # single-element array collapses to its bare element by the time
+  # `$parsed = ... | ConvertFrom-Json` finishes assigning -- the same
+  # unwrapping PowerShell applies to any single-item pipeline output,
+  # independent of the `|` syntax. Reject on the raw top-level token
+  # instead of relying on the parsed shape, since only a JSON object's
+  # first non-whitespace character can be '{'.
+  if ($raw.TrimStart() -notlike '{*') {
+    Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
+    return 1
+  }
+
   try {
     $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
   } catch {
@@ -69,6 +83,10 @@ function Merge-ClaudeSettings {
     return 1
   }
 
+  # Defense in depth: should be unreachable now that the raw-token
+  # check above rejects every non-object top-level shape, but keeps
+  # this invariant explicit rather than silently relying on the check
+  # above never regressing.
   if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
     Write-FatalError "error: $settingsFile is not a JSON object; refusing to modify it. Fix or remove it manually, then re-run 'chezmoi apply'."
     return 1
@@ -192,6 +210,25 @@ function Resolve-MiseNpmPrefix {
   }
 }
 
+function Test-MiseManagedClaudeWorks {
+  # A resolvable install directory alone does not prove the managed
+  # copy actually works: an interrupted or failed npm-backend install
+  # can leave the directory in place without a functional binary.
+  # Delegate to `mise exec` rather than guessing at the managed
+  # install's internal bin/ layout -- it already knows how to
+  # correctly activate that exact tool's binaries on PATH.
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & mise 'exec' 'npm:@anthropic-ai/claude-code' '--' 'claude' '--version' *>$null
+    return $LASTEXITCODE -eq 0
+  } catch {
+    return $false
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
 function Remove-StrayClaudeCodeCopy {
   $nodeDir = Invoke-MiseWhere -Arguments @('where', 'node')
   if (-not $nodeDir) {
@@ -227,6 +264,11 @@ function Remove-StrayClaudeCodeCopy {
   $managedDir = Invoke-MiseWhere -Arguments @('where', 'npm:@anthropic-ai/claude-code')
   if (-not $managedDir -or -not (Test-Path -LiteralPath $managedDir)) {
     Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    return
+  }
+
+  if (-not (Test-MiseManagedClaudeWorks)) {
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
     return
   }
 
