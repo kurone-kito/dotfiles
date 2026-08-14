@@ -21,6 +21,14 @@ pnpm = "latest"
 "github:cli/cli" = "latest"
 "github:anatawa12/git-vrc" = "latest"
 
+# pstop's only release asset is pstop-windows-x86_64.zip (Windows-only
+# upstream); os restricts install attempts to Windows. The archive also
+# ships htop.exe next to pstop.exe (mirrors WinGet's marlocarlo.pstop
+# two-link behavior), so extract_all shims both binaries. Upstream was
+# transferred from marlocarlo/pstop to psmux/pstop; the identifier below
+# stays marlocarlo/pstop, which GitHub still resolves via redirect.
+"ubi:marlocarlo/pstop" = { version = "latest", os = ["windows"], extract_all = true }
+
 [settings]
 idiomatic_version_file_enable_tools = ["node", "python"]
 not_found_auto_install = false

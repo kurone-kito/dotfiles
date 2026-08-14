@@ -159,6 +159,19 @@ MOCK
 }
 
 # ---------------------------------------------------------------------------
+# config.toml tool entries
+# (not templated, so the source file content is the rendered content)
+# ---------------------------------------------------------------------------
+
+@test "restricts the pstop ubi tool to Windows" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '"ubi:marlocarlo/pstop"' "$config"
+  assert_success
+  assert_output --partial 'os = ["windows"]'
+}
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 
