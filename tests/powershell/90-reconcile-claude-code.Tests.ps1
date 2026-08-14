@@ -22,9 +22,11 @@
 #
 # Windows-only claude-code shim naming (claude/claude.cmd/claude.ps1 at
 # the npm prefix root, no `lib/` segment) is implemented from documented
-# npm global-install behavior; it cannot be exercised from a Linux/WSL
-# session, so the corresponding Context below is gated Windows-only and
-# is authoritative only under real Windows CI.
+# npm global-install behavior; the "stray claude-code copy cleanup
+# (Windows layout)" Context below exercises it, but -Skip's condition
+# means it never actually runs on this Linux/WSL session -- it is
+# authoritative only under real Windows CI. The POSIX-layout Context
+# is the mirror image: skipped on Windows, authoritative here.
 
 BeforeAll {
   $script:Template = Join-Path (
@@ -91,11 +93,23 @@ BeforeAll {
   }
 
   function global:Write-TestStrayCopy {
-    $strayDir = Join-Path $script:NodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
-    New-Item -ItemType Directory -Path (Join-Path $strayDir 'bin') -Force | Out-Null
-    New-Item -ItemType File -Path (Join-Path $strayDir (Join-Path 'bin' 'claude.exe')) -Force | Out-Null
-    $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
-    New-Item -ItemType File -Path $shim -Force | Out-Null
+    # Platform-adaptive so both the POSIX and the Windows-only Context
+    # below can share one writer that always matches the layout the
+    # script itself expects on whichever platform this actually runs.
+    if ($IsWindows -ne $false) {
+      $strayDir = Join-Path $script:NodeDir (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code'))
+      New-Item -ItemType Directory -Path $strayDir -Force | Out-Null
+      New-Item -ItemType File -Path (Join-Path $strayDir 'package.json') -Force | Out-Null
+      foreach ($name in @('claude.cmd', 'claude.ps1', 'claude')) {
+        New-Item -ItemType File -Path (Join-Path $script:NodeDir $name) -Force | Out-Null
+      }
+    } else {
+      $strayDir = Join-Path $script:NodeDir (Join-Path 'lib' (Join-Path 'node_modules' (Join-Path '@anthropic-ai' 'claude-code')))
+      New-Item -ItemType Directory -Path (Join-Path $strayDir 'bin') -Force | Out-Null
+      New-Item -ItemType File -Path (Join-Path $strayDir (Join-Path 'bin' 'claude.exe')) -Force | Out-Null
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+      New-Item -ItemType File -Path $shim -Force | Out-Null
+    }
     return $strayDir
   }
 }
@@ -203,14 +217,17 @@ Describe '90-reconcile-claude-code' {
       $after.Hash | Should -Be $before.Hash
     }
 
-    It 'fails loudly on a non-object env key' {
+    It 'fails loudly on a non-object env key, file left untouched' {
       $settingsDir = Join-Path $HOME '.claude'
       New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
       $settingsFile = Join-Path $settingsDir 'settings.json'
       [System.IO.File]::WriteAllText($settingsFile, '{"env":"not-an-object"}', [System.Text.UTF8Encoding]::new($false))
+      $before = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
 
       & $script:Fixture 2>&1 | Out-Null
       $LASTEXITCODE | Should -Be 1
+      $after = Get-FileHash -LiteralPath $settingsFile -Algorithm SHA256
+      $after.Hash | Should -Be $before.Hash
     }
   }
 
@@ -249,6 +266,52 @@ Describe '90-reconcile-claude-code' {
       $output | Should -Match 'leaving the stray copy in place'
       $strayDir | Should -Exist
       $shim | Should -Exist
+    }
+  }
+
+  Context 'stray claude-code copy cleanup (Windows layout)' -Skip:($IsWindows -eq $false) {
+    # Only executes under real Windows PowerShell/pwsh (per the Skip
+    # condition above); on this Linux/WSL development session it is
+    # always skipped, so it is authoritative only under Windows CI --
+    # see the file-level comment at the top of this file.
+    BeforeEach {
+      Assert-TestSafetyPreflight
+    }
+
+    It 'no-ops idempotently when no stray copy exists' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'No stray @anthropic-ai/claude-code copy found'
+    }
+
+    It 'removes the directory and all three shims (claude, claude.cmd, claude.ps1) when the managed copy is confirmed present' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $strayDir = Write-TestStrayCopy
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NodeDir $_ }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $strayDir | Should -Not -Exist
+      foreach ($shim in $shims) {
+        $shim | Should -Not -Exist
+      }
+      $script:ManagedDir | Should -Exist
+    }
+
+    It 'leaves the stray copy and shims in place when the managed copy is not resolvable' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedResolves $false
+      $strayDir = Write-TestStrayCopy
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NodeDir $_ }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      foreach ($shim in $shims) {
+        $shim | Should -Exist
+      }
     }
   }
 }

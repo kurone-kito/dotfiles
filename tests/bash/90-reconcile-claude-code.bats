@@ -85,6 +85,16 @@ write_stray_copy() {
 
 @test "mise absent: whole script no-ops without touching settings.json" {
   export PATH="/usr/bin:/bin"
+  # Preflight guard: don't assume /usr/bin:/bin lacks mise on every
+  # host this suite might run on -- confirm it's genuinely
+  # unresolvable before invoking the script, so a host where mise
+  # happens to live under one of those directories fails the test
+  # setup loudly instead of silently exercising the real mise-managed
+  # environment.
+  ! command -v mise &>/dev/null || {
+    echo "test setup bug: mise still resolvable on the scoped PATH" >&2
+    return 1
+  }
   run bash "$FIXTURE"
   assert_success
   assert_output --partial "mise not found; skipping Claude Code autoupdater repair."
@@ -143,12 +153,15 @@ JSON
   [ "$before_hash" = "$after_hash" ]
 }
 
-@test "non-object env key: fails loudly, non-zero exit" {
+@test "non-object env key: fails loudly, non-zero exit, file left untouched" {
   write_mise_mock
   mkdir -p "$HOME/.claude"
   printf '{"env": "not-an-object"}' > "$HOME/.claude/settings.json"
+  before_hash="$(sha256sum "$HOME/.claude/settings.json")"
   run bash "$FIXTURE"
   assert_failure
+  after_hash="$(sha256sum "$HOME/.claude/settings.json")"
+  [ "$before_hash" = "$after_hash" ]
 }
 
 @test "jq absent: settings reconciliation skipped, stray-copy check still runs" {
@@ -174,6 +187,8 @@ JSON
   assert_success
   assert_output --partial "jq not found; skipping"
   assert_file_not_exists "$HOME/.claude/settings.json"
+  # The stray-copy check does not depend on jq and must still run.
+  assert_output --partial "No stray @anthropic-ai/claude-code copy found"
 }
 
 @test "no stray copy: no-op, idempotent" {

@@ -106,8 +106,31 @@ function Merge-ClaudeSettings {
 
 Merge-ClaudeSettings
 
+function Invoke-MiseWhere {
+  param([Parameter(Mandatory)] [string[]] $Arguments)
+  # Native-command stderr redirected under $ErrorActionPreference =
+  # 'Stop' can be wrapped into a terminating error on some PowerShell
+  # versions (notably PS5.1) instead of the graceful "not resolvable"
+  # skip a non-zero `mise where` exit is meant to signal here. Swap
+  # EAP to 'Continue' and catch, so a resolution failure always comes
+  # back as $null rather than crashing the script.
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & mise @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $output) {
+      return $null
+    }
+    return $output
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+}
+
 function Remove-StrayClaudeCodeCopy {
-  $nodeDir = (mise where node 2>$null)
+  $nodeDir = Invoke-MiseWhere -Arguments @('where', 'node')
   if (-not $nodeDir) {
     Write-Host 'mise-managed Node.js not resolvable; skipping stray @anthropic-ai/claude-code check.'
     return
@@ -126,7 +149,7 @@ function Remove-StrayClaudeCodeCopy {
     return
   }
 
-  $managedDir = (mise where npm:@anthropic-ai/claude-code 2>$null)
+  $managedDir = Invoke-MiseWhere -Arguments @('where', 'npm:@anthropic-ai/claude-code')
   if (-not $managedDir -or -not (Test-Path -LiteralPath $managedDir)) {
     Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
     return
