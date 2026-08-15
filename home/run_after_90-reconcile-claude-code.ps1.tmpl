@@ -77,8 +77,8 @@ function Remove-DirectoryTreeSafely {
     # DirectoryInfo (a directory-type reparse point) this removes only
     # the reparse-point entry itself -- non-recursive, never follows the
     # link into its target -- identically on both PS5.1 and pwsh 7+; for
-    # a FileInfo (a file-type reparse point, e.g. a hardlink) it removes
-    # just that file entry the same way.
+    # a FileInfo (a file-type reparse point, e.g. a file symlink) it
+    # removes just that file entry the same way.
     (Get-Item -LiteralPath $Path -Force).Delete()
     return
   }
