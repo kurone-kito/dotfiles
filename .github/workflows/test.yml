@@ -146,9 +146,15 @@ jobs:
         # unqualified `Invoke-Pester` could still silently run under a
         # 7.x module if one were ever present alongside the capped 6.x
         # install above -- defeating the -MaximumVersion bound on install.
+        #
+        # -CI sets Run.Exit = $true (and TestResult.Enabled = $true), so
+        # a genuine test failure actually fails this step -- without it,
+        # Invoke-Pester's own process exit code stays 0 even when tests
+        # fail, letting the required "PowerShell tests (Pester)" check
+        # report success on a real failure.
         run: |
           Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 -Force
-          Invoke-Pester tests/powershell/ -Output Detailed
+          Invoke-Pester tests/powershell/ -Output Detailed -CI
 
   powershell51-tests:
     name: PowerShell 5.1 tests (Pester)
@@ -231,9 +237,15 @@ jobs:
         # capped install above -- module auto-loading prefers the highest
         # available version, so an unbounded import could still resolve
         # to a 7.x module if one were ever present, defeating the cap.
+        #
+        # -CI (see the matching comment on the PS7 job's "Run Pester
+        # tests" step above) makes a genuine test failure actually fail
+        # this step. This job is advisory only (not a required check),
+        # but keeping both jobs' failure semantics identical avoids a
+        # confusing asymmetry.
         run: |
           Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 -Force
-          Invoke-Pester tests/powershell/ -Output Detailed
+          Invoke-Pester tests/powershell/ -Output Detailed -CI
 
   lua-syntax:
     name: Lua syntax check
