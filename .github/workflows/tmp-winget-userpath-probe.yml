@@ -1,0 +1,98 @@
+name: TEMP winget package directory-layout probe
+# TEMPORARY workflow for issue #272 empirical evidence collection only.
+# Installs Gyan.FFmpeg, SQLite.SQLite, and Ngrok.Ngrok for real on a
+# disposable windows-latest GitHub Actions runner (never on any real
+# developer machine) to observe each package's actual on-disk
+# directory layout under %LOCALAPPDATA%\Microsoft\WinGet\Packages\ (and
+# the machine-scope %ProgramFiles%\WinGet\Packages\ location, in case
+# CI's admin context lands an install there instead) -- the issue's
+# acceptance criteria require this to be backed by real evidence, not
+# documentation alone. Modeled on PR #273's tmp-mkcert-probe.yml.
+#
+# This workflow is removed again before the PR for #272 is finalized;
+# it never touches this repository's real user PATH or trust store,
+# only the ephemeral CI runner's.
+on:
+  push:
+    branches:
+      - issue/272-feat-winget-user-path-ffmpeg-sqlite
+permissions:
+  contents: read
+jobs:
+  probe:
+    name: Probe winget package layout on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Ensure winget is available (bootstrap if missing)
+        shell: pwsh
+        run: |
+          $winget = Get-Command winget -ErrorAction SilentlyContinue
+          if ($null -eq $winget) {
+            Write-Host "winget not found on PATH -- bootstrapping via Microsoft.WinGet.Client"
+            Install-PackageProvider -Name NuGet -Force | Out-Null
+            Install-Module -Name Microsoft.WinGet.Client -Force -Scope CurrentUser -AllowClobber
+            Repair-WinGetPackageManager -AllUsers
+          } else {
+            Write-Host "winget resolved at: $($winget.Source)"
+          }
+          winget --version
+
+      - name: Install Gyan.FFmpeg, SQLite.SQLite, Ngrok.Ngrok
+        shell: pwsh
+        run: |
+          $ids = @('Gyan.FFmpeg', 'SQLite.SQLite', 'Ngrok.Ngrok')
+          foreach ($id in $ids) {
+            Write-Host "=== winget install $id ==="
+            winget install --id $id --exact --source winget `
+              --accept-source-agreements --accept-package-agreements `
+              --disable-interactivity
+            Write-Host "exit code: $LASTEXITCODE"
+          }
+
+      - name: Dump resulting package directory layout
+        shell: pwsh
+        run: |
+          $ids = @('Gyan.FFmpeg', 'SQLite.SQLite', 'Ngrok.Ngrok')
+          $roots = @(
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'),
+            (Join-Path $env:ProgramFiles 'WinGet\Packages')
+          )
+
+          foreach ($root in $roots) {
+            Write-Host ""
+            Write-Host "=== Root: $root ==="
+            if (-not (Test-Path -LiteralPath $root)) {
+              Write-Host "(root does not exist)"
+              continue
+            }
+
+            foreach ($id in $ids) {
+              $matches = @(Get-ChildItem -LiteralPath $root -Directory -Filter "$id*" -ErrorAction SilentlyContinue)
+              if ($matches.Count -eq 0) {
+                Write-Host "--- $id : no matching package directory under this root ---"
+                continue
+              }
+
+              foreach ($dir in $matches) {
+                Write-Host "--- $id package directory: $($dir.FullName) ---"
+                Get-ChildItem -LiteralPath $dir.FullName -Recurse -ErrorAction SilentlyContinue |
+                  Select-Object @{N = 'RelativePath'; E = { $_.FullName.Substring($dir.FullName.Length + 1) } }, PSIsContainer, Length |
+                  Sort-Object RelativePath |
+                  Format-Table -AutoSize |
+                  Out-String -Width 4096 |
+                  Write-Host
+
+                Write-Host "--- $id .exe files (relative paths) ---"
+                Get-ChildItem -LiteralPath $dir.FullName -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue |
+                  ForEach-Object { $_.FullName.Substring($dir.FullName.Length + 1) } |
+                  Sort-Object |
+                  Write-Host
+              }
+            }
+          }
+
+      - name: Report winget list for installed ids
+        shell: pwsh
+        run: |
+          winget list --source winget 2>&1 | Write-Host
