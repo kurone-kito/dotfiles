@@ -10,7 +10,10 @@
      docs/winget-user-path.md. */ -}}
 {{- $wingetDefaultPackages := dict
       "mise"    (dict "id" "jdx.mise" "bin" "mise/bin")
-      "chezmoi" (dict "id" "twpayne.chezmoi") -}}
+      "chezmoi" (dict "id" "twpayne.chezmoi")
+      "ffmpeg"  (dict "id" "Gyan.FFmpeg" "bin" "ffmpeg-*-full_build/bin")
+      "sqlite"  (dict "id" "SQLite.SQLite")
+      "ngrok"   (dict "id" "Ngrok.Ngrok") -}}
 {{- $packages := list -}}
 {{- range $label, $pkg := (merge (dig "wingetUserPath" "packages" dict .) $wingetDefaultPackages) -}}
 {{- $packages = append $packages (dict "label" $label "id" (dig "id" "" $pkg) "bin" (dig "bin" "" $pkg) "enabled" (dig "enabled" true $pkg)) -}}

@@ -62,6 +62,7 @@ words:
   - Gdiffsplit
   - gpgconf
   - Gvdiffsplit
+  - Gyan
   - HKLM
   - hlsearch
   - inputrc
@@ -81,6 +82,7 @@ words:
   - MINIMIZABLE
   - MYVIMRC
   - netrw
+  - Ngrok
   - Nlcjpw
   - nnoremap
   - nvmrc

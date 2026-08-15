@@ -89,7 +89,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     # re-reading $env:LOCALAPPDATA, so a partially-failed BeforeEach
     # can never point this cleanup at a real %LOCALAPPDATA%.
     if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
-      foreach ($filter in @('GitHub.cli_*', 'twpayne.chezmoi_*')) {
+      foreach ($filter in @('GitHub.cli_*', 'twpayne.chezmoi_*', 'Gyan.FFmpeg_*')) {
         Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter $filter -ErrorAction SilentlyContinue |
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
       }
@@ -106,6 +106,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Resolve-WingetUserPathBinDirectory -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
@@ -163,7 +164,10 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $manifestPath = 'TestDrive:\winget-manifest-chezmoi.json'
     Set-Content -Path $manifestPath -Value (
       '[{"bin":"","enabled":true,"id":"twpayne.chezmoi","label":"chezmoi"},' +
-      '{"bin":"mise/bin","enabled":true,"id":"jdx.mise","label":"mise"}]'
+      '{"bin":"ffmpeg-*-full_build/bin","enabled":true,"id":"Gyan.FFmpeg","label":"ffmpeg"},' +
+      '{"bin":"mise/bin","enabled":true,"id":"jdx.mise","label":"mise"},' +
+      '{"bin":"","enabled":true,"id":"Ngrok.Ngrok","label":"ngrok"},' +
+      '{"bin":"","enabled":true,"id":"SQLite.SQLite","label":"sqlite"}]'
     )
     $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
 
@@ -174,6 +178,31 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $registerManagedPaths = @($desiredManagedPaths)
 
     $confDManagedPaths | Should -Contain $chezmoiDir
+    $registerManagedPaths | Should -Be $confDManagedPaths
+  }
+
+  It 'computes the identical managed-path set on both surfaces with a wildcard bin (ffmpeg-style versioned directory)' {
+    # Materializes a real versioned package directory on disk (not
+    # just a JSON-literal update) so this parity gate actually
+    # exercises Resolve-WingetUserPathBinDirectory's wildcard path on
+    # both surfaces, rather than staying green because an unmatched
+    # wildcard segment would let both surfaces silently contribute
+    # nothing.
+    $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    $ffmpegDir = Join-Path (Join-Path $packagesRoot 'Gyan.FFmpeg_Microsoft.Winget.Source_test') 'ffmpeg-9.0-full_build\bin'
+    New-Item -ItemType Directory -Path $ffmpegDir -Force | Out-Null
+
+    $manifestPath = 'TestDrive:\winget-manifest-ffmpeg.json'
+    Set-Content -Path $manifestPath -Value '[{"label":"ffmpeg","id":"Gyan.FFmpeg","bin":"ffmpeg-*-full_build/bin"}]'
+    $env:DOTFILES_TEST_WINGET_USER_PATH_MANIFEST = $manifestPath
+
+    . $script:ConfDScript
+    $confDManagedPaths = @($desiredManagedPaths)
+
+    . $script:RegisterFixture 6>&1 | Out-Null
+    $registerManagedPaths = @($desiredManagedPaths)
+
+    $confDManagedPaths | Should -Contain $ffmpegDir
     $registerManagedPaths | Should -Be $confDManagedPaths
   }
 }

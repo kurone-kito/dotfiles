@@ -63,9 +63,9 @@ Describe 'winget-user-path-packages.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       $script:Render.ExitCode | Should -Be 0
     }
 
-    It 'ships exactly two default entries: mise and chezmoi' {
-      $script:Parsed.Count | Should -Be 2
-      ($script:Parsed.label | Sort-Object) | Should -Be @('chezmoi', 'mise')
+    It 'ships exactly five default entries: mise, chezmoi, ffmpeg, sqlite, and ngrok' {
+      $script:Parsed.Count | Should -Be 5
+      ($script:Parsed.label | Sort-Object) | Should -Be @('chezmoi', 'ffmpeg', 'mise', 'ngrok', 'sqlite')
     }
 
     It 'the chezmoi default has id twpayne.chezmoi, no bin, and is enabled' {
@@ -82,6 +82,27 @@ Describe 'winget-user-path-packages.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       $mise.enabled | Should -BeTrue
     }
 
+    It 'the ffmpeg default has id Gyan.FFmpeg, a wildcard bin, and is enabled' {
+      $ffmpeg = $script:Parsed | Where-Object { $_.label -eq 'ffmpeg' }
+      $ffmpeg.id | Should -Be 'Gyan.FFmpeg'
+      $ffmpeg.bin | Should -Be 'ffmpeg-*-full_build/bin'
+      $ffmpeg.enabled | Should -BeTrue
+    }
+
+    It 'the sqlite default has id SQLite.SQLite, no bin, and is enabled' {
+      $sqlite = $script:Parsed | Where-Object { $_.label -eq 'sqlite' }
+      $sqlite.id | Should -Be 'SQLite.SQLite'
+      $sqlite.bin | Should -Be ''
+      $sqlite.enabled | Should -BeTrue
+    }
+
+    It 'the ngrok default has id Ngrok.Ngrok, no bin, and is enabled' {
+      $ngrok = $script:Parsed | Where-Object { $_.label -eq 'ngrok' }
+      $ngrok.id | Should -Be 'Ngrok.Ngrok'
+      $ngrok.bin | Should -Be ''
+      $ngrok.enabled | Should -BeTrue
+    }
+
     It 'produces the exact deterministic JSON reused as the managed-paths-parity fixture' {
       # This literal string is intentionally duplicated as the
       # DOTFILES_TEST_WINGET_USER_PATH_MANIFEST fixture in
@@ -91,7 +112,10 @@ Describe 'winget-user-path-packages.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       # hand-written one. Keep both in sync if this ever changes.
       $script:Render.Output | Should -Be (
         '[{"bin":"","enabled":true,"id":"twpayne.chezmoi","label":"chezmoi"},' +
-        '{"bin":"mise/bin","enabled":true,"id":"jdx.mise","label":"mise"}]'
+        '{"bin":"ffmpeg-*-full_build/bin","enabled":true,"id":"Gyan.FFmpeg","label":"ffmpeg"},' +
+        '{"bin":"mise/bin","enabled":true,"id":"jdx.mise","label":"mise"},' +
+        '{"bin":"","enabled":true,"id":"Ngrok.Ngrok","label":"ngrok"},' +
+        '{"bin":"","enabled":true,"id":"SQLite.SQLite","label":"sqlite"}]'
       )
     }
   }
