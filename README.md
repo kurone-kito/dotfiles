@@ -77,7 +77,8 @@ input line editing
   the upstream release list; re-run it if that happens)
 - [jq](https://jqlang.org/) — JSON processor
 - [mkcert](https://github.com/FiloSottile/mkcert) — local TLS
-  certificates
+  certificates (opt-in local CA setup on Windows; see
+  [docs/mkcert-local-ca.md](docs/mkcert-local-ca.md))
 - [tealdeer](https://github.com/tealdeer-rs/tealdeer) — `tldr` client
   (the installed command is `tldr`, not `tealdeer`)
 - [Terraform](https://www.terraform.io/) — infrastructure as code
