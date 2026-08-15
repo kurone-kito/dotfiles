@@ -84,6 +84,16 @@ if ($env:DOTFILES_TEST_MKCERT_JOB_INIT) {
 $job = Start-Job @jobParams
 $completed = Wait-Job -Job $job -Timeout $timeoutSeconds
 
+# Wait-Job can return $null exactly at the timeout boundary even when
+# the job finished right around the same instant -- treat a job whose
+# State has already reached Completed as a normal completion rather
+# than a timeout, to avoid a spurious false-failure report when
+# mkcert -install actually succeeded (or failed on its own) right at
+# the boundary.
+if (-not $completed -and $job.State -eq 'Completed') {
+  $completed = $true
+}
+
 if (-not $completed) {
   Stop-Job -Job $job
   # -Keep before Remove-Job: salvage whatever mkcert printed before it
