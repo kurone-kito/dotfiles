@@ -213,7 +213,7 @@ Describe 'ensure-zellij-web' {
     Mock Set-DotfilesZellijWebTailscaleServe { }
 
     Ensure-DotfilesZellijWeb | Should -BeFalse
-    Assert-MockCalled Set-DotfilesZellijWebTailscaleServe -Times 0
+    Should -Invoke Set-DotfilesZellijWebTailscaleServe -Times 0
   }
 
   It 'rejects tailscale publication when zellij bind is not loopback' {
