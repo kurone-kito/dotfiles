@@ -67,7 +67,19 @@ function Remove-DirectoryTreeSafely {
   # Remove-Item -Recurse) so every item is Test-ReparsePoint-checked
   # before it is ever descended into.
   if (Test-ReparsePoint -Path $Path) {
-    Remove-Item -LiteralPath $Path -Force
+    # Remove-Item -LiteralPath ... -Force throws a NullReferenceException
+    # on Windows PowerShell 5.1 (.NET Framework) when the reparse point is
+    # a directory symlink/junction whose target still exists -- a
+    # documented PS5.1 defect, empirically confirmed on real Windows
+    # PS5.1 CI (issue #268; the parallel dangling-target case, where the
+    # link's target is missing, does not trigger it). Unlink via the
+    # underlying .NET FileSystemInfo object's own Delete() instead: for a
+    # DirectoryInfo (a directory-type reparse point) this removes only
+    # the reparse-point entry itself -- non-recursive, never follows the
+    # link into its target -- identically on both PS5.1 and pwsh 7+; for
+    # a FileInfo (a file-type reparse point, e.g. a file symlink) it
+    # removes just that file entry the same way.
+    (Get-Item -LiteralPath $Path -Force).Delete()
     return
   }
   $children = Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue
