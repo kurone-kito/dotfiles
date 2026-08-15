@@ -1,0 +1,172 @@
+# Tests for the opt-in mkcert local CA setup chezmoi run_onchange
+# script (home/run_onchange_after_57-setup-mkcert-ca.ps1.tmpl).
+#
+# Unlike most run_onchange suites in this directory, this one renders
+# the real template via `chezmoi execute-template` (mirrors
+# winget-user-path-packages-tmpl.Tests.ps1 / signing-resolve.Tests.ps1)
+# instead of using a single static pre-rendered fixture: this script's
+# core branch (not just the `.chezmoi.os` guard) is baked in at
+# chezmoi-render time from `data.mkcert.install`, so a single static
+# fixture could only ever represent one of the two opt-in states. A
+# rendered-content diff between the two states is also the mechanical
+# proxy for "toggling the opt-in re-triggers run_onchange": chezmoi
+# keys run_onchange_* re-execution off the rendered script's content
+# hash, so a changed rendering is sufficient evidence.
+#
+# Runtime (Get-Command/mkcert) mocking runs inside a fully separate
+# child `pwsh -NoProfile` process (mirrors 55-setup-editors.Tests.ps1)
+# rather than shadowing Get-Command directly in this Pester session,
+# since Get-Command is used pervasively by Pester itself and by every
+# other suite file sharing the same `Invoke-Pester tests/powershell/`
+# run.
+#
+# Skipped entirely when chezmoi is not available on PATH (CI installs
+# it explicitly; see .github/workflows/test.yml).
+
+BeforeDiscovery {
+  $script:HasChezmoi = [bool] (Get-Command chezmoi -ErrorAction SilentlyContinue)
+}
+
+BeforeAll {
+  $script:RepoHome = Join-Path (Join-Path $PSScriptRoot '..') '..' | Join-Path -ChildPath 'home' | Resolve-Path
+  $script:TemplatePath = Join-Path $script:RepoHome 'run_onchange_after_57-setup-mkcert-ca.ps1.tmpl'
+
+  function Invoke-Render {
+    param(
+      [bool] $Install,
+      [string] $Os = 'windows'
+    )
+    $cfgObj = @{ data = @{ mkcert = @{ install = $Install } } }
+    $cfg = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-cfg-{0}.json" -f [guid]::NewGuid())
+    $dest = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-dest-{0}" -f [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    $json = $cfgObj | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($cfg, $json, [System.Text.UTF8Encoding]::new($false))
+    try {
+      $overrideData = '{{"chezmoi":{{"os":"{0}"}}}}' -f $Os
+      $output = & chezmoi execute-template --file $script:TemplatePath `
+        --config $cfg --config-format json `
+        --override-data $overrideData `
+        --source $script:RepoHome --destination $dest 2>&1
+      [pscustomobject]@{
+        ExitCode = $LASTEXITCODE
+        Output   = ($output -join "`n")
+      }
+    } finally {
+      Remove-Item -Path $cfg, $dest -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  function Invoke-RenderedScript {
+    param(
+      [string] $ScriptContent,
+      [string] $MockScript
+    )
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-run-{0}.ps1" -f [guid]::NewGuid())
+    [System.IO.File]::WriteAllText($tmp, $ScriptContent, [System.Text.UTF8Encoding]::new($false))
+    try {
+      $escapedPath = $tmp -replace "'", "''"
+      $command = "$MockScript`n& '$escapedPath'`nexit `$LASTEXITCODE"
+      $output = & pwsh -NoProfile -Command $command 2>&1
+      [pscustomobject]@{
+        ExitCode = $LASTEXITCODE
+        Output   = ($output | Out-String)
+      }
+    } finally {
+      Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
+
+  Context 'chezmoi template rendering' {
+    It 'renders nothing on non-Windows regardless of the opt-in value' {
+      (Invoke-Render -Install $false -Os 'linux').Output.Trim() | Should -BeNullOrEmpty
+      (Invoke-Render -Install $true -Os 'linux').Output.Trim() | Should -BeNullOrEmpty
+    }
+
+    It 'renders successfully on Windows for both opt-in values' {
+      (Invoke-Render -Install $false -Os 'windows').ExitCode | Should -Be 0
+      (Invoke-Render -Install $true -Os 'windows').ExitCode | Should -Be 0
+    }
+
+    It 'toggling the opt-in changes the rendered content (forces run_onchange re-execution)' {
+      $disabled = (Invoke-Render -Install $false -Os 'windows').Output
+      $enabled = (Invoke-Render -Install $true -Os 'windows').Output
+      $disabled | Should -Not -Be $enabled
+      $disabled | Should -Match 'mkcert install opt-in: false'
+      $enabled | Should -Match 'mkcert install opt-in: true'
+    }
+  }
+
+  Context 'runtime behavior when the opt-in is disabled' {
+    It 'prints a skip message, exits 0, and never touches mkcert' {
+      $rendered = (Invoke-Render -Install $false -Os 'windows').Output
+      $mock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  throw "Get-Command should not be called for '$Name' when the opt-in is disabled"
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match 'not opted in'
+    }
+  }
+
+  Context 'runtime behavior when the opt-in is enabled' {
+    It 'warns and exits non-zero when mkcert is not on PATH' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $mock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  $null
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result.ExitCode | Should -Not -Be 0
+      $result.Output | Should -Match 'not on PATH'
+    }
+
+    It 'invokes mkcert -install exactly once when mkcert is present, and reports success' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $mock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Source = 'mkcert' }
+  } else { $null }
+}
+$global:mkcertCallCount = 0
+function mkcert {
+  $global:mkcertCallCount++
+  Write-Host ('mkcert-invoked-with:' + ($args -join ' '))
+  $global:LASTEXITCODE = 0
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match 'mkcert-invoked-with:-install'
+      $result.Output | Should -Match 'installed/verified'
+    }
+
+    It 'propagates a non-zero mkcert -install exit code as a warning and matching non-zero exit' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $mock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Source = 'mkcert' }
+  } else { $null }
+}
+function mkcert {
+  $global:LASTEXITCODE = 7
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result.ExitCode | Should -Be 7
+      $result.Output | Should -Match 'exited with code 7'
+    }
+  }
+}

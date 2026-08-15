@@ -1,0 +1,49 @@
+# chezmoi:template:left-delimiter=<% right-delimiter=%>
+<%- if eq .chezmoi.os "windows" %>
+# Opt-in local development CA setup via mkcert -install.
+# Windows-only; no POSIX counterpart is shipped (see
+# docs/mkcert-local-ca.md for the rationale and background).
+# Runs only when data.mkcert.install is true (default: false).
+#
+# The opt-in flag is folded into this file's rendered content (see
+# below), so toggling it changes the script's content hash and forces
+# chezmoi's run_onchange re-execution regardless of any previously
+# recorded "done" state for this script.
+#
+# mkcert install opt-in: <% dig "mkcert" "install" false . %>
+
+<%- if dig "mkcert" "install" false . %>
+$mkcertInstallEnabled = $true
+<%- else %>
+$mkcertInstallEnabled = $false
+<%- end %>
+
+if (-not $mkcertInstallEnabled) {
+  Write-Host 'mkcert local CA setup is not opted in (data.mkcert.install = false); skipping.'
+  exit 0
+}
+
+$mkcertCmd = Get-Command mkcert -ErrorAction SilentlyContinue
+if (-not $mkcertCmd) {
+  # Do NOT exit 0 here: chezmoi records a run_onchange script as done
+  # only on success, so a non-zero exit ensures the next `chezmoi
+  # apply` retries once mkcert is actually resolvable on PATH (for
+  # example, if mkcert was just installed via mise earlier in this
+  # same apply run but PATH visibility has not yet propagated to this
+  # script's own process -- see docs/mkcert-local-ca.md).
+  Write-Warning 'mkcert is not on PATH; cannot set up the local development CA. Install mkcert (see docs/mkcert-local-ca.md) and re-run chezmoi apply.'
+  exit 1
+}
+
+# mkcert -install is idempotent upstream (a no-op once the CA is
+# already trusted), so no local state detection is implemented here --
+# it is simply invoked unconditionally whenever the opt-in is enabled.
+& $mkcertCmd.Source -install
+$mkcertExitCode = $LASTEXITCODE
+if ($mkcertExitCode -ne 0) {
+  Write-Warning "mkcert -install exited with code $mkcertExitCode."
+  exit $mkcertExitCode
+}
+
+Write-Host 'mkcert local development CA installed/verified.'
+<%- end %>
