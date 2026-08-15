@@ -176,6 +176,34 @@ function mkcert {
       $result.Output | Should -Match 'installed/verified'
     }
 
+    It 'surfaces mkcert''s own console output rather than discarding it' {
+      # Regression coverage: the job scriptblock merges native
+      # stdout/stderr via `2>&1`, so a real mkcert.exe's own text
+      # (e.g. "Created a new local CA") reaches Receive-Job as plain
+      # pipeline output distinct from Write-Host's Information stream
+      # -- assert on that distinct channel specifically so this test
+      # cannot pass merely because Write-Host output (used by the
+      # other mocks here) already flows through unaffected.
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $getCommandMock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
+  } else { $null }
+}
+'@
+      $mkcertJobInit = @'
+function mkcert {
+  'Created a new local CA (mock pipeline output)'
+  $global:LASTEXITCODE = 0
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock -MkcertJobInit $mkcertJobInit
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match 'Created a new local CA \(mock pipeline output\)'
+    }
+
     It 'propagates a non-zero mkcert -install exit code as a warning and matching non-zero exit' {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
@@ -204,6 +232,12 @@ function mkcert {
       # -- it bounds the wait and fails loudly instead. A short
       # DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS keeps this test
       # fast rather than waiting out the real 60s production default.
+      # 5s (not shorter) is deliberate: empirically, a background
+      # job's very first pipeline output can take a moment to
+      # transport back to the parent job object, and a 1-2s window
+      # flakes waiting on it even though the output was genuinely
+      # produced -- 5s reliably clears that startup latency without
+      # meaningfully slowing the suite.
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
@@ -213,16 +247,22 @@ function Get-Command {
   } else { $null }
 }
 '@
+      # Prints output before hanging, mirroring this PR's own CI probe
+      # finding: real mkcert.exe prints "Created a new local CA" and
+      # then hangs while registering it into the trust store. The
+      # script should salvage and surface that partial output.
       $mkcertJobInit = @'
 function mkcert {
-  Start-Sleep -Seconds 15
+  'Created a new local CA (mock partial output)'
+  Start-Sleep -Seconds 20
   $global:LASTEXITCODE = 0
 }
 '@
       $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock `
-        -MkcertJobInit $mkcertJobInit -TimeoutSeconds 2
+        -MkcertJobInit $mkcertJobInit -TimeoutSeconds 5
       $result.ExitCode | Should -Not -Be 0
-      $result.Output | Should -Match 'did not complete within 2s'
+      $result.Output | Should -Match 'Created a new local CA \(mock partial output\)'
+      $result.Output | Should -Match 'did not complete within 5s'
     }
 
     It 'falls back to Source when Get-Command reports no Path' {
