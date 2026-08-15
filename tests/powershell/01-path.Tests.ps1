@@ -328,7 +328,9 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       { . $script:Subject } | Should -Not -Throw
 
       $entries = @($env:PATH -split ';')
-      $entries | Should -Not -Contain $script:Paths.UnrelatedA
+      # Unrelated (unmanaged) entries are preserved unchanged; only the
+      # zero-match wildcard package must contribute nothing.
+      $entries | Should -Contain $script:Paths.UnrelatedA
       $entries | Where-Object { $_ -like "$pkgDir*" } | Should -BeNullOrEmpty
     }
 
