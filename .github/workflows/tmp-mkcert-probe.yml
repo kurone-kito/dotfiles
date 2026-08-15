@@ -1,0 +1,97 @@
+name: TEMP mkcert -install non-interactive probe
+# TEMPORARY workflow for issue #256 empirical evidence collection only.
+# Runs mkcert -install for real on a disposable windows-latest GitHub
+# Actions runner to observe whether it hangs, fails, or silently
+# succeeds when invoked non-interactively (a proxy for the SSH
+# non-interactive scenario the issue describes -- see
+# docs/mkcert-local-ca.md's non-interactive-sessions section for the
+# caveat and the findings this run produced).
+#
+# This workflow is removed again before the PR for #256 is finalized;
+# it never touches this repository's real trust store, only the
+# ephemeral CI runner's.
+on:
+  push:
+    branches:
+      - issue/256-feat-mkcert-ca
+permissions:
+  contents: read
+jobs:
+  probe:
+    name: Probe mkcert -install on windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install mkcert via choco
+        shell: pwsh
+        run: choco install mkcert -y --no-progress
+
+      - name: Snapshot CurrentUser\Root store before
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\CurrentUser\Root |
+            Select-Object Subject, Thumbprint |
+            Sort-Object Thumbprint |
+            Export-Csv -Path before-root-store.csv -NoTypeInformation
+
+      - name: Run mkcert -install with a bounded inner timeout
+        shell: pwsh
+        env:
+          TRUST_STORES: system
+        run: |
+          Write-Host "mkcert version: $(mkcert -version)"
+          Write-Host "CAROOT: $(mkcert -CAROOT)"
+
+          $job = Start-Job -ScriptBlock {
+            & mkcert -install 2>&1
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE }
+          }
+
+          $completed = Wait-Job -Job $job -Timeout 120
+          $elapsed = (Get-Date) - $job.PSBeginTime
+
+          if (-not $completed) {
+            Write-Host "RESULT: mkcert -install did NOT complete within 120s (still running) -- treating as HANG."
+            Write-Host "Elapsed before giving up: $elapsed"
+            Stop-Job -Job $job
+            $partialOutput = Receive-Job -Job $job -Keep
+            Write-Host "--- partial output/stream so far ---"
+            $partialOutput | Out-String | Write-Host
+            Remove-Job -Job $job -Force
+            "hang" | Out-File -FilePath result.txt
+          } else {
+            $output = Receive-Job -Job $job
+            Remove-Job -Job $job -Force
+            Write-Host "RESULT: mkcert -install completed in $elapsed"
+            Write-Host "--- full output/stream ---"
+            $output | Out-String | Write-Host
+            $exitLine = $output | Where-Object { $_.ExitCode -ne $null } | Select-Object -Last 1
+            $exitCode = if ($exitLine) { $exitLine.ExitCode } else { 'unknown' }
+            Write-Host "mkcert -install exit code: $exitCode"
+            "completed exit=$exitCode elapsed=$elapsed" | Out-File -FilePath result.txt
+          }
+
+      - name: Snapshot CurrentUser\Root store after
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\CurrentUser\Root |
+            Select-Object Subject, Thumbprint |
+            Sort-Object Thumbprint |
+            Export-Csv -Path after-root-store.csv -NoTypeInformation
+
+      - name: Report store diff and final result
+        shell: pwsh
+        run: |
+          Write-Host "=== result.txt ==="
+          Get-Content result.txt
+
+          $before = Import-Csv before-root-store.csv
+          $after = Import-Csv after-root-store.csv
+          $diff = Compare-Object -ReferenceObject $before -DifferenceObject $after -Property Subject, Thumbprint
+
+          Write-Host "=== CurrentUser\Root store diff (before vs after) ==="
+          if ($diff) {
+            $diff | Format-Table -AutoSize | Out-String | Write-Host
+          } else {
+            Write-Host "No difference detected in CurrentUser\Root store."
+          }
