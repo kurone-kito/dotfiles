@@ -21,9 +21,21 @@ BeforeAll {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     [System.IO.File]::WriteAllText($cfg, $ConfigJson, [System.Text.UTF8Encoding]::new($false))
     try {
-      $output = & chezmoi execute-template --file $TemplatePath `
-        --config $cfg --config-format json `
-        --source $script:RepoHome --destination $dest 2>&1
+      # Windows PowerShell 5.1 wraps a native process's redirected stderr
+      # lines as ErrorRecord objects; GitHub Actions' powershell shell
+      # steps default $ErrorActionPreference to Stop, which would otherwise
+      # turn chezmoi's expected non-zero-exit stderr output into a
+      # terminating error before ExitCode/Output can be captured (same
+      # fix as tests/powershell/secret-status.Tests.ps1's Invoke-Status
+      # and tests/powershell/secret-deploy-state.Tests.ps1's Invoke-Helper).
+      # Scoped to a child scriptblock so the override never leaks past
+      # this one native-command capture.
+      $output = & {
+        $ErrorActionPreference = 'Continue'
+        & chezmoi execute-template --file $TemplatePath `
+          --config $cfg --config-format json `
+          --source $script:RepoHome --destination $dest 2>&1
+      }
       [pscustomobject]@{
         ExitCode = $LASTEXITCODE
         Output   = ($output -join "`n")
@@ -161,7 +173,19 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
         # Same duplication risk as the global commit-ssh alias: a
         # stray outer "$@" would forward every argument twice, leaking
         # "-m" past the first "--" as a bogus pathspec.
-        $out = & git -C $scratch commit-ssh -m msg -- no-such-file.txt 2>&1
+        # Windows PowerShell 5.1 wraps git's redirected stderr lines as
+        # ErrorRecord objects; GitHub Actions' powershell shell steps
+        # default $ErrorActionPreference to Stop, which would otherwise
+        # turn this expected non-zero-exit stderr output into a
+        # terminating error before ExitCode/Output can be captured (same
+        # fix as Invoke-Render above and
+        # tests/powershell/secret-status.Tests.ps1's Invoke-Status).
+        # Scoped to a child scriptblock so the override never leaks past
+        # this one native-command capture.
+        $out = & {
+          $ErrorActionPreference = 'Continue'
+          & git -C $scratch commit-ssh -m msg -- no-such-file.txt 2>&1
+        }
         $LASTEXITCODE | Should -Not -Be 0
         ($out -join "`n") | Should -Match "pathspec 'no-such-file.txt' did not match"
         ($out -join "`n") | Should -Not -Match "pathspec '-m'"
