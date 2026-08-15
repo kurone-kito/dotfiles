@@ -18,7 +18,14 @@
 # rather than shadowing Get-Command directly in this Pester session,
 # since Get-Command is used pervasively by Pester itself and by every
 # other suite file sharing the same `Invoke-Pester tests/powershell/`
-# run.
+# run. The script itself invokes mkcert inside a background job (see
+# its own comments on why -- a bounded wait against a call that has
+# been observed to hang), and PowerShell jobs run in a fresh runspace
+# that does not inherit function definitions from the calling scope,
+# so the `mkcert` mock is injected via the script's
+# DOTFILES_TEST_MKCERT_JOB_INIT test seam (a path to a file the job
+# loads as its -InitializationScript) rather than as an ordinary
+# function definition in the wrapping child process.
 #
 # Skipped entirely when chezmoi is not available on PATH (CI installs
 # it explicitly; see .github/workflows/test.yml).
@@ -60,13 +67,30 @@ BeforeAll {
   function Invoke-RenderedScript {
     param(
       [string] $ScriptContent,
-      [string] $MockScript
+      [string] $GetCommandMock,
+      [string] $MkcertJobInit,
+      [int] $TimeoutSeconds
     )
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-run-{0}.ps1" -f [guid]::NewGuid())
     [System.IO.File]::WriteAllText($tmp, $ScriptContent, [System.Text.UTF8Encoding]::new($false))
+
+    $jobInitFile = $null
+    if ($MkcertJobInit) {
+      $jobInitFile = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-jobinit-{0}.ps1" -f [guid]::NewGuid())
+      [System.IO.File]::WriteAllText($jobInitFile, $MkcertJobInit, [System.Text.UTF8Encoding]::new($false))
+    }
+
     try {
       $escapedPath = $tmp -replace "'", "''"
-      $command = "$MockScript`n& '$escapedPath'`nexit `$LASTEXITCODE"
+      $envSetup = ''
+      if ($jobInitFile) {
+        $escapedInit = $jobInitFile -replace "'", "''"
+        $envSetup += "`$env:DOTFILES_TEST_MKCERT_JOB_INIT = '$escapedInit'`n"
+      }
+      if ($TimeoutSeconds) {
+        $envSetup += "`$env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS = '$TimeoutSeconds'`n"
+      }
+      $command = "$envSetup$GetCommandMock`n& '$escapedPath'`nexit `$LASTEXITCODE"
       $output = & pwsh -NoProfile -Command $command 2>&1
       [pscustomobject]@{
         ExitCode = $LASTEXITCODE
@@ -74,6 +98,7 @@ BeforeAll {
       }
     } finally {
       Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+      if ($jobInitFile) { Remove-Item -Path $jobInitFile -Force -ErrorAction SilentlyContinue }
     }
   }
 }
@@ -103,13 +128,13 @@ Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
   Context 'runtime behavior when the opt-in is disabled' {
     It 'prints a skip message, exits 0, and never touches mkcert' {
       $rendered = (Invoke-Render -Install $false -Os 'windows').Output
-      $mock = @'
+      $getCommandMock = @'
 function Get-Command {
   param([string]$Name, [string]$ErrorAction)
   throw "Get-Command should not be called for '$Name' when the opt-in is disabled"
 }
 '@
-      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock
       $result.ExitCode | Should -Be 0
       $result.Output | Should -Match 'not opted in'
     }
@@ -118,34 +143,34 @@ function Get-Command {
   Context 'runtime behavior when the opt-in is enabled' {
     It 'warns and exits non-zero when mkcert is not on PATH' {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
-      $mock = @'
+      $getCommandMock = @'
 function Get-Command {
   param([string]$Name, [string]$ErrorAction)
   $null
 }
 '@
-      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock
       $result.ExitCode | Should -Not -Be 0
       $result.Output | Should -Match 'not on PATH'
     }
 
     It 'invokes mkcert -install exactly once when mkcert is present, and reports success' {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
-      $mock = @'
+      $getCommandMock = @'
 function Get-Command {
   param([string]$Name, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
-    [pscustomobject]@{ Name = 'mkcert'; Source = 'mkcert' }
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
 }
-$global:mkcertCallCount = 0
+'@
+      $mkcertJobInit = @'
 function mkcert {
-  $global:mkcertCallCount++
   Write-Host ('mkcert-invoked-with:' + ($args -join ' '))
   $global:LASTEXITCODE = 0
 }
 '@
-      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock -MkcertJobInit $mkcertJobInit
       $result.ExitCode | Should -Be 0
       $result.Output | Should -Match 'mkcert-invoked-with:-install'
       $result.Output | Should -Match 'installed/verified'
@@ -153,20 +178,97 @@ function mkcert {
 
     It 'propagates a non-zero mkcert -install exit code as a warning and matching non-zero exit' {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
-      $mock = @'
+      $getCommandMock = @'
 function Get-Command {
   param([string]$Name, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
-    [pscustomobject]@{ Name = 'mkcert'; Source = 'mkcert' }
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
 }
+'@
+      $mkcertJobInit = @'
 function mkcert {
   $global:LASTEXITCODE = 7
 }
 '@
-      $result = Invoke-RenderedScript -ScriptContent $rendered -MockScript $mock
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock -MkcertJobInit $mkcertJobInit
       $result.ExitCode | Should -Be 7
       $result.Output | Should -Match 'exited with code 7'
+    }
+
+    It 'warns and exits non-zero when mkcert -install does not complete within the bounded timeout' {
+      # Regression coverage for the empirically observed hang (see
+      # docs/mkcert-local-ca.md): mkcert -install can block
+      # indefinitely on an unanswered trust-store confirmation dialog
+      # in a non-interactive session. The script must not hang forever
+      # -- it bounds the wait and fails loudly instead. A short
+      # DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS keeps this test
+      # fast rather than waiting out the real 60s production default.
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $getCommandMock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
+  } else { $null }
+}
+'@
+      $mkcertJobInit = @'
+function mkcert {
+  Start-Sleep -Seconds 15
+  $global:LASTEXITCODE = 0
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock `
+        -MkcertJobInit $mkcertJobInit -TimeoutSeconds 2
+      $result.ExitCode | Should -Not -Be 0
+      $result.Output | Should -Match 'did not complete within 2s'
+    }
+
+    It 'falls back to Source when Get-Command reports no Path' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $getCommandMock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Path = $null; Source = 'mkcert' }
+  } else { $null }
+}
+'@
+      $mkcertJobInit = @'
+function mkcert {
+  Write-Host 'source-fallback-used'
+  $global:LASTEXITCODE = 0
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock -MkcertJobInit $mkcertJobInit
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match 'source-fallback-used'
+    }
+
+    It 'prefers Path over Source when Get-Command reports both' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $getCommandMock = @'
+function Get-Command {
+  param([string]$Name, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert-via-path'; Source = 'mkcert-via-source' }
+  } else { $null }
+}
+'@
+      $mkcertJobInit = @'
+function mkcert-via-path {
+  Write-Host 'path-preferred'
+  $global:LASTEXITCODE = 0
+}
+function mkcert-via-source {
+  throw 'Source should not be invoked when Path is populated'
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock -MkcertJobInit $mkcertJobInit
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match 'path-preferred'
+      $result.Output | Should -Not -Match 'Source should not be invoked'
     }
   }
 }

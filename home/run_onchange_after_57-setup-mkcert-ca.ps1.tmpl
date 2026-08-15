@@ -35,11 +35,61 @@ if (-not $mkcertCmd) {
   exit 1
 }
 
+# Prefer the fully resolved Path over Source (mirrors the curl.exe
+# Path/Source fallback already used in
+# run_onchange_after_55-setup-editors.ps1.tmpl) for a more robust
+# invocation target across PowerShell versions/CommandTypes.
+$mkcertPath = if ($mkcertCmd.Path) { $mkcertCmd.Path } else { $mkcertCmd.Source }
+
 # mkcert -install is idempotent upstream (a no-op once the CA is
 # already trusted), so no local state detection is implemented here --
 # it is simply invoked unconditionally whenever the opt-in is enabled.
-& $mkcertCmd.Source -install
-$mkcertExitCode = $LASTEXITCODE
+#
+# Bounded timeout: mkcert -install has been empirically observed (see
+# docs/mkcert-local-ca.md) to hang indefinitely in a non-interactive
+# Windows session, waiting on a trust-store confirmation dialog that
+# never receives a response. Run it as a background job with a bounded
+# wait so a non-interactive `chezmoi apply` (e.g. over SSH) fails
+# loudly and retries on the next apply instead of hanging forever.
+$timeoutSeconds = if ($env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS) {
+  [int]$env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS
+} else {
+  60
+}
+
+$jobParams = @{
+  ScriptBlock  = {
+    param($path)
+    & $path -install 2>&1
+    [pscustomobject]@{ ExitCode = $LASTEXITCODE }
+  }
+  ArgumentList = $mkcertPath
+}
+# Test-only seam: background jobs run in a fresh runspace and do not
+# inherit function definitions from the calling scope, so Pester
+# coverage injects a mock `mkcert` function via this initialization
+# script. Never set outside tests/powershell/57-setup-mkcert-ca.Tests.ps1.
+if ($env:DOTFILES_TEST_MKCERT_JOB_INIT) {
+  $jobParams.InitializationScript = [scriptblock]::Create(
+    (Get-Content -Raw -LiteralPath $env:DOTFILES_TEST_MKCERT_JOB_INIT)
+  )
+}
+
+$job = Start-Job @jobParams
+$completed = Wait-Job -Job $job -Timeout $timeoutSeconds
+
+if (-not $completed) {
+  Stop-Job -Job $job
+  Remove-Job -Job $job -Force
+  Write-Warning "mkcert -install did not complete within ${timeoutSeconds}s. On Windows, registering a certificate into the CurrentUser trust store can prompt a confirmation dialog that blocks indefinitely in a non-interactive session (see docs/mkcert-local-ca.md). Re-run chezmoi apply from an interactive session where you can respond to any prompt, or run 'mkcert -install' manually first."
+  exit 1
+}
+
+$jobOutput = Receive-Job -Job $job
+Remove-Job -Job $job -Force
+$exitLine = $jobOutput | Where-Object { $null -ne $_.ExitCode } | Select-Object -Last 1
+$mkcertExitCode = if ($exitLine) { $exitLine.ExitCode } else { 1 }
+
 if ($mkcertExitCode -ne 0) {
   Write-Warning "mkcert -install exited with code $mkcertExitCode."
   exit $mkcertExitCode

@@ -60,9 +60,12 @@ On each `chezmoi apply`:
    non-zero exit here guarantees the **next** `chezmoi apply` retries
    once `mkcert` actually becomes resolvable, instead of the script
    being silently treated as permanently complete.
-3. Otherwise it runs `mkcert -install` unconditionally. Upstream mkcert
-   already treats this as a no-op once the CA is trusted, so this
-   script does not implement its own trust-state detection.
+3. Otherwise it runs `mkcert -install` unconditionally, bounded by a
+   60-second timeout (see
+   [Non-interactive sessions](#non-interactive-sessions-eg-inbound-ssh)
+   below for why). Upstream mkcert already treats a call to `-install`
+   as a no-op once the CA is trusted, so this script does not
+   implement its own trust-state detection beyond that bound.
 
 The opt-in flag itself is folded into the script's rendered content
 (and therefore into chezmoi's `run_onchange` content hash), so flipping
@@ -142,18 +145,26 @@ actually registered into the trust store. This matches a UI
 confirmation dialog blocking on a call that never receives a response,
 rather than mkcert failing fast or succeeding silently.
 
-**What this means for `chezmoi apply` over SSH**: if you enable
-`data.mkcert.install` and then run `chezmoi apply` in a non-interactive
-context (an inbound SSH session with nobody available to click through
-a dialog, a scheduled task, etc.), expect the apply to hang at this
-script rather than completing or failing quickly. Run the initial
-opt-in `chezmoi apply` from a local or RDP session where you can
-dismiss any confirmation dialog, the same recommendation
-`docs/winget-user-path.md` already makes for chezmoi's own
-WinGet-symlink SSH bootstrapping gap. Once the CA is registered, later
-`chezmoi apply` runs over SSH are unaffected (`mkcert -install` is
-then a fast no-op, since the CA is already trusted), and toggling the
-opt-in back off does not need this again.
+**What this means for `chezmoi apply` over SSH**: because of this
+finding, the script runs `mkcert -install` inside a background job
+bounded by a 60-second `Wait-Job` timeout rather than calling it
+directly and unbounded. If it does not complete in time, the job is
+stopped, a warning explains what likely happened (an unanswered
+trust-store confirmation dialog) and recommends completing the opt-in
+from an interactive session instead, and the script exits non-zero —
+the same non-zero-exit-and-retry mechanism documented above, so the
+next `chezmoi apply` tries again rather than the run being silently
+recorded as done. In short: a non-interactive `chezmoi apply` (an
+inbound SSH session with nobody available to click through a dialog,
+a scheduled task, etc.) fails loudly after at most 60 seconds instead
+of hanging forever. Run the initial opt-in `chezmoi apply` from a
+local or RDP session where you can dismiss any confirmation dialog —
+the same recommendation `docs/winget-user-path.md` already makes for
+chezmoi's own WinGet-symlink SSH bootstrapping gap. Once the CA is
+registered, later `chezmoi apply` runs over SSH are unaffected
+(`mkcert -install` is then a fast no-op well within the timeout, since
+the CA is already trusted), and toggling the opt-in back off does not
+need this again.
 
 **Caveat on this evidence's fidelity.** A GitHub Actions
 `windows-latest` runner executes non-interactively (no human present),
