@@ -28,10 +28,14 @@ BeforeAll {
       # terminating error before ExitCode/Output can be captured (same
       # fix as tests/powershell/secret-status.Tests.ps1's Invoke-Status
       # and tests/powershell/secret-deploy-state.Tests.ps1's Invoke-Helper).
-      $ErrorActionPreference = 'Continue'
-      $output = & chezmoi execute-template --file $TemplatePath `
-        --config $cfg --config-format json `
-        --source $script:RepoHome --destination $dest 2>&1
+      # Scoped to a child scriptblock so the override never leaks past
+      # this one native-command capture.
+      $output = & {
+        $ErrorActionPreference = 'Continue'
+        & chezmoi execute-template --file $TemplatePath `
+          --config $cfg --config-format json `
+          --source $script:RepoHome --destination $dest 2>&1
+      }
       [pscustomobject]@{
         ExitCode = $LASTEXITCODE
         Output   = ($output -join "`n")
@@ -176,8 +180,12 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
         # terminating error before ExitCode/Output can be captured (same
         # fix as Invoke-Render above and
         # tests/powershell/secret-status.Tests.ps1's Invoke-Status).
-        $ErrorActionPreference = 'Continue'
-        $out = & git -C $scratch commit-ssh -m msg -- no-such-file.txt 2>&1
+        # Scoped to a child scriptblock so the override never leaks past
+        # this one native-command capture.
+        $out = & {
+          $ErrorActionPreference = 'Continue'
+          & git -C $scratch commit-ssh -m msg -- no-such-file.txt 2>&1
+        }
         $LASTEXITCODE | Should -Not -Be 0
         ($out -join "`n") | Should -Match "pathspec 'no-such-file.txt' did not match"
         ($out -join "`n") | Should -Not -Match "pathspec '-m'"
