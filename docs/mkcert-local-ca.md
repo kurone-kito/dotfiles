@@ -123,8 +123,51 @@ only) between machines, point `$CAROOT` at it, and run `mkcert
 
 ## Non-interactive sessions (e.g. inbound SSH)
 
-<!-- FINDINGS: filled in after the CI empirical check; see the PR for
-     the workflow run this section's conclusion is based on. -->
+The community reports referenced in issue #256 — that `mkcert -install`
+can trigger a Windows confirmation dialog when adding a certificate to
+the `CurrentUser\Root` store, and that this hangs or fails in a
+non-interactive context — were verified empirically as part of this
+change, using a disposable `windows-latest` GitHub Actions runner (see
+the issue/PR history for the exact workflow run; the probe itself was
+removed from the repository afterward since it only existed to gather
+this evidence).
+
+**Observed result: `mkcert -install` hangs.** It printed `Created a new
+local CA` (the CA key material was generated under `$CAROOT`), then
+did **not** return within a 120-second bounded wait — the process was
+still running when the probe gave up and force-terminated it. A
+`Cert:\CurrentUser\Root` snapshot taken immediately before and after
+the attempt showed **no difference**: the certificate was never
+actually registered into the trust store. This matches a UI
+confirmation dialog blocking on a call that never receives a response,
+rather than mkcert failing fast or succeeding silently.
+
+**What this means for `chezmoi apply` over SSH**: if you enable
+`data.mkcert.install` and then run `chezmoi apply` in a non-interactive
+context (an inbound SSH session with nobody available to click through
+a dialog, a scheduled task, etc.), expect the apply to hang at this
+script rather than completing or failing quickly. Run the initial
+opt-in `chezmoi apply` from a local or RDP session where you can
+dismiss any confirmation dialog, the same recommendation
+`docs/winget-user-path.md` already makes for chezmoi's own
+WinGet-symlink SSH bootstrapping gap. Once the CA is registered, later
+`chezmoi apply` runs over SSH are unaffected (`mkcert -install` is
+then a fast no-op, since the CA is already trusted), and toggling the
+opt-in back off does not need this again.
+
+**Caveat on this evidence's fidelity.** A GitHub Actions
+`windows-latest` runner executes non-interactively (no human present),
+but it is still a real, fully-provisioned Windows Server instance with
+an active desktop session behind the automation — not literally the
+same environment as an inbound SSH session, which may have no desktop
+session (`WinSta0`) attached at all. The observed hang is strong,
+directly-reproduced evidence that this operation blocks on *something*
+when unattended, consistent with the community reports this issue
+cites, but it is not a byte-for-byte substitute for testing over a
+real interactive-RDP-with-logged-in-user-vs-plain-SSH comparison. If
+you observe different behavior (a fast failure instead of a hang, for
+example) in your own SSH session, please report it so this note can be
+refined.
 
 ## Scope
 
