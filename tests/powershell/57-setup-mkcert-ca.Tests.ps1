@@ -49,18 +49,26 @@ BeforeAll {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     $json = $cfgObj | ConvertTo-Json -Depth 5
     [System.IO.File]::WriteAllText($cfg, $json, [System.Text.UTF8Encoding]::new($false))
+    # --override-data-file rather than the inline --override-data
+    # string: Windows PowerShell 5.1's native-command argument passing
+    # mangles embedded double-quotes in a `{"chezmoi":{"os":"..."}}`
+    # style argument (stripping them and producing invalid JSON),
+    # unlike PowerShell 7+ -- passing a bare file path instead avoids
+    # that native-argv-quoting difference entirely.
+    $overrideDataFile = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-override-{0}.json" -f [guid]::NewGuid())
+    $overrideJson = "{`"chezmoi`":{`"os`":`"$Os`"}}"
+    [System.IO.File]::WriteAllText($overrideDataFile, $overrideJson, [System.Text.UTF8Encoding]::new($false))
     try {
-      $overrideData = '{{"chezmoi":{{"os":"{0}"}}}}' -f $Os
       $output = & chezmoi execute-template --file $script:TemplatePath `
         --config $cfg --config-format json `
-        --override-data $overrideData `
+        --override-data-file $overrideDataFile `
         --source $script:RepoHome --destination $dest 2>&1
       [pscustomobject]@{
         ExitCode = $LASTEXITCODE
         Output   = ($output -join "`n")
       }
     } finally {
-      Remove-Item -Path $cfg, $dest -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path $cfg, $dest, $overrideDataFile -Recurse -Force -ErrorAction SilentlyContinue
     }
   }
 
