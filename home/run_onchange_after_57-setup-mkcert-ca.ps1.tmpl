@@ -1,0 +1,131 @@
+# chezmoi:template:left-delimiter=<% right-delimiter=%>
+<%- if eq .chezmoi.os "windows" %>
+# Opt-in local development CA setup via mkcert -install.
+# Windows-only; no POSIX counterpart is shipped (see
+# docs/mkcert-local-ca.md for the rationale and background).
+# Runs only when data.mkcert.install is true (default: false).
+#
+# The opt-in flag is folded into this file's rendered content (see
+# below), so toggling it changes the script's content hash and forces
+# chezmoi's run_onchange re-execution regardless of any previously
+# recorded "done" state for this script.
+#
+# mkcert install opt-in: <% dig "mkcert" "install" false . %>
+
+<%- if dig "mkcert" "install" false . %>
+$mkcertInstallEnabled = $true
+<%- else %>
+$mkcertInstallEnabled = $false
+<%- end %>
+
+if (-not $mkcertInstallEnabled) {
+  Write-Host 'mkcert local CA setup is not opted in (data.mkcert.install = false); skipping.'
+  exit 0
+}
+
+# -CommandType Application (mirrors curl.exe in
+# run_onchange_after_55-setup-editors.ps1.tmpl) resolves an external
+# executable specifically, not an alias or function that might also
+# be named "mkcert" -- important here because the resolved path is
+# later invoked via `& $path -install` inside a background job, where
+# an alias/function match would not be a genuinely invokable path.
+$mkcertCmd = Get-Command mkcert -CommandType Application -ErrorAction SilentlyContinue
+if (-not $mkcertCmd) {
+  # Do NOT exit 0 here: chezmoi records a run_onchange script as done
+  # only on success, so a non-zero exit ensures the next `chezmoi
+  # apply` retries once mkcert is actually resolvable on PATH (for
+  # example, if mkcert was just installed via mise earlier in this
+  # same apply run but PATH visibility has not yet propagated to this
+  # script's own process -- see docs/mkcert-local-ca.md).
+  Write-Warning 'mkcert is not on PATH; cannot set up the local development CA. Install mkcert (see docs/mkcert-local-ca.md) and re-run chezmoi apply.'
+  exit 1
+}
+
+# Prefer the fully resolved Path over Source (mirrors the curl.exe
+# Path/Source fallback already used in
+# run_onchange_after_55-setup-editors.ps1.tmpl) for a more robust
+# invocation target across PowerShell versions/CommandTypes.
+$mkcertPath = if ($mkcertCmd.Path) { $mkcertCmd.Path } else { $mkcertCmd.Source }
+
+# mkcert -install is idempotent upstream (a no-op once the CA is
+# already trusted), so no local state detection is implemented here --
+# it is simply invoked unconditionally whenever the opt-in is enabled.
+#
+# Bounded timeout: mkcert -install has been empirically observed (see
+# docs/mkcert-local-ca.md) to hang indefinitely in a non-interactive
+# Windows session, waiting on a trust-store confirmation dialog that
+# never receives a response. Run it as a background job with a bounded
+# wait so a non-interactive `chezmoi apply` (e.g. over SSH) fails
+# loudly and retries on the next apply instead of hanging forever.
+$timeoutSeconds = if ($env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS) {
+  [int]$env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS
+} else {
+  60
+}
+
+$jobParams = @{
+  ScriptBlock  = {
+    param($path)
+    & $path -install 2>&1
+    [pscustomobject]@{ ExitCode = $LASTEXITCODE }
+  }
+  ArgumentList = $mkcertPath
+}
+# Test-only seam: background jobs run in a fresh runspace and do not
+# inherit function definitions from the calling scope, so Pester
+# coverage injects a mock `mkcert` function via this initialization
+# script. Never set outside tests/powershell/57-setup-mkcert-ca.Tests.ps1.
+if ($env:DOTFILES_TEST_MKCERT_JOB_INIT) {
+  $jobParams.InitializationScript = [scriptblock]::Create(
+    (Get-Content -Raw -LiteralPath $env:DOTFILES_TEST_MKCERT_JOB_INIT)
+  )
+}
+
+$job = Start-Job @jobParams
+$completed = Wait-Job -Job $job -Timeout $timeoutSeconds
+
+# Wait-Job can return $null exactly at the timeout boundary even when
+# the job finished right around the same instant -- treat a job whose
+# State has already reached Completed as a normal completion rather
+# than a timeout, to avoid a spurious false-failure report when
+# mkcert -install actually succeeded (or failed on its own) right at
+# the boundary.
+if (-not $completed -and $job.State -eq 'Completed') {
+  $completed = $true
+}
+
+if (-not $completed) {
+  Stop-Job -Job $job
+  # -Keep before Remove-Job: salvage whatever mkcert printed before it
+  # was cut off, for the same diagnostic-value reason as below.
+  $partialOutput = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue
+  Remove-Job -Job $job -Force
+  $partialText = ($partialOutput | Where-Object { $null -eq $_.ExitCode } | Out-String).TrimEnd()
+  if ($partialText) {
+    Write-Host $partialText
+  }
+  Write-Warning "mkcert -install did not complete within ${timeoutSeconds}s. On Windows, registering a certificate into the CurrentUser trust store can prompt a confirmation dialog that blocks indefinitely in a non-interactive session (see docs/mkcert-local-ca.md). Re-run chezmoi apply from an interactive session where you can respond to any prompt, or run 'mkcert -install' manually first."
+  exit 1
+}
+
+$jobOutput = Receive-Job -Job $job
+Remove-Job -Job $job -Force
+$exitLine = $jobOutput | Where-Object { $null -ne $_.ExitCode } | Select-Object -Last 1
+$mkcertExitCode = if ($exitLine) { $exitLine.ExitCode } else { 1 }
+# Surface mkcert's own console output (merged via 2>&1 inside the job,
+# so Receive-Job returns it as plain text rather than streaming it
+# live) -- discarding it would lose exactly the kind of diagnostic
+# detail useful for troubleshooting the trust-store-dialog scenario
+# this script exists to handle.
+$mkcertOutputText = ($jobOutput | Where-Object { $null -eq $_.ExitCode } | Out-String).TrimEnd()
+if ($mkcertOutputText) {
+  Write-Host $mkcertOutputText
+}
+
+if ($mkcertExitCode -ne 0) {
+  Write-Warning "mkcert -install exited with code $mkcertExitCode."
+  exit $mkcertExitCode
+}
+
+Write-Host 'mkcert local development CA installed/verified.'
+<%- end %>

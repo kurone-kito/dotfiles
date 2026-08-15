@@ -116,6 +116,12 @@ clientAliveInterval = {{ dig "clientAliveInterval" 300 $sshServer }}
 clientAliveCountMax = {{ dig "clientAliveCountMax" 5 $sshServer }}
 {{- end }}
 {{- end }}
+{{- $mkcertInstall := dig "mkcert" "install" false . }}
+{{- if $mkcertInstall }}
+
+[data.mkcert]
+install = {{ $mkcertInstall }}
+{{- end }}
 {{- range $key, $entry := (dig "env" "deploy" dict .) }}
 
 [data.env.deploy."{{ $key }}"]
@@ -228,6 +234,15 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #
 # The generated file is at ~/.config/ssh/sshd_config.
 # See docs/sshd-config-setup.md for deployment instructions.
+#
+# To opt in to local mkcert CA setup on Windows (default: not
+# installed):
+#
+#   [data.mkcert]
+#   install = true  # runs `mkcert -install` on Windows via chezmoi apply
+#
+# See docs/mkcert-local-ca.md for details, including $CAROOT /
+# TRUST_STORES handling and non-interactive-session caveats.
 #
 # To deploy .env files from the secret manager into cloned projects:
 #
