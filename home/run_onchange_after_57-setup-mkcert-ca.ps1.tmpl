@@ -23,7 +23,13 @@ if (-not $mkcertInstallEnabled) {
   exit 0
 }
 
-$mkcertCmd = Get-Command mkcert -ErrorAction SilentlyContinue
+# -CommandType Application (mirrors curl.exe in
+# run_onchange_after_55-setup-editors.ps1.tmpl) resolves an external
+# executable specifically, not an alias or function that might also
+# be named "mkcert" -- important here because the resolved path is
+# later invoked via `& $path -install` inside a background job, where
+# an alias/function match would not be a genuinely invokable path.
+$mkcertCmd = Get-Command mkcert -CommandType Application -ErrorAction SilentlyContinue
 if (-not $mkcertCmd) {
   # Do NOT exit 0 here: chezmoi records a run_onchange script as done
   # only on success, so a non-zero exit ensures the next `chezmoi

@@ -45,10 +45,13 @@ to run manually if desired: `mkcert -uninstall`).
 ## What the script does
 
 `home/run_onchange_after_57-setup-mkcert-ca.ps1.tmpl` is a
-**Windows-only** chezmoi `run_onchange` script (guarded by `{{- if eq
-.chezmoi.os "windows" }}`, mirroring
-`run_onchange_after_35-register-path.ps1.tmpl`'s OS guard). There is no
-POSIX counterpart.
+**Windows-only** chezmoi `run_onchange` script (guarded by `<%- if eq
+.chezmoi.os "windows" %>`, mirroring
+`run_onchange_after_35-register-path.ps1.tmpl`'s OS guard — both files
+declare the same custom `<% %>` template delimiters via a
+`chezmoi:template:left-delimiter=<% right-delimiter=%>` header comment,
+rather than go-template's default `{{ }}`). There is no POSIX
+counterpart.
 
 On each `chezmoi apply`:
 

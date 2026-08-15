@@ -138,7 +138,7 @@ Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
       $rendered = (Invoke-Render -Install $false -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   throw "Get-Command should not be called for '$Name' when the opt-in is disabled"
 }
 '@
@@ -153,7 +153,7 @@ function Get-Command {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   $null
 }
 '@
@@ -166,7 +166,7 @@ function Get-Command {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
@@ -195,7 +195,7 @@ function mkcert {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
@@ -216,7 +216,7 @@ function mkcert {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
@@ -249,7 +249,7 @@ function mkcert {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
   } else { $null }
@@ -277,7 +277,7 @@ function mkcert {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = $null; Source = 'mkcert' }
   } else { $null }
@@ -298,7 +298,7 @@ function mkcert {
       $rendered = (Invoke-Render -Install $true -Os 'windows').Output
       $getCommandMock = @'
 function Get-Command {
-  param([string]$Name, [string]$ErrorAction)
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
   if ($Name -eq 'mkcert') {
     [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert-via-path'; Source = 'mkcert-via-source' }
   } else { $null }
