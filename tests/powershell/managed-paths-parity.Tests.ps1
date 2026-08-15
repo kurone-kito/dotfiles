@@ -106,6 +106,7 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Resolve-WingetUserPathBinDirectory -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
     Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
     Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
