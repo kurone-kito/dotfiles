@@ -848,6 +848,46 @@ Describe '90-reconcile-claude-code' {
       $strayShim | Should -Exist
     }
 
+    It 'does not follow a nested reparse point when recursively removing the stray package' {
+      # Regression test: a naive Remove-Item -Recurse on the (real)
+      # $strayDir could still traverse a reparse point nested a few
+      # levels inside it and delete the link target's contents, even
+      # though $strayDir itself is not a reparse point. Create a nested
+      # symlink inside the stray tree pointing at a "canary" directory
+      # entirely outside it, and confirm the canary survives untouched.
+      # This is the Windows-layout mirror of the equivalent test in the
+      # POSIX-layout Context above; unlike the "detects and removes a
+      # dangling symlink" test elsewhere in this Context,
+      # Remove-DirectoryTreeSafely's reparse-point detection (Get-Item
+      # -Force plus the ReparsePoint attribute flag) is runtime-agnostic
+      # and behaves identically on PS5.1 and pwsh 7+, so this test is
+      # authoritative on both -- it is not gated to one runtime.
+      #
+      # Creating a symlink can require elevated privileges or Developer
+      # Mode on Windows; skip gracefully rather than fail the suite on
+      # an environment limitation unrelated to the script under test.
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $strayDir = Write-TestStrayCopy
+      $canaryDir = Join-Path $TestDrive ("canary-{0}" -f [guid]::NewGuid())
+      New-Item -ItemType Directory -Path $canaryDir -Force | Out-Null
+      $canaryFile = Join-Path $canaryDir 'canary.txt'
+      [System.IO.File]::WriteAllText($canaryFile, 'do-not-delete', [System.Text.UTF8Encoding]::new($false))
+      $nestedLinkPath = Join-Path $strayDir 'nested-link'
+      try {
+        New-Item -ItemType SymbolicLink -Path $nestedLinkPath -Target $canaryDir -ErrorAction Stop | Out-Null
+      } catch {
+        Set-ItResult -Skipped -Because "symlink creation not permitted in this environment: $_"
+        return
+      }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      $strayDir | Should -Not -Exist
+      $canaryFile | Should -Exist
+      (Get-Content -LiteralPath $canaryFile -Raw) | Should -Match 'do-not-delete'
+    }
+
     It 'skips the stray-copy check (fail-closed) when the mise-managed npm global prefix is not resolvable' {
       # Regression test for deriving the stray-copy path from the
       # resolved npm prefix rather than assuming it equals $NodeDir:
