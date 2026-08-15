@@ -12,6 +12,10 @@ setup() {
   SCRIPT_PATH="$BATS_TEST_DIRNAME/../../home/dot_config/shell/conf.d/60-mise.sh"
   _ORIG_PATH="$PATH"
   export MISE_MOCK_LOG="$BATS_TEST_TMPDIR/mise-calls.log"
+  # Isolate the WSL-detection glob from the real host's Windows-side
+  # filesystem (e.g. a real /mnt/c/Users/*/.mise on a WSL host running
+  # this suite) by pointing it at a guaranteed-nonexistent directory.
+  export DOTFILES_MISE_WSL_USERS_ROOT="$BATS_TEST_TMPDIR/no-windows-users"
 }
 
 teardown() {
@@ -61,6 +65,45 @@ MOCK
   _source_script
 
   assert_equal "$MISE_TRUSTED_CONFIG_PATHS" "$HOME/.mise:$HOME/.config/mise"
+}
+
+# ---------------------------------------------------------------------------
+# WSL: overridable Windows-side glob root
+# ---------------------------------------------------------------------------
+
+_require_wsl() {
+  { [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; } \
+    || skip "not running on a WSL host"
+}
+
+@test "WSL: includes Windows-side mise directories under the overridable root" {
+  _require_wsl
+  _setup_mock_mise
+  mkdir -p "$BATS_TEST_TMPDIR/winusers/alice/.mise" \
+    "$BATS_TEST_TMPDIR/winusers/bob/.config/mise"
+  export DOTFILES_MISE_WSL_USERS_ROOT="$BATS_TEST_TMPDIR/winusers"
+
+  _source_script
+
+  assert_equal "$MISE_TRUSTED_CONFIG_PATHS" \
+    "$HOME/.mise:$HOME/.config/mise:$BATS_TEST_TMPDIR/winusers/alice/.mise:$BATS_TEST_TMPDIR/winusers/bob/.config/mise"
+}
+
+@test "WSL: trusts Windows-side mise config files under the overridable root" {
+  _require_wsl
+  _setup_mock_mise
+  mkdir -p "$BATS_TEST_TMPDIR/winusers/alice/.mise" \
+    "$BATS_TEST_TMPDIR/winusers/bob/.config/mise"
+  touch "$BATS_TEST_TMPDIR/winusers/alice/.mise/config.toml" \
+    "$BATS_TEST_TMPDIR/winusers/bob/.config/mise/config.toml"
+  export DOTFILES_MISE_WSL_USERS_ROOT="$BATS_TEST_TMPDIR/winusers"
+
+  _source_script
+
+  assert_file_exists "$MISE_MOCK_LOG"
+  run grep -c "trust" "$MISE_MOCK_LOG"
+  assert_success
+  assert_output "2"
 }
 
 # ---------------------------------------------------------------------------
@@ -188,6 +231,7 @@ MOCK
 
   assert [ -z "${_mise_trusted+x}" ]
   assert [ -z "${_mise_dir+x}" ]
+  assert [ -z "${_mise_win_users+x}" ]
   assert [ -z "${_mise_cfg+x}" ]
   assert [ -z "${_ghq_trust_file+x}" ]
   assert [ -z "${_ghq_root+x}" ]
