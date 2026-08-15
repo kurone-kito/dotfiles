@@ -186,7 +186,7 @@ Describe '00-env' {
     Register-DotfilesPSReadLineOnIdleAction -Name 'options' -Action { $true }
     Register-DotfilesPSReadLineOnIdleAction -Name 'psfzf-chords' -Action { $true }
 
-    Assert-MockCalled Register-EngineEvent -Times 1
+    Should -Invoke Register-EngineEvent -Times 1
     $global:DotfilesPSReadLineOnIdleRegistered | Should -BeTrue
     $global:DotfilesPSReadLineOnIdleActions.Keys |
       Should -Be @('options', 'psfzf-chords')
