@@ -174,7 +174,7 @@ MOCK
 @test "no longer references the deprecated pstop ubi identifier" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep '^"ubi:marlocarlo/pstop"' "$config"
+  run grep -q '"ubi:marlocarlo/pstop"' "$config"
   assert_failure 1
 }
 
