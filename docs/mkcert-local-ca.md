@@ -157,8 +157,16 @@ next `chezmoi apply` tries again rather than the run being silently
 recorded as done. In short: a non-interactive `chezmoi apply` (an
 inbound SSH session with nobody available to click through a dialog,
 a scheduled task, etc.) fails loudly after at most 60 seconds instead
-of hanging forever. Run the initial opt-in `chezmoi apply` from a
-local or RDP session where you can dismiss any confirmation dialog —
+of hanging forever. (Stopping the background job also stops its
+underlying native child process, confirmed empirically on
+Linux/PowerShell during development, though not separately confirmed
+on Windows PowerShell 5.1. If a `mkcert.exe` process or a dialog it
+spawned were ever left running in the background regardless,
+`chezmoi apply` itself would still be unblocked — the primary problem
+this bound exists to prevent — with, at worst, a lingering orphaned
+process to clean up by hand.) Run the initial opt-in `chezmoi apply`
+from a local or RDP session where you can dismiss any confirmation
+dialog —
 the same recommendation `docs/winget-user-path.md` already makes for
 chezmoi's own WinGet-symlink SSH bootstrapping gap. Once the CA is
 registered, later `chezmoi apply` runs over SSH are unaffected
