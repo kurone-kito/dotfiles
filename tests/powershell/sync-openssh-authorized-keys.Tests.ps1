@@ -67,11 +67,11 @@ Describe 'sync-openssh-authorized-keys' -Skip:($IsWindows -eq $false) {
       -DestinationPath 'TestDrive:\ProgramData\ssh\administrators_authorized_keys' |
       Should -Be 'TestDrive:\ProgramData\ssh\administrators_authorized_keys'
 
-    Assert-MockCalled New-Item -Times 1 -ParameterFilter {
+    Should -Invoke New-Item -Times 1 -ParameterFilter {
       $ItemType -eq 'Directory' -and
       $Path -eq 'TestDrive:\ProgramData\ssh'
     }
-    Assert-MockCalled Copy-Item -Times 1 -ParameterFilter {
+    Should -Invoke Copy-Item -Times 1 -ParameterFilter {
       $LiteralPath -eq 'TestDrive:\home\.ssh\authorized_keys' -and
       $Destination -eq 'TestDrive:\ProgramData\ssh\administrators_authorized_keys' -and
       $Force

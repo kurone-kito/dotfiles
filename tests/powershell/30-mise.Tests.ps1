@@ -113,8 +113,8 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     . $script:Subject
 
-    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:FallbackPath
     } -Times 0
 
@@ -152,11 +152,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     . $script:Subject
 
-    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:FallbackPath
     } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:WingetPath
     } -Times 0
 
@@ -201,11 +201,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     . $script:Subject
 
-    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:FallbackPath
     } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:WingetPath
     } -Times 1
 
@@ -262,11 +262,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     . $script:Subject
 
-    Assert-MockCalled Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter { $Name -eq 'mise' } -Times 1
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:WingetPathA
     } -Times 1
-    Assert-MockCalled Get-Command -ParameterFilter {
+    Should -Invoke Get-Command -ParameterFilter {
       $Name -eq $script:WingetPathB
     } -Times 0
 
