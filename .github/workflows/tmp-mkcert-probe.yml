@@ -22,9 +22,22 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - name: Install mkcert via choco
+      - name: Download mkcert directly from GitHub releases
+        # Bypasses the community Chocolatey feed (observed transient
+        # 503/504 from community.chocolatey.org during this probe's
+        # earlier attempts) and sidesteps a separate PATH-propagation
+        # quirk: a tool a prior step installs via choco/registry is not
+        # reliably visible to a later step's freshly spawned process on
+        # GitHub-hosted Windows runners. Downloading to a known path and
+        # invoking that exact path avoids both issues.
         shell: pwsh
-        run: choco install mkcert -y --no-progress
+        run: |
+          $version = 'v1.4.4'
+          $dest = Join-Path $env:RUNNER_TEMP 'mkcert.exe'
+          $url = "https://github.com/FiloSottile/mkcert/releases/download/$version/mkcert-$version-windows-amd64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+          "MKCERT_PATH=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Downloaded mkcert to $dest"
 
       - name: Snapshot CurrentUser\Root store before
         shell: pwsh
@@ -39,13 +52,15 @@ jobs:
         env:
           TRUST_STORES: system
         run: |
-          Write-Host "mkcert version: $(mkcert -version)"
-          Write-Host "CAROOT: $(mkcert -CAROOT)"
+          Write-Host "mkcert version: $(& $env:MKCERT_PATH -version)"
+          Write-Host "CAROOT: $(& $env:MKCERT_PATH -CAROOT)"
 
+          $mkcertPath = $env:MKCERT_PATH
           $job = Start-Job -ScriptBlock {
-            & mkcert -install 2>&1
+            param($path)
+            & $path -install 2>&1
             [pscustomobject]@{ ExitCode = $LASTEXITCODE }
-          }
+          } -ArgumentList $mkcertPath
 
           $completed = Wait-Job -Job $job -Timeout 120
           $elapsed = (Get-Date) - $job.PSBeginTime
