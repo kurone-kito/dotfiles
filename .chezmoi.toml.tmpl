@@ -93,7 +93,10 @@ mise_trust = {{ dig "mise_trust" false $clone }}
      sync. */ -}}
 {{- $wingetDefaultPackages := dict
       "mise"    (dict "id" "jdx.mise" "bin" "mise/bin")
-      "chezmoi" (dict "id" "twpayne.chezmoi") -}}
+      "chezmoi" (dict "id" "twpayne.chezmoi")
+      "ffmpeg"  (dict "id" "Gyan.FFmpeg" "bin" "ffmpeg-*-full_build/bin")
+      "sqlite"  (dict "id" "SQLite.SQLite")
+      "ngrok"   (dict "id" "Ngrok.Ngrok") -}}
 {{- range $key, $pkg := (merge (dig "wingetUserPath" "packages" dict .) $wingetDefaultPackages) }}
 
 [data.wingetUserPath.packages."{{ $key }}"]
@@ -222,9 +225,12 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   bin     = "mise/bin"       # optional; subpath within the package dir
 #   enabled = true             # optional; false disables an inherited entry
 #
-# The real Packages\<id>_* directory (with bin appended, if set) is
-# placed in the managed User PATH ahead of WinGet\Links. See
-# docs/winget-user-path.md for details.
+# bin may contain a `*` segment (e.g. "ffmpeg-*-full_build/bin") to
+# match a version-suffixed subdirectory whose name changes on every
+# WinGet update; the lexicographically last match wins when more than
+# one is present. The real Packages\<id>_* directory (with bin
+# resolved and appended, if set) is placed in the managed User PATH
+# ahead of WinGet\Links. See docs/winget-user-path.md for details.
 #
 # To customize sshd_config hardening defaults, add:
 #

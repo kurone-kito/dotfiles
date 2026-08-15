@@ -215,8 +215,10 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       # partially-failed BeforeEach can never point this cleanup at
       # a real %LOCALAPPDATA%.
       if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
-        Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter 'GitHub.cli_*' -ErrorAction SilentlyContinue |
-          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($filter in @('GitHub.cli_*', 'Gyan.FFmpeg_*')) {
+          Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter $filter -ErrorAction SilentlyContinue |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        }
       }
     }
 
@@ -278,6 +280,85 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries = @($env:PATH -split ';')
       $entries | Should -Not -Contain $oldBinDir
       $entries | Should -Contain $newBinDir
+    }
+
+    It 'resolves a wildcard bin pattern to the single matching version directory' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $binDir = Join-Path (Join-Path $packagesRoot 'Gyan.FFmpeg_Microsoft.Winget.Source_test') 'ffmpeg-9.0-full_build\bin'
+      New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"ffmpeg","id":"Gyan.FFmpeg","bin":"ffmpeg-*-full_build/bin"}]'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $binDir
+    }
+
+    It 'resolves a wildcard bin pattern to the lexicographically last version when multiple are present' {
+      # "7.9" sorts after "7.10" as a plain string (Sort-Object
+      # -Property FullName is not version-aware) -- a divergent pair
+      # on purpose, so this pins "lexicographically last", not
+      # "highest version".
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $pkgDir = Join-Path $packagesRoot 'Gyan.FFmpeg_Microsoft.Winget.Source_test'
+      $olderByVersionDir = Join-Path $pkgDir 'ffmpeg-7.10-full_build\bin'
+      $lastByStringSortDir = Join-Path $pkgDir 'ffmpeg-7.9-full_build\bin'
+      New-Item -ItemType Directory -Path $olderByVersionDir -Force | Out-Null
+      New-Item -ItemType Directory -Path $lastByStringSortDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"ffmpeg","id":"Gyan.FFmpeg","bin":"ffmpeg-*-full_build/bin"}]'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $lastByStringSortDir
+      $entries | Should -Not -Contain $olderByVersionDir
+    }
+
+    It 'contributes nothing when a wildcard bin pattern has zero matches' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      # Package directory exists, but no version-suffixed subdirectory
+      # matching the wildcard segment does.
+      $pkgDir = Join-Path $packagesRoot 'Gyan.FFmpeg_Microsoft.Winget.Source_test'
+      New-Item -ItemType Directory -Path $pkgDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"ffmpeg","id":"Gyan.FFmpeg","bin":"ffmpeg-*-full_build/bin"}]'
+
+      { . $script:Subject } | Should -Not -Throw
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $script:Paths.UnrelatedA
+      $entries | Where-Object { $_ -like "$pkgDir*" } | Should -BeNullOrEmpty
+    }
+
+    It 'replaces a stale wildcard-resolved bin directory once winget updates the version' {
+      # Encodes the issue's motivating failure mode: a static bin
+      # string would go stale on every winget auto-update; the
+      # wildcard must re-resolve to the current version and drop the
+      # old one, mirroring "removes a stale sibling directory" above.
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $pkgDir = Join-Path $packagesRoot 'Gyan.FFmpeg_Microsoft.Winget.Source_test'
+      $staleDir = Join-Path $pkgDir 'ffmpeg-8.0-full_build\bin'
+      $currentDir = Join-Path $pkgDir 'ffmpeg-9.0-full_build\bin'
+      # Only the current version exists on disk (the stale sibling was
+      # already removed by the real winget update); the stale PATH
+      # entry is a leftover from before that update.
+      New-Item -ItemType Directory -Path $currentDir -Force | Out-Null
+
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $staleDir
+        $script:Paths.WinGetLinks
+      ) -join ';'
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"ffmpeg","id":"Gyan.FFmpeg","bin":"ffmpeg-*-full_build/bin"}]'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $staleDir
+      $entries | Should -Contain $currentDir
     }
 
     It 'removes a previously-added directory once its declared package is disabled' {

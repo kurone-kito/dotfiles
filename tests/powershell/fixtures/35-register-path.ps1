@@ -134,6 +134,58 @@ function Get-WingetUserPathDeclaredPackages {
   return @($parsed | Where-Object { -not [string]::IsNullOrWhiteSpace($_.id) })
 }
 
+function Resolve-WingetUserPathBinDirectory {
+  # Resolves a declared 'bin' value against a package directory.
+  # - No bin (empty/whitespace): the package directory itself.
+  # - Static bin (no '*'): unchanged single Join-Path, preserving the
+  #   existing multi-segment behavior (e.g. 'mise/bin').
+  # - Wildcard bin (contains '*'): split into segments and walk them
+  #   from the package directory; a segment containing '*' resolves
+  #   via Get-ChildItem, picking the lexicographically last match on
+  #   FullName when more than one exists (not version-aware); a plain
+  #   segment just extends the path. Handles a package directory whose
+  #   real name is version-suffixed and changes on every winget
+  #   update (e.g. Gyan.FFmpeg's 'ffmpeg-<version>-full_build/bin').
+  #   Returns $null when a wildcard segment matches nothing, so the
+  #   caller never probes a null/empty path with Test-Path.
+  param(
+    [Parameter(Mandatory)][string]$PackageDirFullName,
+    [AllowNull()][string]$Bin
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Bin)) {
+    return $PackageDirFullName
+  }
+
+  if ($Bin -notmatch '\*') {
+    return (Join-Path $PackageDirFullName $Bin)
+  }
+
+  $cursor = $PackageDirFullName
+  foreach ($segment in ($Bin -split '[\\/]+')) {
+    if ([string]::IsNullOrEmpty($segment)) {
+      continue
+    }
+
+    if ($segment -match '\*') {
+      $match = Get-ChildItem -LiteralPath $cursor -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like $segment } |
+        Sort-Object -Property FullName |
+        Select-Object -Last 1
+
+      if ($null -eq $match) {
+        return $null
+      }
+
+      $cursor = $match.FullName
+    } else {
+      $cursor = Join-Path $cursor $segment
+    }
+  }
+
+  return $cursor
+}
+
 function Get-WingetUserPathManagedPaths {
   $packagesRoot = Get-WingetPackagesRoot
   if ([string]::IsNullOrEmpty($packagesRoot)) {
@@ -157,13 +209,9 @@ function Get-WingetUserPathManagedPaths {
         Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) } |
         Sort-Object -Property FullName
     )) {
-      $dir = if ([string]::IsNullOrWhiteSpace($declared.bin)) {
-        $packageDir.FullName
-      } else {
-        Join-Path $packageDir.FullName $declared.bin
-      }
+      $dir = Resolve-WingetUserPathBinDirectory -PackageDirFullName $packageDir.FullName -Bin $declared.bin
 
-      if (Test-Path -LiteralPath $dir -PathType Container) {
+      if ($null -ne $dir -and (Test-Path -LiteralPath $dir -PathType Container)) {
         $paths += $dir
       }
     }

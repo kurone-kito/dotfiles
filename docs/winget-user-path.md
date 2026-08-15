@@ -34,7 +34,15 @@ enabled = true             # optional; false disables an inherited entry
 - `bin` is an optional path, relative to the package directory, to
   append before adding the directory to `PATH` (use this when the
   executable lives in a subdirectory of the package, as most portable
-  WinGet packages do).
+  WinGet packages do). A path segment may contain a `*` wildcard to
+  match a version-suffixed subdirectory whose exact name changes on
+  every WinGet update (e.g. `ffmpeg-*-full_build/bin`, matching
+  `ffmpeg-9.0-full_build/bin` today and whatever version directory
+  WinGet extracts next). When more than one directory matches, the
+  lexicographically last one (by full path, plain string sort — not
+  version-aware) wins. A wildcard segment with no match on disk
+  contributes nothing for that package, the same as an absent package
+  directory.
 - `enabled` defaults to `true`; set to `false` to disable a
   repo-shipped default entry (see below) without deleting it. A
   disabled entry stays in the rendered manifest — it is skipped when
@@ -56,15 +64,20 @@ already exist in your `chezmoi.toml` on every `chezmoi init`/re-init,
 so per-machine entries you add persist across re-inits the same way
 `data.ghq.clone` or `data.secret.ssh.keys` entries do.
 
-The repository ships two default entries, labeled `mise`
-(`id = "jdx.mise"`, `bin = "mise/bin"`) and `chezmoi`
-(`id = "twpayne.chezmoi"`, no `bin` — `chezmoi.exe` sits directly in
-its package directory), merged underneath whatever you declare: a
-field you set on the same label (e.g. `enabled` or a different `bin`)
-overrides the repo default field-by-field, so you never need to
-restate `id`/`bin` just to disable it or add other packages alongside
-it. A label you don't touch at all falls back to the shipped default
-in full.
+The repository ships five default entries, merged underneath whatever
+you declare: a field you set on the same label (e.g. `enabled` or a
+different `bin`) overrides the repo default field-by-field, so you
+never need to restate `id`/`bin` just to disable it or add other
+packages alongside it. A label you don't touch at all falls back to
+the shipped default in full.
+
+| Label     | `id`              | `bin`                                  |
+| --------- | ----------------- | -------------------------------------- |
+| `mise`    | `jdx.mise`        | `mise/bin`                             |
+| `chezmoi` | `twpayne.chezmoi` | _(none — directly in the package dir)_ |
+| `ffmpeg`  | `Gyan.FFmpeg`     | `ffmpeg-*-full_build/bin`              |
+| `sqlite`  | `SQLite.SQLite`   | _(none — directly in the package dir)_ |
+| `ngrok`   | `Ngrok.Ngrok`     | _(none — directly in the package dir)_ |
 
 Both `.chezmoi.toml.tmpl` (which persists the effective declaration
 into your `chezmoi.toml` on `chezmoi init`/re-init) and
@@ -77,13 +90,16 @@ prior re-init — already reflects it.
 For each enabled declared package, the shared managed-path source
 (`home/dot_config/powershell/lib/managed-paths.ps1`) looks for
 directories under `%LOCALAPPDATA%\Microsoft\WinGet\Packages\`
-matching `<id>_*`, appends `bin` if set, and includes any that
-currently exist on disk — ahead of `WinGet\Links` and any other
-static managed entries. Directories that no longer exist are simply
-not included on the next reconciliation, and any stale entry
+matching `<id>_*`, resolves `bin` if set (including any `*` wildcard
+segment, against directories actually present on disk), and includes
+any resulting path that currently exists — ahead of `WinGet\Links` and
+any other static managed entries. Directories that no longer exist are
+simply not included on the next reconciliation, and any stale entry
 previously registered for a declared package (matching the same
-`<id>_*` pattern) is recognized as managed and removed even if its
-directory is gone.
+`<id>_*` pattern, independent of its current `bin` resolution) is
+recognized as managed and removed even if its directory is gone — this
+is how a wildcard `bin` re-resolving to a new version directory after
+a WinGet update also drops the old version's directory from `PATH`.
 
 Undeclared or absent packages contribute nothing, and unrelated
 `PATH` entries are always preserved.
