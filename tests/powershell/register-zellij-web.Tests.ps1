@@ -84,15 +84,15 @@ Describe 'register-zellij-web' -Skip:($IsWindows -eq $false) {
 
     Set-DotfilesZellijWebTaskAutostart -AutostartMode 'onlogon'
 
-    Assert-MockCalled New-ScheduledTaskTrigger -Times 1 -ParameterFilter {
+    Should -Invoke New-ScheduledTaskTrigger -Times 1 -ParameterFilter {
       $User -eq 'TEST\User'
     }
-    Assert-MockCalled New-ScheduledTaskPrincipal -Times 1 -ParameterFilter {
+    Should -Invoke New-ScheduledTaskPrincipal -Times 1 -ParameterFilter {
       $UserId -eq 'TEST\User' -and
       $LogonType -eq 'Interactive' -and
       $RunLevel -eq 'Limited'
     }
-    Assert-MockCalled Invoke-DotfilesZellijWebTaskRegistration -Times 1 -ParameterFilter {
+    Should -Invoke Invoke-DotfilesZellijWebTaskRegistration -Times 1 -ParameterFilter {
       $Action.Execute -eq 'TestDrive:\pwsh.exe' -and
       $Trigger.User -eq 'TEST\User' -and
       $Principal.UserId -eq 'TEST\User' -and
@@ -107,7 +107,7 @@ Describe 'register-zellij-web' -Skip:($IsWindows -eq $false) {
 
     Set-DotfilesZellijWebTaskAutostart -AutostartMode 'disabled'
 
-    Assert-MockCalled Unregister-ScheduledTask -Times 1 -ParameterFilter {
+    Should -Invoke Unregister-ScheduledTask -Times 1 -ParameterFilter {
       $TaskName -eq 'dotfiles-zellij-web' -and
       $Confirm -eq $false
     }
@@ -118,7 +118,7 @@ Describe 'register-zellij-web' -Skip:($IsWindows -eq $false) {
     Mock Unregister-ScheduledTask { }
 
     { Set-DotfilesZellijWebTaskAutostart -AutostartMode 'disabled' } | Should -Not -Throw
-    Assert-MockCalled Unregister-ScheduledTask -Times 0
+    Should -Invoke Unregister-ScheduledTask -Times 0
   }
 
   It 'throws for unsupported autostart modes' {

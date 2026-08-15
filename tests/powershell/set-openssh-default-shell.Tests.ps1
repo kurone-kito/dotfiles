@@ -73,11 +73,11 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     Set-DotfilesOpenSSHDefaultShell -ShellPath 'C:\pwsh.exe'
 
-    Assert-MockCalled New-Item -Times 1
-    Assert-MockCalled New-ItemProperty -Times 1 -ParameterFilter {
+    Should -Invoke New-Item -Times 1
+    Should -Invoke New-ItemProperty -Times 1 -ParameterFilter {
       $Name -eq 'DefaultShell' -and $Value -eq 'C:\pwsh.exe'
     }
-    Assert-MockCalled New-ItemProperty -Times 1 -ParameterFilter {
+    Should -Invoke New-ItemProperty -Times 1 -ParameterFilter {
       $Name -eq 'DefaultShellCommandOption' -and
       $Value -eq '-NoLogo -NoProfile'
     }
@@ -92,8 +92,8 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     Set-DotfilesOpenSSHDefaultShell -ShellPath 'C:\pwsh.exe'
 
-    Assert-MockCalled New-Item -Times 0
-    Assert-MockCalled New-ItemProperty -Times 2
+    Should -Invoke New-Item -Times 0
+    Should -Invoke New-ItemProperty -Times 2
   }
 
   It 'Reset-DotfilesOpenSSHDefaultShell removes registry values' {
@@ -116,10 +116,10 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     Reset-DotfilesOpenSSHDefaultShell
 
-    Assert-MockCalled Remove-ItemProperty -Times 1 -ParameterFilter {
+    Should -Invoke Remove-ItemProperty -Times 1 -ParameterFilter {
       $Name -eq 'DefaultShell'
     }
-    Assert-MockCalled Remove-ItemProperty -Times 1 -ParameterFilter {
+    Should -Invoke Remove-ItemProperty -Times 1 -ParameterFilter {
       $Name -eq 'DefaultShellCommandOption'
     }
   }
@@ -132,6 +132,6 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     Reset-DotfilesOpenSSHDefaultShell
 
-    Assert-MockCalled Remove-ItemProperty -Times 0
+    Should -Invoke Remove-ItemProperty -Times 0
   }
 }

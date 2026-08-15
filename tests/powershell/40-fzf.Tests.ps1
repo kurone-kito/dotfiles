@@ -30,6 +30,12 @@ Describe '40-fzf' {
     Mock Get-Command { [pscustomobject]@{ Name = 'fzf' } } -ParameterFilter {
       $Name -eq 'fzf'
     }
+    Mock Get-Command { $null } -ParameterFilter {
+      $Name -eq 'Test-DotfilesVSCodeTerminal'
+    }
+    Mock Get-Command { [pscustomobject]@{ Name = 'Invoke-DotfilesPSReadLineStartupAction' } } -ParameterFilter {
+      $Name -eq 'Invoke-DotfilesPSReadLineStartupAction'
+    }
     Mock Get-Module { [pscustomobject]@{ Name = 'PSFzf' } } -ParameterFilter {
       $Name -eq 'PSFzf' -and $ListAvailable
     }
@@ -43,10 +49,10 @@ Describe '40-fzf' {
 
     . $script:Subject
 
-    Assert-MockCalled Invoke-DotfilesPSReadLineStartupAction -Times 1 -ParameterFilter {
+    Should -Invoke Invoke-DotfilesPSReadLineStartupAction -Times 1 -ParameterFilter {
       $Name -eq 'psfzf-chords'
     }
-    Assert-MockCalled Set-PsFzfOption -Times 1 -ParameterFilter {
+    Should -Invoke Set-PsFzfOption -Times 1 -ParameterFilter {
       $PSReadlineChordProvider -eq 'Ctrl+t' -and
       $PSReadlineChordReverseHistory -eq 'Ctrl+r'
     }
@@ -66,6 +72,9 @@ Describe '40-fzf' {
     Mock Get-Command { $null } -ParameterFilter {
       $Name -eq 'Invoke-DotfilesPSReadLineStartupAction'
     }
+    Mock Get-Command { $null } -ParameterFilter {
+      $Name -eq 'Test-DotfilesVSCodeTerminal'
+    }
     Mock Get-Module { [pscustomobject]@{ Name = 'PSFzf' } } -ParameterFilter {
       $Name -eq 'PSFzf' -and $ListAvailable
     }
@@ -77,7 +86,7 @@ Describe '40-fzf' {
 
     . $script:Subject
 
-    Assert-MockCalled Set-PsFzfOption -Times 1 -ParameterFilter {
+    Should -Invoke Set-PsFzfOption -Times 1 -ParameterFilter {
       $PSReadlineChordProvider -eq 'Ctrl+t' -and
       $PSReadlineChordReverseHistory -eq 'Ctrl+r'
     }
@@ -150,6 +159,9 @@ Describe 'VS Code chord skip' {
     Mock Get-Command { [pscustomobject]@{ Name = 'fzf' } } -ParameterFilter {
       $Name -eq 'fzf'
     }
+    Mock Get-Command { [pscustomobject]@{ Name = 'Test-DotfilesVSCodeTerminal' } } -ParameterFilter {
+      $Name -eq 'Test-DotfilesVSCodeTerminal'
+    }
     Mock Get-Module { [pscustomobject]@{ Name = 'PSFzf' } } -ParameterFilter {
       $Name -eq 'PSFzf' -and $ListAvailable
     }
@@ -158,6 +170,6 @@ Describe 'VS Code chord skip' {
 
     . $script:Subject
 
-    Assert-MockCalled Set-PsFzfOption -Times 0
+    Should -Invoke Set-PsFzfOption -Times 0
   }
 }
