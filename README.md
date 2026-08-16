@@ -90,8 +90,8 @@ input line editing
 - [Antigravity CLI](https://antigravity.google/product/antigravity-cli)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/)
-- [OpenAI Codex CLI](https://github.com/openai/codex)
 - [Grok Build](https://grok.com/)
+- [OpenAI Codex CLI](https://github.com/openai/codex)
 
 ## Requirements
 
