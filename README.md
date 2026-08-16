@@ -87,8 +87,10 @@ input line editing
 
 ### AI coding assistants (via mise)
 
+- [Antigravity CLI](https://antigravity.google/product/antigravity-cli)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli/)
+- [Grok CLI](https://grok.com/)
 - [OpenAI Codex CLI](https://github.com/openai/codex)
 
 ## Requirements
