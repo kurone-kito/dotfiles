@@ -217,7 +217,7 @@ mean setup.windows has stopped installing it: setup.windows
 [issue 112](https://github.com/kurone-kito/setup.windows/issues/112)
 (still open at write time) covers delegating the local-CA post-install
 step, and until it lands, setup.windows's own post-install script may
-still also run `mkcert --install`.
+still also run `mkcert -install`.
 
 ## Decision tree for a new Windows CLI tool
 
