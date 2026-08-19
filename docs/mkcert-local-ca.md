@@ -20,6 +20,12 @@ for other opt-in, potentially sensitive features
 same convention: nothing happens unless you explicitly declare
 `data.mkcert.install = true`.
 
+This repository owns this opt-in CA path; it does not claim exclusive
+ownership of the `mkcert` binary or its post-install step. See
+[docs/setup-windows-boundary.md](setup-windows-boundary.md#mkcert-settings-ownership-not-exclusive-takeover)
+for how that ownership is split with
+[`kurone-kito/setup.windows`](https://github.com/kurone-kito/setup.windows).
+
 ## Declaring the opt-in
 
 Add to `~/.config/chezmoi/chezmoi.toml`:

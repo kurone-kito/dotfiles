@@ -68,7 +68,13 @@ input line editing
 - [ghq](https://github.com/x-motemen/ghq) — remote repository management
 - [GitHub CLI](https://cli.github.com/) — GitHub from the terminal
 - [gwq](https://github.com/d-kuro/gwq) — Git worktree manager
-- [Taskwarrior](https://taskwarrior.org/) — task management
+
+### Task management
+
+- [Taskwarrior](https://taskwarrior.org/) — task management; this
+  repository only ships its config
+  ([`home/dot_config/task/taskrc`](home/dot_config/task/taskrc)), not
+  a mise-installed tool
 
 ### CLI tools (via mise)
 
@@ -141,6 +147,11 @@ package bin directory:
 - `%USERPROFILE%\.local\bin`
 
 Custom `MISE_INSTALL_PATH` values are still not auto-detected today.
+
+For why CLI tools and language runtimes live in mise instead of
+[`kurone-kito/setup.windows`](https://github.com/kurone-kito/setup.windows)'s
+WinGet/DSC definitions, and which tools stay on which side, see
+[docs/setup-windows-boundary.md](docs/setup-windows-boundary.md).
 
 ### Windows note for psmux
 

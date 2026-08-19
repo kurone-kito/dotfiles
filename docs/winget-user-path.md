@@ -1,5 +1,12 @@
 # Declaring WinGet package directories in the User PATH
 
+The packages declared below are the WinGet portables that stay on the
+[`kurone-kito/setup.windows`](https://github.com/kurone-kito/setup.windows)
+side rather than moving to mise; see
+[docs/setup-windows-boundary.md](setup-windows-boundary.md) for the
+mise-vs-WinGet ownership decision itself. This page covers the PATH
+mechanism only.
+
 WinGet installs portable tools under
 `%LOCALAPPDATA%\Microsoft\WinGet\Packages\<id>_<publisher-hash>\` and
 exposes them via symlinks in `%LOCALAPPDATA%\Microsoft\WinGet\Links`.
