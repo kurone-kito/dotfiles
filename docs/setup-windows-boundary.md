@@ -108,7 +108,7 @@ merely listed as "moved here."
 
 setup.windows [issue 111](https://github.com/kurone-kito/setup.windows/issues/111)
 named these five as the first delegation wave; setup.windows's own
-winget/DSC definitions no longer include them.
+WinGet/DSC definitions no longer include them.
 
 | Tool | mise key |
 | -------------------- | --------------------------- |
