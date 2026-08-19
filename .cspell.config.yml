@@ -39,6 +39,7 @@ language: en,ja
 useGitignore: true
 version: '0.2'
 words:
+  - ajeetdsouza
   - AKIAEXAMPLE
   - anomalyco
   - bbwe
@@ -46,6 +47,7 @@ words:
   - CAROOT
   - catppuccin
   - curlrc
+  - dbrgn
   - DECRQCRA
   - dedup
   - deprioritize
@@ -67,6 +69,7 @@ words:
   - hlsearch
   - inputrc
   - inshellisense
+  - jqlang
   - jsonls
   - junegunn
   - keepassxc

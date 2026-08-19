@@ -10,6 +10,15 @@ line-length:
 # prohibition. Due to the `siblings_only` flag not working, it is necessary
 # to enable duplicate headings in the entire document.
 no-duplicate-heading: false
+# OKF (Open Knowledge Format) frontmatter pages intentionally repeat the
+# page title as both a YAML frontmatter `title:` field and the body's `#`
+# H1 heading (the two are required to match exactly). MD025's default
+# `front_matter_title` pattern treats the frontmatter `title:` field as an
+# implicit top-level heading, so it would otherwise flag the real H1 as a
+# second top-level heading on every OKF-frontmattered page. Disable that
+# matching so frontmatter `title:` and the body H1 can coexist.
+single-title:
+  front_matter_title: ""
 # Allows embedding of the specified HTML tag. The default is unconditional
 # prohibition. Allow for some valuable features, such as folding.
 no-inline-html:
