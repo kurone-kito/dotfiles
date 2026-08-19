@@ -1,7 +1,7 @@
 ---
 type: guide
 title: Tool ownership boundary with setup.windows
-description: Explains which layer -- this repository's mise, WinGet/DSC in kurone-kito/setup.windows, or Chocolatey -- owns each Windows tool and why.
+description: Explains which layer — this repository's mise, WinGet/DSC in kurone-kito/setup.windows, or Chocolatey — owns each Windows tool and why.
 ---
 
 # Tool ownership boundary with setup.windows
@@ -20,7 +20,7 @@ if you just want to know which repository owns a given tool, and why.
 
 | Layer | Owns | Examples |
 | ------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| winget / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, 7-Zip, GnuPG, Neovim, .NET SDK, Steam, Unity Hub |
+| WinGet / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, 7-Zip, GnuPG, Neovim, .NET SDK, Steam, Unity Hub |
 | mise (this repository) | Delegated CLI tools, language runtimes | Node.js, GitHub CLI, ghq, GitHub Copilot CLI, git-vrc, and more below |
 | managed User `PATH` (this repository) | The Windows User `PATH` | `mise\shims`, `WinGet\Links`, `data.wingetUserPath.packages` entries |
 | Chocolatey (setup.windows) | Fonts, audio drivers | HackGen, VB-CABLE |
@@ -54,12 +54,12 @@ Three problems push CLI tools and language runtimes off WinGet's
    [PowerShell/Win32-OpenSSH#1047](https://github.com/PowerShell/Win32-OpenSSH/issues/1047)
    is cited only as background on how a public-key session's network
    logon token behaves more restrictively in general (it documents a
-   separate SMB-share restriction, closed "By Design") -- it is not
+   separate SMB-share restriction, closed "By Design") — it is not
    independent proof of this symlink-traversal failure.
 2. **PATH growth when Developer Mode is off.** With Developer Mode
    disabled, symlink creation fails outright and WinGet instead adds
    each portable package's own install directory to `PATH`
-   individually -- roughly 115-170 characters per entry -- pushing
+   individually — roughly 115-170 characters per entry — pushing
    toward `cmd.exe`'s 8191-character limit
    ([KB830473](https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/command-line-string-limitation)).
    `cmd.exe` does not truncate a `PATH` value past that limit; it
@@ -68,7 +68,7 @@ Three problems push CLI tools and language runtimes off WinGet's
 3. **mise's Windows shims avoid both failures.** mise's default
    Windows shim mode copies a real `mise-shim.exe` binary as
    `<tool>.exe` under a single `%LOCALAPPDATA%\mise\shims` `PATH`
-   entry -- a plain file, not a symlink or reparse point, so an SSH
+   entry — a plain file, not a symlink or reparse point, so an SSH
    session can execute it directly, and adding tools through mise
    never grows `PATH` per-package the way WinGet `portable` entries
    do.
@@ -79,21 +79,21 @@ reachability through a different mechanism instead of moving to mise:
 this repository declares their install directories in
 `data.wingetUserPath.packages`, and the managed User `PATH`
 reconciler adds each declared directory as a normal string `PATH`
-entry -- see [docs/winget-user-path.md](winget-user-path.md) for the
+entry — see [docs/winget-user-path.md](winget-user-path.md) for the
 full mechanism.
 
 ### Operational rule: run `winget upgrade` from an interactive session
 
 `data.wingetUserPath.packages` fixes `PATH` *resolution* for an
 already-installed portable package. It does not fix the separate
-problem that `winget` itself -- running `install`, `upgrade`, or
-`uninstall` against a package it already tracks as `portable` -- still
+problem that `winget` itself — running `install`, `upgrade`, or
+`uninstall` against a package it already tracks as `portable` — still
 tries to traverse that package's own `WinGet\Links` symlink and fails
 with the same `ERROR_UNTRUSTED_MOUNT_POINT`, confirmed live in
 [microsoft/winget-cli#4936](https://github.com/microsoft/winget-cli/issues/4936)
 (reproduced there against `junegunn.fzf`'s `WinGet\Links\fzf.exe`
-entry). **Run `winget upgrade` -- and any other `winget` command that
-touches an already-installed portable package -- from a local or RDP
+entry). **Run `winget upgrade` — and any other `winget` command that
+touches an already-installed portable package — from a local or RDP
 interactive session, never over SSH.**
 
 ## What this repository owns via mise
@@ -140,7 +140,7 @@ plus one Windows-only addition:
 
 ### Always-here
 
-Never a WinGet `portable` duplicate on the setup.windows side -- these
+Never a WinGet `portable` duplicate on the setup.windows side — these
 did not "move," they were only ever defined here:
 
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
@@ -165,20 +165,20 @@ as exclusive to either repository.
 Five packages stay WinGet-only by design, per the rationale setup.windows
 issue 111 recorded:
 
-- **`jdx.mise`** -- the bootstrap portable. This repository manages
+- **`jdx.mise`** — the bootstrap portable. This repository manages
   mise *tools*, not the mise binary itself, so `jdx.mise` stays in the
   stay-in-WinGet set.
-- **`twpayne.chezmoi`** -- structurally cannot move. The mechanism that
+- **`twpayne.chezmoi`** — structurally cannot move. The mechanism that
   fixes SSH reachability for every *other* portable package
   (`data.wingetUserPath.packages`, applied by `chezmoi apply`) only
   runs once chezmoi itself is already reachable, so chezmoi cannot be
   the thing that fixes its own reachability.
-- **`Gyan.FFmpeg` / `SQLite.SQLite`** -- mise's registry only exposes
+- **`Gyan.FFmpeg` / `SQLite.SQLite`** — mise's registry only exposes
   these via the `conda:` backend, and mise's `conda` backend installs
   a single package without resolving its dependencies (FFmpeg needs
   roughly 30; SQLite needs its own `libsqlite` DLL), so neither would
   actually start correctly under mise today.
-- **`Ngrok.Ngrok`** -- no GitHub release or aqua-registry source that
+- **`Ngrok.Ngrok`** — no GitHub release or aqua-registry source that
   versions; distribution is a fixed, unversioned URL, so mise has
   nothing to pin a version against.
 
@@ -191,9 +191,9 @@ As of 2026-08-19T00:21Z (UTC), reading
 [`kurone-kito/setup.windows`](https://github.com/kurone-kito/setup.windows)
 at commit `67a211ad4de50c2948098e1db9217d3c80c8306d` (`master`),
 `configurations/packages.dsc.yaml` still lists the aqua-wave WinGet
-IDs -- `jqlang.jq`, `MikeFarah.yq`, `dandavison.delta`,
+IDs — `jqlang.jq`, `MikeFarah.yq`, `dandavison.delta`,
 `Fastfetch-cli.Fastfetch`, `dbrgn.tealdeer`, `junegunn.fzf`,
-`FiloSottile.mkcert`, `Hashicorp.Terraform` -- even though this
+`FiloSottile.mkcert`, `Hashicorp.Terraform` — even though this
 repository now installs those same commands via mise. This is today's
 overlap, not a completed migration; their eventual WinGet opt-out
 belongs to setup.windows roadmap issue 111, not this page.
@@ -228,13 +228,13 @@ still also run `mkcert --install`.
    portable: add a `data.wingetUserPath.packages` declaration here
    (see [docs/winget-user-path.md](winget-user-path.md)) instead of
    writing the Windows User `PATH` from setup.windows.
-3. Never put chezmoi or the mise binary itself on mise -- see
+3. Never put chezmoi or the mise binary itself on mise — see
    [What stays in WinGet](#what-stays-in-winget) above for why.
 
 ## See also
 
 - setup.windows [`docs/dotfiles-boundary.md`](https://github.com/kurone-kito/setup.windows/blob/master/docs/dotfiles-boundary.md)
-- setup.windows [README ownership table](https://github.com/kurone-kito/setup.windows#readme)
+- setup.windows [README ownership table](https://github.com/kurone-kito/setup.windows#ownership-boundary)
 - setup.windows [issue 111](https://github.com/kurone-kito/setup.windows/issues/111)
 - [docs/winget-user-path.md](winget-user-path.md)
 - [docs/mkcert-local-ca.md](mkcert-local-ca.md)
