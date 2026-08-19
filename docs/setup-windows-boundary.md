@@ -47,8 +47,9 @@ Three problems push CLI tools and language runtimes off WinGet's
    logon token, and that token cannot traverse an NTFS reparse point:
    the symlinked executable fails with `ERROR_UNTRUSTED_MOUNT_POINT`
    (448, "the path cannot be traversed because it contains an
-   untrusted mount point"). `fsutil behavior set SymlinkEvaluation
-   R2L:1 R2R:1` does not fix it. See
+   untrusted mount point"), and running
+   `fsutil behavior set SymlinkEvaluation R2L:1 R2R:1` does not fix
+   it. See
    [ajeetdsouza/zoxide#1180](https://github.com/ajeetdsouza/zoxide/issues/1180)
    for this exact failure.
    [PowerShell/Win32-OpenSSH#1047](https://github.com/PowerShell/Win32-OpenSSH/issues/1047)
