@@ -119,6 +119,12 @@ clientAliveInterval = {{ dig "clientAliveInterval" 300 $sshServer }}
 clientAliveCountMax = {{ dig "clientAliveCountMax" 5 $sshServer }}
 {{- end }}
 {{- end }}
+{{- $tmpfilesAge := dig "tmpfiles" "age" "10d" . }}
+{{- if ne $tmpfilesAge "10d" }}
+
+[data.tmpfiles]
+age = {{ $tmpfilesAge | quote }}
+{{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
 {{- if $mkcertInstall }}
 
@@ -240,6 +246,18 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #
 # The generated file is at ~/.config/ssh/sshd_config.
 # See docs/sshd-config-setup.md for deployment instructions.
+#
+# To customize the systemd-tmpfiles /tmp cleanup age (default: "10d"),
+# add:
+#
+#   [data.tmpfiles]
+#   age = "2d"  # systemd time-span syntax, e.g. "2d", "36h"
+#
+# This is Linux-only; it is ignored entirely on non-Linux hosts and on
+# Linux hosts without the systemd-tmpfiles binary. The generated file
+# is at ~/.config/tmpfiles.d/tmp.conf (a staging copy; deployment to
+# /etc/tmpfiles.d/tmp.conf is manual).
+# See docs/tmpfiles-cleanup-setup.md for deployment instructions.
 #
 # To opt in to local mkcert CA setup on Windows (default: not
 # installed):
