@@ -36,11 +36,10 @@ and `src/scripts/advisory-convergence.mts` computes the report's
 `review-clause.mts` alone computes.
 
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
-stays `0.6.0` as of this track — roadmap #292's final-verification
-track (#298) bumps it to `0.7.0` once the sibling tracks land, mirroring
-how the prior round's schema-audit track (#234) also left
-`iddVersion` unchanged until #238. `.github/idd/config.json` already
-validates
+is now `0.7.0` — roadmap #292's final-verification track (#298) bumped
+it once every sibling track landed, mirroring how the prior round's
+schema-audit track (#234) also left `iddVersion` unchanged until #238
+bumped it. `.github/idd/config.json` already validates
 cleanly against the fetched `v0.7.0` `policy.schema.json`
 (`npx ajv-cli validate --spec=draft2020`: valid) and via `idd-doctor`
 run from the `v0.7.0` tarball directly (`PASS .github/idd/config.json
@@ -148,16 +147,16 @@ this pin to `v0.7.0` (`f51a8bb73a47452eff5799e8a27251b660ba4ae0`,
 confirmed working via `idd-doctor`, `ajv-cli`, and
 `idd-helper-bundle-manifest` against this repository) ahead of the
 instructions/skills re-import landing, opening a **transitional skew
-window** where audited helper commands resolve against the `v0.7.0`
+window** where audited helper commands resolved against the `v0.7.0`
 schema while `.github/instructions/` and `.claude/skills/` themselves
-stay on the prior `v0.6.0`-round import. That window closes once
-roadmap #292's sibling tracks re-import both surfaces to the same
-`v0.7.0` baseline — #294 for `.github/instructions/`, #297 for the
-`.claude/skills/issue-authoring/` companion bundle (#295 covers the
-remaining docs/profiles/githooks/scripts file set, not
-`.claude/skills/`) — so the pin, the instructions, and the skills
-bundle will all track `v0.7.0` uniformly once #298's final verification
-sweep lands.
+stayed on the prior `v0.6.0`-round import. That window closed once
+roadmap #292's sibling tracks re-imported both surfaces to the same
+`v0.7.0` baseline — #294 for `.github/instructions/` (PR #305), #297
+for the `.claude/skills/issue-authoring/` companion bundle (PR #306)
+(#295 covered the remaining docs/profiles/githooks/scripts file set,
+not `.claude/skills/`). #298's final verification sweep confirmed the
+pin, the instructions, and the skills bundle now all track `v0.7.0`
+uniformly.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
