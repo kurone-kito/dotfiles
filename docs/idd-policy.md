@@ -530,16 +530,16 @@ comment (`// ...`) in JavaScript -- so a future re-import can detect
 and preserve it instead of silently reverting to upstream's default.
 Current slugs:
 
-| Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233       |
-| `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233                   |
-| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235                   |
-| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237 |
-| `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead. `docs/index.md` (a new upstream `v0.6.0` generated page) is also excluded, for the same reason: its generated table links both trimmed onboarding pages, so adopting it verbatim would ship broken relative links | #145, #196, #233             |
-| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232                   |
-| `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233                   |
-| `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233                         |
+| Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233, #294, #295             |
+| `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233, #295                               |
+| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297                               |
+| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237, #294, #295, #296 |
+| `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead. `docs/index.md` (a new upstream `v0.6.0` generated page) is also excluded, for the same reason: its generated table links both trimmed onboarding pages, so adopting it verbatim would ship broken relative links | #145, #196, #233, #295                         |
+| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294                               |
+| `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233                                     |
+| `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -554,6 +554,18 @@ caveat text were removed from
 [`docs/idd-comment-minimization.md`](idd-comment-minimization.md) as
 part of #238's final verification sweep, since the local behavior no
 longer diverges from upstream.
+
+**Reaffirmed this round**: roadmap #292's re-import (#293-#297) touched
+files carrying seven of the eight registered markers; the table above
+now attributes each accordingly (PR #302/#303/#304/#305/#306 file lists
+cross-referenced against each slug's live marker instances). #298's
+final verification sweep additionally confirmed every registered slug
+still has at least one live, findable marker instance in the repository
+(a repository-wide grep, not a visual spot-check) — none has silently
+reverted to upstream's default. `vendored-file-header`
+(`scripts/minimize-superseded-markers.mjs`) was not touched by any of
+this round's five PRs, so it carries no new attribution; its marker is
+still present and correct.
 
 ## Open follow-ups
 
@@ -652,7 +664,7 @@ removed.
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
-`result: passed` with four `WARN`s and no `ERROR`; each below is
+`result: passed` with five `WARN`s and no `ERROR`; each below is
 expected, not a defect. #218 resolved the one finding that was a
 genuine `ERROR` (the `idd-task.yml` placeholder syntax) by
 reformatting it; the remaining findings are accepted noise, recorded
@@ -667,16 +679,48 @@ rediscover them:
   scanner has no per-finding waiver flag (confirmed via
   `idd-doctor --help` while investigating #218), so this is accepted
   as permanent noise rather than suppressed.
+- **Command mismatch between `.github/idd/config.json` and the
+  overview project-commands table** (two instances: `pre-push-validate`
+  and `post-fix-validate`; new relative to this section's own
+  previously-recorded baseline, which predates the commit below —
+  #293 already surfaced it in the "Pinned upstream commit" note above,
+  and #298 gives it a dedicated entry here): `config.json`'s two
+  commands gained a `-CI` flag on the
+  `Invoke-Pester` invocation via `b749315` (#280, 2026-08-15) so a
+  genuine Pester test failure propagates to the process exit code
+  instead of being silently swallowed — the same fix #269 already
+  applied to the CI workflow job. That commit updated `config.json`
+  but not the mirrored table in
+  `.github/instructions/idd-overview-core.instructions.md`'s Project
+  commands section. Non-blocking: that file's own text states
+  `config.json`'s `commands` object overrides the table when present,
+  so the live behavior is already correct; only the descriptive text
+  in the instructions file lags. Predates and is unrelated to the
+  v0.7.0 re-import — recorded here rather than fixed, since #293
+  already confirmed (see the "Pinned upstream commit" note above) this
+  warning is byte-identical whether `idd-doctor` runs from the `v0.6.0`
+  or `v0.7.0` tarball.
 - **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
   this environment**: expected on any fresh clone that has not yet run
   the wiring step documented in [Worktree Guard](#worktree-guard) --
   `core.hooksPath` is local, per-clone config that #148 could not ship
   in a commit. Not a repository defect; wire it per-clone as needed.
-- **Branch protection not readable for `kurone-kito/dotfiles:master`**:
-  expected. This repository's merge gate comes from a ruleset, not
-  classic branch protection, so the classic-protection read returns
-  empty/`404`. **`ciGate.trustEmptyProtectionReads`** is now `true`
-  (changed from the `false` default confirmed in #146 — see
+  (This warning did not surface during #298's own `idd-doctor` run
+  because that run's worktree had already inherited `core.hooksPath`
+  from the primary clone -- environment state, not evidence the
+  condition no longer exists.)
+- **Branch protection reads differently at `v0.7.0`** (same underlying
+  condition, reworded upstream): the `v0.6.0`-era wording was "Branch
+  protection not readable for `kurone-kito/dotfiles:master`"; the
+  `v0.7.0` tarball instead reports "branch protection is enabled but no
+  required status checks are configured on master." Confirmed by #293
+  (see the "Pinned upstream commit" note above) to be a change in
+  `idd-doctor`'s own diagnostic wording/logic between the two tags, not
+  a schema or configuration change. Both wordings describe the same
+  expected condition: this repository's merge gate comes from a
+  ruleset, not classic branch protection, so the classic-protection
+  read returns empty/`404`. **`ciGate.trustEmptyProtectionReads`** is
+  `true` (changed from the `false` default confirmed in #146 — see
   [Required status checks on `master`](#required-status-checks-on-master)
   for why), so this read is trusted as genuinely empty rather than
   failing closed.
@@ -734,10 +778,11 @@ no `pnpm-lock.yaml`).
 
 ### `idd-onboard --verify` findings
 
-A full `idd-onboard --verify` run (pinned `v0.6.0` source tree,
-`--profile ephemeral-npx`) exits `blocking: true` with two finding
-classes; both are expected, not defects, recorded here so a future
-verification sweep does not have to rediscover them:
+A full `idd-onboard --verify` run (originally pinned `v0.6.0` source
+tree, `--profile ephemeral-npx`; re-run by #298 against the pinned
+`v0.7.0` source tree with the same profile) exits `blocking: true` with
+two finding classes; both are expected, not defects, recorded here so a
+future verification sweep does not have to rediscover them:
 
 - **`manifestCompleteness.missingTarget`**: `docs/index.md`,
   `docs/onboarding/placeholders.md`, and
@@ -747,10 +792,11 @@ verification sweep does not have to rediscover them:
   entry (the two `onboarding/` pages are self-corrupting once
   substituted and stay linked to the pinned upstream copies instead;
   `docs/index.md` was evaluated and skipped by #233 for the same
-  reason -- see that entry).
-- **`placeholderResidue`**: six known-placeholder tokens, seven raw
-  `{{...}}` occurrences, in `docs/customization.md` -- one occurrence
-  of each of the six tokens is inside the
+  reason -- see that entry). Unchanged at the `v0.7.0` re-run: same
+  three files, same reasoning.
+- **`placeholderResidue`**: at the `v0.6.0` pin, six known-placeholder
+  tokens, seven raw `{{...}}` occurrences, in `docs/customization.md`
+  -- one occurrence of each of the six tokens is inside the
   [placeholder mapping table](customization.md) that documents the
   onboarding substitution mechanism itself (for example, the table
   literally shows `{{REPO_NAME}}` as the template-side name for the
@@ -759,18 +805,86 @@ verification sweep does not have to rediscover them:
   synchronization-example sentence ("Template copies use placeholders
   like `{{REPO_NAME}}` to support ..."). Both forms are the same
   documentation-as-example usage, just in prose instead of a table
-  cell. `idd-onboard --verify`'s residue scanner matches the seven
-  raw `{{...}}` occurrences (six distinct token names) as plain text
-  anywhere in the file and cannot distinguish either usage from
-  genuine unresolved residue -- the same false-positive shape as the
-  `markdownlint-cli2` toolchain-residue warnings above.
-  `idd-doctor`'s own, separately-scoped placeholder check (`no
-  unresolved {{...}} placeholders in IDD-managed files`) passes
-  clean, and a manual repository-wide grep for the `.github/`,
-  `.claude/`, `docs/`, `scripts/`, and `profiles/` surface found no
-  other unexplained `{{...}}` residue as of this round (see
+  cell. At the `v0.7.0` re-run, the residue scanner instead attributes
+  three `{{REPO_NAME}}` occurrences to `docs/idd-policy.md` -- new
+  prose #293's schema-audit track added this round (the
+  "Description-only changes" section above, which quotes
+  `{{REPO_NAME}}` by name as a worked example of the same false-positive
+  class). `docs/customization.md`'s own occurrences are confirmed
+  unchanged and still present by manual grep; the scanner's shifted
+  attribution does not indicate they were resolved or removed, only
+  that this run's residue list surfaces a different file. Both files'
+  occurrences are the same documentation-as-example non-issue.
+  `idd-onboard --verify`'s residue scanner matches raw `{{...}}`
+  occurrences as plain text anywhere in a scanned file and cannot
+  distinguish either usage from genuine unresolved residue -- the same
+  false-positive shape as the `markdownlint-cli2` toolchain-residue
+  warnings above. `idd-doctor`'s own, separately-scoped placeholder
+  check (`no unresolved {{...}} placeholders in IDD-managed files`)
+  passes clean at both pins, and a manual repository-wide grep scoped
+  to the IDD-managed surface (`.github/instructions/`,
+  `.github/workflows/` excluding `${{ ... }}` Actions expressions,
+  `docs/idd-*`, `docs/onboarding/`, `.claude/skills/`) found no other
+  unexplained `{{...}}` residue as of this round (see
   `.github/ISSUE_TEMPLATE/idd-task.yml`'s fix above for the one
-  genuine instance found and fixed).
+  genuine instance found and fixed, prior to this round).
+
+### Shared lint/settings config parity
+
+Confirmed by #298: `.cspell.config.yml`, `.markdownlint-cli2.yaml`,
+`.markdownlint.yml`, and `.claude/settings.json` show **no upstream
+diff between the `v0.6.0` and `v0.7.0` tags** -- all four are
+byte-identical in `idd-template/` across the two pins (direct tarball
+diff, both fetched fresh). No upstream drift landed this round; nothing
+to reconcile for the `v0.7.0` re-import itself.
+
+Diffing the local repository's own copies against the upstream
+`v0.7.0` template shows all four differ from upstream, but
+`docs/customization.md` already documents this as expected, by-design
+divergence: `idd-onboard --import` never overwrites an existing target
+file whose content differs, so these four are meant to be
+hand-reconciled per repository need, never byte-identical to upstream.
+
+One genuine gap surfaced by this comparison, **pre-existing rather than
+newly appeared** (confirmed present in upstream
+`idd-template/.markdownlint.yml` at both `v0.6.0` and `v0.7.0`, so it
+did not "appear since" the prior round -- it has simply gone
+unabsorbed since at least the `v0.6.0` round): the local
+`.markdownlint.yml` is missing upstream's `table-column-style: false`
+override entirely. Recorded here as a follow-up per this issue's own
+instruction, rather than adopted unilaterally -- relaxing
+markdownlint's table-column-alignment rule is a deliberate lint-policy
+decision, not a mechanical sync, and this repository's tables
+(Divergence Register included) currently rely on manual alignment.
+
+### PR #291 regression check (`idd-advisory-convergence`)
+
+Issue #296's PR #303 already built and ran the concrete regression
+check this round's acceptance criteria call for: the real PR #291 (not
+a synthetic fixture matching its shape) against both the old and new
+pin, contrasted directly:
+
+```console
+$ npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
+    idd-advisory-convergence --pr 291 --assert
+# review.satisfied: false, converged: false, ready: false (exit 1)
+
+$ npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/f51a8bb73a47452eff5799e8a27251b660ba4ae0 \
+    idd-advisory-convergence --pr 291 --assert
+# review.satisfied: true, converged: true, ready: true (exit 0)
+```
+
+Full command transcripts and JSON output: PR #303's body, "Decisions
+recorded" §2. Same PR, same live GitHub state, only the pinned helper
+commit differs — `review.satisfied`/`converged`/`ready` all flip
+`false` -> `true`, confirming the advisory-convergence fix is live in
+this repository's required CI the moment `v0.7.0` is the pin.
+
+This is real GitHub state, not a constructed fixture -- stronger
+evidence than the synthetic fixture the issue's own wording anticipated
+building "if #296 did not include it." #296 already included it, so
+this issue (#298) does not rebuild it; this section records that the
+criterion is satisfied by that existing evidence.
 
 ### Issue authoring gate
 
@@ -824,3 +938,33 @@ code:
   stderr output loses `error.message`'s useful timeout text. File this
   upstream, or fix it locally the next time this vendored file is
   re-imported (see the `vendored-file-header` divergence above).
+- `docs/idd-concept-ownership.md` and
+  `.github/instructions/idd-overview-appendix.instructions.md` disagree
+  on who removes the `needs-decision` label (flagged by #294, carried
+  verbatim from `f51a8bb` -- confirmed byte-identical against that
+  pinned source, so this is an upstream inconsistency, not a local
+  editing error). The concept-ownership matrix says "human maintainer
+  removes `status:blocked-by-human`/`status:needs-decision`/`idd:ready`
+  ... regardless of which actor applied it"; the appendix's
+  "Needs-decision claim release" paragraph says the opposite for
+  `needs-decision` specifically: "Once a qualifying human decision
+  resolves the hold, **a later session removes the label** and
+  re-claims" -- a worker session, not a human maintainer. Root cause:
+  upstream #2065 generalized the appendix's claim-release rule but
+  never touched `idd-concept-ownership.md`, which was out of that
+  issue's scope. `idd-concept-ownership.md`'s own "Derivation and
+  authority disclaimer" resolves ties for exactly this situation: "the
+  instruction file wins, and the disagreement is a bug in this
+  document" -- so for any live IDD run, the appendix's rule (worker
+  session removes the label after a qualifying human decision) is
+  authoritative; no phase behavior in this repository actually reads
+  `idd-concept-ownership.md` itself, so nothing operational was at risk
+  meanwhile. Kept both files verbatim rather than hand-editing vendored
+  corpus for a navigation-only doc bug (either would need its own
+  `dotfiles-divergence` marker + Register entry to survive the next
+  re-import, disproportionate for what the source doc itself calls "a
+  bug in this document"). Filed upstream via the cross-repo findings
+  gist
+  ([`idd-skill-findings-2026-08-20-issue-298.md`](https://gist.github.com/kurone-kito/52ed338da39f8cfb80b4bf8cf7c2636d#file-idd-skill-findings-2026-08-20-issue-298-md)),
+  confirmed still present on `idd-skill`'s current `main` and
+  deduplicated against the existing issue tracker before filing.
