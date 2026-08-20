@@ -4,9 +4,20 @@ name: Ruleset required-checks guard
 # set. Added after a 2026-08-02 incident where that rule silently
 # disappeared in its entirety and went undetected for 11 days -- see
 # the "Required status checks on `master`" section of
-# docs/idd-policy.md for the incident writeup. Update the
-# EXPECTED_SORTED list below and that doc section together whenever a
-# required context is added or removed.
+# docs/idd-policy.md for the incident writeup. The expected-context
+# list now lives in scripts/check-ruleset-drift.sh (its
+# `default_expected_contexts` function) rather than here -- update that
+# script and the doc section together whenever a required context is
+# added or removed.
+#
+# On drift (or when the ruleset's required_status_checks rule
+# disappears entirely), this workflow escalates beyond its own red X:
+# it opens (or comments on, avoiding duplicate-issue spam across
+# repeated daily failures) a tracking issue with a fixed, greppable
+# title, and closes that issue with an explanatory comment the next
+# time the check passes while it is still open. See
+# scripts/escalate-ruleset-drift.sh and
+# docs/idd-policy.md's "Scheduled drift guard (#249)" section.
 #
 # Uses the "Get rules for a branch" effective-rules endpoint
 # (`repos/{owner}/{repo}/rules/branches/{branch}`) -- a lighter-weight
@@ -14,12 +25,13 @@ name: Ruleset required-checks guard
 # `.github/instructions/idd-ci.instructions.md`'s required-check
 # discovery unions with classic branch protection: this endpoint does
 # not require the elevated `administration` permission those need, so
-# the default `GITHUB_TOKEN` with `contents: read` is sufficient. This
-# guard intentionally checks only the ruleset side of that union
-# (classic branch protection is unconfigured on this repository today,
-# per docs/idd-policy.md's `trustEmptyProtectionReads` note); revisit
-# this workflow if branch protection is ever configured on `master`
-# alongside the ruleset.
+# the default `GITHUB_TOKEN` with `contents: read` (plus `issues: write`
+# for the escalation/recovery steps below) is sufficient. This guard
+# intentionally checks only the ruleset side of that union (classic
+# branch protection is unconfigured on this repository today, per
+# docs/idd-policy.md's `trustEmptyProtectionReads` note); revisit this
+# workflow if branch protection is ever configured on `master` alongside
+# the ruleset.
 on:
   schedule:
     # Off the start of the hour and away from midnight UTC: GitHub's
@@ -29,6 +41,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,56 +49,75 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      TRACKING_ISSUE_TITLE: 'ci: master ruleset required_status_checks drift detected'
     steps:
-      - name: Assert required_status_checks rule matches expected contexts
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Fetch ruleset rules
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Force byte-order sorting regardless of the runner's locale,
-          # so the shell `sort` below and jq's (always byte-order)
-          # `sort` agree -- otherwise a locale-aware sort (which orders
-          # case-insensitively) can silently desync from jq's output
-          # and make `comm` misreport drift or matches.
-          export LC_ALL=C
-
-          # Keep in sync with docs/idd-policy.md's "Required status
-          # checks on `master`" section.
-          EXPECTED_SORTED=$(printf '%s\n' \
-            'Bash tests (bats)' \
-            'Lua syntax check' \
-            'PowerShell tests (Pester)' \
-            'idd-advisory-convergence' \
-            'lint' \
-            | sort -u)
-
           # --paginate --slurp + flatten: the endpoint defaults to 30
           # rules per page, and this repository's ruleset already
           # returns 6 -- comfortably below that today, but an
           # unpaginated call would silently drop later pages once
           # more rules accumulate.
-          RULES_JSON=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/rules/branches/master" | jq 'flatten')
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/rules/branches/master" \
+            | jq 'flatten' > rules.json
 
-          RULE_COUNT=$(printf '%s' "$RULES_JSON" | jq '[.[] | select(.type == "required_status_checks")] | length')
-          if [ "$RULE_COUNT" -eq 0 ]; then
-            echo "::error::master ruleset has no required_status_checks rule (expected contexts: $(printf '%s' "$EXPECTED_SORTED" | paste -sd, -))"
-            exit 1
-          fi
+      - name: Check drift
+        id: check
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          bash scripts/check-ruleset-drift.sh rules.json | tee check-output.txt
+          exit "${PIPESTATUS[0]}"
 
-          ACTUAL_SORTED=$(printf '%s' "$RULES_JSON" | jq -r '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context] | unique | .[]')
+      - name: Find open tracking issue
+        id: find-issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NUMBER=$(bash scripts/escalate-ruleset-drift.sh find-tracking-issue \
+            --title "$TRACKING_ISSUE_TITLE" --repo "$GITHUB_REPOSITORY")
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
 
-          MISSING=$(comm -23 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))
-          EXTRA=$(comm -13 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL_SORTED"))
+      - name: Escalate on failure
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRACKING_ISSUE_NUMBER: ${{ steps.find-issue.outputs.number }}
+        run: |
+          set -euo pipefail
+          MISSING=$(sed -n 's/^MISSING_CONTEXTS=//p' check-output.txt)
+          EXTRA=$(sed -n 's/^EXTRA_CONTEXTS=//p' check-output.txt)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          bash scripts/escalate-ruleset-drift.sh escalate \
+            --title "$TRACKING_ISSUE_TITLE" \
+            --issue "$TRACKING_ISSUE_NUMBER" \
+            --missing "$MISSING" \
+            --extra "$EXTRA" \
+            --run-url "$RUN_URL" \
+            --repo "$GITHUB_REPOSITORY"
 
-          if [ -n "$MISSING" ] || [ -n "$EXTRA" ]; then
-            echo "::error::master ruleset required_status_checks context set has drifted from the expected set."
-            if [ -n "$MISSING" ]; then
-              echo "::error::Missing context(s): $(printf '%s' "$MISSING" | paste -sd, -)"
-            fi
-            if [ -n "$EXTRA" ]; then
-              echo "::error::Unexpected extra context(s): $(printf '%s' "$EXTRA" | paste -sd, -)"
-            fi
-            exit 1
-          fi
+      - name: Recover on success
+        if: steps.check.outcome == 'success' && steps.find-issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRACKING_ISSUE_NUMBER: ${{ steps.find-issue.outputs.number }}
+        run: |
+          set -euo pipefail
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          bash scripts/escalate-ruleset-drift.sh recover \
+            --issue "$TRACKING_ISSUE_NUMBER" \
+            --run-url "$RUN_URL" \
+            --repo "$GITHUB_REPOSITORY"
 
-          echo "master ruleset required_status_checks contexts match the expected set."
+      - name: Fail the job on drift
+        if: steps.check.outcome == 'failure'
+        run: exit 1

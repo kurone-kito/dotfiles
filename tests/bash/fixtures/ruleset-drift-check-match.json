@@ -1,0 +1,14 @@
+[
+  {
+    "type": "required_status_checks",
+    "parameters": {
+      "required_status_checks": [
+        { "context": "Bash tests (bats)" },
+        { "context": "Lua syntax check" },
+        { "context": "PowerShell tests (Pester)" },
+        { "context": "idd-advisory-convergence" },
+        { "context": "lint" }
+      ]
+    }
+  }
+]
