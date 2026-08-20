@@ -141,11 +141,19 @@ symlink-based mask, and Step 5's `--remove-destination` then deletes
 that symlink permanently with no way to restore it. Detect and handle
 both cases:
 
+Each backup form is mutually exclusive with the other and with any
+prior round's backup — remove the alternate form when writing either,
+so at most one backup exists and Rollback always restores the
+*immediately previous* configuration rather than a stale one left over
+from an earlier round where the override's type differed:
+
 ```bash
 if sudo test -L /etc/tmpfiles.d/tmp.conf; then
+  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak
   sudo readlink /etc/tmpfiles.d/tmp.conf | \
     sudo tee /etc/tmpfiles.d/tmp.conf.bak.symlink-target > /dev/null
 elif sudo test -f /etc/tmpfiles.d/tmp.conf; then
+  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak.symlink-target
   sudo cp /etc/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf.bak
 fi
 ```
