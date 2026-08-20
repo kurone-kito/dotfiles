@@ -71,10 +71,15 @@ but `--remove` **does** empty contents). Some distros ship `D` for
 and its `systemd-tmpfiles-setup.service` runs `systemd-tmpfiles
 --create --remove --boot`, so that shipped `D` line fully empties
 `/tmp` on every boot. Masking it with this template's `q` line
-silently disables that boot-time wipe. `q` is kept as the
-less-destructive default; check your diffed vendor file's own type
-letter (Step 2) and change the generated `q` to `D` if you need to
-preserve an existing boot-time wipe.
+silently disables that boot-time wipe. `q` is kept as the default
+specifically because it avoids adding that boot-time wipe behavior on
+top of whatever the vendor rule already did — this is narrower than a
+general "less-destructive" claim: deploying a shorter age (or the
+project's `10d` default on a host whose vendor age is longer) still
+deletes files sooner than before, regardless of `q` vs `D`. Check your
+diffed vendor file's own type letter (Step 2) and change the generated
+`q` to `D` if you need to preserve an existing boot-time wipe; check
+the age separately (previous section).
 
 **Do not deploy this file under any name other than `tmp.conf`.** A
 different filename would *add* a second, independent `/tmp` rule

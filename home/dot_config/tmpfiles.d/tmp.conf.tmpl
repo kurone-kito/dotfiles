@@ -61,10 +61,14 @@
 # its shipped "D /tmp ... 30d" fully empties /tmp on every boot, a
 # behavior "q" does not reproduce. Masking a "D" vendor rule with this
 # "q" line silently stops that boot-time wipe. "q" is kept as the
-# safer, less-destructive default (it never deletes more than the
-# vendor rule already did); check your diffed vendor file's own
-# type letter and change "q" to "D" below if you need to preserve an
-# existing boot-time wipe.
+# default specifically because it avoids adding that boot-time wipe
+# behavior on top of whatever the vendor rule already did -- this is
+# narrower than a general "less-destructive" claim: deploying a
+# shorter age (or the project's "10d" default on a host whose vendor
+# age is longer) still deletes files sooner than before, regardless of
+# "q" vs "D". Check your diffed vendor file's own type letter and
+# change "q" to "D" below if you need to preserve an existing
+# boot-time wipe; check the age separately (previous section).
 #
 # See docs/tmpfiles-cleanup-setup.md for full deployment and rollback
 # instructions.
