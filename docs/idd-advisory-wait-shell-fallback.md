@@ -28,6 +28,7 @@ the contract wins and these commands must be updated.
 ```sh
 OWNER=$(gh repo view --json owner --jq '.owner.login')
 REPO=$(gh repo view --json name --jq '.name')
+PR_HEAD_SHA=$(gh pr view {pr-number} --json headRefOid --jq '.headRefOid')
 
 LAST_COPILOT_COMMIT=$(
   gh api "repos/${OWNER}/${REPO}/pulls/{pr-number}/reviews" \
