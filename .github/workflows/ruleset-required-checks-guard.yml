@@ -44,7 +44,17 @@ permissions:
   issues: write
 concurrency:
   cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Deliberately NOT keyed by `${{ github.ref }}`: the checked resource
+  # (the `master` ruleset) and the tracking issue this workflow
+  # escalates to are both global, not per-ref, but `workflow_dispatch`
+  # can be triggered from any branch. A ref-keyed group would let a
+  # scheduled run on `master` and a manual dispatch from another branch
+  # run concurrently, race on "does a tracking issue already exist?",
+  # and both take the create path -- defeating the de-duplication this
+  # workflow depends on. Serializing across every ref closes that race;
+  # `cancel-in-progress: true` is still safe here because every run
+  # checks the identical resource regardless of which ref triggered it.
+  group: ${{ github.workflow }}
 jobs:
   guard:
     runs-on: ubuntu-latest
@@ -54,6 +64,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          # Trusted default-branch checkout, not whatever ref triggered
+          # the run, for any trigger type including workflow_dispatch --
+          # mirrors idd-advisory-convergence.yml's rationale: this job
+          # runs scripts/*.sh with an `issues: write` token, so it must
+          # never execute a branch's own copy of those scripts.
+          # persist-credentials: false additionally keeps that token out
+          # of .git/config -- neither script here performs a git
+          # operation; both call `gh` directly via the GH_TOKEN env var,
+          # so nothing needs the credential helper.
+          # <!-- dotfiles-divergence: master-branch -->
+          ref: master
+          persist-credentials: false
 
       - name: Fetch ruleset rules
         env:
