@@ -29,7 +29,7 @@ only the schema: `src/scripts/review-clause.mts` defines a `reviewId`
 field on `AdvisoryConvergenceReviewClause` (gated on `matchesHead`,
 scoping Clause 1's thread evidence to the specific triggering review),
 and `src/scripts/advisory-convergence.mts` computes the report's
-top-level `satisfied` as a disposition-aware caller-side override
+`review.satisfied` as a disposition-aware caller-side override
 (`hasValidReviewAck` / `itemCountClauseSatisfied`, bound to
 `review.reviewId`) rather than the raw mechanical
 `matchesHead && itemCount === 0 && suppressedCount === 0` check
