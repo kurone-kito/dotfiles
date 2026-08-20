@@ -18,6 +18,14 @@ jq = "latest"
 mkcert = "latest"
 tealdeer = "latest"
 terraform = "latest"
+# tsl0922/ttyd's aqua-registry entry declares
+# supported_envs: [linux, windows/amd64] with no darwin entry, so
+# macOS is not a supported target for this backend. vhs (which needs
+# ttyd + ffmpeg on PATH at runtime) still works on macOS through its
+# own aqua:charmbracelet/vhs entry; ttyd itself must come from another
+# route there (e.g. Homebrew).
+ttyd = { version = "latest", os = ["linux", "windows"] }
+vhs = "latest"
 yq = "latest"
 yt-dlp = "latest"
 

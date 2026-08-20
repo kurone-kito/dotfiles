@@ -88,6 +88,13 @@ input line editing
 - [tealdeer](https://github.com/tealdeer-rs/tealdeer) — `tldr` client
   (the installed command is `tldr`, not `tealdeer`)
 - [Terraform](https://www.terraform.io/) — infrastructure as code
+- [ttyd](https://github.com/tsl0922/ttyd) — terminal-sharing web server
+  (also required by `vhs` below at runtime; not mise-managed on macOS
+  since its aqua-registry entry has no macOS build — install it
+  another way there, e.g. via Homebrew)
+- [vhs](https://github.com/charmbracelet/vhs) — terminal session
+  recorder, renders `.tape` scripts to GIF/video (requires `ttyd` and
+  `ffmpeg` on `PATH` at runtime)
 - [yq](https://github.com/mikefarah/yq) — YAML/JSON/XML processor
   (`mikefarah/yq`; not the unrelated Python `kislyuk/yq`)
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — video/audio downloader
