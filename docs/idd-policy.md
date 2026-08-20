@@ -4,26 +4,51 @@ This repository uses the Issue-Driven Development (IDD) workflow
 imported from
 [`kurone-kito/idd-skill`](https://github.com/kurone-kito/idd-skill).
 This page records the policy decisions confirmed during the
-onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), and
-the 0.5.0/0.6.0 re-import (roadmap #239). The machine-readable mirror
-lives at
+onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), the
+0.5.0/0.6.0 re-import (roadmap #239), and the 0.7.0 re-import
+(roadmap #292). The machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/f51a8bb73a47452eff5799e8a27251b660ba4ae0/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Pinned upstream commit**: `0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`
-(abbreviated `0a9c90d`; tag `v0.6.0`), audited by roadmap #239's
-0.5.0/0.6.0 policy-schema track (#234), which supersedes the 0.4.0-round
-pin imported by roadmap #144. `iddVersion` in
-[`.github/idd/config.json`](../.github/idd/config.json) is `0.6.0`,
-bumped by roadmap #239's own final-verification track (#238), which
-also re-validated `.github/idd/config.json` against the pinned
-`v0.6.0` `policy.schema.json` (`npx ajv-cli validate --spec=draft2020`:
-valid).
+**Pinned upstream commit**: `f51a8bb73a47452eff5799e8a27251b660ba4ae0`
+(abbreviated `f51a8bb`; tag `v0.7.0`), confirmed as the current latest
+tag and audited by roadmap #292's schema-audit track (#293), which
+supersedes the 0.5.0/0.6.0-round pin recorded by roadmap #239's #234.
+The advisory-convergence fix chain (upstream
+[#2050](https://github.com/kurone-kito/idd-skill/issues/2050) /
+[#2054](https://github.com/kurone-kito/idd-skill/pull/2054) /
+[#2056](https://github.com/kurone-kito/idd-skill/issues/2056), merged
+via [PR #2116](https://github.com/kurone-kito/idd-skill/pull/2116))
+was confirmed present at `f51a8bb` by reading the actual source, not
+only the schema: `src/scripts/review-clause.mts` defines a `reviewId`
+field on `AdvisoryConvergenceReviewClause` (gated on `matchesHead`,
+scoping Clause 1's thread evidence to the specific triggering review),
+and `src/scripts/advisory-convergence.mts` computes the report's
+top-level `satisfied` as a disposition-aware caller-side override
+(`hasValidReviewAck` / `itemCountClauseSatisfied`, bound to
+`review.reviewId`) rather than the raw mechanical
+`matchesHead && itemCount === 0 && suppressedCount === 0` check
+`review-clause.mts` alone computes.
+
+`iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
+stays `0.6.0` as of this track — roadmap #292's final-verification
+track (#298) bumps it to `0.7.0` once the sibling tracks land, mirroring
+how the prior round's schema-audit track (#234) also left `iddVersion`
+unbumped until #238. `.github/idd/config.json` already validates
+cleanly against the fetched `v0.7.0` `policy.schema.json`
+(`npx ajv-cli validate --spec=draft2020`: valid) and via `idd-doctor`
+run from the `v0.7.0` tarball directly (`PASS .github/idd/config.json
+validates against policy.schema.json`; 5 warnings, none a correctness
+break: command-mismatch x2 and toolchain-residue x2 are byte-identical
+to the same run against the `v0.6.0` tarball, and the fifth
+(branch-protection) reads differently only because `idd-doctor`'s own
+diagnostic wording/logic changed between the two tags, not because of
+any schema or configuration change).
 
 ## Merge Policy
 
@@ -108,7 +133,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/f51a8bb73a47452eff5799e8a27251b660ba4ae0 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -117,21 +142,21 @@ the import baseline for `.github/instructions/` and `.claude/skills/`,
 so the helper surface never drifts ahead of the checked-in templates —
 bump that commit deliberately whenever the IDD instructions are
 re-imported, and do **not** point the spec at a mutable
-`refs/heads/main` ref. Roadmap #239's schema-audit track (#234) bumped
-this pin to `v0.6.0` (`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`,
-confirmed working via `idd-doctor` and `idd-helper-bundle-manifest`
-against this repository) ahead of the instructions/skills re-import
-landing, opening a **transitional skew window** where audited helper
-commands resolved against the `v0.6.0` schema while
-`.github/instructions/` and `.claude/skills/` themselves stayed on the
-prior 0.4.0-round import. That window closed once roadmap #239's
-sibling tracks re-imported both surfaces to the same `v0.6.0` baseline
-— #232 for `.github/instructions/`, #235 for the
-`.claude/skills/issue-authoring/` companion bundle (#233 covers the
+`refs/heads/main` ref. Roadmap #292's schema-audit track (#293) bumped
+this pin to `v0.7.0` (`f51a8bb73a47452eff5799e8a27251b660ba4ae0`,
+confirmed working via `idd-doctor`, `ajv-cli`, and
+`idd-helper-bundle-manifest` against this repository) ahead of the
+instructions/skills re-import landing, opening a **transitional skew
+window** where audited helper commands resolve against the `v0.7.0`
+schema while `.github/instructions/` and `.claude/skills/` themselves
+stay on the prior `v0.6.0`-round import. That window closes once
+roadmap #292's sibling tracks re-import both surfaces to the same
+`v0.7.0` baseline — #294 for `.github/instructions/`, #297 for the
+`.claude/skills/issue-authoring/` companion bundle (#295 covers the
 remaining docs/profiles/githooks/scripts file set, not
 `.claude/skills/`) — so the pin, the instructions, and the skills
-bundle all track `v0.6.0` uniformly as of #238's final verification
-sweep.
+bundle will all track `v0.7.0` uniformly once #298's final verification
+sweep lands.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -399,6 +424,102 @@ unchanged at `v0.6.0`:
   section; its actual adoption is deferred to #237 (the
   workflow-reconciliation track), which owns workflow YAML and
   repository settings.
+
+## New 0.7.0 Schema Keys Left at Default
+
+Audited by roadmap #292's schema-audit track (#293): a direct diff of
+`schemas/policy.schema.json` and `schemas/advisory-convergence.schema.json`
+between the `v0.6.0` pin
+(`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`) and `v0.7.0`
+(`f51a8bb73a47452eff5799e8a27251b660ba4ae0`), re-verified against the
+fetched schema text rather than trusted from the issue's own drafted
+inventory (which mis-attributed one description change — see
+[Description-only changes](#description-only-changes) below).
+`policy.schema.json` gained two genuinely new top-level keys
+(`authoringLanguage`, `critiqueLoop.delegate`); both stayed at their
+distributed default as of this track. `.github/idd/config.json` was
+unchanged by this audit. See the
+[0.4.0](#new-040-schema-keys-left-at-default) and
+[0.5.0/0.6.0](#new-050060-schema-keys-left-at-default) sections above
+for the same convention.
+
+### Genuinely new in 0.7.0
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `authoringLanguage` | default: unset (0.7.0) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. Left unset: this repository already authors issues and PRs in English, and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
+| `critiqueLoop.delegate` | default: unset (0.7.0) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. Left unset: this repository has no external critique-delegate command in use; the per-agent critique table stays the sole C1 mechanism. |
+
+### Advisory-convergence report schema (not a policy key)
+
+`schemas/advisory-convergence.schema.json` describes the shape of the
+`idd-advisory-convergence` gate's own report output, not a
+`.github/idd/config.json` policy key — nothing below is adopted or
+left at a default, since there is no config surface to set. Recorded
+here per the issue's audit scope:
+
+- **`reviewId`** (new required string field on the `review` object):
+  the matched primary-bot review's own GraphQL node id, read only when
+  `matchesHead` is true (empty otherwise). Binds Clause 1's
+  itemCount-half thread evidence to the *specific* triggering review
+  via each thread's originating comment's `pullRequestReview.id`, per
+  idd-skill #2050 — confirmed present in `review-clause.mts` source,
+  per the **Pinned upstream commit** confirmation near the top of this
+  page.
+- **`review.itemCount`** gained a `"minimum": 0` constraint (tightened
+  from a bare `["integer", "null"]` type). No behavioral change for
+  this repository; purely a schema-strictness tightening.
+- **`review.satisfied`**'s description changed from a purely mechanical
+  `matchesHead && itemCount === 0 && suppressedCount === 0` check to a
+  disposition-aware one, matching the `advisory-convergence.mts`
+  caller-side override confirmed in source above.
+- **`nextActions`** (new required top-level array field on the report
+  object, idd-skill #2143): a structured next-action catalog (stable
+  token + one-line English summary + command/phase pointer) mirroring
+  the stderr `--assert` failure block, empty exactly when `ready` is
+  true, and never feeding `ready` itself. **Consumer conclusion**: no
+  file under `.github/instructions/`, `.github/workflows/`, or
+  `.claude/skills/` in this repository reads or surfaces this field —
+  it is diagnostic output for a human or agent reading a failed run,
+  not a new gate, and this repository has no such consumer to add.
+  (The unrelated `--next-action` CLI flag on
+  `post-idd-marker`/`live-status-digest.mjs`, documented in
+  [`docs/idd-comment-minimization.md`](idd-comment-minimization.md),
+  is a status-digest field name collision only — it predates this
+  schema field and reads nothing from it.)
+- **`already-satisfied-via-review-ack`** (new enum value on
+  `sameHeadReroll.ineligibleReasons`, alongside the existing
+  `review-item-count-not-positive`): reported when the reroll gate's
+  own eligibility check finds the review already satisfied via a
+  valid, HEAD-matching review-ack marker rather than a positive item
+  count. No config-key action needed; it is a new report value, not a
+  new policy input.
+
+### Description-only changes
+
+Both re-verified against the fetched `v0.7.0` schema text directly, no
+shape change in either case:
+
+- **`reviewPolicy`**'s description gained a clause documenting that
+  `advisory-convergence` reads it: `human-required`/`no-advisory` make
+  the check `not_applicable`; other values keep today's
+  Copilot/`primaryBotLogin` applicability. This repository's
+  `copilot-advisory` profile (see [PR Review Policy](#pr-review-policy))
+  already falls in the unaffected branch.
+- **`worktreeGuard.enabled`**'s description was reworded for precision
+  (references `idd-doctor`'s `--strict` flag by name, clarifies
+  enforcement stays local with no CI step). This repository's existing
+  [Worktree Guard](#worktree-guard) decision is unaffected.
+- **Correction to the issue's own drafted inventory**: the issue body
+  claimed "`ready`'s own description gained a clause" (a suppressed-
+  count/review-ack edge case). Re-reading the fetched `v0.7.0` schema
+  directly shows the top-level `ready` property's description is
+  byte-identical to `v0.6.0`; the changed description described in the
+  issue actually belongs to `sameHeadReroll.eligible` (see
+  `already-satisfied-via-review-ack` above), not `ready`. Recorded here
+  as the corrected attribution, per the issue's own instruction to
+  re-verify against the actual schema rather than trust the drafted
+  inventory.
 
 ## Divergence Register
 
