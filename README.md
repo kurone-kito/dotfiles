@@ -90,6 +90,8 @@ input line editing
 - [Terraform](https://www.terraform.io/) — infrastructure as code
 - [yq](https://github.com/mikefarah/yq) — YAML/JSON/XML processor
   (`mikefarah/yq`; not the unrelated Python `kislyuk/yq`)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — video/audio downloader
+  (youtube-dl fork)
 
 ### AI coding assistants (via mise)
 
