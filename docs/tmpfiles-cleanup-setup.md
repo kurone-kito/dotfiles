@@ -126,43 +126,67 @@ materially, adapt before deploying:
 
 ### Step 3: Back up the existing override (if any)
 
+`/etc/tmpfiles.d/tmp.conf` may already exist as either a regular file
+or a **symlink** — the standard way to fully mask a vendor tmpfiles
+file is a symlink to `/dev/null`. Bash's `test -f` follows symlinks
+and requires the resolved target to be a *regular file*, so it
+evaluates false for a symlink to `/dev/null` (a character device) —
+naively backing up only when `-f` is true silently skips backing up a
+symlink-based mask, and Step 5's `--remove-destination` then deletes
+that symlink permanently with no way to restore it. Detect and handle
+both cases:
+
 ```bash
-sudo test -f /etc/tmpfiles.d/tmp.conf && \
+if sudo test -L /etc/tmpfiles.d/tmp.conf; then
+  sudo readlink /etc/tmpfiles.d/tmp.conf | \
+    sudo tee /etc/tmpfiles.d/tmp.conf.bak.symlink-target > /dev/null
+elif sudo test -f /etc/tmpfiles.d/tmp.conf; then
   sudo cp /etc/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf.bak
+fi
 ```
 
-### Step 4: Deploy
+### Step 4: Validate the staged copy before deploying
+
+Validate `~/.config/tmpfiles.d/tmp.conf` — the staged copy, not yet
+installed — **before** Step 5 overwrites the live vendor file.
+Validating only after deploying (as an earlier revision of this guide
+did) means a syntax error in a hand-edited staged file already masked
+the valid vendor config by the time validation catches it, and
+`systemd-tmpfiles-clean.timer`'s own service
+(`systemd-tmpfiles-clean.service`) reads whatever is active at
+`/etc/tmpfiles.d/tmp.conf` on its own schedule — it does not re-run
+Step 6 itself, so a bad override deployed early could be picked up by
+that timer before you notice:
+
+```bash
+systemd-tmpfiles --create --dry-run ~/.config/tmpfiles.d/tmp.conf
+```
+
+This exits `0` and reports the actions it would take without
+performing them (no `sudo` needed — it targets your own staged copy).
+Only proceed to Step 5 once this reports no unexpected errors.
+
+`--dry-run` requires a sufficiently recent `systemd-tmpfiles` — check
+with `systemd-tmpfiles --help | grep dry-run` first. If it reports
+`unrecognized option '--dry-run'`, that flag isn't available on this
+host; skip straight to Step 5, having reviewed the staged file by eye
+beforehand.
+
+### Step 5: Deploy
 
 ```bash
 sudo cp --remove-destination ~/.config/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf
 ```
 
 Use this exact destination filename — see the masking-semantics
-caution above. `--remove-destination` matters if
-`/etc/tmpfiles.d/tmp.conf` is already a symlink — for example, the
-standard way to fully mask a vendor tmpfiles file is a symlink to
-`/dev/null`. A plain `cp` follows that symlink and writes through it
-(to `/dev/null`, silently discarding the new content and leaving the
-mask in place — or to whatever else the symlink targets), so both
-Step 5's validation and Step 6's apply can report success while the
-new policy was never actually installed. `--remove-destination`
-deletes the destination path itself (symlink or not) before writing,
-ensuring a real regular file lands at `/etc/tmpfiles.d/tmp.conf`.
-
-### Step 5: Validate before applying for real
-
-```bash
-sudo systemd-tmpfiles --create --dry-run /etc/tmpfiles.d/tmp.conf
-```
-
-This exits `0` and reports the actions it would take without
-performing them. Only proceed once this reports no unexpected errors.
-
-`--dry-run` requires a sufficiently recent `systemd-tmpfiles` — check
-with `systemd-tmpfiles --help | grep dry-run` first. If it reports
-`unrecognized option '--dry-run'`, that flag isn't available on this
-host; skip straight to Step 6, having reviewed the rendered file by
-eye beforehand.
+caution above. `--remove-destination` matters because a plain `cp`
+follows an existing destination symlink and writes through it (to
+`/dev/null`, silently discarding the new content and leaving the mask
+in place — or to whatever else the symlink targets), so Step 6's
+apply could report success while the new policy was never actually
+installed. `--remove-destination` deletes the destination path itself
+(symlink or not) before writing, ensuring a real regular file lands at
+`/etc/tmpfiles.d/tmp.conf`.
 
 ### Step 6: Apply
 
@@ -186,14 +210,29 @@ Then re-run `chezmoi apply` and redeploy (Steps 1–6 above).
 
 ## Rollback
 
-If the new override causes problems, restore the backup:
+If the new override causes problems, restore whichever backup Step 3
+produced:
+
+**A symlink-target backup exists** (the prior override was a symlink,
+e.g. a `/dev/null` mask):
 
 ```bash
-sudo cp /etc/tmpfiles.d/tmp.conf.bak /etc/tmpfiles.d/tmp.conf
+sudo ln -sf "$(sudo cat /etc/tmpfiles.d/tmp.conf.bak.symlink-target)" \
+  /etc/tmpfiles.d/tmp.conf
+```
+
+Re-running `systemd-tmpfiles --create` afterward is unnecessary here —
+a symlink to `/dev/null` masks the file entirely rather than defining
+active rules.
+
+**A regular-file backup exists**:
+
+```bash
+sudo cp --remove-destination /etc/tmpfiles.d/tmp.conf.bak /etc/tmpfiles.d/tmp.conf
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/tmp.conf
 ```
 
-If no backup exists (no prior override was present), remove the file
+**No backup exists** (no prior override was present), remove the file
 to fall back to the shipped default:
 
 ```bash
