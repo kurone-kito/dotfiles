@@ -6,7 +6,13 @@
 # It is an inert staging copy — it has no special meaning to any
 # systemd instance. Deploy it to the system location manually:
 #
-#   sudo cp ~/.config/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf
+#   sudo cp --remove-destination ~/.config/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf
+#
+# --remove-destination matters if /etc/tmpfiles.d/tmp.conf is already a
+# symlink (the standard way to fully mask a vendor tmpfiles file is a
+# symlink to /dev/null): a plain cp follows that symlink and writes
+# through it instead of replacing it, silently discarding the new
+# content while leaving the mask in place.
 #
 # /etc/tmpfiles.d/tmp.conf MASKS (fully replaces, not merges with)
 # /usr/lib/tmpfiles.d/tmp.conf — same filename in the higher-priority
