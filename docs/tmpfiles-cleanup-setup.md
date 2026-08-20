@@ -154,27 +154,26 @@ symlink-based mask, and Step 5's `--remove-destination` then deletes
 that symlink permanently with no way to restore it. Detect and handle
 both cases:
 
-Each backup form is mutually exclusive with the other and with any
-prior round's backup — remove the alternate form when writing either,
-so at most one backup exists and Rollback always restores the
-*immediately previous* configuration rather than a stale one left over
-from an earlier round where the override's type differed. This
-includes the case where no override exists at all: without an `else`
-branch, a stale backup from an earlier round (when an override *did*
-exist) would be left in place and Rollback would restore it instead of
-correctly reporting "no backup exists" (see Rollback below):
+At most one backup form should exist at a time, so Rollback always
+restores the *immediately previous* configuration rather than a stale
+one left over from an earlier round where the override's type (or
+presence) differed. Remove **both** backup destinations up front in
+every branch, before writing either — not just the unused alternate
+form — since `tee` and `cp` both follow an existing destination
+symlink rather than replacing it: if `tmp.conf.bak` or
+`tmp.conf.bak.symlink-target` were themselves already a symlink (e.g.
+a leftover from manual cleanup, or one an administrator created),
+writing through it would silently modify whatever file it points at
+instead of recording the current override:
 
 ```bash
+sudo rm -f /etc/tmpfiles.d/tmp.conf.bak \
+  /etc/tmpfiles.d/tmp.conf.bak.symlink-target
 if sudo test -L /etc/tmpfiles.d/tmp.conf; then
-  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak
   sudo readlink /etc/tmpfiles.d/tmp.conf | \
     sudo tee /etc/tmpfiles.d/tmp.conf.bak.symlink-target > /dev/null
 elif sudo test -f /etc/tmpfiles.d/tmp.conf; then
-  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak.symlink-target
   sudo cp /etc/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf.bak
-else
-  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak \
-    /etc/tmpfiles.d/tmp.conf.bak.symlink-target
 fi
 ```
 
@@ -279,7 +278,7 @@ to fall back to the shipped default:
 
 ```bash
 sudo rm /etc/tmpfiles.d/tmp.conf
-sudo systemd-tmpfiles --create
+sudo systemd-tmpfiles --create --prefix=/tmp --prefix=/var/tmp
 ```
 
 Run `--create` with **no filename argument** here, not
@@ -290,7 +289,11 @@ in effect before this override existed (masked by it, same as
 bypasses that and re-applies the wrong rules. With no argument,
 `systemd-tmpfiles` re-resolves the standard search path itself and
 applies whichever file is actually effective now that the override is
-gone.
+gone. `--prefix=/tmp --prefix=/var/tmp` restricts that reprocessing to
+just these two paths — without it, no-argument `--create` reprocesses
+every rule in every resolved `tmpfiles.d` file on the system, which
+could repeat unrelated file creation elsewhere as a side effect of a
+`/tmp`-only rollback.
 
 ## Limitations
 

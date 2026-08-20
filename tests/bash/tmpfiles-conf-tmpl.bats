@@ -93,7 +93,10 @@ JSON
 
   run systemd-tmpfiles --create --dry-run "$rendered"
   assert_success
-  refute_output --partial "ignoring"
+  # Case-insensitive: systemd-tmpfiles wording/casing isn't guaranteed
+  # stable across versions, and a case-sensitive check would silently
+  # pass (false negative) if it ever emits "Ignoring" instead.
+  refute_output --regexp '(ignoring|Ignoring)'
 }
 
 @test "a multi-component age validates with systemd-tmpfiles --create --dry-run without a warning" {
@@ -114,5 +117,8 @@ JSON
 
   run systemd-tmpfiles --create --dry-run "$rendered"
   assert_success
-  refute_output --partial "ignoring"
+  # Case-insensitive: systemd-tmpfiles wording/casing isn't guaranteed
+  # stable across versions, and a case-sensitive check would silently
+  # pass (false negative) if it ever emits "Ignoring" instead.
+  refute_output --regexp '(ignoring|Ignoring)'
 }
