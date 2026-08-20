@@ -78,5 +78,5 @@
 # See docs/tmpfiles-cleanup-setup.md for full deployment and rollback
 # instructions.
 
-q /tmp 1777 root root "{{ dig "tmpfiles" "age" "10d" . }}"
+q /tmp 1777 root root {{ dig "tmpfiles" "age" "10d" . | quote }}
 q /var/tmp 1777 root root 30d
