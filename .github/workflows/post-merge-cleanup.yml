@@ -37,8 +37,8 @@
 #
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml at pin
-# 0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 (v0.6.0; reconciled from the
-# prior 0.4.0-round pin by #237). This
+# f51a8bb73a47452eff5799e8a27251b660ba4ae0 (v0.7.0; reconciled from the
+# prior v0.6.0 pin by #296). This
 # repository runs the ephemeral-npx helper profile (no vendored
 # scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
 # CLI rather than upstream's `node scripts/audit-pr-cleanup.mjs` form --
@@ -46,17 +46,26 @@
 # resolution (which falls back to a mutable default archive URL under
 # ephemeral-npx when `helperRuntime.packageSpec` is unset), so this copy
 # is not exposed to that wider fetch-at-run-time surface. `runs-on`
-# follows this repository's own idd-advisory-convergence.yml convention
-# (`ubuntu-latest`) rather than upstream's `ubuntu-slim`, since that is
-# the runner label this repository already uses for its other npx+gh
-# workflows (lint.yml and stale.yml use `ubuntu-slim` for actions-only
-# steps with no npx/gh dependency). The checkout/setup-node action pins
+# (`ubuntu-latest`) matches upstream's own default for this specific
+# file directly -- upstream's `idd-template` copy of
+# `post-merge-cleanup.yml` has never shipped `ubuntu-slim` (unlike
+# `idd-advisory-convergence.yml`, whose upstream template copy is
+# `ubuntu-slim`); this repository's real divergence for this file is
+# reusing the ephemeral-npx packaged `idd-audit-pr-cleanup` CLI directly
+# (a single pinned-tarball invocation) instead of upstream's
+# profile-resolving `node scripts/audit-pr-cleanup.mjs` /
+# multi-package-manager branching. The checkout/setup-node action pins
 # are copied verbatim from upstream's own pinned-SHA choices, since this
 # workflow's elevated `pull_request_target` permissions warrant the same
 # supply-chain hardening upstream already applied. The duplicate
 # evidence-comment check below is trust-scoped to match upstream's
-# v0.6.0 hardening (#237): an untrusted commenter's marker-prefixed
-# comment must never suppress the genuine evidence post.
+# v0.7.0 hardening (#296, following the v0.6.0-round #237 precedent):
+# skip posting only when the **latest** trusted
+# `idd-cleanup-evidence` comment already recorded `applied` or `clean`
+# -- a stale `failed`/`incomplete`/`rescan-failed`/`permission-blocked`
+# record no longer suppresses a fresh retry's evidence post, and an
+# untrusted commenter's marker-prefixed comment must never suppress the
+# genuine evidence post either way.
 name: Post-merge cleanup
 on:
   pull_request_target:
@@ -75,6 +84,15 @@ permissions:
 concurrency:
   group: post-merge-cleanup-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
   cancel-in-progress: false
+defaults:
+  run:
+    # Pins every run: step's shell regardless of runner OS -- GitHub
+    # Actions otherwise picks bash on Linux/macOS but PowerShell Core on
+    # Windows, which would silently misinterpret this file's POSIX
+    # command substitution and shell variable expansion instead of
+    # failing loudly. No-op on this repository's ubuntu-latest runner;
+    # imported for parity with upstream.
+    shell: bash
 jobs:
   cleanup:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
@@ -92,6 +110,11 @@ jobs:
         id: cleanup
         env:
           GH_TOKEN: ${{ github.token }}
+          # gh reads whichever of these two matches its resolved host
+          # (`gh help environment`), so setting both is inert on
+          # github.com and lets this same step authenticate on a
+          # self-hosted GHES host too.
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
         run: |
           if [ -z "$PR_NUMBER" ]; then
@@ -110,7 +133,7 @@ jobs:
             fi
           fi
           set +e
-          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6 \
+          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/f51a8bb73a47452eff5799e8a27251b660ba4ae0 \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
             --apply \
@@ -132,6 +155,8 @@ jobs:
             FAILED=$(printf '%s' "$JSON" | jq -r '(.failed // []) | length')
             SKIPPED=$(printf '%s' "$JSON" | jq -r '(.skipped // []) | length')
             BLOCKED=$(printf '%s' "$JSON" | jq -r '[(.skipped // [])[] | select(.isMinimized==false and .viewerCanMinimize==false)] | length')
+            RETRY_ATTEMPTS=$(printf '%s' "$JSON" | jq -r '.retryAttempts // 0')
+            RETRY_BOUND_EXHAUSTED=$(printf '%s' "$JSON" | jq -r '.retryBoundExhausted // false')
             if [ "$HELPER_EXIT" -ne 0 ]; then
               echo "::warning::idd-audit-pr-cleanup exited $HELPER_EXIT but emitted a valid JSON report; using helper status \"$STATUS\""
             fi
@@ -142,6 +167,8 @@ jobs:
             FAILED=0
             SKIPPED=0
             BLOCKED=0
+            RETRY_ATTEMPTS=0
+            RETRY_BOUND_EXHAUSTED=false
           fi
           {
             echo "pr_number=$PR_NUMBER"
@@ -150,30 +177,44 @@ jobs:
             echo "failed=$FAILED"
             echo "skipped=$SKIPPED"
             echo "blocked=$BLOCKED"
+            echo "retry_attempts=$RETRY_ATTEMPTS"
+            echo "retry_bound_exhausted=$RETRY_BOUND_EXHAUSTED"
           } >> "$GITHUB_OUTPUT"
       - name: Post cleanup evidence comment
         env:
           GH_TOKEN: ${{ github.token }}
+          # gh reads whichever of these two matches its resolved host
+          # (`gh help environment`), so setting both is inert on
+          # github.com and lets this same step authenticate on a
+          # self-hosted GHES host too.
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.cleanup.outputs.pr_number }}
           STATUS: ${{ steps.cleanup.outputs.status }}
           APPLIED: ${{ steps.cleanup.outputs.applied }}
           FAILED: ${{ steps.cleanup.outputs.failed }}
           SKIPPED: ${{ steps.cleanup.outputs.skipped }}
           BLOCKED: ${{ steps.cleanup.outputs.blocked }}
+          RETRY_ATTEMPTS: ${{ steps.cleanup.outputs.retry_attempts }}
+          RETRY_BOUND_EXHAUSTED: ${{ steps.cleanup.outputs.retry_bound_exhausted }}
         run: |
-          # Avoid duplicate evidence comments. Workflow-level concurrency
-          # only serialises this workflow's own runs; an agent F4 (or a
-          # maintainer rerunning workflow_dispatch on the same PR) can
-          # still have posted an evidence comment outside this run. Skip
-          # if a <!-- idd-cleanup-evidence: ... --> comment already on the
-          # PR was posted by a trusted author -- this workflow's own posts
-          # are authored by `github-actions[bot]` (the GITHUB_TOKEN actor),
-          # and an agent's local F4 post is authored by a configured
-          # `trustedMarkerActors` login. An untrusted commenter pre-posting
-          # this marker prefix must never suppress the genuine evidence
-          # post or be treated as a completed cleanup record (this is the
-          # same trust-scoping every other IDD operational marker already
-          # applies).
+          # Avoid duplicate evidence comments, but only on a genuinely
+          # converged outcome. Workflow-level concurrency only serialises
+          # this workflow's own runs; an agent F4 (or a maintainer
+          # rerunning workflow_dispatch on the same PR) can still have
+          # posted an evidence comment outside this run. Skip only when
+          # the latest trusted <!-- idd-cleanup-evidence: {status} ... -->
+          # comment already records `applied` or `clean` -- a trusted
+          # comment recording any other status (`failed`, `incomplete`,
+          # `rescan-failed`, `permission-blocked`) invites a retry, so a
+          # rerun must post fresh evidence for its own outcome instead of
+          # leaving stale non-success evidence as the PR's only record.
+          # "Trusted" scoping: this workflow's own posts are authored by
+          # `github-actions[bot]` (the GITHUB_TOKEN actor), and an agent's
+          # local F4 post is authored by a configured `trustedMarkerActors`
+          # login. An untrusted commenter pre-posting this marker prefix
+          # must never suppress the genuine evidence post or be treated as
+          # a completed cleanup record (this is the same trust-scoping
+          # every other IDD operational marker already applies).
           # `|| true` keeps a missing/unreadable config.json a soft "no
           # extra trusted logins" read instead of aborting this step under
           # the default `bash -eo pipefail`.
@@ -189,24 +230,31 @@ jobs:
           # empty and post a duplicate evidence comment on a transient
           # `gh api` failure (rate limit/network). A plain command
           # substitution assignment does trip `-e` on failure.
+          #
+          # The API returns issue comments in creation-ascending order, so
+          # iterating every match without an early `break` and keeping the
+          # last assignment leaves EXISTING/EXISTING_STATUS holding the
+          # *latest* trusted comment, not merely the first one found.
           COMMENTS_TSV=$(gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login] | @tsv')
+            --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login, (.body | split("\n")[0])] | @tsv')
           EXISTING=""
-          while IFS=$'\t' read -r candidate_id candidate_login; do
+          EXISTING_STATUS=""
+          while IFS=$'\t' read -r candidate_id candidate_login candidate_marker_line; do
             [ -z "$candidate_id" ] && continue
             lower_login=$(printf '%s' "$candidate_login" | tr '[:upper:]' '[:lower:]')
             if printf '%s\n' "$TRUSTED_LOGINS" | grep -Fxq "$lower_login"; then
               EXISTING="$candidate_id"
-              break
+              EXISTING_STATUS=$(printf '%s' "$candidate_marker_line" \
+                | sed -n 's/^<!-- idd-cleanup-evidence: \([^ ]*\) .*/\1/p')
             fi
           done <<< "$COMMENTS_TSV"
-          if [ -n "$EXISTING" ]; then
-            echo "::notice::PR #${PR_NUMBER} already has a trusted-author idd-cleanup-evidence comment (id: ${EXISTING}); skipping workflow post."
+          if [ -n "$EXISTING" ] && { [ "$EXISTING_STATUS" = "applied" ] || [ "$EXISTING_STATUS" = "clean" ]; }; then
+            echo "::notice::PR #${PR_NUMBER} already has a trusted-author idd-cleanup-evidence comment recording '${EXISTING_STATUS}' (id: ${EXISTING}); skipping workflow post."
             exit 0
           fi
-          BODY=$(printf '%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
-            "<!-- idd-cleanup-evidence: ${STATUS} applied:${APPLIED} failed:${FAILED} skipped:${SKIPPED} viewer-cannot-minimize:${BLOCKED} -->" \
+          BODY=$(printf '%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "<!-- idd-cleanup-evidence: ${STATUS} applied:${APPLIED} failed:${FAILED} skipped:${SKIPPED} viewer-cannot-minimize:${BLOCKED} retry-attempts:${RETRY_ATTEMPTS} retry-bound-exhausted:${RETRY_BOUND_EXHAUSTED} -->" \
             "**F4 Cleanup Evidence** (server-side fallback via \`post-merge-cleanup.yml\`)" \
             "| Field              | Value |" \
             "| ------------------ | ----- |" \
@@ -215,6 +263,7 @@ jobs:
             "| Failed             | ${FAILED} |" \
             "| Skipped            | ${SKIPPED} |" \
             "| Permission-blocked | ${BLOCKED} |" \
+            "| Retry attempts (bound-exhausted) | ${RETRY_ATTEMPTS} (${RETRY_BOUND_EXHAUSTED}) |" \
             "| Posted by          | post-merge-cleanup workflow |" \
           )
           printf '%s' "$BODY" | gh pr comment "$PR_NUMBER" --body-file -
