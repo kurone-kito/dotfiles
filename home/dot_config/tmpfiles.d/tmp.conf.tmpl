@@ -17,10 +17,14 @@
 # /etc/tmpfiles.d/tmp.conf MASKS (fully replaces, not merges with)
 # /usr/lib/tmpfiles.d/tmp.conf — same filename in the higher-priority
 # directory is systemd's documented override mechanism. Diff your own
-# distro's shipped file first, since the exact ruleset can vary by
-# distro/systemd version:
+# distro's effective shipped configuration first, since the exact
+# ruleset can vary by distro/systemd version. Use --cat-config rather
+# than reading /usr/lib/tmpfiles.d/tmp.conf directly: it shows the
+# resolved config across all priority directories (/etc, /run,
+# /usr/local/lib, /usr/lib), so a higher-priority override in /run or
+# /usr/local/lib isn't missed:
 #
-#   cat /usr/lib/tmpfiles.d/tmp.conf
+#   systemd-tmpfiles --cat-config
 #
 # Because masking replaces the whole file, both shipped rules are
 # reproduced below — only the /tmp age is parameterized. Do not deploy
@@ -31,7 +35,7 @@
 #
 # The /tmp age is quoted so a multi-component systemd time span (e.g.
 # "1d 12h", which is valid systemd.time(7) syntax and contains a
-# space) still parses as one field. q/D lines take exactly five data
+# space) still parses as one field. q/D lines take exactly six data
 # fields (type, path, mode, uid, gid, age) and no further "argument"
 # field; an unquoted space splits the age into two tokens, so
 # systemd-tmpfiles keeps only the first ("1d") as the age and reports

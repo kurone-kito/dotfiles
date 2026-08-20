@@ -47,7 +47,7 @@ q /var/tmp 1777 root root 30d
 
 The `/tmp` age is quoted so a multi-component systemd time span
 containing a space (e.g. `"1d 12h"`, valid `systemd.time(7)` syntax)
-still parses as one field. `q`/`D` lines take exactly five data
+still parses as one field. `q`/`D` lines take exactly six data
 fields (type, path, mode, uid, gid, age) and support no further
 "argument" field; unquoted, the space splits the age into two tokens,
 so systemd-tmpfiles keeps only the first (`1d`) as the age and reports
@@ -279,8 +279,18 @@ to fall back to the shipped default:
 
 ```bash
 sudo rm /etc/tmpfiles.d/tmp.conf
-sudo systemd-tmpfiles --create /usr/lib/tmpfiles.d/tmp.conf
+sudo systemd-tmpfiles --create
 ```
+
+Run `--create` with **no filename argument** here, not
+`--create /usr/lib/tmpfiles.d/tmp.conf`. If a higher-priority file in
+`/run/tmpfiles.d/` or `/usr/local/lib/tmpfiles.d/` was the one actually
+in effect before this override existed (masked by it, same as
+`/etc/tmpfiles.d/` masks `/usr/lib/`), an explicit vendor-file argument
+bypasses that and re-applies the wrong rules. With no argument,
+`systemd-tmpfiles` re-resolves the standard search path itself and
+applies whichever file is actually effective now that the override is
+gone.
 
 ## Limitations
 
