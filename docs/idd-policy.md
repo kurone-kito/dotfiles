@@ -664,7 +664,9 @@ removed.
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
-`result: passed` with five `WARN`s and no `ERROR`; each below is
+`result: passed` with three `WARN`s in a worktree that has already
+wired `core.hooksPath` (four on a fresh clone that has not — see that
+bullet below) and no `ERROR`; each below is
 expected, not a defect. #218 resolved the one finding that was a
 genuine `ERROR` (the `idd-task.yml` placeholder syntax) by
 reformatting it; the remaining findings are accepted noise, recorded
@@ -679,27 +681,26 @@ rediscover them:
   scanner has no per-finding waiver flag (confirmed via
   `idd-doctor --help` while investigating #218), so this is accepted
   as permanent noise rather than suppressed.
-- **Command mismatch between `.github/idd/config.json` and the
-  overview project-commands table** (two instances: `pre-push-validate`
-  and `post-fix-validate`; new relative to this section's own
-  previously-recorded baseline, which predates the commit below —
-  #293 already surfaced it in the "Pinned upstream commit" note above,
-  and #298 gives it a dedicated entry here): `config.json`'s two
-  commands gained a `-CI` flag on the
-  `Invoke-Pester` invocation via `b749315` (#280, 2026-08-15) so a
-  genuine Pester test failure propagates to the process exit code
-  instead of being silently swallowed — the same fix #269 already
-  applied to the CI workflow job. That commit updated `config.json`
-  but not the mirrored table in
+- ~~**Command mismatch between `.github/idd/config.json` and the
+  overview project-commands table**~~ (two instances:
+  `pre-push-validate` and `post-fix-validate`) -- traced to commit
+  `b749315` (#280, 2026-08-15), which added a `-CI` flag to
+  `config.json`'s two `Invoke-Pester` invocations so a genuine Pester
+  test failure propagates to the process exit code instead of being
+  silently swallowed (the same fix #269 already applied to the CI
+  workflow job), but did not update the mirrored table in
   `.github/instructions/idd-overview-core.instructions.md`'s Project
-  commands section. Non-blocking: that file's own text states
-  `config.json`'s `commands` object overrides the table when present,
-  so the live behavior is already correct; only the descriptive text
-  in the instructions file lags. Predates and is unrelated to the
-  v0.7.0 re-import — recorded here rather than fixed, since #293
-  already confirmed (see the "Pinned upstream commit" note above) this
-  warning is byte-identical whether `idd-doctor` runs from the `v0.6.0`
-  or `v0.7.0` tarball.
+  commands section. Predates and is unrelated to the `v0.7.0`
+  re-import; #293 already noted it as non-blocking noise (see the
+  "Pinned upstream commit" note above), since that file's own text
+  states `config.json`'s `commands` object overrides the table when
+  present -- config.json currently exists and validates, so live
+  behavior was already correct. #307's review caught the sharper
+  point: `config.json`-absent-or-invalid is exactly this table's own
+  documented fallback condition, so the un-flagged table command would
+  silently reintroduce the test-failure-masking bug `b749315` fixed, in
+  that fallback path specifically. Fixed directly in #307 by adding
+  `-CI` to both table rows -- no longer a live `idd-doctor` finding.
 - **`worktreeGuard.enabled` is true but `core.hooksPath` is unset in
   this environment**: expected on any fresh clone that has not yet run
   the wiring step documented in [Worktree Guard](#worktree-guard) --
@@ -806,15 +807,22 @@ future verification sweep does not have to rediscover them:
   like `{{REPO_NAME}}` to support ..."). Both forms are the same
   documentation-as-example usage, just in prose instead of a table
   cell. At the `v0.7.0` re-run, the residue scanner instead attributes
-  three `{{REPO_NAME}}` occurrences to `docs/idd-policy.md` -- new
-  prose #293's schema-audit track added this round (the
-  "Description-only changes" section above, which quotes
-  `{{REPO_NAME}}` by name as a worked example of the same false-positive
-  class). `docs/customization.md`'s own occurrences are confirmed
-  unchanged and still present by manual grep; the scanner's shifted
-  attribution does not indicate they were resolved or removed, only
-  that this run's residue list surfaces a different file. Both files'
-  occurrences are the same documentation-as-example non-issue.
+  its hits to `docs/idd-policy.md` -- new prose #293's schema-audit
+  track added this round (the "Description-only changes" section
+  above, which quotes the same placeholder token by name as a worked
+  example of this false-positive class). Deliberately not restating an
+  exact occurrence count here: a live count would go stale the moment
+  this section's own prose changes (as happened during #298's own PR
+  #307 review, where a reviewer correctly flagged that an earlier draft
+  of this bullet undercounted itself after adding worked-example prose
+  that itself quotes the token) -- read the raw count directly
+  (`grep -c` for the literal token in this file) rather than trusting
+  any number recorded here. `docs/customization.md`'s own occurrences
+  are confirmed unchanged and still present by manual grep; the
+  scanner's shifted attribution does not indicate they were resolved or
+  removed, only that this run's residue list surfaces a different
+  file. Both files' occurrences are the same documentation-as-example
+  non-issue.
   `idd-onboard --verify`'s residue scanner matches raw `{{...}}`
   occurrences as plain text anywhere in a scanned file and cannot
   distinguish either usage from genuine unresolved residue -- the same
