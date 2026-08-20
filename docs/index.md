@@ -5,7 +5,7 @@
 This index currently covers only this repository's own
 locally-authored `docs/` pages. At the next template re-import, once
 the 17 upstream-synced pages gain OKF frontmatter of their own (see
-[docs/idd-policy.md](idd-policy.md)'s pinned-upstream-commit note),
+[docs/idd-policy.md](idd-policy.md)'s "Pinned upstream commit" note),
 this index should be reconciled to cover the full `docs/` bundle
 instead of staying local-only.
 
