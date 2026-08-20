@@ -812,23 +812,31 @@ future verification sweep does not have to rediscover them:
   synchronization-example sentence ("Template copies use placeholders
   like `{{REPO_NAME}}` to support ..."). Both forms are the same
   documentation-as-example usage, just in prose instead of a table
-  cell. At the `v0.7.0` re-run, the residue scanner instead attributes
-  its hits to `docs/idd-policy.md` -- new prose #293's schema-audit
-  track added this round (the "Description-only changes" section
-  above, which quotes the same placeholder token by name as a worked
-  example of this false-positive class). Deliberately not restating an
-  exact occurrence count here: a live count would go stale the moment
-  this section's own prose changes (as happened during #298's own PR
-  #307 review, where a reviewer correctly flagged that an earlier draft
-  of this bullet undercounted itself after adding worked-example prose
-  that itself quotes the token) -- read the raw count directly
-  (`grep -c` for the literal token in this file) rather than trusting
+  cell. A fresh run against #298's own current tree surfaces an
+  additional hit this section never previously recorded: this same
+  worked-example prose, right here in this bullet, itself quotes the
+  placeholder token by name to describe `docs/customization.md`'s
+  occurrences -- three raw `{{...}}` occurrences of its own, which the
+  scanner matches as plain text with the same false-positive blindness.
+  **This is not new at the `v0.7.0` pin**: re-running the `v0.6.0`-pinned
+  tool against the identical current tree reports the exact same
+  `docs/idd-policy.md` hit, confirmed by direct A/B invocation of both
+  pinned tarballs against this file's current content. The
+  previously-documented finding above (`docs/customization.md` only)
+  simply predates this explanatory paragraph's own addition to
+  `docs/idd-policy.md` and was never re-verified against the file's own
+  content until #298's sweep -- an existing documentation-staleness gap
+  this round happened to catch, not a v0.6.0-vs-v0.7.0 pin difference.
+  Deliberately not restating an exact occurrence count for either file
+  here: a live count goes stale the moment this section's own prose
+  changes (as happened during #298's own PR #307 review, more than
+  once) -- read the raw count directly with an occurrence-counting form
+  (for example `grep -o '{{TOKEN}}' <file> | wc -l`; a plain `grep -c`
+  counts matching *lines*, not occurrences, and undercounts if more
+  than one instance ever lands on the same line) rather than trusting
   any number recorded here. `docs/customization.md`'s own occurrences
-  are confirmed unchanged and still present by manual grep; the
-  scanner's shifted attribution does not indicate they were resolved or
-  removed, only that this run's residue list surfaces a different
-  file. Both files' occurrences are the same documentation-as-example
-  non-issue.
+  are confirmed unchanged and still present by manual grep. Both files'
+  occurrences are the same documentation-as-example non-issue.
   `idd-onboard --verify`'s residue scanner matches raw `{{...}}`
   occurrences as plain text anywhere in a scanned file and cannot
   distinguish either usage from genuine unresolved residue -- the same
@@ -853,11 +861,27 @@ diff, both fetched fresh). No upstream drift landed this round; nothing
 to reconcile for the `v0.7.0` re-import itself.
 
 Diffing the local repository's own copies against the upstream
-`v0.7.0` template shows all four differ from upstream, but
-`docs/customization.md` already documents this as expected, by-design
-divergence: `idd-onboard --import` never overwrites an existing target
-file whose content differs, so these four are meant to be
-hand-reconciled per repository need, never byte-identical to upstream.
+`v0.7.0` template shows all four differ from upstream, but each is
+expected, by-design divergence -- **not the same mechanism for all
+four**, so treat them as two groups:
+
+- `.cspell.config.yml`, `.markdownlint-cli2.yaml`, and
+  `.markdownlint.yml` are part of the core `--import` file set;
+  `docs/customization.md`'s "Documentation lint compatibility" section
+  documents that `idd-onboard --import` never overwrites an existing
+  target file whose content differs (reported under
+  `blockedOverwrites` instead), so these three are meant to be
+  hand-reconciled per repository need, never byte-identical to
+  upstream.
+- `.claude/settings.json` is not part of the core import at all --
+  `docs/onboarding/template-distribution.md` explicitly lists it among
+  the files the core `idd-template-core-files` set excludes by design
+  (alongside `scripts/minimize-superseded-markers.mjs` and
+  `.github/workflows/idd-advisory-convergence.yml`). `idd-onboard
+  --import` therefore never attempts to copy or overwrite it in either
+  direction; its local divergence from upstream's own
+  `.claude/settings.json` template copy is simply out of `--import`'s
+  scope, not a `blockedOverwrites` case.
 
 One genuine gap surfaced by this comparison, **pre-existing rather than
 newly appeared** (confirmed present in upstream
@@ -927,37 +951,41 @@ the `copilot-pull-request-reviewer` actor. The default
 
 ### Upstream template issues deferred to the next re-import
 
-The [`#233`](https://github.com/kurone-kito/dotfiles/issues/233)
-v0.6.0 re-sync carried these two items verbatim from upstream
-(confirmed byte-identical against the pinned
-`0a9c90dc277e05e0d7d96f1b09d79ff668860cc6` source); both are review
-findings this repository chose not to fix ad hoc, since that issue's
-scope is placeholder substitution plus the registered divergence
-hunks, not an editorial rewrite of upstream's own prose or vendored
-code:
+Each item below is carried verbatim from a vendored/re-imported
+upstream file at the pin recorded alongside it; this repository chose
+not to fix any of them ad hoc, since the relevant track's scope was
+re-import/verification, not an editorial rewrite of upstream's own
+prose or vendored code. File each upstream against
+`kurone-kito/idd-skill`, or resolve it locally the next time its file
+is re-imported:
 
-- `docs/idd-helper-scripts.md`'s "Package-manager / ephemeral-npx
+- (`v0.6.0`, `0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`, carried by
+  [`#233`](https://github.com/kurone-kito/dotfiles/issues/233), confirmed
+  byte-identical against that pinned source)
+  `docs/idd-helper-scripts.md`'s "Package-manager / ephemeral-npx
   command" sections (claim-approval-gate, claim-lock, branch-name,
   select-desynced-index, emit-marker, post-idd-marker, and others)
   show only the `ephemeral-npx` `npx` literal invocation under a
   heading that also names the `package-manager` profile, which
   contradicts the `package-manager` profile's own contract elsewhere
   in the same file ("do not fall back to ad hoc `npx` in this mode").
-  File this ambiguity upstream against `kurone-kito/idd-skill`, or
-  resolve it locally the next time this file is re-imported.
-- `scripts/minimize-superseded-markers.mjs`'s `runGh` error handler
+- (`v0.6.0`, `0a9c90dc277e05e0d7d96f1b09d79ff668860cc6`, carried by
+  [`#233`](https://github.com/kurone-kito/dotfiles/issues/233), confirmed
+  byte-identical against that pinned source)
+  `scripts/minimize-superseded-markers.mjs`'s `runGh` error handler
   (`String(e.stderr?.toString?.() ?? e.message ?? 'unknown error')`)
   treats an empty-but-defined `stderr` string as present because `??`
   only falls through on `null`/`undefined`, so a `gh` timeout with no
-  stderr output loses `error.message`'s useful timeout text. File this
-  upstream, or fix it locally the next time this vendored file is
-  re-imported (see the `vendored-file-header` divergence above).
-- `docs/idd-concept-ownership.md` and
+  stderr output loses `error.message`'s useful timeout text (see the
+  `vendored-file-header` divergence above).
+- (`v0.7.0`, `f51a8bb73a47452eff5799e8a27251b660ba4ae0`, flagged by
+  #294, dispositioned by #298, confirmed byte-identical against that
+  pinned source)
+  `docs/idd-concept-ownership.md` and
   `.github/instructions/idd-overview-appendix.instructions.md` disagree
-  on who removes the `needs-decision` label (flagged by #294, carried
-  verbatim from `f51a8bb` -- confirmed byte-identical against that
-  pinned source, so this is an upstream inconsistency, not a local
-  editing error). The concept-ownership matrix says "human maintainer
+  on who removes the `needs-decision` label -- an upstream
+  inconsistency, not a local editing error. The concept-ownership
+  matrix says "human maintainer
   removes `status:blocked-by-human`/`status:needs-decision`/`idd:ready`
   ... regardless of which actor applied it"; the appendix's
   "Needs-decision claim release" paragraph says the opposite for
