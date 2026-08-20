@@ -146,7 +146,7 @@ way Option A fetches every other file:
 ```sh
 mkdir -p scripts
 curl -fsSL \
-  "https://raw.githubusercontent.com/kurone-kito/idd-skill/0a9c90dc277e05e0d7d96f1b09d79ff668860cc6/idd-template/scripts/minimize-superseded-markers.mjs" \
+  "https://raw.githubusercontent.com/kurone-kito/idd-skill/f51a8bb73a47452eff5799e8a27251b660ba4ae0/idd-template/scripts/minimize-superseded-markers.mjs" \
   -o scripts/minimize-superseded-markers.mjs
 ```
 
