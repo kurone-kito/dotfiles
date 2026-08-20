@@ -38,8 +38,9 @@ top-level `satisfied` as a disposition-aware caller-side override
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
 stays `0.6.0` as of this track — roadmap #292's final-verification
 track (#298) bumps it to `0.7.0` once the sibling tracks land, mirroring
-how the prior round's schema-audit track (#234) also left `iddVersion`
-unbumped until #238. `.github/idd/config.json` already validates
+how the prior round's schema-audit track (#234) also left
+`iddVersion` unchanged until #238. `.github/idd/config.json` already
+validates
 cleanly against the fetched `v0.7.0` `policy.schema.json`
 (`npx ajv-cli validate --spec=draft2020`: valid) and via `idd-doctor`
 run from the `v0.7.0` tarball directly (`PASS .github/idd/config.json
