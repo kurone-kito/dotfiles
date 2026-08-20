@@ -438,7 +438,7 @@ non-zero, include the blocked count in the same comment rather than
 posting a separate permission-blocked comment:
 
 ```markdown
-<!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
+<!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} retry-attempts:{N} retry-bound-exhausted:{true|false} -->
 
 **F4 Cleanup Failure**
 
@@ -448,6 +448,7 @@ Cleanup candidates were detected but not all could be applied.
 - Failed: N candidates (reason: ...)
 - Unapplied: N candidates
 - Permission-blocked: N candidates (if any)
+- Retry attempts (bound-exhausted): N (true / false)
 
 This does not re-block the merge. A maintainer may run cleanup
 manually: `node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check`
