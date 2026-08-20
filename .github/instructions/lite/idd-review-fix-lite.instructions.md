@@ -194,6 +194,11 @@ other GitHub side effect, confirm all of the following:
    which commits fixed it and how.
 2. Start every reply with:
    `**Accepted** — fixed in {commit-sha or comma-separated list}: {brief explanation}`
+   After that visible prefix, include the reply-identity stamp exactly
+   as `idd-review-triage.instructions.md`'s E6 defines it
+   (`<!-- {markerPrefix}-review-reply -->`) — same stamp mechanics and
+   constraints, applied here to the `**Accepted**`-only prefix this
+   phase posts.
 3. For a review thread, immediately resolve the thread after posting
    the reply. Reply first, resolve second, so a failed reply never
    leaves a silently-resolved thread.
