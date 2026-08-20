@@ -120,8 +120,8 @@ WinGet/DSC definitions no longer include them.
 
 ### Added here (this repository also owns install, not only config)
 
-The aqua wave (see [#257](https://github.com/kurone-kito/dotfiles/issues/257))
-plus one Windows-only addition:
+The aqua wave (see [#257](https://github.com/kurone-kito/dotfiles/issues/257)),
+yt-dlp, plus one Windows-only addition:
 
 | Tool | mise key |
 | ---------- | -------------------- |
@@ -133,6 +133,7 @@ plus one Windows-only addition:
 | fzf | `fzf` |
 | mkcert | `mkcert` |
 | Terraform | `terraform` |
+| yt-dlp | `yt-dlp` |
 | pstop (Windows-only) | `github:psmux/pstop` |
 
 `pstop` (a `htop`-style Windows CLI, no WinGet equivalent) uses the

@@ -19,6 +19,7 @@ mkcert = "latest"
 tealdeer = "latest"
 terraform = "latest"
 yq = "latest"
+yt-dlp = "latest"
 
 "aqua:anomalyco/opencode" = "latest"
 "aqua:google-antigravity/antigravity-cli" = "latest"
