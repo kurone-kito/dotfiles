@@ -43,12 +43,15 @@ bumped it. `.github/idd/config.json` already validates
 cleanly against the fetched `v0.7.0` `policy.schema.json`
 (`npx ajv-cli validate --spec=draft2020`: valid) and via `idd-doctor`
 run from the `v0.7.0` tarball directly (`PASS .github/idd/config.json
-validates against policy.schema.json`; 5 warnings, none a correctness
-break: command-mismatch x2 and toolchain-residue x2 are byte-identical
-to the same run against the `v0.6.0` tarball, and the fifth
-(branch-protection) reads differently only because `idd-doctor`'s own
-diagnostic wording/logic changed between the two tags, not because of
-any schema or configuration change).
+validates against policy.schema.json`; 3 warnings in a worktree with
+`core.hooksPath` already wired, none a correctness break:
+toolchain-residue x2 is byte-identical to the same run against the
+`v0.6.0` tarball, and the third (branch-protection) reads differently
+only because `idd-doctor`'s own diagnostic wording/logic changed
+between the two tags, not because of any schema or configuration
+change; #307's own review caught and fixed a fourth, transient
+command-mismatch pair unrelated to the pin -- see the dedicated
+`idd-doctor` findings section below).
 
 ## Merge Policy
 
