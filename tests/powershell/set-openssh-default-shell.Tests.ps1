@@ -1,10 +1,9 @@
 # Tests for the OpenSSH default shell configuration script.
-# Exercises: admin elevation check, preferred shell lookup,
-# registry set/reset operations, and main-block guard behaviour.
+# Exercises: admin elevation check, registry set/reset operations, main-block
+# guard behaviour, and the [data.ssh.server].defaultShell resolution table.
 
 BeforeAll {
-  $script:Subject = Join-Path $PSScriptRoot `
-    '../../home/dot_local/bin/executable_set-openssh-default-shell.ps1'
+  $script:Subject = Join-Path $PSScriptRoot 'fixtures/set-openssh-default-shell.ps1'
 }
 
 Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
@@ -20,7 +19,7 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     foreach ($name in @(
       'Test-DotfilesAdminElevation'
-      'Get-DotfilesPreferredShell'
+      'Resolve-DotfilesOpenSSHShellChoice'
       'Set-DotfilesOpenSSHDefaultShell'
       'Reset-DotfilesOpenSSHDefaultShell'
       'Restart-DotfilesSshdService'
@@ -35,31 +34,6 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
       [Security.Principal.WindowsBuiltInRole]::Administrator)
   ) {
     Test-DotfilesAdminElevation | Should -BeFalse
-  }
-
-  It 'Get-DotfilesPreferredShell finds pwsh when available' {
-    Mock Get-Command {
-      [pscustomobject]@{ Source = 'TestDrive:\pwsh.exe' }
-    } -ParameterFilter { $Name -eq 'pwsh' }
-
-    Get-DotfilesPreferredShell | Should -Be 'TestDrive:\pwsh.exe'
-  }
-
-  It 'Get-DotfilesPreferredShell falls back to powershell when pwsh unavailable' {
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'pwsh' }
-    Mock Get-Command {
-      [pscustomobject]@{ Source = 'TestDrive:\powershell.exe' }
-    } -ParameterFilter { $Name -eq 'powershell' }
-
-    Get-DotfilesPreferredShell | Should -Be 'TestDrive:\powershell.exe'
-  }
-
-  It 'Get-DotfilesPreferredShell throws when no shell available' {
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'pwsh' }
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'powershell' }
-
-    { Get-DotfilesPreferredShell } |
-      Should -Throw 'Neither pwsh nor powershell found on this system.'
   }
 
   It 'Set-DotfilesOpenSSHDefaultShell creates key and sets registry values' {
@@ -133,5 +107,118 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
     Reset-DotfilesOpenSSHDefaultShell
 
     Should -Invoke Remove-ItemProperty -Times 0
+  }
+}
+
+Describe 'Resolve-DotfilesOpenSSHShellChoice' {
+  # Only exercises Get-Command mocks -- no registry or WindowsIdentity
+  # access, so this Describe intentionally carries no Windows skip. It
+  # must set up its own skip-main + dot-source, independent of the
+  # Windows-only Describe above (which never runs on this platform).
+
+  BeforeEach {
+    $script:OriginalSkip = $env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN
+    $env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN = '1'
+    . $script:Subject
+    $script:DotfilesOpenSSHDefaultShellChoice = ''
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $false
+  }
+
+  AfterEach {
+    $env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN = $script:OriginalSkip
+
+    foreach ($name in @(
+      'Test-DotfilesAdminElevation'
+      'Resolve-DotfilesOpenSSHShellChoice'
+      'Set-DotfilesOpenSSHDefaultShell'
+      'Reset-DotfilesOpenSSHDefaultShell'
+      'Restart-DotfilesSshdService'
+    )) {
+      Remove-Item "Function:\$name" -ErrorAction SilentlyContinue
+    }
+  }
+
+  It 'resolves to a no-op when defaultShell is absent' {
+    $script:DotfilesOpenSSHDefaultShellChoice = ''
+
+    (Resolve-DotfilesOpenSSHShellChoice).Action | Should -Be 'NoOp'
+  }
+
+  It 'resolves "cmd" to a reset action' {
+    $script:DotfilesOpenSSHDefaultShellChoice = 'cmd'
+
+    (Resolve-DotfilesOpenSSHShellChoice).Action | Should -Be 'Reset'
+  }
+
+  It 'resolves "legacy-powershell" to powershell.exe when found' {
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\powershell.exe' }
+    } -ParameterFilter { $Name -eq 'powershell' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'legacy-powershell'
+    $resolution = Resolve-DotfilesOpenSSHShellChoice
+
+    $resolution.Action | Should -Be 'Set'
+    $resolution.ShellPath | Should -Be 'TestDrive:\powershell.exe'
+  }
+
+  It 'throws when "legacy-powershell" is requested but powershell.exe is missing' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'powershell' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'legacy-powershell'
+
+    { Resolve-DotfilesOpenSSHShellChoice } | Should -Throw '*powershell.exe*'
+  }
+
+  It 'resolves "modern-powershell" to pwsh.exe when found' {
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\pwsh.exe' }
+    } -ParameterFilter { $Name -eq 'pwsh' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $resolution = Resolve-DotfilesOpenSSHShellChoice
+
+    $resolution.Action | Should -Be 'Set'
+    $resolution.ShellPath | Should -Be 'TestDrive:\pwsh.exe'
+  }
+
+  It 'throws when "modern-powershell" is requested, pwsh.exe is missing, and fallback is disabled' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'pwsh' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $false
+
+    { Resolve-DotfilesOpenSSHShellChoice } | Should -Throw '*pwsh.exe*'
+  }
+
+  It 'falls back to powershell.exe when "modern-powershell" is missing and fallback is enabled' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'pwsh' }
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\powershell.exe' }
+    } -ParameterFilter { $Name -eq 'powershell' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $true
+    $resolution = Resolve-DotfilesOpenSSHShellChoice
+
+    $resolution.Action | Should -Be 'Set'
+    $resolution.ShellPath | Should -Be 'TestDrive:\powershell.exe'
+  }
+
+  It 'throws when "modern-powershell" falls back but powershell.exe is also missing' {
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'pwsh' }
+    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'powershell' }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $true
+
+    { Resolve-DotfilesOpenSSHShellChoice } | Should -Throw '*pwsh.exe*powershell.exe*'
+  }
+
+  It 'throws listing all valid choices for an unrecognized defaultShell value' {
+    $script:DotfilesOpenSSHDefaultShellChoice = 'bogus'
+
+    { Resolve-DotfilesOpenSSHShellChoice } |
+      Should -Throw '*cmd*legacy-powershell*modern-powershell*'
   }
 }

@@ -197,20 +197,51 @@ Re-run the helper whenever `chezmoi apply` updates your public keys.
 
 ## Windows: Changing the default SSH shell
 
-By default, Windows OpenSSH uses `cmd.exe` as the login shell.
-This project includes a helper script to switch it to PowerShell 7
-(pwsh).
+By default, Windows OpenSSH uses `cmd.exe` as the login shell. This
+project includes a helper script that can switch it to PowerShell (7
+`pwsh` or legacy `powershell`), or reset it back to `cmd.exe`. Its
+default resolution is declarative and driven by
+`[data.ssh.server].defaultShell` in `chezmoi.toml`.
 
 ### Why a separate script?
 
 The default shell is controlled by a machine-wide registry key
 (`HKLM:\SOFTWARE\OpenSSH\DefaultShell`) that requires administrator
 privileges. chezmoi deploys the script to `~/.local/bin/`, but you
-must run it manually with elevation.
+must run it manually with elevation -- chezmoi never applies this
+registry change automatically.
+
+### Configuring `chezmoi.toml`
+
+Add to `[data.ssh.server]` in `chezmoi.toml`:
+
+```toml
+[data.ssh.server]
+defaultShell = "modern-powershell"    # "cmd", "legacy-powershell", or
+                                       # "modern-powershell"
+defaultShellFallbackToLegacy = false  # ignored unless defaultShell is
+                                       # "modern-powershell"
+```
+
+`defaultShell` controls what the script's **bare invocation** (no
+`-Shell` / `-Reset` flag) resolves to:
+
+| `defaultShell` | Bare invocation behavior |
+| --- | --- |
+| *(absent)* | No-op: prints guidance and exits without touching the registry. |
+| `"cmd"` | Equivalent to `-Reset` -- removes the `DefaultShell` / `DefaultShellCommandOption` registry values. |
+| `"legacy-powershell"` | Resolves and sets `powershell.exe`. Fails loudly if it isn't found. |
+| `"modern-powershell"` | Resolves and sets `pwsh.exe`. Fails loudly if it isn't found, unless `defaultShellFallbackToLegacy = true`, in which case it falls back to `powershell.exe` (and still fails loudly if that is also missing). |
+
+An unrecognized `defaultShell` value fails loudly and lists the three
+valid choices.
 
 ### Usage
 
-**Set pwsh as the default shell:**
+**Set the default shell from `chezmoi.toml` (config-driven):**
+
+Set `defaultShell` as shown above, run `chezmoi apply` to re-render
+the script, then run it bare as Administrator:
 
 ```powershell
 # Run as Administrator
@@ -223,13 +254,13 @@ must run it manually with elevation.
 & "$HOME\.local\bin\set-openssh-default-shell.ps1" -WhatIf
 ```
 
-**Specify a custom shell path:**
+**Specify a custom shell path (explicit, config-independent override):**
 
 ```powershell
 & "$HOME\.local\bin\set-openssh-default-shell.ps1" -Shell "C:\Program Files\PowerShell\7\pwsh.exe"
 ```
 
-**Reset to the system default (cmd.exe):**
+**Reset to the system default (`cmd.exe`), explicit override:**
 
 ```powershell
 & "$HOME\.local\bin\set-openssh-default-shell.ps1" -Reset
@@ -241,23 +272,37 @@ must run it manually with elevation.
 & "$HOME\.local\bin\set-openssh-default-shell.ps1" -NoRestart
 ```
 
+`-Shell <path>` and `-Reset` always take priority over `chezmoi.toml`
+and behave identically regardless of what (if anything) `defaultShell`
+is set to; only a bare invocation (both flags omitted) resolves
+`defaultShell`.
+
 ### What it does
 
 1. Verifies the current session has administrator privileges
-2. Detects the `pwsh.exe` path via `Get-Command` (or uses `-Shell`)
-3. Sets `HKLM:\SOFTWARE\OpenSSH\DefaultShell` to the shell path
+2. On a bare invocation, resolves `[data.ssh.server].defaultShell` per
+   the table above (explicit `-Shell` / `-Reset` skip this step)
+3. Sets `HKLM:\SOFTWARE\OpenSSH\DefaultShell` to the resolved shell
+   path, or removes it (and `DefaultShellCommandOption`) when
+   resetting
 4. Sets `HKLM:\SOFTWARE\OpenSSH\DefaultShellCommandOption` to
-   `-NoLogo -NoProfile` for a clean startup
+   `-NoLogo -NoProfile` for a clean startup when setting a shell
 5. Restarts the `sshd` service (unless `-NoRestart` is specified)
 
 ### Notes
 
 - New SSH sessions use the updated shell immediately after sshd
   restarts. Existing sessions are unaffected.
-- The `-Reset` flag removes both registry values, reverting to
-  the Windows default (`cmd.exe`).
+- The `-Reset` flag (and `defaultShell = "cmd"`) removes both registry
+  values, reverting to the Windows default (`cmd.exe`).
 - This setting is system-wide (all SSH users). Per-user shell
   overrides are not supported by Windows OpenSSH.
+- **Behavior change**: previously, a bare invocation (no arguments)
+  implicitly preferred `pwsh.exe`, falling back to `powershell.exe`,
+  and threw if neither was found. That implicit preference is
+  superseded by the explicit `defaultShell` resolution table above --
+  a bare invocation with no `defaultShell` configured is now a no-op
+  instead of an implicit `pwsh`/`powershell` preference.
 
 ## Troubleshooting
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env pwsh
-# Set (or reset) the Windows OpenSSH server default shell to pwsh.
+# Pre-rendered test fixture for set-openssh-default-shell.ps1.tmpl.
+# Simulates:
+#   [data.ssh.server]
+#   defaultShell = "modern-powershell"
+#   defaultShellFallbackToLegacy = false
 [CmdletBinding(SupportsShouldProcess)]
 param(
   [Parameter()]
@@ -13,6 +17,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:OpenSSHRegistryPath = 'HKLM:\SOFTWARE\OpenSSH'
 $script:DefaultShellCommandOption = '-NoLogo -NoProfile'
+$script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+$script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $false
 
 function Test-DotfilesAdminElevation {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -20,18 +26,43 @@ function Test-DotfilesAdminElevation {
   return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Get-DotfilesPreferredShell {
-  $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
-  if ($cmd) {
-    return $cmd.Source
-  }
+function Resolve-DotfilesOpenSSHShellChoice {
+  switch ($script:DotfilesOpenSSHDefaultShellChoice) {
+    '' {
+      return [pscustomobject]@{ Action = 'NoOp' }
+    }
+    'cmd' {
+      return [pscustomobject]@{ Action = 'Reset' }
+    }
+    'legacy-powershell' {
+      $cmd = Get-Command powershell -ErrorAction SilentlyContinue
+      if (-not $cmd) {
+        throw 'defaultShell = "legacy-powershell" requires powershell.exe, but it was not found on this system.'
+      }
 
-  $cmd = Get-Command powershell -ErrorAction SilentlyContinue
-  if ($cmd) {
-    return $cmd.Source
-  }
+      return [pscustomobject]@{ Action = 'Set'; ShellPath = $cmd.Source }
+    }
+    'modern-powershell' {
+      $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
+      if ($cmd) {
+        return [pscustomobject]@{ Action = 'Set'; ShellPath = $cmd.Source }
+      }
 
-  throw 'Neither pwsh nor powershell found on this system.'
+      if ($script:DotfilesOpenSSHDefaultShellFallbackToLegacy) {
+        $cmd = Get-Command powershell -ErrorAction SilentlyContinue
+        if ($cmd) {
+          return [pscustomobject]@{ Action = 'Set'; ShellPath = $cmd.Source }
+        }
+
+        throw 'defaultShell = "modern-powershell" with defaultShellFallbackToLegacy = true requires pwsh.exe or powershell.exe, but neither was found on this system.'
+      }
+
+      throw 'defaultShell = "modern-powershell" requires pwsh.exe, but it was not found on this system. Set defaultShellFallbackToLegacy = true to fall back to powershell.exe.'
+    }
+    default {
+      throw "Unrecognized [data.ssh.server].defaultShell value: '$($script:DotfilesOpenSSHDefaultShellChoice)'. Valid choices: cmd, legacy-powershell, modern-powershell."
+    }
+  }
 }
 
 function Set-DotfilesOpenSSHDefaultShell {
@@ -75,6 +106,23 @@ if ($env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN -ne '1') {
     exit 1
   }
 
+  if (-not $Reset -and [string]::IsNullOrWhiteSpace($Shell)) {
+    $resolution = Resolve-DotfilesOpenSSHShellChoice
+
+    switch ($resolution.Action) {
+      'NoOp' {
+        Write-Host 'No [data.ssh.server].defaultShell configured; pass -Shell, or set [data.ssh.server].defaultShell in chezmoi.toml.'
+        exit 0
+      }
+      'Reset' {
+        $Reset = $true
+      }
+      'Set' {
+        $Shell = $resolution.ShellPath
+      }
+    }
+  }
+
   if ($Reset) {
     if ($PSCmdlet.ShouldProcess($script:OpenSSHRegistryPath, 'Remove DefaultShell registry values')) {
       Reset-DotfilesOpenSSHDefaultShell
@@ -88,11 +136,7 @@ if ($env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN -ne '1') {
       }
     }
   } else {
-    $shellPath = if ([string]::IsNullOrWhiteSpace($Shell)) {
-      Get-DotfilesPreferredShell
-    } else {
-      $Shell
-    }
+    $shellPath = $Shell
 
     if (-not (Test-Path -LiteralPath $shellPath -PathType Leaf)) {
       Write-Error "Shell not found: $shellPath"
