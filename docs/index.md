@@ -40,6 +40,7 @@ describes.
 | guide | [Secret manager setup](secret-manager-setup.md) | Explains how to configure chezmoi to retrieve GPG keys, SSH keys, and SSH host configuration from an external secret manager. |
 | guide | [Tool ownership boundary with setup.windows](setup-windows-boundary.md) | Explains which layer — this repository's mise, WinGet/DSC in kurone-kito/setup.windows, or Chocolatey — owns each Windows tool and why. |
 | guide | [Deploying sshd_config](sshd-config-setup.md) | Explains how to manually deploy the chezmoi-generated hardened sshd_config to its system location on Linux, macOS, and Windows. |
+| guide | [Configuring the systemd-tmpfiles /tmp cleanup age](tmpfiles-cleanup-setup.md) | Explains how to manually deploy the chezmoi-generated tmpfiles.d override that shortens the /tmp cleanup age on Linux, and why deployment stays manual. |
 | guide | [VS Code Integrated Terminal](vscode-terminal.md) | Explains how this dotfiles PowerShell profile adapts to VS Code's integrated terminal and lists recommended VS Code settings. |
 | guide | [Declaring WinGet package directories in the User PATH](winget-user-path.md) | Explains how to declare a WinGet portable package's real directory so it is registered in the managed User PATH independent of WinGet's symlinks. |
 | guide | [Zellij Web Client — Mobile Usage Guide](zellij-web-mobile.md) | Covers known limitations and recommended workarounds for using the Zellij web client from mobile devices. |

@@ -47,3 +47,6 @@ link-powershell-profile.ps1
 {{- if ne .chezmoi.os "darwin" }}
 Library/LaunchAgents/**
 {{- end }}
+{{- if or (ne .chezmoi.os "linux") (not (lookPath "systemd-tmpfiles")) }}
+.config/tmpfiles.d/tmp.conf
+{{- end }}
