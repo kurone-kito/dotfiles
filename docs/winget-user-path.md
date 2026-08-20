@@ -1,3 +1,9 @@
+---
+type: guide
+title: Declaring WinGet package directories in the User PATH
+description: Explains how to declare a WinGet portable package's real directory so it is registered in the managed User PATH independent of WinGet's symlinks.
+---
+
 # Declaring WinGet package directories in the User PATH
 
 The packages declared below are the WinGet portables that stay on the

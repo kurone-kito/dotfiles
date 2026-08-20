@@ -1,3 +1,9 @@
+---
+type: guide
+title: Using ghq with multiple accounts
+description: Explains how to configure ghq so each GitHub or GitLab account automatically uses the correct SSH key, commit identity, and GPG signing key.
+---
+
 # Using ghq with multiple accounts
 
 This guide explains how to configure ghq so that each GitHub (or

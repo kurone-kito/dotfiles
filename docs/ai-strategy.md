@@ -1,3 +1,9 @@
+---
+type: guide
+title: AI tooling strategy
+description: Explains why this repository prioritizes GitHub Copilot for AI tooling and how its instruction-file layers relate to each other.
+---
+
 # AI tooling strategy
 
 This repository currently prioritizes GitHub Copilot because it

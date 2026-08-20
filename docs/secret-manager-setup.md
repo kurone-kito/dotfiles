@@ -1,3 +1,9 @@
+---
+type: guide
+title: Secret manager setup
+description: Explains how to configure chezmoi to retrieve GPG keys, SSH keys, and SSH host configuration from an external secret manager.
+---
+
 # Secret manager setup
 
 This guide explains how to configure chezmoi to retrieve GPG keys,

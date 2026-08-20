@@ -1,3 +1,9 @@
+---
+type: guide
+title: VS Code Integrated Terminal
+description: Explains how this dotfiles PowerShell profile adapts to VS Code's integrated terminal and lists recommended VS Code settings.
+---
+
 # VS Code Integrated Terminal
 
 This dotfiles profile is designed to work seamlessly with VS Code's
