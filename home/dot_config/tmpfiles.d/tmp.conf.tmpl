@@ -42,6 +42,24 @@
 # this override doesn't silently start deleting untouched /var/tmp
 # contents that were never being cleaned before.
 #
+# This project's own default age ("10d") is a project choice, NOT
+# necessarily your distro's shipped default — e.g. Ubuntu 24.04 ships
+# 30d for /tmp. Deploying the default without diffing your own host's
+# shipped file first (previous section) can silently shorten your
+# actual retention policy.
+#
+# The /tmp line below uses "q" (create-if-missing; --remove does NOT
+# empty existing contents), not "D" (same, but --remove DOES empty
+# contents). Some distros ship "D" for /tmp — e.g. Ubuntu 24.04's
+# systemd-tmpfiles-setup.service runs `--create --remove --boot`, so
+# its shipped "D /tmp ... 30d" fully empties /tmp on every boot, a
+# behavior "q" does not reproduce. Masking a "D" vendor rule with this
+# "q" line silently stops that boot-time wipe. "q" is kept as the
+# safer, less-destructive default (it never deletes more than the
+# vendor rule already did); check your diffed vendor file's own
+# type letter and change "q" to "D" below if you need to preserve an
+# existing boot-time wipe.
+#
 # See docs/tmpfiles-cleanup-setup.md for full deployment and rollback
 # instructions.
 

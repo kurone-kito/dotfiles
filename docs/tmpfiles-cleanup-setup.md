@@ -64,6 +64,18 @@ whose shipped default had it disabled — always diff your own host's
 file first (Step 2 below) and uncomment the line only if your shipped
 default already had it active.
 
+The `/tmp` line uses the `q` type letter (create-if-missing; a
+`--remove` pass does **not** empty existing contents), not `D` (same,
+but `--remove` **does** empty contents). Some distros ship `D` for
+`/tmp` — Ubuntu 24.04, for example, ships `D /tmp 1777 root root 30d`,
+and its `systemd-tmpfiles-setup.service` runs `systemd-tmpfiles
+--create --remove --boot`, so that shipped `D` line fully empties
+`/tmp` on every boot. Masking it with this template's `q` line
+silently disables that boot-time wipe. `q` is kept as the
+less-destructive default; check your diffed vendor file's own type
+letter (Step 2) and change the generated `q` to `D` if you need to
+preserve an existing boot-time wipe.
+
 **Do not deploy this file under any name other than `tmp.conf`.** A
 different filename would *add* a second, independent `/tmp` rule
 alongside the shipped one instead of replacing it — a documented
@@ -74,7 +86,7 @@ source of duplicate/conflicting-rule warnings on every
 
 | Setting | Value | Purpose |
 | ------- | --------------------------------------- | --------------------------------------- |
-| `/tmp` age | configurable, default `10d` (matches the systemd-shipped default) | How long an untouched file under `/tmp` survives before cleanup |
+| `/tmp` age | configurable, project default `10d` | How long an untouched file under `/tmp` survives before cleanup. **`10d` is this project's own chosen default, not necessarily your distro's shipped default** — e.g. Ubuntu 24.04 ships `30d`. Deploying the default without diffing your host's shipped file first can change (not just document) your retention policy. |
 | `/var/tmp` age | commented out by default (not force-enabled) | Reproduced as an inactive placeholder line because masking replaces the whole file; uncomment manually if your host's shipped default already had it active |
 
 ## Deployment steps
@@ -95,12 +107,22 @@ cat /usr/lib/tmpfiles.d/tmp.conf
 
 Compare this against the generated file to confirm your distro ships
 the same two-rule shape this template assumes. If it differs
-materially, adapt before deploying. In particular, check whether the
-shipped `/var/tmp` line is active or commented out: if it's active on
-your host, edit `~/.config/tmpfiles.d/tmp.conf` to uncomment the
-`#q /var/tmp 1777 root root 30d` line before continuing — otherwise
-leave it commented (the default) so this override doesn't change
-`/var/tmp` behavior your host wasn't already applying.
+materially, adapt before deploying:
+
+- **`/var/tmp` activation**: check whether the shipped `/var/tmp` line
+  is active or commented out. If it's active on your host, edit
+  `~/.config/tmpfiles.d/tmp.conf` to uncomment the `#q /var/tmp 1777
+  root root 30d` line before continuing — otherwise leave it commented
+  (the default) so this override doesn't change `/var/tmp` behavior
+  your host wasn't already applying.
+- **`/tmp` type letter**: check whether the shipped `/tmp` line uses
+  `q` or `D`. If it uses `D` (as Ubuntu 24.04 does), edit the generated
+  `/tmp` line to use `D` instead of `q` to preserve an existing
+  boot-time wipe — see the masking-semantics section above.
+- **`/tmp` age**: note your host's actual shipped age before deploying
+  the project default. Deploying `10d` unmodified changes (not just
+  documents) your retention policy when your host's shipped age
+  differs — see the table above.
 
 ### Step 3: Back up the existing override (if any)
 
