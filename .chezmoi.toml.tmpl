@@ -118,6 +118,12 @@ clientAliveInterval = {{ dig "clientAliveInterval" 300 $sshServer }}
 {{- if ne (dig "clientAliveCountMax" 5 $sshServer) 5 }}
 clientAliveCountMax = {{ dig "clientAliveCountMax" 5 $sshServer }}
 {{- end }}
+{{- if (dig "defaultShell" "" $sshServer) }}
+defaultShell = {{ dig "defaultShell" "" $sshServer | quote }}
+{{- end }}
+{{- if (dig "defaultShellFallbackToLegacy" false $sshServer) }}
+defaultShellFallbackToLegacy = {{ dig "defaultShellFallbackToLegacy" false $sshServer }}
+{{- end }}
 {{- end }}
 {{- $tmpfilesAge := dig "tmpfiles" "age" "10d" . }}
 {{- if ne $tmpfilesAge "10d" }}
@@ -243,8 +249,25 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 #   [data.ssh.server]
 #   clientAliveInterval = 300  # seconds between keepalive probes (default: 300)
 #   clientAliveCountMax = 5    # missed probes before disconnect (default: 5)
+#   defaultShell = "modern-powershell"    # "cmd", "legacy-powershell", or
+#                                         # "modern-powershell"; absent = no-op
+#   defaultShellFallbackToLegacy = false  # ignored unless defaultShell is
+#                                         # "modern-powershell" (default: false)
 #
-# The generated file is at ~/.config/ssh/sshd_config.
+# defaultShell drives set-openssh-default-shell.ps1's Windows bare-invocation
+# (no -Shell/-Reset) resolution:
+#   (absent)            -> no-op; the script prints guidance and exits
+#   "cmd"               -> equivalent to -Reset (removes the DefaultShell /
+#                          DefaultShellCommandOption registry values)
+#   "legacy-powershell" -> resolves and sets powershell.exe (fails loudly if
+#                          not found)
+#   "modern-powershell" -> resolves and sets pwsh.exe; fails loudly if not
+#                          found, unless defaultShellFallbackToLegacy = true,
+#                          in which case it falls back to powershell.exe
+#                          (and still fails loudly if that is also missing)
+#
+# This registry change stays manual and elevated -- chezmoi never applies it
+# automatically. The generated file is at ~/.config/ssh/sshd_config.
 # See docs/sshd-config-setup.md for deployment instructions.
 #
 # To customize the systemd-tmpfiles /tmp cleanup age (default: "10d"),
