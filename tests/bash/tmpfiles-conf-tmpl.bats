@@ -61,6 +61,9 @@ JSON
   if ! command -v systemd-tmpfiles > /dev/null 2>&1; then
     skip "systemd-tmpfiles not available"
   fi
+  if ! systemd-tmpfiles --help 2>&1 | grep -q -- '--dry-run'; then
+    skip "systemd-tmpfiles on this host predates --dry-run support"
+  fi
 
   cat > "$TMP_CONFIG" <<JSON
 { "data": {} }

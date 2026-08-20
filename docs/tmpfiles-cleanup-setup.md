@@ -110,6 +110,12 @@ sudo systemd-tmpfiles --create --dry-run /etc/tmpfiles.d/tmp.conf
 This exits `0` and reports the actions it would take without
 performing them. Only proceed once this reports no unexpected errors.
 
+`--dry-run` requires a sufficiently recent `systemd-tmpfiles` — check
+with `systemd-tmpfiles --help | grep dry-run` first. If it reports
+`unrecognized option '--dry-run'`, that flag isn't available on this
+host; skip straight to Step 6, having reviewed the rendered file by
+eye beforehand.
+
 ### Step 6: Apply
 
 ```bash
