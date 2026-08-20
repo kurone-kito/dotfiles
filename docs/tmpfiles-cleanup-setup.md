@@ -41,16 +41,28 @@ reproduces **both** of the shipped rules, with only the `/tmp` age
 configurable:
 
 ```text
-q /tmp 1777 root root <age>
-q /var/tmp 1777 root root 30d
+q /tmp 1777 root root "<age>"
+#q /var/tmp 1777 root root 30d
 ```
 
-`/var/tmp`'s `30d` is a **literal**, not a configurable field —
-customizing it is out of scope for this template; it is reproduced
-only because masking requires the whole file to be present. The exact
-shipped ruleset varies by distro and systemd version, so always diff
-your own host's file before trusting this override (see Step 2
-below).
+The `/tmp` age is quoted so a multi-component systemd time span
+containing a space (e.g. `"1d 12h"`, valid `systemd.time(7)` syntax)
+still parses as one field — unquoted, systemd-tmpfiles treats the
+extra token as an unexpected argument and silently ignores the whole
+age instead ("q lines don't take argument fields, ignoring"),
+falling back to its own built-in default.
+
+`/var/tmp`'s `30d` line stays **commented out by default** — not a
+configurable field, and deliberately not force-enabled either. The
+exact shipped ruleset varies by distro and systemd version: on Ubuntu
+24.04, for example, the shipped `/usr/lib/tmpfiles.d/tmp.conf` itself
+ships `/var/tmp` cleanup commented out (`#q /var/tmp 1777 root root
+30d`), while other distros/versions ship it active. Because masking
+fully replaces the file, unconditionally enabling this line would
+silently start deleting untouched `/var/tmp` contents on any host
+whose shipped default had it disabled — always diff your own host's
+file first (Step 2 below) and uncomment the line only if your shipped
+default already had it active.
 
 **Do not deploy this file under any name other than `tmp.conf`.** A
 different filename would *add* a second, independent `/tmp` rule
@@ -63,7 +75,7 @@ source of duplicate/conflicting-rule warnings on every
 | Setting | Value | Purpose |
 | ------- | --------------------------------------- | --------------------------------------- |
 | `/tmp` age | configurable, default `10d` (matches the systemd-shipped default) | How long an untouched file under `/tmp` survives before cleanup |
-| `/var/tmp` age | fixed `30d` (not configurable) | Reproduced verbatim because masking replaces the whole file |
+| `/var/tmp` age | commented out by default (not force-enabled) | Reproduced as an inactive placeholder line because masking replaces the whole file; uncomment manually if your host's shipped default already had it active |
 
 ## Deployment steps
 
@@ -83,7 +95,12 @@ cat /usr/lib/tmpfiles.d/tmp.conf
 
 Compare this against the generated file to confirm your distro ships
 the same two-rule shape this template assumes. If it differs
-materially, adapt before deploying.
+materially, adapt before deploying. In particular, check whether the
+shipped `/var/tmp` line is active or commented out: if it's active on
+your host, edit `~/.config/tmpfiles.d/tmp.conf` to uncomment the
+`#q /var/tmp 1777 root root 30d` line before continuing — otherwise
+leave it commented (the default) so this override doesn't change
+`/var/tmp` behavior your host wasn't already applying.
 
 ### Step 3: Back up the existing override (if any)
 

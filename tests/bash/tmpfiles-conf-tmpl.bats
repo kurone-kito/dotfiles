@@ -3,9 +3,11 @@
 #
 # /etc/tmpfiles.d/tmp.conf masks (fully replaces) the shipped
 # /usr/lib/tmpfiles.d/tmp.conf, so this template must reproduce BOTH
-# the /tmp (parameterized age) and /var/tmp (literal 30d) rules. The
-# tests below guard both the parameterization and the masking
-# invariant (that /var/tmp never picks up the overridden age).
+# the /tmp (parameterized age) and /var/tmp (commented-out-by-default)
+# rules. The tests below guard the parameterization, the quoting
+# needed for multi-component (space-containing) systemd time spans,
+# and the masking invariant that /var/tmp stays an inactive
+# placeholder unaffected by the configured /tmp age.
 
 bats_require_minimum_version 1.5.0
 
@@ -29,32 +31,44 @@ _render() {
     --source "$TMP_SOURCE" --destination "$TMP_HOME"
 }
 
-@test "default config renders the /tmp rule with the default 10d age" {
+@test "default config renders the /tmp rule with the default 10d age, quoted" {
   cat > "$TMP_CONFIG" <<JSON
 { "data": {} }
 JSON
   run _render "$TMP_CONFIG"
   assert_success
-  assert_output --partial "q /tmp 1777 root root 10d"
+  assert_output --partial 'q /tmp 1777 root root "10d"'
 }
 
-@test "overridden tmpfiles.age renders that value in the /tmp line" {
+@test "overridden tmpfiles.age renders that value in the /tmp line, quoted" {
   cat > "$TMP_CONFIG" <<JSON
 { "data": { "tmpfiles": { "age": "2d" } } }
 JSON
   run _render "$TMP_CONFIG"
   assert_success
-  assert_output --partial "q /tmp 1777 root root 2d"
+  assert_output --partial 'q /tmp 1777 root root "2d"'
 }
 
-@test "/var/tmp always renders as the literal 30d, unaffected by tmpfiles.age" {
+@test "a multi-component (space-containing) age renders as a single quoted field" {
+  cat > "$TMP_CONFIG" <<JSON
+{ "data": { "tmpfiles": { "age": "1d 12h" } } }
+JSON
+  run _render "$TMP_CONFIG"
+  assert_success
+  assert_output --partial 'q /tmp 1777 root root "1d 12h"'
+}
+
+@test "/var/tmp stays commented out (default-off), unaffected by tmpfiles.age" {
   cat > "$TMP_CONFIG" <<JSON
 { "data": { "tmpfiles": { "age": "2d" } } }
 JSON
   run _render "$TMP_CONFIG"
   assert_success
-  assert_output --partial "q /var/tmp 1777 root root 30d"
+  assert_output --partial "#q /var/tmp 1777 root root 30d"
   refute_output --partial "q /var/tmp 1777 root root 2d"
+  # Guard against accidentally uncommenting the line: no line may start
+  # with "q /var/tmp" (only the "#q /var/tmp" placeholder is allowed).
+  refute_line --regexp '^q /var/tmp'
 }
 
 @test "rendered default output validates with systemd-tmpfiles --create --dry-run" {
@@ -75,4 +89,26 @@ JSON
 
   run systemd-tmpfiles --create --dry-run "$rendered"
   assert_success
+  refute_output --partial "ignoring"
+}
+
+@test "a multi-component age validates with systemd-tmpfiles --create --dry-run without a warning" {
+  if ! command -v systemd-tmpfiles > /dev/null 2>&1; then
+    skip "systemd-tmpfiles not available"
+  fi
+  if ! systemd-tmpfiles --help 2>&1 | grep -q -- '--dry-run'; then
+    skip "systemd-tmpfiles on this host predates --dry-run support"
+  fi
+
+  cat > "$TMP_CONFIG" <<JSON
+{ "data": { "tmpfiles": { "age": "1d 12h" } } }
+JSON
+  run _render "$TMP_CONFIG"
+  assert_success
+  local rendered="$BATS_TEST_TMPDIR/tmp-space.conf"
+  printf '%s\n' "$output" > "$rendered"
+
+  run systemd-tmpfiles --create --dry-run "$rendered"
+  assert_success
+  refute_output --partial "ignoring"
 }
