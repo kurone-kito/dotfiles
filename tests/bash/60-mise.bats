@@ -214,6 +214,14 @@ MOCK
   assert_output --partial 'os = ["windows"]'
 }
 
+@test "restricts the ttyd tool to Linux and Windows" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^ttyd' "$config"
+  assert_success
+  assert_output --partial 'os = ["linux", "windows"]'
+}
+
 @test "no longer references the deprecated pstop ubi identifier" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 

@@ -121,7 +121,8 @@ WinGet/DSC definitions no longer include them.
 ### Added here (this repository also owns install, not only config)
 
 The aqua wave (see [#257](https://github.com/kurone-kito/dotfiles/issues/257)),
-yt-dlp, plus one Windows-only addition:
+yt-dlp, vhs, plus two platform-restricted additions (ttyd: no macOS
+build; pstop: Windows-only):
 
 | Tool | mise key |
 | ---------- | -------------------- |
@@ -134,11 +135,21 @@ yt-dlp, plus one Windows-only addition:
 | mkcert | `mkcert` |
 | Terraform | `terraform` |
 | yt-dlp | `yt-dlp` |
+| vhs | `vhs` |
+| ttyd (Linux/Windows-only) | `ttyd` |
 | pstop (Windows-only) | `github:psmux/pstop` |
 
 `pstop` (a `htop`-style Windows CLI, no WinGet equivalent) uses the
 `github` backend under a project rename (from `marlocarlo/pstop` to
 `psmux/pstop`) since mise's `ubi` backend is scheduled for removal.
+
+WinGet's own `charmbracelet.vhs` package exists too, but
+[microsoft/winget-pkgs#393367](https://github.com/microsoft/winget-pkgs/issues/393367)
+reports it does not pull in its `ttyd` dependency, leaving a broken
+install on a clean machine — so both tools are managed explicitly
+through mise instead. `ttyd`'s aqua-registry entry declares
+`supported_envs: [linux, windows/amd64]` with no `darwin` entry, so
+macOS is not a supported target for this backend.
 
 ### Always-here
 
