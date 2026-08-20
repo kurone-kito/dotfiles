@@ -43,7 +43,18 @@ permissions:
   contents: read
   issues: write
 concurrency:
-  cancel-in-progress: true
+  # cancel-in-progress: false (queue, never cancel) is required here,
+  # not merely a stricter option than true: the find-or-create sequence
+  # in "Find open tracking issue" / "Escalate on failure" is not atomic,
+  # so cancelling an in-flight run after it decided no tracking issue is
+  # open but before it finishes creating one would let the next queued
+  # run repeat that same stale decision and create a duplicate --
+  # reintroducing the exact race the ref-independent group below closes
+  # for the concurrent case. Queueing instead of cancelling means a
+  # later run only ever starts after the earlier one's create/comment
+  # step has actually finished, so its own find-tracking-issue search
+  # sees that result.
+  cancel-in-progress: false
   # Deliberately NOT keyed by `${{ github.ref }}`: the checked resource
   # (the `master` ruleset) and the tracking issue this workflow
   # escalates to are both global, not per-ref, but `workflow_dispatch`
@@ -51,9 +62,9 @@ concurrency:
   # scheduled run on `master` and a manual dispatch from another branch
   # run concurrently, race on "does a tracking issue already exist?",
   # and both take the create path -- defeating the de-duplication this
-  # workflow depends on. Serializing across every ref closes that race;
-  # `cancel-in-progress: true` is still safe here because every run
-  # checks the identical resource regardless of which ref triggered it.
+  # workflow depends on. Serializing across every ref (combined with
+  # cancel-in-progress: false above) closes that race for both the
+  # concurrent-run and the cancelled-mid-create case.
   group: ${{ github.workflow }}
 jobs:
   guard:

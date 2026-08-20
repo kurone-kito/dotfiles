@@ -66,8 +66,16 @@ setup() {
 }
 
 @test "honors an EXPECTED_CONTEXTS override instead of the built-in default" {
-  export EXPECTED_CONTEXTS=$'lint\nBash tests (bats)\nLua syntax check\nPowerShell tests (Pester)\nidd-advisory-convergence'
+  # The missing-context fixture carries exactly these 4 contexts (the
+  # built-in default's 5 minus "lint"). Overriding EXPECTED_CONTEXTS to
+  # this same 4-context set must turn the same fixture that fails
+  # against the built-in default into a match -- an implementation that
+  # silently ignored the override and kept using the 5-context default
+  # would still report "lint" missing here, so this is the case that
+  # actually distinguishes "override honored" from "override ignored"
+  # (an override reusing the same 5 contexts, just reordered, cannot).
+  export EXPECTED_CONTEXTS=$'Bash tests (bats)\nLua syntax check\nPowerShell tests (Pester)\nidd-advisory-convergence'
   run bash "$SCRIPT" "$FIXTURES/ruleset-drift-check-missing-context.json"
-  assert_failure
-  assert_output --partial 'Missing context(s): lint'
+  assert_success
+  assert_output --partial 'contexts match the expected set'
 }

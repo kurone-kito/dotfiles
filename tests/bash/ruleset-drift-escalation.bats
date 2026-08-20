@@ -27,6 +27,8 @@ setup() {
   export GH_CALL_LOG="$BATS_TEST_TMPDIR/gh-calls.log"
   : > "$GH_CALL_LOG"
 
+  export GH_BODY_LOG="$BATS_TEST_TMPDIR/gh-body.log"
+
   TRACKING_TITLE='ci: master ruleset required_status_checks drift detected'
 }
 
@@ -62,6 +64,14 @@ setup() {
   assert_output --partial 'CALL: label create bug'
   assert_output --partial "CALL: issue create --title $TRACKING_TITLE --label bug --body-file -"
   refute_output --partial 'CALL: issue comment'
+
+  # Assert on the actual piped body content, not just the gh argv above --
+  # a regression that silently dropped the missing/extra contexts or the
+  # run URL from build_drift_body would still pass an argv-only check.
+  run cat "$GH_BODY_LOG"
+  assert_output --partial 'Missing context(s): lint'
+  assert_output --partial 'https://example.test/run/1'
+  refute_output --partial 'Unexpected extra context(s)'
 }
 
 @test "escalate does not create the bug label when it already exists" {
@@ -78,13 +88,20 @@ setup() {
 
 @test "escalate comments on an already-open tracking issue instead of creating a duplicate" {
   run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "42" \
-    --missing "lint" --extra "" --run-url "https://example.test/run/2"
+    --missing "" --extra "totally-unexpected-check" --run-url "https://example.test/run/2"
   assert_success
 
   run cat "$GH_CALL_LOG"
   assert_output --partial 'CALL: issue comment 42 --body-file -'
   refute_output --partial 'CALL: issue create'
   refute_output --partial 'CALL: label'
+
+  # Same body-content check as the create path above, using the extra-
+  # context field this time so both fields get covered across the suite.
+  run cat "$GH_BODY_LOG"
+  assert_output --partial 'Unexpected extra context(s): totally-unexpected-check'
+  assert_output --partial 'https://example.test/run/2'
+  refute_output --partial 'Missing context(s)'
 }
 
 @test "recover closes the tracking issue with an explanatory comment" {
