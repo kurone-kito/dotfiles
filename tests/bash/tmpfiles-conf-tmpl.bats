@@ -3,11 +3,11 @@
 #
 # /etc/tmpfiles.d/tmp.conf masks (fully replaces) the shipped
 # /usr/lib/tmpfiles.d/tmp.conf, so this template must reproduce BOTH
-# the /tmp (parameterized age) and /var/tmp (commented-out-by-default)
-# rules. The tests below guard the parameterization, the quoting
-# needed for multi-component (space-containing) systemd time spans,
-# and the masking invariant that /var/tmp stays an inactive
-# placeholder unaffected by the configured /tmp age.
+# the /tmp (parameterized age) and /var/tmp (literal 30d) rules. The
+# tests below guard the parameterization, the quoting needed for
+# multi-component (space-containing) systemd time spans, and the
+# invariant that /var/tmp's literal age is unaffected by the
+# configured /tmp age.
 
 bats_require_minimum_version 1.5.0
 
@@ -58,17 +58,21 @@ JSON
   assert_output --partial 'q /tmp 1777 root root "1d 12h"'
 }
 
-@test "/var/tmp stays commented out (default-off), unaffected by tmpfiles.age" {
+@test "/var/tmp renders as an active literal 30d rule, unaffected by tmpfiles.age" {
   cat > "$TMP_CONFIG" <<JSON
 { "data": { "tmpfiles": { "age": "2d" } } }
 JSON
   run _render "$TMP_CONFIG"
   assert_success
-  assert_output --partial "#q /var/tmp 1777 root root 30d"
-  refute_output --partial "q /var/tmp 1777 root root 2d"
-  # Guard against accidentally uncommenting the line: no line may start
-  # with "q /var/tmp" (only the "#q /var/tmp" placeholder is allowed).
-  refute_line --regexp '^q /var/tmp'
+  # Assert the exact functional line (not just a substring match),
+  # since explanatory comments in the header also mention the
+  # "#q /var/tmp 1777 root root 30d" string as prose.
+  assert_line "q /var/tmp 1777 root root 30d"
+  refute_line "q /var/tmp 1777 root root 2d"
+  # Guard against accidentally commenting the functional line back
+  # out: no *line* (as opposed to substring anywhere in output) may
+  # start with "#q /var/tmp" — it must be an active rule.
+  refute_line --regexp '^#q /var/tmp'
 }
 
 @test "rendered default output validates with systemd-tmpfiles --create --dry-run" {

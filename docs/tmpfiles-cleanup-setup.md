@@ -42,27 +42,30 @@ configurable:
 
 ```text
 q /tmp 1777 root root "<age>"
-#q /var/tmp 1777 root root 30d
+q /var/tmp 1777 root root 30d
 ```
 
 The `/tmp` age is quoted so a multi-component systemd time span
 containing a space (e.g. `"1d 12h"`, valid `systemd.time(7)` syntax)
-still parses as one field — unquoted, systemd-tmpfiles treats the
-extra token as an unexpected argument and silently ignores the whole
-age instead ("q lines don't take argument fields, ignoring"),
-falling back to its own built-in default.
+still parses as one field. `q`/`D` lines take exactly five data
+fields (type, path, mode, uid, gid, age) and support no further
+"argument" field; unquoted, the space splits the age into two tokens,
+so systemd-tmpfiles keeps only the first (`1d`) as the age and reports
+the second (`12h`) as a superfluous, unsupported argument ("q lines
+don't take argument fields, ignoring") — it does **not** fall back to
+any built-in default, and it does **not** drop the age entirely.
 
-`/var/tmp`'s `30d` line stays **commented out by default** — not a
-configurable field, and deliberately not force-enabled either. The
+`/var/tmp`'s `30d` line is **active by default**, matching this
+project's chosen default and this issue's acceptance criteria. The
 exact shipped ruleset varies by distro and systemd version: on Ubuntu
-24.04, for example, the shipped `/usr/lib/tmpfiles.d/tmp.conf` itself
-ships `/var/tmp` cleanup commented out (`#q /var/tmp 1777 root root
-30d`), while other distros/versions ship it active. Because masking
-fully replaces the file, unconditionally enabling this line would
-silently start deleting untouched `/var/tmp` contents on any host
-whose shipped default had it disabled — always diff your own host's
-file first (Step 2 below) and uncomment the line only if your shipped
-default already had it active.
+24.04, for example, the shipped `/usr/lib/tmpfiles.d/tmp.conf` ships
+`/var/tmp` cleanup commented out (`#q /var/tmp 1777 root root 30d`),
+while other distros/versions ship it active like this template does.
+Because masking fully replaces the file, deploying this default
+unmodified starts `/var/tmp` cleanup on any host whose shipped default
+had it disabled — always diff your own host's file first (Step 2
+below, now via `--cat-config`) and comment the line back out if your
+shipped default had it inactive.
 
 The `/tmp` line uses the `q` type letter (create-if-missing; a
 `--remove` pass does **not** empty existing contents), not `D` (same,
@@ -92,7 +95,7 @@ source of duplicate/conflicting-rule warnings on every
 | Setting | Value | Purpose |
 | ------- | --------------------------------------- | --------------------------------------- |
 | `/tmp` age | configurable, project default `10d` | How long an untouched file under `/tmp` survives before cleanup. **`10d` is this project's own chosen default, not necessarily your distro's shipped default** — e.g. Ubuntu 24.04 ships `30d`. Deploying the default without diffing your host's shipped file first can change (not just document) your retention policy. |
-| `/var/tmp` age | commented out by default (not force-enabled) | Reproduced as an inactive placeholder line because masking replaces the whole file; uncomment manually if your host's shipped default already had it active |
+| `/var/tmp` age | fixed, active by default (literal `30d`) | Reproduced as an active rule because masking replaces the whole file and this issue's acceptance criteria calls for a literal `30d` rule; comment it back out manually if your host's shipped default had it inactive — e.g. Ubuntu 24.04 |
 
 ## Deployment steps
 
@@ -104,23 +107,33 @@ chezmoi apply
 
 This renders `~/.config/tmpfiles.d/tmp.conf` from the template.
 
-### Step 2: Diff against the shipped file
+### Step 2: Diff against the effective shipped configuration
 
 ```bash
-cat /usr/lib/tmpfiles.d/tmp.conf
+systemd-tmpfiles --cat-config
 ```
 
-Compare this against the generated file to confirm your distro ships
-the same two-rule shape this template assumes. If it differs
-materially, adapt before deploying:
+Prefer `--cat-config` over reading `/usr/lib/tmpfiles.d/tmp.conf`
+directly: it prints every `tmpfiles.d` file systemd actually resolves,
+in priority order, across `/etc/`, `/run/`, `/usr/local/lib/`, and
+`/usr/lib/`. A higher-priority directory (`/run/tmpfiles.d/tmp.conf`
+or `/usr/local/lib/tmpfiles.d/tmp.conf`, for example) can already mask
+the vendor file with a different ruleset, and diffing only
+`/usr/lib/tmpfiles.d/tmp.conf` would miss that — `--cat-config` shows
+the actual rule in effect, not just the vendor default. Locate the
+`# /usr/lib/tmpfiles.d/tmp.conf` section in its output (or whichever
+higher-priority file appears instead) and compare it against the
+generated file to confirm your distro ships the same two-rule shape
+this template assumes. If it differs materially, adapt before
+deploying:
 
-- **`/var/tmp` activation**: check whether the shipped `/var/tmp` line
-  is active or commented out. If it's active on your host, edit
-  `~/.config/tmpfiles.d/tmp.conf` to uncomment the `#q /var/tmp 1777
-  root root 30d` line before continuing — otherwise leave it commented
-  (the default) so this override doesn't change `/var/tmp` behavior
-  your host wasn't already applying.
-- **`/tmp` type letter**: check whether the shipped `/tmp` line uses
+- **`/var/tmp` activation**: check whether the effective `/var/tmp`
+  line is active or commented out. If it's commented out on your host
+  (as Ubuntu 24.04 ships it), edit `~/.config/tmpfiles.d/tmp.conf` to
+  comment out the `q /var/tmp 1777 root root 30d` line before
+  continuing — otherwise leave it active (the default) to match this
+  issue's acceptance criteria.
+- **`/tmp` type letter**: check whether the effective `/tmp` line uses
   `q` or `D`. If it uses `D` (as Ubuntu 24.04 does), edit the generated
   `/tmp` line to use `D` instead of `q` to preserve an existing
   boot-time wipe — see the masking-semantics section above.
@@ -145,7 +158,11 @@ Each backup form is mutually exclusive with the other and with any
 prior round's backup — remove the alternate form when writing either,
 so at most one backup exists and Rollback always restores the
 *immediately previous* configuration rather than a stale one left over
-from an earlier round where the override's type differed:
+from an earlier round where the override's type differed. This
+includes the case where no override exists at all: without an `else`
+branch, a stale backup from an earlier round (when an override *did*
+exist) would be left in place and Rollback would restore it instead of
+correctly reporting "no backup exists" (see Rollback below):
 
 ```bash
 if sudo test -L /etc/tmpfiles.d/tmp.conf; then
@@ -155,6 +172,9 @@ if sudo test -L /etc/tmpfiles.d/tmp.conf; then
 elif sudo test -f /etc/tmpfiles.d/tmp.conf; then
   sudo rm -f /etc/tmpfiles.d/tmp.conf.bak.symlink-target
   sudo cp /etc/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf.bak
+else
+  sudo rm -f /etc/tmpfiles.d/tmp.conf.bak \
+    /etc/tmpfiles.d/tmp.conf.bak.symlink-target
 fi
 ```
 
@@ -234,9 +254,18 @@ sudo ln -sf "$(sudo cat /etc/tmpfiles.d/tmp.conf.bak.symlink-target)" \
   /etc/tmpfiles.d/tmp.conf
 ```
 
-Re-running `systemd-tmpfiles --create` afterward is unnecessary here —
-a symlink to `/dev/null` masks the file entirely rather than defining
-active rules.
+If the restored target is `/dev/null` (the standard full-mask
+convention), re-running `systemd-tmpfiles --create` afterward is
+unnecessary — a symlink to `/dev/null` masks the file entirely rather
+than defining active rules. If the restored target is a real
+configuration file instead (some setups symlink `tmp.conf` to a
+shared config elsewhere rather than to `/dev/null`), restoring the
+link alone does not reapply whatever `--create` effects that file
+defines — run `systemd-tmpfiles --create` afterward in that case too:
+
+```bash
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/tmp.conf
+```
 
 **A regular-file backup exists**:
 
