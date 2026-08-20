@@ -112,11 +112,20 @@ sudo test -f /etc/tmpfiles.d/tmp.conf && \
 ### Step 4: Deploy
 
 ```bash
-sudo cp ~/.config/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf
+sudo cp --remove-destination ~/.config/tmpfiles.d/tmp.conf /etc/tmpfiles.d/tmp.conf
 ```
 
 Use this exact destination filename — see the masking-semantics
-caution above.
+caution above. `--remove-destination` matters if
+`/etc/tmpfiles.d/tmp.conf` is already a symlink — for example, the
+standard way to fully mask a vendor tmpfiles file is a symlink to
+`/dev/null`. A plain `cp` follows that symlink and writes through it
+(to `/dev/null`, silently discarding the new content and leaving the
+mask in place — or to whatever else the symlink targets), so both
+Step 5's validation and Step 6's apply can report success while the
+new policy was never actually installed. `--remove-destination`
+deletes the destination path itself (symlink or not) before writing,
+ensuring a real regular file lands at `/etc/tmpfiles.d/tmp.conf`.
 
 ### Step 5: Validate before applying for real
 
