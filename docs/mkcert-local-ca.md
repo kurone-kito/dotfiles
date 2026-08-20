@@ -1,3 +1,9 @@
+---
+type: guide
+title: Opt-in local development CA setup (mkcert)
+description: Explains how to opt into registering a local mkcert CA into the Windows certificate trust store during chezmoi apply, and why it stays off by default.
+---
+
 # Opt-in local development CA setup (mkcert)
 
 This project can register a local development root CA into the

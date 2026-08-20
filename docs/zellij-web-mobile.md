@@ -1,3 +1,9 @@
+---
+type: guide
+title: Zellij Web Client — Mobile Usage Guide
+description: Covers known limitations and recommended workarounds for using the Zellij web client from mobile devices.
+---
+
 # Zellij Web Client — Mobile Usage Guide
 
 The Zellij web client allows browser-based access to terminal sessions.

@@ -1,3 +1,9 @@
+---
+type: guide
+title: Deploying sshd_config
+description: Explains how to manually deploy the chezmoi-generated hardened sshd_config to its system location on Linux, macOS, and Windows.
+---
+
 # Deploying sshd_config
 
 This project generates a hardened `sshd_config` at
