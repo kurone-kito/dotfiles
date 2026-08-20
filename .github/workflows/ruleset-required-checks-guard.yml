@@ -96,13 +96,15 @@ jobs:
         continue-on-error: true
         run: |
           # GitHub Actions' default bash `run:` shell already runs with
-          # `-e` (errexit) active before this script body executes, and
-          # `set` cannot retroactively unset an option it didn't itself
-          # enable -- so `set +e` here is required, not decorative: it
-          # explicitly disables errexit for the piped command below,
-          # letting the explicit `exit "${PIPESTATUS[0]}"` line run and
-          # own this step's exit code instead of a prior implicit
-          # errexit abort silently pre-empting it.
+          # `-e` (errexit) active before this script body executes. This
+          # script never enabled it itself, but `set +e` still disables
+          # it -- errexit is a shell option, not a lexically-scoped
+          # setting, so any `set +e` in the running shell turns it off
+          # regardless of who turned it on. That's exactly why the line
+          # below is required, not decorative: without it, errexit would
+          # abort the step the moment the piped command below returns
+          # non-zero, pre-empting the explicit `exit "${PIPESTATUS[0]}"`
+          # line that's meant to own this step's exit code.
           set +e
           bash scripts/check-ruleset-drift.sh rules.json | tee check-output.txt
           exit "${PIPESTATUS[0]}"
