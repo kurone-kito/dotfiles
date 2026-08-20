@@ -134,7 +134,8 @@ by reasoned rejection of peripheral or verified-false items — not every
 comment needs a code change. Record the reason in the disposition reply;
 "a bot raised it" alone never forces a change (e.g., a "credential
 leak" flag on a placeholders-only config file:
-`**Rejected** — verified placeholders-only`).
+`**Rejected** — verified placeholders-only<!-- {markerPrefix}-review-reply -->`,
+including the reply-identity stamp from E6 below).
 
 ## E6 — Post disposition replies
 
@@ -319,7 +320,8 @@ review-ack: {agent-id} {PR_HEAD_SHA} {ISO8601-acknowledged-at}
 
 _Worked example_: a review posts a regular-comment finding plus a
 suppressed one. Disposition the regular-comment finding normally
-(`**Rejected** — verified placeholders-only`), then also post
+(`**Rejected** — verified placeholders-only<!-- {markerPrefix}-review-reply -->`,
+the reply-identity stamp from above), then also post
 `review-ack: claude-code-1a2b3c4d 4b825dc642cb6eb9a060e54bf8d69288fbee4904 2026-08-19T00:10:00Z`
 (plain text, no HTML comment) to cover the suppressed one — the
 regular-comment rejection alone never sets `converged`, and this is
