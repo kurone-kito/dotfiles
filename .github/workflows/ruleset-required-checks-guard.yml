@@ -72,7 +72,15 @@ jobs:
         id: check
         continue-on-error: true
         run: |
-          set -uo pipefail
+          # GitHub Actions' default bash `run:` shell already runs with
+          # `-e` (errexit) active before this script body executes, and
+          # `set` cannot retroactively unset an option it didn't itself
+          # enable -- so `set +e` here is required, not decorative: it
+          # explicitly disables errexit for the piped command below,
+          # letting the explicit `exit "${PIPESTATUS[0]}"` line run and
+          # own this step's exit code instead of a prior implicit
+          # errexit abort silently pre-empting it.
+          set +e
           bash scripts/check-ruleset-drift.sh rules.json | tee check-output.txt
           exit "${PIPESTATUS[0]}"
 

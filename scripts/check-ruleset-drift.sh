@@ -23,7 +23,9 @@
 #
 # Output contract (stdout):
 #   - Zero-rule case: an `::error::` line naming the expected contexts,
-#     plus `RULE_COUNT=0`; exits 1.
+#     `RULE_COUNT=0`, `MISSING_CONTEXTS=<every expected context, csv>`
+#     (the whole rule is absent, so every context is "missing"), and
+#     `EXTRA_CONTEXTS=` (empty); exits 1.
 #   - Drift case: an `::error::` summary, conditional missing/extra
 #     `::error::` lines, plus stable `MISSING_CONTEXTS=<comma-or-empty>`
 #     / `EXTRA_CONTEXTS=<comma-or-empty>` lines for a caller to parse;
@@ -66,6 +68,14 @@ main() {
   if [ "$rule_count" -eq 0 ]; then
     echo "::error::master ruleset has no required_status_checks rule (expected contexts: $(printf '%s' "$expected_sorted" | paste -sd, -))"
     echo "RULE_COUNT=0"
+    # Every expected context is missing when the rule itself is absent --
+    # emit MISSING_CONTEXTS/EXTRA_CONTEXTS here too (not just RULE_COUNT)
+    # so a caller building an escalation body from this output (see
+    # scripts/escalate-ruleset-drift.sh) names the missing contexts
+    # instead of reporting an empty diff for the exact "whole rule
+    # vanished" incident this guard exists to catch.
+    echo "MISSING_CONTEXTS=$(printf '%s' "$expected_sorted" | paste -sd, -)"
+    echo "EXTRA_CONTEXTS="
     exit 1
   fi
 

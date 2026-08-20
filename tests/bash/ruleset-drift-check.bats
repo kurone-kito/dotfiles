@@ -47,6 +47,18 @@ setup() {
   assert_output --partial 'RULE_COUNT=0'
 }
 
+@test "names every expected context as missing when the whole rule is absent" {
+  # The zero-rule case is the exact "rule vanished entirely" incident
+  # this guard exists to catch -- MISSING_CONTEXTS must still be
+  # populated here (not just RULE_COUNT=0), or a caller building an
+  # escalation issue body from this output (see
+  # scripts/escalate-ruleset-drift.sh) would report an empty diff.
+  run bash "$SCRIPT" "$FIXTURES/ruleset-drift-check-zero-rule.json"
+  assert_failure
+  assert_output --partial 'MISSING_CONTEXTS=Bash tests (bats),Lua syntax check,PowerShell tests (Pester),idd-advisory-convergence,lint'
+  assert_output --partial 'EXTRA_CONTEXTS='
+}
+
 @test "reads from stdin when no file argument is given" {
   run bash -c "cat '$FIXTURES/ruleset-drift-check-match.json' | bash '$SCRIPT'"
   assert_success
