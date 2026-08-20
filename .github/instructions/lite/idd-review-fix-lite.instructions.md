@@ -135,7 +135,9 @@ other GitHub side effect, confirm all of the following:
    hostile (GPG pinentry or hardware-touch) but that provides a
    fallback signing wrapper for arbitrary git subcommands (pass
    `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
-   commit.gpgsign=true` to `git` before the subcommand — `git -c …
+   commit.gpgsign=true` to `git` before the subcommand, plus
+   `-m "chore: merge origin/master into the claimed branch"` on the
+   first `merge` so a commitlint hook accepts the subject — `git -c …
    merge`, not `git merge -c …`; a commit-only alias like
    `git commit-ssh` will not run `merge`), run this merge through that
    wrapper, not the plain command.
@@ -192,6 +194,11 @@ other GitHub side effect, confirm all of the following:
    which commits fixed it and how.
 2. Start every reply with:
    `**Accepted** — fixed in {commit-sha or comma-separated list}: {brief explanation}`
+   After that visible prefix, include the reply-identity stamp exactly
+   as `idd-review-triage.instructions.md`'s E6 defines it
+   (`<!-- {markerPrefix}-review-reply -->`) — same stamp mechanics and
+   constraints, applied here to the `**Accepted**`-only prefix this
+   phase posts.
 3. For a review thread, immediately resolve the thread after posting
    the reply. Reply first, resolve second, so a failed reply never
    leaves a silently-resolved thread.
