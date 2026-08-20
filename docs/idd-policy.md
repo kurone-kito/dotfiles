@@ -669,10 +669,13 @@ removed.
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
 `result: passed` with three `WARN`s in a worktree that has already
 wired `core.hooksPath` (four on a fresh clone that has not — see that
-bullet below) and no `ERROR`; each below is
-expected, not a defect. #218 resolved the one finding that was a
-genuine `ERROR` (the `idd-task.yml` placeholder syntax) by
-reformatting it; the remaining findings are accepted noise, recorded
+bullet below) and no `ERROR`. Each bullet below currently reflects
+either a live warning, an environment-dependent one that only shows on
+a fresh clone, or (struck through) one this round found and already
+fixed -- none is a defect needing further action. #218 resolved the
+one finding that was a genuine `ERROR` (the `idd-task.yml` placeholder
+syntax) by reformatting it; the remaining findings are accepted noise,
+recorded
 here so #150's kind of verification sweep does not have to
 rediscover them:
 
