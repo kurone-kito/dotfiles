@@ -87,7 +87,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-k 2 5 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
 }
 
 @test "honors PINENTRY_AUTO_TIMEOUT override from the environment" {
@@ -98,7 +98,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-k 2 30 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 30 pinentry-curses"
 }
 
 @test "the macOS pinentry-mac branch is timeout-wrapped, not a bare exec" {
@@ -109,7 +109,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$TIMEOUT_LOG" "pinentry-mac"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-mac"
 }
 
 @test "the GUI pinentry-gnome3 branch is timeout-wrapped, not a bare exec" {
@@ -121,7 +121,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$TIMEOUT_LOG" "pinentry-gnome3"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-gnome3"
 }
 
 @test "prefers timeout over gtimeout when both are present" {
@@ -148,7 +148,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$GTIMEOUT_LOG" "pinentry-curses"
+  assert_file_contains "$GTIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
 }
 
 @test "falls back to the old unbounded exec when neither timeout nor gtimeout is found" {

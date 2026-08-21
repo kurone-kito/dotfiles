@@ -16,9 +16,11 @@
 # seconds. Raise it in your shell profile if you routinely need more
 # time to notice and answer a prompt. Requires GNU `timeout` (Linux:
 # part of the base coreutils package; macOS: `gtimeout` from Homebrew's
-# coreutils, already a hard dependency of this repository's macOS
-# provisioning) — falls back to the old unbounded behavior if neither
-# is found, rather than failing outright.
+# coreutils — this dotfiles repo does not itself provision Homebrew or
+# coreutils, but a machine already provisioned via the sibling
+# kurone-kito/setup.macos repository's Brewfile has it) — falls back to
+# the old unbounded behavior if neither is found, rather than failing
+# outright.
 
 PINENTRY_AUTO_TIMEOUT="${PINENTRY_AUTO_TIMEOUT:-5}"
 
@@ -40,7 +42,17 @@ run_pinentry() {
     exec "$prog" "$@"
   fi
 
-  "$TIMEOUT_CMD" -k 2 "$PINENTRY_AUTO_TIMEOUT" "$prog" "$@"
+  # --foreground: pinentry-auto is launched by gpg-agent, not directly
+  # from an interactive shell prompt, so without this flag `timeout`
+  # would run "$prog" in a separate background process group. A
+  # background process group reading from its controlling terminal
+  # (as pinentry-curses/pinentry-tty do via $GPG_TTY) receives SIGTTIN
+  # instead of the passphrase, which would break normal interactive
+  # signing — the exact case this change must not regress. Foreground
+  # mode only stops `timeout` from timing out further descendants that
+  # "$prog" itself spawns, which pinentry programs don't do, so the -k
+  # kill-after guarantee below is unaffected.
+  "$TIMEOUT_CMD" --foreground -k 2 "$PINENTRY_AUTO_TIMEOUT" "$prog" "$@"
   status=$?
 
   if [ "$status" -eq 0 ]; then
