@@ -1,23 +1,130 @@
 #!/bin/sh
-# Auto-detect the best pinentry program for the current session.
-# Installed by chezmoi to ~/.gnupg/pinentry-auto and referenced
-# from gpg-agent.conf as the pinentry-program on Linux/macOS.
+# Auto-detect the best pinentry program for the current session, and
+# fail fast with a clear message if it doesn't respond within a bounded
+# window — instead of hanging indefinitely when no human is actually
+# available to answer the prompt (e.g. an agent/automation-driven,
+# non-interactive gpg-agent client). Installed by chezmoi to
+# ~/.gnupg/pinentry-auto and referenced from gpg-agent.conf as the
+# pinentry-program on Linux/macOS.
 #
 # Decision logic (checked via env vars propagated by updatestartuptty):
 #   1. macOS pinentry-mac        — native dialog, works everywhere
 #   2. DISPLAY/WAYLAND_DISPLAY   — X11/Wayland GUI pinentry
 #   3. Fallback                  — curses or tty for terminal sessions
+#
+# PINENTRY_AUTO_TIMEOUT (default 5) bounds every attempt below in
+# seconds. Raise it in your shell profile if you routinely need more
+# time to notice and answer a prompt. Requires GNU `timeout` (Linux:
+# part of the base coreutils package; macOS: `gtimeout` from Homebrew's
+# coreutils — this dotfiles repo does not itself provision Homebrew or
+# coreutils, but a machine already provisioned via the sibling
+# kurone-kito/setup.macos repository's Brewfile has it) — falls back to
+# the old unbounded behavior if neither is found, rather than failing
+# outright.
+
+PINENTRY_AUTO_TIMEOUT="${PINENTRY_AUTO_TIMEOUT:-5}"
+# `timeout DURATION` treats 0 (or any all-zero form like "00") as "no
+# deadline", which would silently defeat the whole fail-fast guarantee.
+# Reject empty/non-numeric values with a pattern match, then reject
+# zero/all-zero values with a numeric comparison (catches "00"/"000"
+# too, unlike a literal-"0" pattern match) and fall back to the
+# documented default instead.
+case "$PINENTRY_AUTO_TIMEOUT" in
+  '' | *[!0-9]*) PINENTRY_AUTO_TIMEOUT=5 ;;
+  *) [ "$PINENTRY_AUTO_TIMEOUT" -gt 0 ] 2>/dev/null || PINENTRY_AUTO_TIMEOUT=5 ;;
+esac
+
+# `command -v` only checks that a `timeout`/`gtimeout` binary exists on
+# PATH, not that it understands the GNU-specific `--foreground`/`-k`
+# options this script actually invokes it with below (e.g. BusyBox's
+# minimal `timeout` applet supports neither). Probe --help output for
+# both, so an incompatible binary is treated the same as a missing one
+# — falling back to the old unbounded exec, never a hard failure. A
+# binary advertising only one of the two would otherwise be selected
+# and then fail every pinentry attempt with an option error. Match
+# with a `case` pattern instead of `grep` so this probe adds no
+# executable dependency of its own (a missing `grep` would otherwise
+# silently defeat the bounded path exactly like a missing `timeout`
+# does).
+timeout_cmd_is_compatible() {
+  help_output=$("$1" --help 2>&1)
+  case "$help_output" in
+    *--foreground*) ;;
+    *) return 1 ;;
+  esac
+  case "$help_output" in
+    *--kill-after*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if command -v timeout >/dev/null 2>&1 && timeout_cmd_is_compatible timeout; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_is_compatible gtimeout; then
+  TIMEOUT_CMD="gtimeout"
+else
+  TIMEOUT_CMD=""
+fi
+
+run_pinentry() {
+  prog="$1"
+  shift
+
+  if [ -z "$TIMEOUT_CMD" ]; then
+    # No timeout implementation available: preserve the old unbounded
+    # behavior rather than breaking signing outright.
+    exec "$prog" "$@"
+  fi
+
+  # --foreground: pinentry-auto is launched by gpg-agent, not directly
+  # from an interactive shell prompt, so without this flag `timeout`
+  # would run "$prog" in a separate background process group. A
+  # background process group reading from its controlling terminal
+  # (as pinentry-curses/pinentry-tty do via $GPG_TTY) receives SIGTTIN
+  # instead of the passphrase, which would break normal interactive
+  # signing — the exact case this change must not regress. Foreground
+  # mode only stops `timeout` from timing out further descendants that
+  # "$prog" itself spawns, which pinentry programs don't do, so the
+  # --kill-after guarantee below is unaffected.
+  #
+  # --kill-after (long form, not the -k short alias): the capability
+  # probe above checks --help output for the literal --kill-after
+  # string. Invoking with -k instead would let a hypothetical
+  # implementation that documents one form but not the other slip past
+  # the probe and then reject this call outright, defeating the
+  # graceful-fallback guarantee the probe exists to provide. Using the
+  # exact string that's probed makes that class of mismatch structurally
+  # impossible rather than relying on the two forms always being paired.
+  "$TIMEOUT_CMD" --foreground --kill-after 2 "$PINENTRY_AUTO_TIMEOUT" "$prog" "$@"
+  status=$?
+
+  if [ "$status" -eq 0 ]; then
+    exit 0
+  fi
+  # 124 = timeout fired and TERM ended the child; 137 = the child
+  # ignored/trapped TERM and the -k grace period's SIGKILL was what
+  # actually ended it (128 + signal 9) — both are "did not respond",
+  # not a genuine pinentry cancel/error.
+  if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+    echo "pinentry-auto: '$prog' did not respond within ${PINENTRY_AUTO_TIMEOUT}s." >&2
+    echo "Either no human is available to answer the passphrase prompt, or" >&2
+    echo "the terminal/display it tried to use isn't actually being watched." >&2
+    echo "Run 'gpg-cache' from a real interactive shell to warm the 24h" >&2
+    echo "passphrase cache before starting an unattended/agent session." >&2
+  fi
+  exit "$status"
+}
 
 # macOS: pinentry-mac handles both GUI and terminal contexts natively
 if command -v pinentry-mac >/dev/null 2>&1; then
-  exec pinentry-mac "$@"
+  run_pinentry pinentry-mac "$@"
 fi
 
 # Graphical session available: prefer GUI pinentry
 if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
   for p in pinentry-gnome3 pinentry-qt pinentry-qt5 pinentry-gtk-2; do
     if command -v "$p" >/dev/null 2>&1; then
-      exec "$p" "$@"
+      run_pinentry "$p" "$@"
     fi
   done
 fi
@@ -25,13 +132,13 @@ fi
 # Terminal fallback: curses provides a TUI, tty is simpler
 for p in pinentry-curses pinentry-tty; do
   if command -v "$p" >/dev/null 2>&1; then
-    exec "$p" "$@"
+    run_pinentry "$p" "$@"
   fi
 done
 
 # Last resort: system default pinentry
 if command -v pinentry >/dev/null 2>&1; then
-  exec pinentry "$@"
+  run_pinentry pinentry "$@"
 fi
 
 echo "pinentry-auto: no pinentry program found" >&2
