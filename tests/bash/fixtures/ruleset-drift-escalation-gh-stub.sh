@@ -7,11 +7,12 @@
 #     (default: `[]`) -- the real script applies its own local `jq`
 #     filter to this command's output, so the stub returns unfiltered
 #     JSON exactly like the real `gh issue list --json ...` would.
-#   - `gh label list ...`  -> prints $GH_STUB_LABEL_LIST_NAMES, one label
-#     name per line (default: empty) -- the real script asks `gh` itself
-#     to apply `--jq '.[].name'`, so the stub returns the
-#     already-filtered plain-text names that flag would produce, not
-#     raw JSON.
+#   - `gh api repos/{owner}/{repo}/labels/<name>` -> simulates the real
+#     single-label GET endpoint: exits 0 (label exists) when <name>
+#     appears (whitespace-separated) in $GH_STUB_EXISTING_LABELS,
+#     otherwise exits 1 (label absent, mirroring a real 404) -- no
+#     stdout either way, since the real script only checks this
+#     command's exit status.
 # Every other subcommand (`issue create`, `issue comment`, `label
 # create`, `issue close`) is a pure recording no-op: it never talks to
 # GitHub, so these tests never create, comment on, or close anything in
@@ -32,9 +33,7 @@ printf 'CALL: %s\n' "$*" >> "$GH_CALL_LOG"
 case "${1:-} ${2:-}" in
   "issue list")
     printf '%s\n' "${GH_STUB_ISSUE_LIST_JSON:-[]}"
-    ;;
-  "label list")
-    printf '%s\n' "${GH_STUB_LABEL_LIST_NAMES:-}"
+    exit 0
     ;;
   "issue create" | "issue comment")
     if [ -n "${GH_BODY_LOG:-}" ]; then
@@ -42,10 +41,25 @@ case "${1:-} ${2:-}" in
     else
       cat > /dev/null
     fi
+    exit 0
     ;;
   "label create" | "issue close")
-    : # no stdin expected for these
+    exit 0 # no stdin expected for these
     ;;
 esac
+
+if [ "${1:-}" = "api" ]; then
+  case "${2:-}" in
+    */labels/*)
+      requested_label="${2##*/labels/}"
+      for existing_label in ${GH_STUB_EXISTING_LABELS:-}; do
+        if [ "$existing_label" = "$requested_label" ]; then
+          exit 0
+        fi
+      done
+      exit 1
+      ;;
+  esac
+fi
 
 exit 0

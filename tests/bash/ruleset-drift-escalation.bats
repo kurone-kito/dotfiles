@@ -32,15 +32,27 @@ setup() {
   TRACKING_TITLE='ci: master ruleset required_status_checks drift detected'
 }
 
-@test "find-tracking-issue returns the number of an exact title match" {
-  export GH_STUB_ISSUE_LIST_JSON='[{"number":42,"title":"ci: master ruleset required_status_checks drift detected"}]'
+@test "find-tracking-issue returns the number of an exact title match from this workflow's own author" {
+  export GH_STUB_ISSUE_LIST_JSON='[{"number":42,"title":"ci: master ruleset required_status_checks drift detected","author":{"login":"github-actions[bot]"}}]'
   run bash "$SCRIPT" find-tracking-issue --title "$TRACKING_TITLE"
   assert_success
   assert_output '42'
 }
 
 @test "find-tracking-issue ignores a title that only contains the search phrase" {
-  export GH_STUB_ISSUE_LIST_JSON='[{"number":7,"title":"unrelated: mentions ci: master ruleset required_status_checks drift detected in passing"}]'
+  export GH_STUB_ISSUE_LIST_JSON='[{"number":7,"title":"unrelated: mentions ci: master ruleset required_status_checks drift detected in passing","author":{"login":"github-actions[bot]"}}]'
+  run bash "$SCRIPT" find-tracking-issue --title "$TRACKING_TITLE"
+  assert_success
+  assert_output ''
+}
+
+@test "find-tracking-issue ignores an exact-title match opened by someone other than this workflow" {
+  # The tracking-issue title is public and fixed, so anyone could open
+  # an unrelated issue with that exact title. Without this author check
+  # the workflow would adopt a stranger's issue as its own tracker --
+  # closing it as "recovered" on the next passing run, or commenting on
+  # it as if it were the real drift record.
+  export GH_STUB_ISSUE_LIST_JSON='[{"number":99,"title":"ci: master ruleset required_status_checks drift detected","author":{"login":"some-random-user"}}]'
   run bash "$SCRIPT" find-tracking-issue --title "$TRACKING_TITLE"
   assert_success
   assert_output ''
@@ -54,13 +66,13 @@ setup() {
 }
 
 @test "escalate creates a tracking issue with the bug label when none is open" {
-  export GH_STUB_LABEL_LIST_NAMES='enhancement'
+  export GH_STUB_EXISTING_LABELS='enhancement'
   run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
     --missing "lint" --extra "" --run-url "https://example.test/run/1"
   assert_success
 
   run cat "$GH_CALL_LOG"
-  assert_output --partial 'CALL: label list'
+  assert_output --partial 'CALL: api repos/{owner}/{repo}/labels/bug'
   assert_output --partial 'CALL: label create bug'
   assert_output --partial "CALL: issue create --title $TRACKING_TITLE --label bug --body-file -"
   refute_output --partial 'CALL: issue comment'
@@ -75,13 +87,13 @@ setup() {
 }
 
 @test "escalate does not create the bug label when it already exists" {
-  export GH_STUB_LABEL_LIST_NAMES=$'bug\nenhancement'
+  export GH_STUB_EXISTING_LABELS='bug enhancement'
   run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
     --missing "lint" --extra "" --run-url "https://example.test/run/1"
   assert_success
 
   run cat "$GH_CALL_LOG"
-  assert_output --partial 'CALL: label list'
+  assert_output --partial 'CALL: api repos/{owner}/{repo}/labels/bug'
   refute_output --partial 'CALL: label create'
   assert_output --partial 'CALL: issue create'
 }

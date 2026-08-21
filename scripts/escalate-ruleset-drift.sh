@@ -40,11 +40,25 @@ require_arg() {
 }
 
 # find-tracking-issue -- prints the open tracking issue's number to
-# stdout when one exists with an *exact* title match, or nothing when
-# none does. gh's --search is a fuzzy text search, not an exact-title
-# filter, so the exact-match narrowing happens locally via jq to avoid
-# reusing (and commenting on) an unrelated issue whose title merely
-# contains the search phrase.
+# stdout when one exists with an *exact* title match created by this
+# workflow, or nothing when none does.
+#
+# Two narrowing layers, for two different reasons:
+#   - gh's --search is a fuzzy text search, not an exact-title filter,
+#     so the exact-match narrowing happens locally via jq to avoid
+#     reusing (and commenting on) an unrelated issue whose title merely
+#     contains the search phrase.
+#   - The tracking-issue title is public and fixed, so anyone could
+#     open an unrelated issue with that exact title -- the workflow
+#     would then treat a stranger's issue as its own tracker (closing
+#     it as "recovered" on the next passing run, or commenting on it as
+#     if it were the real drift record). Requiring both the `bug` label
+#     (server-side, also shrinks the result set against the --limit
+#     truncation risk below) and an author matching this workflow's own
+#     GITHUB_TOKEN identity (checked locally, tolerant of the different
+#     login forms gh has reported for that identity across versions/
+#     surfaces) means only an issue this workflow itself created can
+#     ever be reused as the tracker.
 cmd_find_tracking_issue() {
   local title="" repo=""
   while [ $# -gt 0 ]; do
@@ -56,18 +70,50 @@ cmd_find_tracking_issue() {
   done
   title="$(require_arg title "$title")"
 
-  local -a gh_args=(issue list --search "in:title \"${title}\"" --state open --json number,title --limit 50)
+  # --limit high enough that a real truncation is not a practical
+  # concern: with only 50, more than 50 open issues fuzzy-matching the
+  # search phrase would push the real tracking issue past the page
+  # boundary, making this return empty and the caller create a
+  # duplicate -- silently defeating the de-duplication guarantee this
+  # whole command exists for. `gh` paginates automatically to satisfy a
+  # --limit above one page.
+  local -a gh_args=(issue list --search "in:title \"${title}\"" --state open --label "$TRACKING_LABEL" --json number,title,author --limit 1000)
   [ -n "$repo" ] && gh_args+=(--repo "$repo")
 
-  gh "${gh_args[@]}" | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].number // empty'
+  gh "${gh_args[@]}" | jq -r --arg t "$title" '
+    [.[]
+      | select(.title == $t)
+      | select(.author.login == "github-actions" or .author.login == "github-actions[bot]" or .author.login == "app/github-actions")
+    ][0].number // empty
+  '
 }
 
+# ensure_label_exists -- a single targeted "get this one label" lookup
+# rather than a paginated `label list` + local match. Two prior review
+# rounds each flagged a real gap here that this design removes instead
+# of patching around: (1) a `--limit`-bounded list can miss an existing
+# label in a repository with more labels than the page size, wrongly
+# treating it as absent, so `label create` then fails on a label that
+# already exists and the whole escalation aborts under `set -e` before
+# ever reaching `issue create`/`issue comment`; (2) piping a list
+# through `grep` under `pipefail` makes a real `gh` lookup failure
+# (rate limit, transient API error) indistinguishable from "label
+# genuinely absent" -- both produce the same non-zero pipeline status.
+# A single-label GET has no page to overflow, and its own exit code
+# means exactly "found" or "not found/error" for that one label, with
+# no separate pipeline stage to blur the distinction.
+#
+# `gh api` has no `--repo`/`-R` flag of its own (unlike `gh label`/
+# `gh issue`) -- it resolves `{owner}`/`{repo}` placeholders from the
+# ambient git remote or the `GH_REPO` environment variable, so an
+# explicit `--repo` selection is threaded through via `GH_REPO` instead.
 ensure_label_exists() {
   local label="$1" repo="$2"
-  local -a list_args=(label list --json name --jq '.[].name' --limit 100)
-  [ -n "$repo" ] && list_args+=(--repo "$repo")
+  local -a get_args=(api "repos/{owner}/{repo}/labels/${label}" --silent)
+  local -a repo_env=()
+  [ -n "$repo" ] && repo_env=(env "GH_REPO=$repo")
 
-  if gh "${list_args[@]}" | grep -qxF "$label"; then
+  if "${repo_env[@]}" gh "${get_args[@]}" 2>/dev/null; then
     return 0
   fi
 
