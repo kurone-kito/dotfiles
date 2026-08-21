@@ -74,7 +74,14 @@ jobs:
       TRACKING_ISSUE_TITLE: 'ci: master ruleset required_status_checks drift detected'
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        # SHA-pinned, not the mutable @v7 tag idd-advisory-convergence.yml
+        # (read-only permissions) safely uses: this job holds
+        # `issues: write`, the same risk tier as post-merge-cleanup.yml's
+        # own write-capable checkout, which pins the same SHA below for
+        # the same reason -- a retargeted mutable tag could otherwise
+        # execute arbitrary action code with this job's write-capable
+        # token.
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # Trusted default-branch checkout, not whatever ref triggered
           # the run, for any trigger type including workflow_dispatch --
