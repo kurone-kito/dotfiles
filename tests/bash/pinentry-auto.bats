@@ -136,6 +136,21 @@ EOF
   assert_file_not_exists "$GTIMEOUT_LOG"
 }
 
+@test "resolves to gtimeout when timeout is absent" {
+  make_mock_command pinentry-curses "exit 0"
+  make_mock_command gtimeout "printf '%s\n' \"\$*\" >> \"${GTIMEOUT_LOG}\"; exit 124"
+
+  # Scope PATH to only the mock bin directory (same `env`-on-the-child
+  # technique as the neither-found fallback test below) so the real
+  # system `timeout` cannot be found and mask the gtimeout-only branch;
+  # the mock gtimeout remains available.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" /bin/sh "$SCRIPT_PATH"
+
+  assert_equal "$status" 124
+  assert_stderr --partial "did not respond within"
+  assert_file_contains "$GTIMEOUT_LOG" "pinentry-curses"
+}
+
 @test "falls back to the old unbounded exec when neither timeout nor gtimeout is found" {
   # A distinctive exit code: if a real timeout binary were found despite
   # the PATH scoping below, the wrapped call would behave differently
