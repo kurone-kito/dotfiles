@@ -37,17 +37,17 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
-# The script probes `timeout`/`gtimeout --help` for `--foreground`
-# support before selecting either as TIMEOUT_CMD. A GNU/uutils-style
-# mock must therefore answer that probe itself, on top of its normal
-# (non-`--help`) behavior, or every test below would silently fall
-# through to the unbounded-exec branch instead of exercising the
-# timeout-wrapped path it means to test.
+# The script probes `timeout`/`gtimeout --help` for both --foreground
+# and --kill-after support before selecting either as TIMEOUT_CMD. A
+# GNU/uutils-style mock must therefore answer that probe itself, on
+# top of its normal (non-`--help`) behavior, or every test below would
+# silently fall through to the unbounded-exec branch instead of
+# exercising the timeout-wrapped path it means to test.
 make_mock_timeout() {
   cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
 #!/bin/sh
 if [ "\$1" = "--help" ]; then
-  printf -- '--foreground\n'
+  printf -- '--foreground\n--kill-after\n'
   exit 0
 fi
 $2
@@ -56,14 +56,31 @@ EOF
 }
 
 # A BusyBox-style timeout applet: recognized by `command -v`, but its
-# --help output has no --foreground option, so the capability probe
-# must reject it and fall back to the unbounded exec, not select it
-# and let `--foreground -k 2 ...` fail outright.
+# --help output has neither --foreground nor --kill-after, so the
+# capability probe must reject it and fall back to the unbounded exec,
+# not select it and let `--foreground -k 2 ...` fail outright.
 make_mock_busybox_timeout() {
   cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
 #!/bin/sh
 if [ "\$1" = "--help" ]; then
   printf 'Usage: timeout [-s SIG] [-t TIMEOUT] [-9] PROG ARGS\n'
+  exit 0
+fi
+printf '%s\n' "\$*" >> "${TIMEOUT_LOG}"
+exit 99
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+# A partially-compatible timeout: advertises --foreground but not
+# --kill-after. The probe must require both, not just --foreground, or
+# this would be selected and then every pinentry attempt would fail
+# with an option error at the real invocation instead of falling back.
+make_mock_partial_timeout() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
+#!/bin/sh
+if [ "\$1" = "--help" ]; then
+  printf -- '--foreground\n'
   exit 0
 fi
 printf '%s\n' "\$*" >> "${TIMEOUT_LOG}"
@@ -239,16 +256,50 @@ EOF
   assert_equal "$stderr" ""
 }
 
-@test "falls back to the old unbounded exec when timeout exists but lacks --foreground support (BusyBox)" {
+@test "falls back to the old unbounded exec when timeout exists but lacks --foreground/-k support (BusyBox)" {
   # A distinctive exit code proves the pinentry mock was exec'd directly
   # rather than routed through the incompatible mock timeout (which
   # would exit 99 and log the call, per make_mock_busybox_timeout).
   make_mock_command pinentry-curses "exit 43"
   make_mock_busybox_timeout timeout
 
-  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+  # Scope PATH to only the mock bin directory: a real, compatible
+  # gtimeout on the test-running machine (e.g. a macOS dev box with
+  # Homebrew coreutils, one of this repo's own target platforms) would
+  # otherwise be found via the unscoped default PATH's /usr/bin:/bin
+  # and selected via the elif branch, making this test pass for the
+  # wrong reason (routed through a real gtimeout, not the intended
+  # busybox-rejection-then-fallback path) instead of exercising it.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" /bin/sh "$SCRIPT_PATH"
 
   assert_equal "$status" 43
   assert_equal "$stderr" ""
   assert_file_not_exists "$TIMEOUT_LOG"
+}
+
+@test "falls back to the old unbounded exec when timeout advertises --foreground but not --kill-after" {
+  make_mock_command pinentry-curses "exit 44"
+  make_mock_partial_timeout timeout
+
+  # Same PATH-scoping rationale as the BusyBox case above.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" /bin/sh "$SCRIPT_PATH"
+
+  assert_equal "$status" 44
+  assert_equal "$stderr" ""
+  assert_file_not_exists "$TIMEOUT_LOG"
+}
+
+@test "the last-resort system-default pinentry branch is timeout-wrapped, not a bare exec" {
+  # No pinentry-mac, no DISPLAY/WAYLAND_DISPLAY (unset in setup), no
+  # pinentry-curses/pinentry-tty: only the final `pinentry` fallback is
+  # available, so this exercises the one selection branch none of the
+  # other cases above cover.
+  make_mock_command pinentry "exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
+
+  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+
+  assert_equal "$status" 124
+  assert_stderr --partial "did not respond within"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry"
 }

@@ -36,24 +36,31 @@ esac
 
 # `command -v` only checks that a `timeout`/`gtimeout` binary exists on
 # PATH, not that it understands the GNU-specific `--foreground`/`-k`
-# options this script relies on (e.g. BusyBox's minimal `timeout`
-# applet does not). Probe --help output for --foreground support so an
-# incompatible binary is treated the same as a missing one — falling
-# back to the old unbounded exec, never a hard failure. Match with a
-# `case` pattern instead of `grep` so this probe adds no executable
-# dependency of its own (a missing `grep` would otherwise silently
-# defeat the bounded path exactly like a missing `timeout` does).
-timeout_cmd_supports_foreground() {
+# options this script actually invokes it with below (e.g. BusyBox's
+# minimal `timeout` applet supports neither). Probe --help output for
+# both, so an incompatible binary is treated the same as a missing one
+# — falling back to the old unbounded exec, never a hard failure. A
+# binary advertising only one of the two would otherwise be selected
+# and then fail every pinentry attempt with an option error. Match
+# with a `case` pattern instead of `grep` so this probe adds no
+# executable dependency of its own (a missing `grep` would otherwise
+# silently defeat the bounded path exactly like a missing `timeout`
+# does).
+timeout_cmd_is_compatible() {
   help_output=$("$1" --help 2>&1)
   case "$help_output" in
-    *--foreground*) return 0 ;;
+    *--foreground*) ;;
+    *) return 1 ;;
+  esac
+  case "$help_output" in
+    *--kill-after*) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-if command -v timeout >/dev/null 2>&1 && timeout_cmd_supports_foreground timeout; then
+if command -v timeout >/dev/null 2>&1 && timeout_cmd_is_compatible timeout; then
   TIMEOUT_CMD="timeout"
-elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_supports_foreground gtimeout; then
+elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_is_compatible gtimeout; then
   TIMEOUT_CMD="gtimeout"
 else
   TIMEOUT_CMD=""
