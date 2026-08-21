@@ -666,10 +666,49 @@ loudly — naming the missing and/or unexpected contexts — if its context
 set drifts from the five contexts listed above. It intentionally checks
 only the ruleset side of that union; classic branch protection is
 unconfigured on `master` today (see the `trustEmptyProtectionReads`
-note above), so this is not currently a coverage gap. The workflow's
-own expected-context list carries a comment pointing back to this
-section; update both together whenever a required context is added or
-removed.
+note above), so this is not currently a coverage gap. The
+expected-context list lives in
+[`scripts/check-ruleset-drift.sh`](../scripts/check-ruleset-drift.sh)'s
+`default_expected_contexts` function, which carries a comment pointing
+back to this section; update both together whenever a required context
+is added or removed.
+
+A red X on the scheduled run alone depends on someone checking the
+Actions tab or having reliable GitHub run-failure email notifications
+configured — a 2026-08-17 incident saw the guard correctly report
+`conclusion: failure` once daily for 4 consecutive days with zero human
+response before a maintainer restored the rule after being told
+directly. The workflow now escalates beyond that red X:
+
+- **On failure**, it searches for an open issue with the fixed,
+  greppable title `ci: master ruleset required_status_checks drift
+  detected`. If none exists, it opens one (creating the `bug` label
+  first if the repository doesn't already have it) naming the missing
+  and/or unexpected contexts and linking the failed run. If one is
+  already open, it comments on that issue instead of opening a second
+  one, so repeated daily failures for the same drift don't spam new
+  issues.
+- **On success**, it looks for that same tracking issue; if one is
+  still open, it closes it with a comment confirming the rule matches
+  again and linking the passing run.
+
+The drift-comparison logic (the rule-count check and the missing/extra
+context diff) lives in
+[`scripts/check-ruleset-drift.sh`](../scripts/check-ruleset-drift.sh),
+which takes already-fetched rules JSON (via a file argument or stdin)
+so it is directly unit-testable against fixture JSON —
+[`tests/bash/ruleset-drift-check.bats`](../tests/bash/ruleset-drift-check.bats)
+covers the matching, missing-context, extra-context, and zero-rule
+cases — without mutating the real `master` ruleset. The tracking-issue
+find/escalate/recover logic (including the de-duplication behavior)
+lives in
+[`scripts/escalate-ruleset-drift.sh`](../scripts/escalate-ruleset-drift.sh),
+covered against a stubbed `gh` binary by
+[`tests/bash/ruleset-drift-escalation.bats`](../tests/bash/ruleset-drift-escalation.bats),
+so this behavior is verified without ever creating, commenting on, or
+closing an issue in the live repository. The workflow's `permissions:`
+block now includes `issues: write` (alongside `contents: read`) so it
+can create, comment on, and close that tracking issue.
 
 ### `idd-doctor` findings
 
