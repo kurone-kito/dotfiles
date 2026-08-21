@@ -52,13 +52,20 @@ require_arg() {
 #     open an unrelated issue with that exact title -- the workflow
 #     would then treat a stranger's issue as its own tracker (closing
 #     it as "recovered" on the next passing run, or commenting on it as
-#     if it were the real drift record). Requiring both the `bug` label
-#     (server-side, also shrinks the result set against the --limit
-#     truncation risk below) and an author matching this workflow's own
-#     GITHUB_TOKEN identity (checked locally, tolerant of the different
-#     login forms gh has reported for that identity across versions/
-#     surfaces) means only an issue this workflow itself created can
-#     ever be reused as the tracker.
+#     if it were the real drift record). An author matching this
+#     workflow's own GITHUB_TOKEN identity (checked locally, tolerant of
+#     the different login forms gh has reported for that identity
+#     across versions/surfaces), combined with the exact-title match
+#     above, is sufficient on its own to prevent that: nobody but this
+#     workflow's own token can author a matching issue. Deliberately
+#     NOT also requiring the `bug` label here (creation still applies
+#     it, in cmd_escalate below) -- requiring it on this *lookup* too
+#     would make the label a single point of failure for the whole
+#     dedup/recovery lifecycle: an unrelated label cleanup that
+#     removes/renames it on the still-open tracking issue would hide
+#     the issue from every later lookup, letting a subsequent drift
+#     create a duplicate and orphaning the original with no way for a
+#     later passing run to find and close it.
 cmd_find_tracking_issue() {
   local title="" repo=""
   while [ $# -gt 0 ]; do
@@ -77,7 +84,7 @@ cmd_find_tracking_issue() {
   # duplicate -- silently defeating the de-duplication guarantee this
   # whole command exists for. `gh` paginates automatically to satisfy a
   # --limit above one page.
-  local -a gh_args=(issue list --search "in:title \"${title}\"" --state open --label "$TRACKING_LABEL" --json number,title,author --limit 1000)
+  local -a gh_args=(issue list --search "in:title \"${title}\"" --state open --json number,title,author --limit 1000)
   [ -n "$repo" ] && gh_args+=(--repo "$repo")
 
   gh "${gh_args[@]}" | jq -r --arg t "$title" '
@@ -99,9 +106,25 @@ cmd_find_tracking_issue() {
 # through `grep` under `pipefail` makes a real `gh` lookup failure
 # (rate limit, transient API error) indistinguishable from "label
 # genuinely absent" -- both produce the same non-zero pipeline status.
-# A single-label GET has no page to overflow, and its own exit code
-# means exactly "found" or "not found/error" for that one label, with
-# no separate pipeline stage to blur the distinction.
+# A single-label GET has no page to overflow.
+#
+# That still leaves one thing to distinguish explicitly: `gh api`
+# itself exits non-zero on *any* failure, not only a genuine 404 --
+# a rate limit, a permission error, or a transient network failure all
+# look the same as "label absent" by exit code alone. Left unhandled,
+# that misclassification would attempt `gh label create` on a label
+# that actually still exists, fail there instead, and abort the whole
+# escalation under `set -e` before ever reaching `issue create`/`issue
+# comment` -- silently losing the escalation for a real drift over a
+# transient API hiccup, exactly the failure class this whole script
+# exists to prevent. `gh` reports a real 404 as "HTTP 404" in its own
+# stderr text (empirically confirmed against the live API, including
+# that a wrong repository path also reports HTTP 404 -- so this only
+# ever distinguishes "genuinely missing resource" from every other
+# failure class, which is the distinction that actually matters here,
+# not "missing label" from "missing repository"); anything else is
+# treated as a real failure and surfaced rather than silently
+# misclassified as "absent".
 #
 # `gh api` has no `--repo`/`-R` flag of its own (unlike `gh label`/
 # `gh issue`) -- it resolves `{owner}`/`{repo}` placeholders from the
@@ -113,8 +136,12 @@ ensure_label_exists() {
   local -a repo_env=()
   [ -n "$repo" ] && repo_env=(env "GH_REPO=$repo")
 
-  if "${repo_env[@]}" gh "${get_args[@]}" 2>/dev/null; then
+  local get_stderr
+  if get_stderr=$("${repo_env[@]}" gh "${get_args[@]}" 2>&1 >/dev/null); then
     return 0
+  fi
+  if ! printf '%s' "$get_stderr" | grep -q 'HTTP 404'; then
+    die "checking whether the ${label} label exists failed (not a 404 -- treating as a real failure rather than \"label absent\"): ${get_stderr}"
   fi
 
   local -a create_args=(label create "$label" --description "$TRACKING_LABEL_DESCRIPTION" --color "$TRACKING_LABEL_COLOR")

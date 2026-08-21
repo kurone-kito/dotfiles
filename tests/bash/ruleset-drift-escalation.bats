@@ -86,6 +86,24 @@ setup() {
   refute_output --partial 'Unexpected extra context(s)'
 }
 
+@test "escalate fails instead of misreading a non-404 label lookup failure as absent" {
+  # A rate limit, permission error, or transient network failure must
+  # not be treated the same as "label genuinely absent" -- that
+  # misclassification would attempt `label create` on a label that may
+  # still exist, fail there instead, and silently lose the escalation
+  # for a real drift under set -e.
+  export GH_STUB_LABEL_LOOKUP_ERROR='gh: API rate limit exceeded (HTTP 403)'
+  run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
+    --missing "lint" --extra "" --run-url "https://example.test/run/1"
+  assert_failure
+  assert_output --partial 'not a 404'
+  assert_output --partial 'API rate limit exceeded'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: label create'
+  refute_output --partial 'CALL: issue create'
+}
+
 @test "escalate does not create the bug label when it already exists" {
   export GH_STUB_EXISTING_LABELS='bug enhancement'
   run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \

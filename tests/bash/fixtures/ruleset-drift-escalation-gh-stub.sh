@@ -9,10 +9,15 @@
 #     JSON exactly like the real `gh issue list --json ...` would.
 #   - `gh api repos/{owner}/{repo}/labels/<name>` -> simulates the real
 #     single-label GET endpoint: exits 0 (label exists) when <name>
-#     appears (whitespace-separated) in $GH_STUB_EXISTING_LABELS,
-#     otherwise exits 1 (label absent, mirroring a real 404) -- no
-#     stdout either way, since the real script only checks this
-#     command's exit status.
+#     appears (whitespace-separated) in $GH_STUB_EXISTING_LABELS.
+#     Otherwise, if $GH_STUB_LABEL_LOOKUP_ERROR is set, prints that
+#     value to stderr and exits 1 -- simulating a real API failure
+#     other than "label not found" (rate limit, permission error,
+#     transient network failure), so a test can assert the real script
+#     treats that differently from a genuine 404. With neither
+#     variable set, exits 1 with the same stderr text a real 404
+#     produces (mirroring gh's own wording), simulating a genuine
+#     "label not found".
 # Every other subcommand (`issue create`, `issue comment`, `label
 # create`, `issue close`) is a pure recording no-op: it never talks to
 # GitHub, so these tests never create, comment on, or close anything in
@@ -57,6 +62,11 @@ if [ "${1:-}" = "api" ]; then
           exit 0
         fi
       done
+      if [ -n "${GH_STUB_LABEL_LOOKUP_ERROR:-}" ]; then
+        printf '%s\n' "$GH_STUB_LABEL_LOOKUP_ERROR" >&2
+      else
+        printf 'gh: Not Found (HTTP 404)\n' >&2
+      fi
       exit 1
       ;;
   esac
