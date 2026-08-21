@@ -23,10 +23,22 @@
 # outright.
 
 PINENTRY_AUTO_TIMEOUT="${PINENTRY_AUTO_TIMEOUT:-5}"
+# `timeout DURATION` treats 0 as "no deadline", which would silently
+# defeat the whole fail-fast guarantee. Reject empty, non-numeric, and
+# zero values and fall back to the documented default instead.
+case "$PINENTRY_AUTO_TIMEOUT" in
+  '' | *[!0-9]* | 0) PINENTRY_AUTO_TIMEOUT=5 ;;
+esac
 
-if command -v timeout >/dev/null 2>&1; then
+# `command -v` only checks that a `timeout`/`gtimeout` binary exists on
+# PATH, not that it understands the GNU-specific `--foreground`/`-k`
+# options this script relies on (e.g. BusyBox's minimal `timeout`
+# applet does not). Probe --help output for --foreground support so an
+# incompatible binary is treated the same as a missing one — falling
+# back to the old unbounded exec, never a hard failure.
+if command -v timeout >/dev/null 2>&1 && timeout --help 2>&1 | grep -q -- '--foreground'; then
   TIMEOUT_CMD="timeout"
-elif command -v gtimeout >/dev/null 2>&1; then
+elif command -v gtimeout >/dev/null 2>&1 && gtimeout --help 2>&1 | grep -q -- '--foreground'; then
   TIMEOUT_CMD="gtimeout"
 else
   TIMEOUT_CMD=""

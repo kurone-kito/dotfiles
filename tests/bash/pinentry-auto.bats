@@ -15,6 +15,13 @@ setup() {
   export TIMEOUT_LOG="$BATS_TEST_TMPDIR/timeout.log"
   export GTIMEOUT_LOG="$BATS_TEST_TMPDIR/gtimeout.log"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
+  # The script's timeout/gtimeout --foreground capability probe needs
+  # `grep` on PATH. Symlink the real one into the mock bin directory
+  # (always first on PATH) so it stays available even in the tests
+  # below that scope PATH down to that directory alone to hide the
+  # real system `timeout` — mirrors a real minimal/BusyBox environment,
+  # which ships some `grep` too, just not necessarily GNU `timeout`.
+  ln -s "$(command -v grep)" "$BATS_TEST_TMPDIR/bin/grep"
   # A leaked DISPLAY/WAYLAND_DISPLAY would silently divert the
   # terminal-fallback tests below into the GUI branch instead.
   unset DISPLAY
@@ -37,6 +44,41 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+# The script probes `timeout`/`gtimeout --help` for `--foreground`
+# support before selecting either as TIMEOUT_CMD. A GNU/uutils-style
+# mock must therefore answer that probe itself, on top of its normal
+# (non---help) behavior, or every test below would silently fall
+# through to the unbounded-exec branch instead of exercising the
+# timeout-wrapped path it means to test.
+make_mock_timeout() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
+#!/bin/sh
+if [ "\$1" = "--help" ]; then
+  printf -- '--foreground\n'
+  exit 0
+fi
+$2
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+# A BusyBox-style timeout applet: recognized by `command -v`, but its
+# --help output has no --foreground option, so the capability probe
+# must reject it and fall back to the unbounded exec, not select it
+# and let `--foreground -k 2 ...` fail outright.
+make_mock_busybox_timeout() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
+#!/bin/sh
+if [ "\$1" = "--help" ]; then
+  printf 'Usage: timeout [-s SIG] [-t TIMEOUT] [-9] PROG ARGS\n'
+  exit 0
+fi
+printf '%s\n' "\$*" >> "${TIMEOUT_LOG}"
+exit 99
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
 @test "instant-responding pinentry exits 0 with no stderr message" {
   make_mock_command pinentry-curses "exit 0"
 
@@ -48,7 +90,7 @@ EOF
 
 @test "mock timeout exiting 124 prints the gpg-cache message and propagates the exit code" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -60,7 +102,7 @@ EOF
 
 @test "mock timeout exiting 137 (SIGKILL via -k grace period) prints the same message" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 137"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 137"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -71,7 +113,7 @@ EOF
 
 @test "a genuine pinentry cancel/error (other non-zero exit) propagates without the timeout message" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "exit 2"
+  make_mock_timeout timeout "exit 2"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -82,7 +124,7 @@ EOF
 
 @test "uses PINENTRY_AUTO_TIMEOUT default of 5 when unset" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -92,7 +134,7 @@ EOF
 
 @test "honors PINENTRY_AUTO_TIMEOUT override from the environment" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
   export PINENTRY_AUTO_TIMEOUT=30
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
@@ -101,9 +143,31 @@ EOF
   assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 30 pinentry-curses"
 }
 
+@test "rejects PINENTRY_AUTO_TIMEOUT=0 and falls back to the default (timeout 0 means no deadline)" {
+  make_mock_command pinentry-curses "exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  export PINENTRY_AUTO_TIMEOUT=0
+
+  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+
+  assert_success
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+}
+
+@test "rejects a non-numeric PINENTRY_AUTO_TIMEOUT and falls back to the default" {
+  make_mock_command pinentry-curses "exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  export PINENTRY_AUTO_TIMEOUT="not-a-number"
+
+  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+
+  assert_success
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+}
+
 @test "the macOS pinentry-mac branch is timeout-wrapped, not a bare exec" {
   make_mock_command pinentry-mac "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -115,7 +179,7 @@ EOF
 @test "the GUI pinentry-gnome3 branch is timeout-wrapped, not a bare exec" {
   export DISPLAY=":0"
   make_mock_command pinentry-gnome3 "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -126,8 +190,8 @@ EOF
 
 @test "prefers timeout over gtimeout when both are present" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
-  make_mock_command gtimeout "printf '%s\n' \"\$*\" >> \"${GTIMEOUT_LOG}\"; exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  make_mock_timeout gtimeout "printf '%s\n' \"\$*\" >> \"${GTIMEOUT_LOG}\"; exit 0"
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
@@ -138,7 +202,7 @@ EOF
 
 @test "resolves to gtimeout when timeout is absent" {
   make_mock_command pinentry-curses "exit 0"
-  make_mock_command gtimeout "printf '%s\n' \"\$*\" >> \"${GTIMEOUT_LOG}\"; exit 124"
+  make_mock_timeout gtimeout "printf '%s\n' \"\$*\" >> \"${GTIMEOUT_LOG}\"; exit 124"
 
   # Scope PATH to only the mock bin directory (same `env`-on-the-child
   # technique as the neither-found fallback test below) so the real
@@ -169,4 +233,18 @@ EOF
 
   assert_equal "$status" 42
   assert_equal "$stderr" ""
+}
+
+@test "falls back to the old unbounded exec when timeout exists but lacks --foreground support (BusyBox)" {
+  # A distinctive exit code proves the pinentry mock was exec'd directly
+  # rather than routed through the incompatible mock timeout (which
+  # would exit 99 and log the call, per make_mock_busybox_timeout).
+  make_mock_command pinentry-curses "exit 43"
+  make_mock_busybox_timeout timeout
+
+  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+
+  assert_equal "$status" 43
+  assert_equal "$stderr" ""
+  assert_file_not_exists "$TIMEOUT_LOG"
 }
