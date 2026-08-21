@@ -23,11 +23,15 @@
 # outright.
 
 PINENTRY_AUTO_TIMEOUT="${PINENTRY_AUTO_TIMEOUT:-5}"
-# `timeout DURATION` treats 0 as "no deadline", which would silently
-# defeat the whole fail-fast guarantee. Reject empty, non-numeric, and
-# zero values and fall back to the documented default instead.
+# `timeout DURATION` treats 0 (or any all-zero form like "00") as "no
+# deadline", which would silently defeat the whole fail-fast guarantee.
+# Reject empty/non-numeric values with a pattern match, then reject
+# zero/all-zero values with a numeric comparison (catches "00"/"000"
+# too, unlike a literal-"0" pattern match) and fall back to the
+# documented default instead.
 case "$PINENTRY_AUTO_TIMEOUT" in
-  '' | *[!0-9]* | 0) PINENTRY_AUTO_TIMEOUT=5 ;;
+  '' | *[!0-9]*) PINENTRY_AUTO_TIMEOUT=5 ;;
+  *) [ "$PINENTRY_AUTO_TIMEOUT" -gt 0 ] 2>/dev/null || PINENTRY_AUTO_TIMEOUT=5 ;;
 esac
 
 # `command -v` only checks that a `timeout`/`gtimeout` binary exists on
@@ -35,10 +39,21 @@ esac
 # options this script relies on (e.g. BusyBox's minimal `timeout`
 # applet does not). Probe --help output for --foreground support so an
 # incompatible binary is treated the same as a missing one — falling
-# back to the old unbounded exec, never a hard failure.
-if command -v timeout >/dev/null 2>&1 && timeout --help 2>&1 | grep -q -- '--foreground'; then
+# back to the old unbounded exec, never a hard failure. Match with a
+# `case` pattern instead of `grep` so this probe adds no executable
+# dependency of its own (a missing `grep` would otherwise silently
+# defeat the bounded path exactly like a missing `timeout` does).
+timeout_cmd_supports_foreground() {
+  help_output=$("$1" --help 2>&1)
+  case "$help_output" in
+    *--foreground*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if command -v timeout >/dev/null 2>&1 && timeout_cmd_supports_foreground timeout; then
   TIMEOUT_CMD="timeout"
-elif command -v gtimeout >/dev/null 2>&1 && gtimeout --help 2>&1 | grep -q -- '--foreground'; then
+elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_supports_foreground gtimeout; then
   TIMEOUT_CMD="gtimeout"
 else
   TIMEOUT_CMD=""

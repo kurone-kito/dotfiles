@@ -15,13 +15,6 @@ setup() {
   export TIMEOUT_LOG="$BATS_TEST_TMPDIR/timeout.log"
   export GTIMEOUT_LOG="$BATS_TEST_TMPDIR/gtimeout.log"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
-  # The script's timeout/gtimeout --foreground capability probe needs
-  # `grep` on PATH. Symlink the real one into the mock bin directory
-  # (always first on PATH) so it stays available even in the tests
-  # below that scope PATH down to that directory alone to hide the
-  # real system `timeout` — mirrors a real minimal/BusyBox environment,
-  # which ships some `grep` too, just not necessarily GNU `timeout`.
-  ln -s "$(command -v grep)" "$BATS_TEST_TMPDIR/bin/grep"
   # A leaked DISPLAY/WAYLAND_DISPLAY would silently divert the
   # terminal-fallback tests below into the GUI branch instead.
   unset DISPLAY
@@ -47,7 +40,7 @@ EOF
 # The script probes `timeout`/`gtimeout --help` for `--foreground`
 # support before selecting either as TIMEOUT_CMD. A GNU/uutils-style
 # mock must therefore answer that probe itself, on top of its normal
-# (non---help) behavior, or every test below would silently fall
+# (non-`--help`) behavior, or every test below would silently fall
 # through to the unbounded-exec branch instead of exercising the
 # timeout-wrapped path it means to test.
 make_mock_timeout() {
@@ -158,6 +151,17 @@ EOF
   make_mock_command pinentry-curses "exit 0"
   make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
   export PINENTRY_AUTO_TIMEOUT="not-a-number"
+
+  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+
+  assert_success
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+}
+
+@test "rejects an all-zero PINENTRY_AUTO_TIMEOUT like 00 (not just the literal 0)" {
+  make_mock_command pinentry-curses "exit 0"
+  make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 0"
+  export PINENTRY_AUTO_TIMEOUT=00
 
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
