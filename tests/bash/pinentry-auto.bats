@@ -58,7 +58,7 @@ EOF
 # A BusyBox-style timeout applet: recognized by `command -v`, but its
 # --help output has neither --foreground nor --kill-after, so the
 # capability probe must reject it and fall back to the unbounded exec,
-# not select it and let `--foreground -k 2 ...` fail outright.
+# not select it and let `--foreground --kill-after 2 ...` fail outright.
 make_mock_busybox_timeout() {
   cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
 #!/bin/sh
@@ -139,7 +139,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-curses"
 }
 
 @test "honors PINENTRY_AUTO_TIMEOUT override from the environment" {
@@ -150,7 +150,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 30 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 30 pinentry-curses"
 }
 
 @test "rejects PINENTRY_AUTO_TIMEOUT=0 and falls back to the default (timeout 0 means no deadline)" {
@@ -161,7 +161,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-curses"
 }
 
 @test "rejects a non-numeric PINENTRY_AUTO_TIMEOUT and falls back to the default" {
@@ -172,7 +172,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-curses"
 }
 
 @test "rejects an all-zero PINENTRY_AUTO_TIMEOUT like 00 (not just the literal 0)" {
@@ -183,7 +183,7 @@ EOF
   run --separate-stderr /bin/sh "$SCRIPT_PATH"
 
   assert_success
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-curses"
 }
 
 @test "the macOS pinentry-mac branch is timeout-wrapped, not a bare exec" {
@@ -194,7 +194,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-mac"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-mac"
 }
 
 @test "the GUI pinentry-gnome3 branch is timeout-wrapped, not a bare exec" {
@@ -206,7 +206,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-gnome3"
+  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-gnome3"
 }
 
 @test "prefers timeout over gtimeout when both are present" {
@@ -233,7 +233,7 @@ EOF
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$GTIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry-curses"
+  assert_file_contains "$GTIMEOUT_LOG" "\-\-foreground \-\-kill\-after 2 5 pinentry-curses"
 }
 
 @test "falls back to the old unbounded exec when neither timeout nor gtimeout is found" {
@@ -309,5 +309,5 @@ EOF
   # Exact match, not a substring: "pinentry" alone would also match a
   # "pinentry-curses"/"pinentry-tty" log line, silently accepting the
   # wrong branch instead of proving the last-resort one ran.
-  assert_equal "$(cat "$TIMEOUT_LOG")" "--foreground -k 2 5 pinentry"
+  assert_equal "$(cat "$TIMEOUT_LOG")" "--foreground --kill-after 2 5 pinentry"
 }

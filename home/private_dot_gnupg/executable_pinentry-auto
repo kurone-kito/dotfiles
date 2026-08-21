@@ -84,9 +84,18 @@ run_pinentry() {
   # instead of the passphrase, which would break normal interactive
   # signing — the exact case this change must not regress. Foreground
   # mode only stops `timeout` from timing out further descendants that
-  # "$prog" itself spawns, which pinentry programs don't do, so the -k
-  # kill-after guarantee below is unaffected.
-  "$TIMEOUT_CMD" --foreground -k 2 "$PINENTRY_AUTO_TIMEOUT" "$prog" "$@"
+  # "$prog" itself spawns, which pinentry programs don't do, so the
+  # --kill-after guarantee below is unaffected.
+  #
+  # --kill-after (long form, not the -k short alias): the capability
+  # probe above checks --help output for the literal --kill-after
+  # string. Invoking with -k instead would let a hypothetical
+  # implementation that documents one form but not the other slip past
+  # the probe and then reject this call outright, defeating the
+  # graceful-fallback guarantee the probe exists to provide. Using the
+  # exact string that's probed makes that class of mismatch structurally
+  # impossible rather than relying on the two forms always being paired.
+  "$TIMEOUT_CMD" --foreground --kill-after 2 "$PINENTRY_AUTO_TIMEOUT" "$prog" "$@"
   status=$?
 
   if [ "$status" -eq 0 ]; then
