@@ -297,9 +297,17 @@ EOF
   make_mock_command pinentry "exit 0"
   make_mock_timeout timeout "printf '%s\n' \"\$*\" >> \"${TIMEOUT_LOG}\"; exit 124"
 
-  run --separate-stderr /bin/sh "$SCRIPT_PATH"
+  # Scope PATH to only the mock bin directory: this test machine has a
+  # real /usr/bin/pinentry-curses, and the earlier substring assertion
+  # ("...pinentry", a prefix of "...pinentry-curses" too) let that real
+  # binary silently satisfy the terminal-fallback loop before this
+  # test ever reached the last-resort branch it claims to cover.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" /bin/sh "$SCRIPT_PATH"
 
   assert_equal "$status" 124
   assert_stderr --partial "did not respond within"
-  assert_file_contains "$TIMEOUT_LOG" "\-\-foreground \-k 2 5 pinentry"
+  # Exact match, not a substring: "pinentry" alone would also match a
+  # "pinentry-curses"/"pinentry-tty" log line, silently accepting the
+  # wrong branch instead of proving the last-resort one ran.
+  assert_equal "$(cat "$TIMEOUT_LOG")" "--foreground -k 2 5 pinentry"
 }
