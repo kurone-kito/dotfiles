@@ -30,11 +30,15 @@ fi
 target_dir="${xdg_config_home}/idd-skill"
 target="${target_dir}/config.json"
 
-if [ -L "${target}" ] && [ "$(readlink "${target}")" = "${rendered}" ]; then
+if [ -L "${target}" ]; then
+  if [ "$(readlink "${target}")" = "${rendered}" ]; then
+    exit 0
+  fi
+  echo "idd-skill config: ${target} is a symlink to a different target; not overwriting." >&2
   exit 0
 fi
 
-if [ -e "${target}" ] && [ ! -L "${target}" ]; then
+if [ -e "${target}" ]; then
   echo "idd-skill config: ${target} already exists and is not a symlink; not overwriting." >&2
   exit 0
 fi

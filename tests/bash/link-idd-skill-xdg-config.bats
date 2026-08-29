@@ -82,6 +82,21 @@ write_rendered_config() {
   assert_output ""
 }
 
+@test "does not overwrite a symlink pointing at a different target" {
+  write_rendered_config
+  export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/custom-xdg"
+  mkdir -p "$XDG_CONFIG_HOME/idd-skill"
+  echo '{"other":true}' > "$BATS_TEST_TMPDIR/other-managed-config.json"
+  ln -s "$BATS_TEST_TMPDIR/other-managed-config.json" "$XDG_CONFIG_HOME/idd-skill/config.json"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "not overwriting"
+  run readlink "$XDG_CONFIG_HOME/idd-skill/config.json"
+  assert_output "$BATS_TEST_TMPDIR/other-managed-config.json"
+}
+
 @test "does not overwrite a real (non-symlink) file already at the target" {
   write_rendered_config
   export XDG_CONFIG_HOME="$BATS_TEST_TMPDIR/custom-xdg"

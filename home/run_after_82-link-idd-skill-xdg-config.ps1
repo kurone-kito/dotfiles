@@ -34,10 +34,12 @@ if ($existing) {
   if ($isSymlink -and $existing.Target -contains $rendered) {
     exit 0
   }
-  if (-not $isSymlink) {
-    Write-Warning "idd-skill config: $target already exists and is not a symlink; not overwriting."
+  if ($isSymlink) {
+    Write-Warning "idd-skill config: $target is a symlink to a different target; not overwriting."
     exit 0
   }
+  Write-Warning "idd-skill config: $target already exists and is not a symlink; not overwriting."
+  exit 0
 }
 
 if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
@@ -45,7 +47,6 @@ if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
 }
 
 try {
-  if ($existing) { Remove-Item -LiteralPath $target -Force }
   $null = New-Item -ItemType SymbolicLink -Path $target -Target $rendered -Force
   Write-Host "idd-skill config: linked $target -> $rendered"
 } catch [System.Exception] {

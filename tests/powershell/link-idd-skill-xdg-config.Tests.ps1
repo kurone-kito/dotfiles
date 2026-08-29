@@ -84,6 +84,23 @@ Describe 'link-idd-skill-xdg-config' {
     { & $script:Subject } | Should -Not -Throw
   }
 
+  It 'does not overwrite a symlink pointing at a different target' {
+    Write-RenderedConfig
+    $env:XDG_CONFIG_HOME = Join-Path $TestDrive 'custom-xdg'
+    $targetDir = Join-Path $env:XDG_CONFIG_HOME 'idd-skill'
+    $null = New-Item -ItemType Directory -Path $targetDir -Force
+    $otherManaged = Join-Path $TestDrive 'other-managed-config.json'
+    Set-Content -Path $otherManaged -Value '{"other":true}'
+    $target = Join-Path $targetDir 'config.json'
+    $null = New-Item -ItemType SymbolicLink -Path $target -Target $otherManaged
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*not overwriting*'
+    (Get-Item -LiteralPath $target).Target | Should -Contain $otherManaged
+  }
+
   It 'does not overwrite a real (non-symlink) file already at the target' {
     Write-RenderedConfig
     $env:XDG_CONFIG_HOME = Join-Path $TestDrive 'custom-xdg'
