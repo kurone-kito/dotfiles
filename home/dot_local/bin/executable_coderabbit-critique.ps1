@@ -59,13 +59,24 @@ function global:Resolve-DotfilesCoderabbitBaseBranch {
     }
   } catch [System.Exception] {}
 
+  # A first-match loop would silently pick "main" over "master" whenever a
+  # repository happens to have both remote-tracking refs (a rename in
+  # progress, a stale branch left over, etc.) even if the real default is
+  # "master" -- fail closed on that ambiguity instead of guessing.
+  $existing = @{}
   foreach ($candidate in @('main', 'master')) {
     try {
       & $gitCommand.Name rev-parse --verify --quiet "origin/$candidate" 2>$null | Out-Null
-      if ($LASTEXITCODE -eq 0) {
-        return $candidate
-      }
-    } catch [System.Exception] {}
+      $existing[$candidate] = ($LASTEXITCODE -eq 0)
+    } catch [System.Exception] {
+      $existing[$candidate] = $false
+    }
+  }
+  if ($existing['main'] -and -not $existing['master']) {
+    return 'main'
+  }
+  if ($existing['master'] -and -not $existing['main']) {
+    return 'master'
   }
 
   return $null

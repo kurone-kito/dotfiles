@@ -79,12 +79,19 @@ if [ -z "$BASE_BRANCH" ]; then
   BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')"
 fi
 if [ -z "$BASE_BRANCH" ]; then
-  for candidate in main master; do
-    if git rev-parse --verify --quiet "origin/$candidate" >/dev/null; then
-      BASE_BRANCH="$candidate"
-      break
-    fi
-  done
+  # A first-match loop would silently pick "main" over "master" whenever
+  # a repository happens to have both remote-tracking refs (a rename in
+  # progress, a stale branch left over, etc.) even if the real default is
+  # "master" -- fail closed on that ambiguity instead of guessing.
+  main_exists=false
+  master_exists=false
+  git rev-parse --verify --quiet origin/main >/dev/null && main_exists=true
+  git rev-parse --verify --quiet origin/master >/dev/null && master_exists=true
+  if [ "$main_exists" = true ] && [ "$master_exists" = false ]; then
+    BASE_BRANCH=main
+  elif [ "$master_exists" = true ] && [ "$main_exists" = false ]; then
+    BASE_BRANCH=master
+  fi
 fi
 if [ -z "$BASE_BRANCH" ]; then
   echo "coderabbit-critique: could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly" >&2

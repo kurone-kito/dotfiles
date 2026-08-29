@@ -157,6 +157,25 @@ Describe 'coderabbit-critique' {
       Resolve-DotfilesCoderabbitBaseBranch | Should -Be 'main'
     }
 
+    It 'returns $null (fails closed) when both origin/main and origin/master resolve without a symbolic-ref' {
+      function script:git {
+        if ($args[0] -eq 'symbolic-ref') {
+          $global:LASTEXITCODE = 1
+          return
+        }
+        if ($args[0] -eq 'rev-parse') {
+          $global:LASTEXITCODE = 0
+          return
+        }
+        $global:LASTEXITCODE = 1
+      }
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git'; CommandType = 'Function' }
+      } -ParameterFilter { $Name -eq 'git' }
+
+      Resolve-DotfilesCoderabbitBaseBranch | Should -BeNullOrEmpty
+    }
+
     It 'returns $null when neither symbolic-ref nor origin/main nor origin/master resolve' {
       function script:git { $global:LASTEXITCODE = 1 }
       Mock Get-Command {

@@ -113,6 +113,7 @@ setup_git_repo_with_base() {
   # $1: "symref" (origin/HEAD symref present, on master),
   #     "main-only" (no symref, only origin/main resolvable),
   #     "master-only" (no symref, only origin/master resolvable),
+  #     "both" (no symref, both origin/main and origin/master resolvable),
   #     "none" (no origin remote at all)
   mode="$1"
   bare="$BATS_TEST_TMPDIR/remote.git"
@@ -132,6 +133,10 @@ setup_git_repo_with_base() {
     git -C "$work" push -q origin "$branch"
     if [ "$mode" = "symref" ]; then
       git -C "$work" remote set-head origin "$branch"
+    fi
+    if [ "$mode" = "both" ]; then
+      git -C "$work" checkout -q -b main
+      git -C "$work" push -q origin main
     fi
   fi
   printf '%s' "$work"
@@ -355,6 +360,18 @@ exit 1
   run grep -c -- "--base main" "$CODERABBIT_CRITIQUE_LOG"
   assert_output "1"
   assert_only_readonly_git_subcommands_and_at_least_one
+}
+
+@test "fails closed when both origin/main and origin/master exist without a symref" {
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit 'exit 1'
+  work="$(setup_git_repo_with_base both)"
+  make_git_passthrough_logger
+
+  run --separate-stderr sh -c 'cd "$1" && shift && exec "$@"' -- "$work" "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "could not determine the default base branch"
 }
 
 @test "fails closed when the base branch cannot be determined" {
