@@ -84,16 +84,59 @@ function global:Resolve-DotfilesCoderabbitBaseBranch {
 
 # ProcessStartInfo.ArgumentList was added in .NET Core 2.1+ and does not
 # exist on .NET Framework -- Windows PowerShell 5.1's runtime. Build the
-# single-string Arguments fallback with every argument double-quoted and
-# any embedded double quote doubled. Safe for this script's actual
-# argument set (literal CLI flags and a git branch name, which git
-# itself forbids from containing quotes, spaces, or control characters),
-# not a general Windows command-line escaping implementation.
+# single-string Arguments fallback using the standard CommandLineToArgvW
+# escaping algorithm .NET's own ArgumentList uses internally on newer
+# runtimes -- doubling embedded quotes (an earlier version of this
+# function) is a CSV/SQL-style convention, not how Windows argv parsing
+# actually decodes a quoted argument, and does not reliably preserve an
+# embedded quote. A git branch name cannot contain a backslash (git
+# check-ref-format rejects it) but git does allow an embedded double
+# quote, and the explicit CODERABBIT_CRITIQUE_BASE override is
+# unconstrained by git's ref-name rules at all, so both the
+# quote-escaping and backslash-run-doubling parts of the algorithm are
+# required, not just quote-wrapping.
+function global:ConvertTo-DotfilesWindowsQuotedArgument {
+  param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Argument)
+
+  if ($Argument -eq '') {
+    return '""'
+  }
+  if ($Argument -notmatch '[\s"]') {
+    return $Argument
+  }
+
+  $result = [System.Text.StringBuilder]::new()
+  [void]$result.Append('"')
+  $backslashes = 0
+  foreach ($ch in $Argument.ToCharArray()) {
+    if ($ch -eq '\') {
+      $backslashes++
+      continue
+    }
+    if ($ch -eq '"') {
+      [void]$result.Append('\' * (($backslashes * 2) + 1))
+      [void]$result.Append('"')
+      $backslashes = 0
+      continue
+    }
+    if ($backslashes -gt 0) {
+      [void]$result.Append('\' * $backslashes)
+      $backslashes = 0
+    }
+    [void]$result.Append($ch)
+  }
+  if ($backslashes -gt 0) {
+    [void]$result.Append('\' * ($backslashes * 2))
+  }
+  [void]$result.Append('"')
+  return $result.ToString()
+}
+
 function global:ConvertTo-DotfilesQuotedArgumentString {
   param([string[]] $ArgumentList = @())
 
   return ($ArgumentList | ForEach-Object {
-      '"' + ($_ -replace '"', '""') + '"'
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument $_
     }) -join ' '
 }
 

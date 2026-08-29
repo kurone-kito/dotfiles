@@ -49,6 +49,7 @@ Describe 'coderabbit-critique' {
       'Test-DotfilesCoderabbitAuthenticated'
       'Resolve-DotfilesCoderabbitTimeoutSeconds'
       'Resolve-DotfilesCoderabbitBaseBranch'
+      'ConvertTo-DotfilesWindowsQuotedArgument'
       'ConvertTo-DotfilesQuotedArgumentString'
       'Start-DotfilesProcessWithTimeout'
       'Invoke-DotfilesCoderabbitReviewWithTimeout'
@@ -195,14 +196,73 @@ Describe 'coderabbit-critique' {
     }
   }
 
-  Context 'ConvertTo-DotfilesQuotedArgumentString (PS5.1 Arguments fallback)' {
-    It 'quotes each argument and joins with a space' {
-      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @('review', '--agent', '--base', 'main') |
-        Should -Be '"review" "--agent" "--base" "main"'
+  Context 'ConvertTo-DotfilesWindowsQuotedArgument (CommandLineToArgvW escaping)' {
+    # This is the actual algorithm .NET's own ArgumentList uses internally
+    # on newer runtimes to build a native Windows command line -- doubling
+    # embedded quotes (an earlier version of this function) is a CSV/SQL
+    # convention, not how CommandLineToArgvW decodes a quoted argument, and
+    # does not reliably preserve an embedded quote. A git branch name can
+    # contain an embedded double quote (git check-ref-format accepts it,
+    # confirmed empirically) but never a backslash (git check-ref-format
+    # rejects it); CODERABBIT_CRITIQUE_BASE is unconstrained by git's
+    # ref-name rules at all, so both the quote-escaping and the
+    # backslash-run-doubling parts of the algorithm are exercised, not
+    # just quote-wrapping.
+    It 'returns a simple argument unquoted' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument 'review' | Should -Be 'review'
     }
 
-    It 'doubles an embedded double quote' {
-      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @('a"b') | Should -Be '"a""b"'
+    It 'quotes an argument containing a space' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument 'with space' | Should -Be '"with space"'
+    }
+
+    It 'backslash-escapes an embedded double quote' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument 'with"quote' | Should -Be '"with\"quote"'
+    }
+
+    It 'doubles a backslash run immediately before an embedded quote' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument 'quote"then\backslash' |
+        Should -Be '"quote\"then\backslash"'
+    }
+
+    It 'leaves a trailing backslash with no adjacent quote unquoted (no whitespace or quote present)' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument 'trailing\' | Should -Be 'trailing\'
+    }
+
+    It 'represents an empty argument as two double quotes' {
+      ConvertTo-DotfilesWindowsQuotedArgument -Argument '' | Should -Be '""'
+    }
+
+    It 'round-trips space, quote, and backslash-quote arguments through a real process' {
+      $echoScript = Join-Path $TestDrive 'echo-arg.ps1'
+      Set-Content -Path $echoScript `
+        -Value '$args[0] | Out-File -FilePath $env:ECHO_ARG_OUT -Encoding utf8 -NoNewline'
+      $quotedScript = ConvertTo-DotfilesWindowsQuotedArgument -Argument $echoScript
+
+      foreach ($case in @('with space', 'with"quote', 'quote"then\backslash')) {
+        $outFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+        $quotedCase = ConvertTo-DotfilesWindowsQuotedArgument -Argument $case
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+        $psi.Arguments = "-NoProfile -File $quotedScript $quotedCase"
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.EnvironmentVariables['ECHO_ARG_OUT'] = $outFile
+        $proc = [Diagnostics.Process]::Start($psi)
+        $proc.StandardInput.Close()
+        $null = $proc.StandardError.ReadToEnd()
+        $proc.WaitForExit()
+
+        Get-Content -LiteralPath $outFile -Raw | Should -Be $case
+      }
+    }
+  }
+
+  Context 'ConvertTo-DotfilesQuotedArgumentString' {
+    It 'joins per-argument quoting with a space, quoting only where needed' {
+      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @('review', '--agent', '--base', 'with space') |
+        Should -Be 'review --agent --base "with space"'
     }
 
     It 'returns an empty string for an empty argument list' {
