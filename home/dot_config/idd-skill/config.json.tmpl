@@ -1,0 +1,27 @@
+{{/*
+User-global IDD critique-loop delegate configuration, read by an IDD
+session's C1 phase from $XDG_CONFIG_HOME/idd-skill/config.json (falling
+back to $HOME/.config/idd-skill/config.json), per idd-skill's documented
+path/fallback rule. A repository-local delegate always overrides this
+when present -- this file only takes effect for a repository whose own
+.github/idd/config.json leaves critiqueLoop.delegate entirely unset.
+
+mode: "combined" runs both this delegate and the per-agent critique
+mechanism every C1 pass and unions their findings, rather than only
+falling back to the per-agent mechanism when this delegate fails --
+maximizing what is caught before a PR opens.
+*/ -}}
+{{- $home := .chezmoi.homeDir -}}
+{{- $sep := "/" -}}
+{{- if eq .chezmoi.os "windows" }}{{ $sep = "\\" }}{{ end -}}
+{{- $command := printf "%s%s.local%sbin%scoderabbit-critique" $home $sep $sep $sep -}}
+{{- if eq .chezmoi.os "windows" -}}
+{{-   $psPath := printf "%s%s.local%sbin%scoderabbit-critique.ps1" $home $sep $sep $sep -}}
+{{-   $command = printf "pwsh -NoProfile -File \"%s\"" $psPath -}}
+{{- end -}}
+{{- $config := dict
+      "critiqueLoop" (dict
+        "delegate" (dict
+          "command" $command
+          "mode" "combined")) -}}
+{{ $config | toPrettyJson }}
