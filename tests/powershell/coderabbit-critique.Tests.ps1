@@ -40,6 +40,7 @@ Describe 'coderabbit-critique' {
       'Test-DotfilesCoderabbitAuthenticated'
       'Resolve-DotfilesCoderabbitTimeoutSeconds'
       'Resolve-DotfilesCoderabbitBaseBranch'
+      'ConvertTo-DotfilesQuotedArgumentString'
       'Start-DotfilesProcessWithTimeout'
       'Invoke-DotfilesCoderabbitReviewWithTimeout'
       'Invoke-DotfilesCoderabbitCritique'
@@ -163,6 +164,21 @@ Describe 'coderabbit-critique' {
       } -ParameterFilter { $Name -eq 'git' }
 
       Resolve-DotfilesCoderabbitBaseBranch | Should -BeNullOrEmpty
+    }
+  }
+
+  Context 'ConvertTo-DotfilesQuotedArgumentString (PS5.1 Arguments fallback)' {
+    It 'quotes each argument and joins with a space' {
+      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @('review', '--agent', '--base', 'main') |
+        Should -Be '"review" "--agent" "--base" "main"'
+    }
+
+    It 'doubles an embedded double quote' {
+      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @('a"b') | Should -Be '"a""b"'
+    }
+
+    It 'returns an empty string for an empty argument list' {
+      ConvertTo-DotfilesQuotedArgumentString -ArgumentList @() | Should -Be ''
     }
   }
 

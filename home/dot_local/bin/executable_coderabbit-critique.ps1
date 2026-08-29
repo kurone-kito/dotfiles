@@ -71,6 +71,21 @@ function global:Resolve-DotfilesCoderabbitBaseBranch {
   return $null
 }
 
+# ProcessStartInfo.ArgumentList was added in .NET Core 2.1+ and does not
+# exist on .NET Framework -- Windows PowerShell 5.1's runtime. Build the
+# single-string Arguments fallback with every argument double-quoted and
+# any embedded double quote doubled. Safe for this script's actual
+# argument set (literal CLI flags and a git branch name, which git
+# itself forbids from containing quotes, spaces, or control characters),
+# not a general Windows command-line escaping implementation.
+function global:ConvertTo-DotfilesQuotedArgumentString {
+  param([string[]] $ArgumentList = @())
+
+  return ($ArgumentList | ForEach-Object {
+      '"' + ($_ -replace '"', '""') + '"'
+    }) -join ' '
+}
+
 # Generic bounded-execution primitive, factored out of
 # Invoke-DotfilesCoderabbitReviewWithTimeout so it can be unit-tested with
 # an arbitrary real target (e.g. pwsh itself) instead of only via coderabbit
@@ -85,7 +100,11 @@ function global:Start-DotfilesProcessWithTimeout {
   )
 
   $psi = [Diagnostics.ProcessStartInfo]::new($FilePath)
-  foreach ($a in $ArgumentList) { $psi.ArgumentList.Add($a) }
+  if ($psi.PSObject.Properties.Name -contains 'ArgumentList') {
+    foreach ($a in $ArgumentList) { $psi.ArgumentList.Add($a) }
+  } else {
+    $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString -ArgumentList $ArgumentList
+  }
   $psi.UseShellExecute = $false
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
