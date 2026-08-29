@@ -14,7 +14,15 @@ maximizing what is caught before a PR opens.
 {{- $home := .chezmoi.homeDir -}}
 {{- $sep := "/" -}}
 {{- if eq .chezmoi.os "windows" }}{{ $sep = "\\" }}{{ end -}}
-{{- $command := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique" -}}
+{{- $unixPath := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique" -}}
+{{/* critiqueLoop.delegate.command is run as a shell command (see
+     docs/idd-workflow.md's Critique pass invocation section), so the
+     path itself needs POSIX shell quoting, not just JSON-safe text --
+     toPrettyJson only escapes for JSON, and a $home containing a space
+     or other shell metacharacter would otherwise be split/expanded
+     into multiple words. squote does not escape an embedded single
+     quote, so build the standard '...'\''...' POSIX escape by hand. */ -}}
+{{- $command := printf "'%s'" (replace "'" "'\\''" $unixPath) -}}
 {{- if eq .chezmoi.os "windows" -}}
 {{-   $psPath := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique.ps1" -}}
 {{/* Prefer pwsh (PowerShell 7+), but a supported Windows machine may
