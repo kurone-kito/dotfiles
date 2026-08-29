@@ -110,3 +110,12 @@ write_rendered_config() {
   run cat "$XDG_CONFIG_HOME/idd-skill/config.json"
   assert_output --partial "pre-existing"
 }
+
+@test "chezmoiignore excludes the platform-inappropriate run_after script pair" {
+  ignore_file="$BATS_TEST_DIRNAME/../../home/.chezmoiignore.tmpl"
+
+  run grep -c '^82-link-idd-skill-xdg-config\.sh$' "$ignore_file"
+  assert_output "1"
+  run grep -c '^82-link-idd-skill-xdg-config\.ps1$' "$ignore_file"
+  assert_output "1"
+}

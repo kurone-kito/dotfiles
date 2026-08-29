@@ -115,4 +115,12 @@ Describe 'link-idd-skill-xdg-config' {
     Get-Content -LiteralPath (Join-Path $targetDir 'config.json') -Raw |
       Should -BeLike '*pre-existing*'
   }
+
+  It 'is excluded from the platform-inappropriate side by .chezmoiignore.tmpl' {
+    $ignoreFile = Join-Path $PSScriptRoot '../../home/.chezmoiignore.tmpl'
+    $lines = Get-Content $ignoreFile
+
+    $lines | Should -Contain '82-link-idd-skill-xdg-config.sh'
+    $lines | Should -Contain '82-link-idd-skill-xdg-config.ps1'
+  }
 }
