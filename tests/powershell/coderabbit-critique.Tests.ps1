@@ -7,7 +7,16 @@
 BeforeAll {
   $script:Subject = Join-Path $PSScriptRoot `
     '../../home/dot_local/bin/executable_coderabbit-critique.ps1'
+  # On a Windows machine with only the built-in Windows PowerShell 5.1
+  # (no pwsh installed) -- exactly the environment the delegate itself now
+  # supports -- Get-Command pwsh returns nothing, which would otherwise
+  # leave the mandatory -FilePath parameter unbound below. Fall back to
+  # powershell.exe: the -NoProfile/-Command flags and the plain PowerShell
+  # syntax these tests pass are identical on both hosts.
   $script:PwshPath = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+  if (-not $script:PwshPath) {
+    $script:PwshPath = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source
+  }
 }
 
 Describe 'coderabbit-critique' {
