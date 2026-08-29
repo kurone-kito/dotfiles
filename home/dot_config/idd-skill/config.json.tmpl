@@ -17,7 +17,15 @@ maximizing what is caught before a PR opens.
 {{- $command := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique" -}}
 {{- if eq .chezmoi.os "windows" -}}
 {{-   $psPath := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique.ps1" -}}
-{{-   $command = printf "pwsh -NoProfile -File \"%s\"" $psPath -}}
+{{/* Prefer pwsh (PowerShell 7+), but a supported Windows machine may
+     have only the built-in Windows PowerShell 5.1 -- the script itself
+     is PS5.1-compatible, so fall back to powershell.exe rather than
+     rendering a command that can never be found there. */ -}}
+{{-   $shell := "pwsh" -}}
+{{-   if not (lookPath "pwsh") -}}
+{{-     $shell = "powershell.exe" -}}
+{{-   end -}}
+{{-   $command = printf "%s -NoProfile -File \"%s\"" $shell $psPath -}}
 {{- end -}}
 {{- $config := dict
       "critiqueLoop" (dict
