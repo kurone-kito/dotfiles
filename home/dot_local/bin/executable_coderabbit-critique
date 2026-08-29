@@ -102,10 +102,18 @@ if [ "$status" -ne 0 ]; then
   exit 1
 fi
 
-if printf '%s\n' "$output" | grep -q '"type":"action_required"'; then
-  echo "coderabbit review requires operator action; treating as unavailable" >&2
-  printf '%s\n' "$output" >&2
-  exit 1
-fi
+# `case` rather than `grep -q`: an `if pipeline | grep ...` pipeline sits
+# outside `set -e`'s coverage, so a missing `grep` binary would exit the
+# pipeline non-zero (command not found) and be silently read as "no
+# action_required found" -- passing a genuinely action_required response
+# through as if it were a clean findings result, exactly the failure this
+# check exists to catch. `case` adds no executable dependency of its own.
+case "$output" in
+  *'"type":"action_required"'*)
+    echo "coderabbit review requires operator action; treating as unavailable" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+    ;;
+esac
 
 printf '%s\n' "$output"

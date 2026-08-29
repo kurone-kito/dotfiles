@@ -83,6 +83,32 @@ exit 1
   export CODERABBIT_CRITIQUE_BASE=master
 }
 
+# A passthrough logging shim (not a stub): the script's own base-branch
+# auto-detection legitimately needs a real, working git to resolve against
+# the fixture repo set up by setup_git_repo_with_base below, so this must
+# forward to the real binary rather than fake one like make_git_call_recorder
+# does. Create only after fixture setup so it logs solely the SCRIPT's own
+# git calls, not the fixture's own init/commit/push/remote-set-head calls.
+make_git_passthrough_logger() {
+  real_git="$(command -v git)"
+  cat > "$BATS_TEST_TMPDIR/bin/git" << EOF
+#!/bin/sh
+printf "gitcall:%s\n" "\$1" >> "$CODERABBIT_CRITIQUE_LOG"
+exec "$real_git" "\$@"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/git"
+}
+
+assert_only_readonly_git_subcommands_and_at_least_one() {
+  run grep -c '^gitcall:' "$CODERABBIT_CRITIQUE_LOG"
+  refute_output "0"
+  # Isolate gitcall: lines first -- otherwise -v's inversion would also
+  # match unrelated log lines (e.g. this file's own "review:..." entries),
+  # which never start with "gitcall:" and would falsely fail this check.
+  run sh -c "grep '^gitcall:' \"$CODERABBIT_CRITIQUE_LOG\" | grep -vE '^gitcall:(symbolic-ref|rev-parse)\$'"
+  assert_failure
+}
+
 setup_git_repo_with_base() {
   # $1: "symref" (origin/HEAD symref present, on master),
   #     "main-only" (no symref, only origin/main resolvable),
@@ -296,12 +322,14 @@ fi
 exit 1
 '
   work="$(setup_git_repo_with_base symref)"
+  make_git_passthrough_logger
 
   run --separate-stderr sh -c 'cd "$1" && shift && exec "$@"' -- "$work" "$SCRIPT"
 
   assert_success
   run grep -c -- "--base master" "$CODERABBIT_CRITIQUE_LOG"
   assert_output "1"
+  assert_only_readonly_git_subcommands_and_at_least_one
 }
 
 @test "falls back to origin/main when no origin/HEAD symref is set" {
@@ -319,21 +347,25 @@ fi
 exit 1
 '
   work="$(setup_git_repo_with_base main-only)"
+  make_git_passthrough_logger
 
   run --separate-stderr sh -c 'cd "$1" && shift && exec "$@"' -- "$work" "$SCRIPT"
 
   assert_success
   run grep -c -- "--base main" "$CODERABBIT_CRITIQUE_LOG"
   assert_output "1"
+  assert_only_readonly_git_subcommands_and_at_least_one
 }
 
 @test "fails closed when the base branch cannot be determined" {
   make_mock_timeout timeout 'shift 3; exec "$@"'
   make_mock coderabbit 'exit 1'
   work="$(setup_git_repo_with_base none)"
+  make_git_passthrough_logger
 
   run --separate-stderr sh -c 'cd "$1" && shift && exec "$@"' -- "$work" "$SCRIPT"
 
   assert_failure
   assert_stderr --partial "could not determine the default base branch"
+  assert_only_readonly_git_subcommands_and_at_least_one
 }
