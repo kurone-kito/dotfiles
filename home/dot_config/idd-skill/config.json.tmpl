@@ -14,9 +14,9 @@ maximizing what is caught before a PR opens.
 {{- $home := .chezmoi.homeDir -}}
 {{- $sep := "/" -}}
 {{- if eq .chezmoi.os "windows" }}{{ $sep = "\\" }}{{ end -}}
-{{- $command := printf "%s%s.local%sbin%scoderabbit-critique" $home $sep $sep $sep -}}
+{{- $command := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique" -}}
 {{- if eq .chezmoi.os "windows" -}}
-{{-   $psPath := printf "%s%s.local%sbin%scoderabbit-critique.ps1" $home $sep $sep $sep -}}
+{{-   $psPath := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep "coderabbit-critique.ps1" -}}
 {{-   $command = printf "pwsh -NoProfile -File \"%s\"" $psPath -}}
 {{- end -}}
 {{- $config := dict
