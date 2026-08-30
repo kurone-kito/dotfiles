@@ -198,6 +198,20 @@ exit 1
   refute_output --partial "no timeout/gtimeout"
 }
 
+@test "fails closed when grep is not found" {
+  make_mock coderabbit 'exit 1'
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+
+  # Scope PATH to only the mock bin dir (mocked coderabbit/timeout, no
+  # real grep) -- the grep preflight check runs before auth_status or
+  # review, so nothing past it (mktemp, cat, coderabbit auth/review) is
+  # ever reached in this test.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "grep not found"
+}
+
 @test "fails without calling review when auth status reports signed out" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 3; exec "$@"'
@@ -230,6 +244,67 @@ exit 0
   assert_no_git_calls
 }
 
+@test "fails closed when mktemp fails" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+exit 1
+'
+  # A failing (not merely absent) mktemp mirrors a real-world failure mode
+  # -- e.g. a full or unwritable TMPDIR -- distinct from the grep-absent
+  # test above. The broken mock lives in its OWN directory, never added
+  # to this test's own exported PATH, and is prepended only for the
+  # script's scoped subprocess below: dropping it into the shared mock
+  # bin dir (already on this whole test process's PATH via setup())
+  # would also break bats-core's own `run --separate-stderr` machinery,
+  # which needs a working mktemp of its own.
+  broken_mktemp_dir="$BATS_TEST_TMPDIR/broken-mktemp-bin"
+  mkdir -p "$broken_mktemp_dir"
+  cat > "$broken_mktemp_dir/mktemp" << 'EOF'
+#!/bin/sh
+exit 1
+EOF
+  chmod +x "$broken_mktemp_dir/mktemp"
+
+  run --separate-stderr env PATH="$broken_mktemp_dir:$BATS_TEST_TMPDIR/bin:/usr/bin:/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "mktemp failed"
+  assert_no_git_calls
+}
+
+@test "keeps stderr out of a successful findings response" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"finding\",\"message\":\"stdout text\"}"
+  echo "diagnostic noise on stderr" >&2
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_success
+  assert_output --partial "stdout text"
+  refute_output --partial "diagnostic noise on stderr"
+  # Diagnostics are kept out of findings, not silently dropped -- they
+  # still reach the delegate's own stderr.
+  assert_stderr --partial "diagnostic noise on stderr"
+  assert_no_git_calls
+}
+
 @test "rejects an action_required response" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 3; exec "$@"'
@@ -240,6 +315,52 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
 fi
 if [ "$1" = "review" ]; then
   echo "{\"type\":\"action_required\",\"phase\":\"billing\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "requires operator action"
+  assert_no_git_calls
+}
+
+@test "rejects a pretty-printed action_required response with whitespace around the marker" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  printf "{\n  \"type\" : \"action_required\",\n  \"phase\": \"billing\"\n}\n"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "requires operator action"
+  assert_no_git_calls
+}
+
+@test "rejects an action_required response arriving only on stderr" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"action_required\",\"phase\":\"billing\"}" >&2
   exit 0
 fi
 exit 1
