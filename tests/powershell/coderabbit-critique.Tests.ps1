@@ -278,7 +278,7 @@ Describe 'coderabbit-critique' {
 
       $result.TimedOut | Should -BeFalse
       $result.ExitCode | Should -Be 0
-      $result.Output | Should -Match 'hello'
+      $result.Stdout | Should -Match 'hello'
     }
 
     It 'captures a non-zero exit code' {
@@ -297,12 +297,25 @@ Describe 'coderabbit-critique' {
 
       $result.TimedOut | Should -BeTrue
     }
+
+    It 'captures stdout and stderr as separate fields, without cross-contamination' {
+      $result = Start-DotfilesProcessWithTimeout -FilePath $script:PwshPath `
+        -ArgumentList @(
+          '-NoProfile', '-Command',
+          "Write-Output 'stdout-marker-text'; [Console]::Error.WriteLine('stderr-marker-text')"
+        ) -TimeoutSeconds 10
+
+      $result.Stdout | Should -Match 'stdout-marker-text'
+      $result.Stdout | Should -Not -Match 'stderr-marker-text'
+      $result.Stderr | Should -Match 'stderr-marker-text'
+      $result.Stderr | Should -Not -Match 'stdout-marker-text'
+    }
   }
 
   Context 'Invoke-DotfilesCoderabbitReviewWithTimeout' {
     It 'invokes the bounded primitive with the coderabbit review --agent --base arguments' {
       Mock Start-DotfilesProcessWithTimeout {
-        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = '{}' }
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{}'; Stderr = '' }
       }
       $cmd = [pscustomobject]@{ Name = '/usr/bin/coderabbit' }
 
@@ -349,7 +362,7 @@ Describe 'coderabbit-critique' {
       Mock Test-DotfilesCoderabbitAuthenticated { $true }
       Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
       Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
-        [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Output = '' }
+        [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
       }
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
@@ -361,7 +374,7 @@ Describe 'coderabbit-critique' {
       Mock Test-DotfilesCoderabbitAuthenticated { $true }
       Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
       Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
-        [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = 'boom' }
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Stdout = ''; Stderr = 'boom' }
       }
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
@@ -375,7 +388,40 @@ Describe 'coderabbit-critique' {
       Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
         [pscustomobject]@{
           TimedOut = $false; ExitCode = 0
-          Output   = '{"type":"action_required","phase":"billing"}'
+          Stdout   = '{"type":"action_required","phase":"billing"}'
+          Stderr   = ''
+        }
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+    }
+
+    It 'rejects a pretty-printed action_required response with whitespace around the marker' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = "{`n  `"type`" : `"action_required`",`n  `"phase`": `"billing`"`n}"
+          Stderr   = ''
+        }
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+    }
+
+    It 'rejects an action_required response found only on stderr' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = ''
+          Stderr   = '{"type":"action_required","phase":"billing"}'
         }
       }
 
@@ -390,7 +436,8 @@ Describe 'coderabbit-critique' {
       Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
         [pscustomobject]@{
           TimedOut = $false; ExitCode = 0
-          Output   = '{"type":"finding","message":"example issue"}'
+          Stdout   = '{"type":"finding","message":"example issue"}'
+          Stderr   = ''
         }
       }
 
@@ -398,6 +445,121 @@ Describe 'coderabbit-critique' {
 
       $result.Success | Should -BeTrue
       $result.Output | Should -Match '"type":"finding"'
+    }
+
+    It 'keeps stderr out of the successful findings output' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = '{"type":"finding","message":"stdout marker text"}'
+          Stderr   = 'stderr marker text'
+        }
+      }
+
+      # This asserts only that Output excludes Stderr text -- it cannot
+      # also assert that Stderr is actually forwarded somewhere, since
+      # the production code forwards it via [Console]::Error directly
+      # (bypassing PowerShell's own streams entirely, precisely so a
+      # non-interactive pwsh host can't silently reroute it onto real
+      # stdout the way Write-Warning does -- see the code comment at the
+      # call site). That real-fd-level forwarding is covered instead by
+      # the "Full script as a real subprocess" context below, which
+      # spawns a genuine OS process and reads its actual redirected
+      # stderr handle.
+      $result = Invoke-DotfilesCoderabbitCritique
+
+      $result.Success | Should -BeTrue
+      $result.Output | Should -Match 'stdout marker text'
+      $result.Output | Should -Not -Match 'stderr marker text'
+    }
+  }
+
+  Context 'Full script as a real subprocess (stdout/stderr separation)' {
+    # Every other test in this file dot-sources the script with
+    # DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN=1 and mocks internal
+    # functions -- necessary because the script's own top-level `exit`
+    # would otherwise terminate the whole Pester run if invoked in-process
+    # (`&`/dot-sourcing a script that calls `exit` kills the host, not
+    # just that script's scope). Proving the real OS-level stdout/stderr
+    # separation this issue is about requires a genuine child process, so
+    # this context spawns $script:PwshPath -File $script:Subject as an
+    # actual subprocess instead, with a fake `coderabbit` executable
+    # placed on $env:PATH. This composes three patterns already proven
+    # elsewhere in this repo rather than inventing new infrastructure:
+    # cross-platform fake-executable creation and the $env:PATH
+    # save/restore-in-finally idiom (both from
+    # 90-reconcile-claude-code.Tests.ps1's Set-TestMiseMock and its
+    # callers), and process-spawn-with-redirected-streams (already used
+    # by this file's own "real process" tests above).
+    BeforeEach {
+      $script:FakeBinDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:FakeBinDir -Force | Out-Null
+      $exeName = if ($IsWindows -ne $false) { 'coderabbit.cmd' } else { 'coderabbit' }
+      $script:FakeCoderabbitPath = Join-Path $script:FakeBinDir $exeName
+      if ($IsWindows -ne $false) {
+        $content = "@echo off`r`n" +
+          "if `"%1`"==`"auth`" if `"%2`"==`"status`" (`r`n" +
+          "  echo Account: fake-user`r`n" +
+          "  exit /b 0`r`n" +
+          ")`r`n" +
+          "echo STDOUT_MARKER_TEXT`r`n" +
+          "echo STDERR_MARKER_TEXT 1>&2`r`n" +
+          "exit /b 0`r`n"
+        [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
+      } else {
+        $content = "#!/bin/sh`n" +
+          "if [ `"`$1`" = auth ] && [ `"`$2`" = status ]; then`n" +
+          "  echo `"Account: fake-user`"`n" +
+          "  exit 0`n" +
+          "fi`n" +
+          "echo STDOUT_MARKER_TEXT`n" +
+          "echo STDERR_MARKER_TEXT >&2`n" +
+          "exit 0`n"
+        [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
+        & chmod +x $script:FakeCoderabbitPath
+      }
+    }
+
+    It 'keeps the reviewed process''s stderr out of the delegate''s own stdout on success' {
+      $originalPath = $env:PATH
+      $originalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
+      try {
+        $env:PATH = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
+        # The outer BeforeEach sets this to '1' for every other test in
+        # this file so dot-sourcing never runs main; this child process
+        # must NOT inherit that, or its own top-level exit-guarded block
+        # -- the only place that produces real process output -- never
+        # runs at all.
+        Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
+        $env:CODERABBIT_CRITIQUE_BASE = 'master'
+
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+        $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+          -ArgumentList @('-NoProfile', '-File', $script:Subject)
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $proc = [Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+        $stderrText = $stderrTask.GetAwaiter().GetResult()
+      } finally {
+        $env:PATH = $originalPath
+        if ($originalSkip) {
+          $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $originalSkip
+        }
+      }
+
+      $proc.ExitCode | Should -Be 0
+      $stdoutText | Should -Match 'STDOUT_MARKER_TEXT'
+      $stdoutText | Should -Not -Match 'STDERR_MARKER_TEXT'
+      $stderrText | Should -Match 'STDERR_MARKER_TEXT'
     }
   }
 

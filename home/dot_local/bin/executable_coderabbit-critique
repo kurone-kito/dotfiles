@@ -60,6 +60,22 @@ if [ -z "$TIMEOUT_CMD" ]; then
   exit 1
 fi
 
+# The action_required guard below matches its literal via `grep -E`
+# instead of a bare `case` (see the comment at the match site for why).
+# `grep`'s own absence must not be misread as "no marker present" -- the
+# exact failure this whole guard exists to prevent -- so it is checked
+# explicitly up front, before any output exists to examine. This check is
+# genuinely load-bearing rather than a nicety: the match itself has to
+# run inside an `if grep ...; then` condition, which `set -e` does not
+# cover (POSIX exempts commands in an `if` condition from triggering
+# it), so without this preflight a missing `grep` there would silently
+# read as "no match" -- the identical blind spot the existing `grep -q`
+# rejection below already describes.
+if ! command -v grep >/dev/null 2>&1; then
+  echo "coderabbit-critique: grep not found; failing closed rather than risking an unmatched action_required marker" >&2
+  exit 1
+fi
+
 auth_status="$(coderabbit auth status 2>&1 || true)"
 case "$auth_status" in
   *"signed out"*)
@@ -98,29 +114,71 @@ if [ -z "$BASE_BRANCH" ]; then
   exit 1
 fi
 
+# stdout and stderr are captured separately (stderr via a temp file) so a
+# clean run's own stdout carries only the reviewed process's findings --
+# a progress line or diagnostic written to stderr must never reach C1 as
+# findings text, where C3 could score it as a real issue. `mktemp` is
+# already an accepted dependency in this repo's shell scripts (see
+# secret-deploy-state); failing to create it fails closed rather than
+# falling back to a merged capture that would reintroduce the leak this
+# split exists to close.
+stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
+  echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
+  exit 1
+}
+trap 'rm -f "$stderr_tmp"' EXIT
+
 set +e
-output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>&1)"
+stdout_output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>"$stderr_tmp")"
 status=$?
 set -e
+stderr_output="$(cat "$stderr_tmp")"
 
 if [ "$status" -ne 0 ]; then
   echo "coderabbit review failed or timed out (exit $status)" >&2
-  printf '%s\n' "$output" >&2
+  printf '%s\n' "$stdout_output" >&2
+  printf '%s\n' "$stderr_output" >&2
   exit 1
 fi
 
-# `case` rather than `grep -q`: an `if pipeline | grep ...` pipeline sits
-# outside `set -e`'s coverage, so a missing `grep` binary would exit the
-# pipeline non-zero (command not found) and be silently read as "no
-# action_required found" -- passing a genuinely action_required response
-# through as if it were a clean findings result, exactly the failure this
-# check exists to catch. `case` adds no executable dependency of its own.
-case "$output" in
-  *'"type":"action_required"'*)
-    echo "coderabbit review requires operator action; treating as unavailable" >&2
-    printf '%s\n' "$output" >&2
-    exit 1
-    ;;
-esac
+# `grep -E` rather than a bare `case`: `coderabbit review --agent`'s
+# serialization is not a pinned contract, so a pretty-printer emitting
+# whitespace around the key, the colon, or the value (e.g.
+# `"type": "action_required"`) must still be caught, and a `case` glob
+# cannot express "zero or more whitespace characters" without either
+# over-matching (a wildcard would also swallow unrelated text between the
+# tokens, risking a false positive against, say, a finding whose own
+# message quotes that exact literal as an example) or enumerating a
+# handful of specific whitespace-run lengths, which is not robust. A
+# narrowly-scoped extended regex expresses the requirement precisely
+# without mutating the text at all, so it cannot fuse unrelated tokens
+# together the way a whitespace-stripping normalization pass could.
+# `grep`'s own absence was already turned into a fail-closed exit above,
+# so using it here for the match itself does not reopen the failure mode
+# the original `grep -q` rejection describes.
+#
+# Both streams are scanned independently (not concatenated) because the
+# emission point is unverified; scanning both keeps today's detection
+# reach even though only stdout is emitted as findings below. Checking
+# them independently rather than joined also avoids a false match built
+# from a token split across the stream boundary -- a real marker write is
+# atomic to one fd anyway, so this loses no genuine positive.
+action_required_pattern='"type"[[:space:]]*:[[:space:]]*"action_required"'
+action_required=false
+if printf '%s' "$stdout_output" | grep -Eq -- "$action_required_pattern"; then
+  action_required=true
+elif printf '%s' "$stderr_output" | grep -Eq -- "$action_required_pattern"; then
+  action_required=true
+fi
 
-printf '%s\n' "$output"
+if [ "$action_required" = true ]; then
+  echo "coderabbit review requires operator action; treating as unavailable" >&2
+  printf '%s\n' "$stdout_output" >&2
+  printf '%s\n' "$stderr_output" >&2
+  exit 1
+fi
+
+if [ -n "$stderr_output" ]; then
+  printf '%s\n' "$stderr_output" >&2
+fi
+printf '%s\n' "$stdout_output"

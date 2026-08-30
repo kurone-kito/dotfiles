@@ -170,7 +170,7 @@ function global:Start-DotfilesProcessWithTimeout {
 
   if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
     try { $proc.Kill() } catch [System.Exception] {}
-    return [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Output = '' }
+    return [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
   }
 
   $stdout = $stdoutTask.GetAwaiter().GetResult()
@@ -178,7 +178,8 @@ function global:Start-DotfilesProcessWithTimeout {
   return [pscustomobject]@{
     TimedOut = $false
     ExitCode = $proc.ExitCode
-    Output   = "$stdout$stderr"
+    Stdout   = $stdout
+    Stderr   = $stderr
   }
 }
 
@@ -225,12 +226,37 @@ function global:Invoke-DotfilesCoderabbitCritique {
     Write-Warning "coderabbit review failed (exit $($result.ExitCode))"
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
-  if ($result.Output -match '"type":"action_required"') {
+
+  # `coderabbit review --agent`'s serialization is not a pinned contract,
+  # so a pretty-printer emitting whitespace around the key, the colon, or
+  # the value (e.g. `"type": "action_required"`) must still be caught --
+  # `\s*` tolerates that without an external tool, since .NET regex is
+  # part of the runtime itself. Both streams are checked (not only the
+  # one presumed to carry findings) because the emission point is
+  # unverified; this keeps today's detection reach even though only
+  # Stdout is returned as findings below.
+  $actionRequiredPattern = '"type"\s*:\s*"action_required"'
+  if ($result.Stdout -match $actionRequiredPattern -or $result.Stderr -match $actionRequiredPattern) {
     Write-Warning 'coderabbit review requires operator action; treating as unavailable'
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
-  return [pscustomobject]@{ Success = $true; Output = $result.Output }
+  # Only Stdout becomes findings text -- a progress line or diagnostic on
+  # Stderr must never reach C1 as findings, where C3 could score it as a
+  # real issue. Stderr is not silently dropped, though: it is forwarded
+  # to the delegate's own real stderr, mirroring the shell twin's
+  # equivalent forward-to-stderr-on-success behavior. `Write-Warning` was
+  # tried first and rejected: under `pwsh -File` non-interactive
+  # execution (this script's actual invocation shape), the default host
+  # writes the warning stream onto the process's real stdout, not
+  # stderr -- confirmed empirically -- which would silently recreate the
+  # exact leak this whole change exists to close. `[Console]::Error`
+  # writes directly to the OS-level stderr handle, bypassing that host
+  # routing entirely.
+  if ($result.Stderr) {
+    [Console]::Error.WriteLine($result.Stderr)
+  }
+  return [pscustomobject]@{ Success = $true; Output = $result.Stdout }
 }
 
 if ($env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ne '1') {
