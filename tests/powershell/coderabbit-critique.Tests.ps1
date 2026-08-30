@@ -466,9 +466,12 @@ Describe 'coderabbit-critique' {
       # non-interactive pwsh host can't silently reroute it onto real
       # stdout the way Write-Warning does -- see the code comment at the
       # call site). That real-fd-level forwarding is covered instead by
-      # the "Full script as a real subprocess" context below, which
-      # spawns a genuine OS process and reads its actual redirected
-      # stderr handle.
+      # the Unix-only "Full script as a real subprocess" context below,
+      # which spawns a genuine OS process and reads its actual redirected
+      # stderr handle; on Windows this specific forwarding path is
+      # exercised only up to this mock boundary (see that context's own
+      # comment for why a Windows-real-process equivalent isn't safe to
+      # add here).
       $result = Invoke-DotfilesCoderabbitCritique
 
       $result.Success | Should -BeTrue
@@ -477,7 +480,7 @@ Describe 'coderabbit-critique' {
     }
   }
 
-  Context 'Full script as a real subprocess (stdout/stderr separation)' {
+  Context 'Full script as a real subprocess (stdout/stderr separation, Unix pwsh)' -Skip:($IsWindows -ne $false) {
     # Every other test in this file dot-sources the script with
     # DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN=1 and mocks internal
     # functions -- necessary because the script's own top-level `exit`
@@ -487,40 +490,46 @@ Describe 'coderabbit-critique' {
     # separation this issue is about requires a genuine child process, so
     # this context spawns $script:PwshPath -File $script:Subject as an
     # actual subprocess instead, with a fake `coderabbit` executable
-    # placed on $env:PATH. This composes three patterns already proven
-    # elsewhere in this repo rather than inventing new infrastructure:
-    # cross-platform fake-executable creation and the $env:PATH
-    # save/restore-in-finally idiom (both from
-    # 90-reconcile-claude-code.Tests.ps1's Set-TestMiseMock and its
-    # callers), and process-spawn-with-redirected-streams (already used
-    # by this file's own "real process" tests above).
+    # placed on $env:PATH. This composes two patterns already proven
+    # elsewhere in this repo rather than inventing new infrastructure: the
+    # $env:PATH save/restore-in-finally idiom (from
+    # 90-reconcile-claude-code.Tests.ps1) and process-spawn-with-
+    # redirected-streams (already used by this file's own "real process"
+    # tests above).
+    #
+    # Unix-only (mirrors the existing "02-cargo (Unix pwsh)" -Skip
+    # convention): a Windows fake-`coderabbit` fixture would need a
+    # `.cmd` batch file, since arbitrary script content can't be an
+    # `.exe`, but `Start-DotfilesProcessWithTimeout` launches the
+    # reviewed process via raw `[Diagnostics.Process]::Start()` with
+    # `UseShellExecute = $false` -- and per CreateProcess's own
+    # documented contract, that path never runs `.bat`/`.cmd` files
+    # directly; only cmd.exe itself can (the same limitation Node's
+    # `cross-spawn` package exists to paper over). Unlike
+    # 90-reconcile-claude-code.Tests.ps1's `claude.cmd` fixture, which
+    # this script's own comment (elsewhere in this repo) launches via the
+    # `&` call operator, this script's `[Diagnostics.Process]::Start()`
+    # call cannot be swapped for `&` here (that's the exact mechanism it
+    # deliberately bypasses to sidestep PowerShell function-shadowing),
+    # so a `.cmd`-based fixture would not exercise the real path and
+    # could not be verified from this repo's Linux-only implementation
+    # environment. Whether the production `coderabbit` review path itself
+    # can invoke an npm-style `.cmd` shim on Windows is a separate,
+    # pre-existing question outside this issue's scope.
     BeforeEach {
       $script:FakeBinDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       New-Item -ItemType Directory -Path $script:FakeBinDir -Force | Out-Null
-      $exeName = if ($IsWindows -ne $false) { 'coderabbit.cmd' } else { 'coderabbit' }
-      $script:FakeCoderabbitPath = Join-Path $script:FakeBinDir $exeName
-      if ($IsWindows -ne $false) {
-        $content = "@echo off`r`n" +
-          "if `"%1`"==`"auth`" if `"%2`"==`"status`" (`r`n" +
-          "  echo Account: fake-user`r`n" +
-          "  exit /b 0`r`n" +
-          ")`r`n" +
-          "echo STDOUT_MARKER_TEXT`r`n" +
-          "echo STDERR_MARKER_TEXT 1>&2`r`n" +
-          "exit /b 0`r`n"
-        [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
-      } else {
-        $content = "#!/bin/sh`n" +
-          "if [ `"`$1`" = auth ] && [ `"`$2`" = status ]; then`n" +
-          "  echo `"Account: fake-user`"`n" +
-          "  exit 0`n" +
-          "fi`n" +
-          "echo STDOUT_MARKER_TEXT`n" +
-          "echo STDERR_MARKER_TEXT >&2`n" +
-          "exit 0`n"
-        [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
-        & chmod +x $script:FakeCoderabbitPath
-      }
+      $script:FakeCoderabbitPath = Join-Path $script:FakeBinDir 'coderabbit'
+      $content = "#!/bin/sh`n" +
+        "if [ `"`$1`" = auth ] && [ `"`$2`" = status ]; then`n" +
+        "  echo `"Account: fake-user`"`n" +
+        "  exit 0`n" +
+        "fi`n" +
+        "echo STDOUT_MARKER_TEXT`n" +
+        "echo STDERR_MARKER_TEXT >&2`n" +
+        "exit 0`n"
+      [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
+      & chmod +x $script:FakeCoderabbitPath
     }
 
     It 'keeps the reviewed process''s stderr out of the delegate''s own stdout on success' {

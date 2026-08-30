@@ -304,7 +304,7 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
 if [ "$1" = "review" ]; then
-  printf "{\n  \"type\": \"action_required\",\n  \"phase\": \"billing\"\n}\n"
+  printf "{\n  \"type\" : \"action_required\",\n  \"phase\": \"billing\"\n}\n"
   exit 0
 fi
 exit 1
