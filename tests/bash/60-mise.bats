@@ -229,6 +229,21 @@ MOCK
   assert_failure 1
 }
 
+@test "no longer overrides grok with the broken aqua backend" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -q '"aqua:x.ai/cli/grok"' "$config"
+  assert_failure 1
+}
+
+@test "uses the grok registry short name" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^grok' "$config"
+  assert_success
+  assert_output --partial '"latest"'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
