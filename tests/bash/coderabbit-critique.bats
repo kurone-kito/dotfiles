@@ -244,6 +244,39 @@ exit 0
   assert_no_git_calls
 }
 
+@test "fails closed when mktemp fails" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+exit 1
+'
+  # A failing (not merely absent) mktemp mirrors a real-world failure mode
+  # -- e.g. a full or unwritable TMPDIR -- distinct from the grep-absent
+  # test above. The broken mock lives in its OWN directory, never added
+  # to this test's own exported PATH, and is prepended only for the
+  # script's scoped subprocess below: dropping it into the shared mock
+  # bin dir (already on this whole test process's PATH via setup())
+  # would also break bats-core's own `run --separate-stderr` machinery,
+  # which needs a working mktemp of its own.
+  broken_mktemp_dir="$BATS_TEST_TMPDIR/broken-mktemp-bin"
+  mkdir -p "$broken_mktemp_dir"
+  cat > "$broken_mktemp_dir/mktemp" << 'EOF'
+#!/bin/sh
+exit 1
+EOF
+  chmod +x "$broken_mktemp_dir/mktemp"
+
+  run --separate-stderr env PATH="$broken_mktemp_dir:$BATS_TEST_TMPDIR/bin:/usr/bin:/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "mktemp failed"
+  assert_no_git_calls
+}
+
 @test "keeps stderr out of a successful findings response" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 3; exec "$@"'
