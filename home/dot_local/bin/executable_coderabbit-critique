@@ -1,0 +1,126 @@
+#!/bin/sh
+# Emit CodeRabbit CLI's structured findings for the current branch diff, for
+# use as an IDD C1 critiqueLoop.delegate command. Read-only findings adapter
+# only: never fixes, commits, or retries -- C2-C6 own that. Fails (non-zero
+# exit) whenever the caller should fall through to the per-agent critique
+# mechanism instead: coderabbit missing, unauthenticated, no bounded way to
+# run it, or an action_required response (rate limit / usage confirmation)
+# that only the operator can resolve.
+#
+# `coderabbit review --agent` does not fail fast when unauthenticated -- it
+# hangs waiting on an interactive browser OAuth flow instead of exiting, so
+# authentication is checked up front via `coderabbit auth status` (which
+# never hangs and always exits 0 regardless of sign-in state -- its text
+# output must be parsed instead).
+set -eu
+
+# 300s default: an empirically observed real review of a 5-file diff took
+# ~151s end to end (connect, setup, summarize, review); 120s was measured
+# to be too short and cut a genuine in-progress review off mid-flight.
+TIMEOUT_SECONDS="${CODERABBIT_CRITIQUE_TIMEOUT:-300}"
+case "$TIMEOUT_SECONDS" in
+  '' | *[!0-9]*) TIMEOUT_SECONDS=300 ;;
+  *) [ "$TIMEOUT_SECONDS" -gt 0 ] 2>/dev/null || TIMEOUT_SECONDS=300 ;;
+esac
+
+if ! command -v coderabbit >/dev/null 2>&1; then
+  echo "coderabbit not found in PATH" >&2
+  exit 1
+fi
+
+# `command -v` only checks that a `timeout`/`gtimeout` binary exists, not
+# that it understands the GNU-specific `--kill-after` option this script
+# invokes it with (e.g. BusyBox's minimal `timeout` applet lacks it) -- a
+# child that ignores SIGTERM would then survive past the bound. Probe
+# --help output for the exact flag string this script invokes with (see
+# ~/.gnupg/pinentry-auto's `timeout_cmd_is_compatible` for the identical
+# pattern and its rationale). Unlike pinentry-auto -- which falls back to
+# unbounded exec because an interactive human is normally present to
+# eventually answer -- this script fails closed when no compatible timeout
+# is found: it runs unattended, and the exact hang this bounds (an
+# unauthenticated coderabbit call blocking on browser OAuth) has no human
+# present to rescue it.
+timeout_cmd_is_compatible() {
+  help_output=$("$1" --help 2>&1)
+  case "$help_output" in
+    *--kill-after*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1 && timeout_cmd_is_compatible timeout; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_is_compatible gtimeout; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+if [ -z "$TIMEOUT_CMD" ]; then
+  echo "coderabbit-critique: no timeout/gtimeout with --kill-after found; failing closed rather than risking an unbounded hang" >&2
+  exit 1
+fi
+
+auth_status="$(coderabbit auth status 2>&1 || true)"
+case "$auth_status" in
+  *"signed out"*)
+    echo "coderabbit is not authenticated (run: coderabbit auth login)" >&2
+    exit 1
+    ;;
+esac
+
+# A hardcoded default branch name would be wrong for any repository that
+# does not use it (this delegate is user-global, not dotfiles-specific).
+# Prefer the remote's actual recorded default; fall back to checking common
+# candidate names only if that is unset (e.g. `git remote set-head origin
+# -a` was never run); fail closed rather than guessing wrong and silently
+# diffing against a nonexistent or unintended base.
+BASE_BRANCH="${CODERABBIT_CRITIQUE_BASE:-}"
+if [ -z "$BASE_BRANCH" ]; then
+  BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')"
+fi
+if [ -z "$BASE_BRANCH" ]; then
+  # A first-match loop would silently pick "main" over "master" whenever
+  # a repository happens to have both remote-tracking refs (a rename in
+  # progress, a stale branch left over, etc.) even if the real default is
+  # "master" -- fail closed on that ambiguity instead of guessing.
+  main_exists=false
+  master_exists=false
+  git rev-parse --verify --quiet origin/main >/dev/null && main_exists=true
+  git rev-parse --verify --quiet origin/master >/dev/null && master_exists=true
+  if [ "$main_exists" = true ] && [ "$master_exists" = false ]; then
+    BASE_BRANCH=main
+  elif [ "$master_exists" = true ] && [ "$main_exists" = false ]; then
+    BASE_BRANCH=master
+  fi
+fi
+if [ -z "$BASE_BRANCH" ]; then
+  echo "coderabbit-critique: could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly" >&2
+  exit 1
+fi
+
+set +e
+output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>&1)"
+status=$?
+set -e
+
+if [ "$status" -ne 0 ]; then
+  echo "coderabbit review failed or timed out (exit $status)" >&2
+  printf '%s\n' "$output" >&2
+  exit 1
+fi
+
+# `case` rather than `grep -q`: an `if pipeline | grep ...` pipeline sits
+# outside `set -e`'s coverage, so a missing `grep` binary would exit the
+# pipeline non-zero (command not found) and be silently read as "no
+# action_required found" -- passing a genuinely action_required response
+# through as if it were a clean findings result, exactly the failure this
+# check exists to catch. `case` adds no executable dependency of its own.
+case "$output" in
+  *'"type":"action_required"'*)
+    echo "coderabbit review requires operator action; treating as unavailable" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+    ;;
+esac
+
+printf '%s\n' "$output"
