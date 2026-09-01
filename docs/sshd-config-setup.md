@@ -32,17 +32,18 @@ daemon if the configuration is invalid.
 The generated `sshd_config` includes only the settings that differ
 from defaults:
 
-| Setting                  | Value           | Purpose                             |
-| ------------------------ | --------------- | ----------------------------------- |
-| `PasswordAuthentication` | `no`            | Disable password login              |
-| `PermitEmptyPasswords`   | `no`            | Reject empty passwords              |
-| `PermitRootLogin`        | `no`            | Block root SSH access (Unix only)   |
-| `PubkeyAuthentication`   | `yes`           | Enable public key authentication    |
-| `AuthenticationMethods`  | `publickey`     | Enforce key-only authentication     |
-| `Subsystem sftp`         | `internal-sftp` | Cross-platform SFTP support         |
-| `ClientAliveInterval`    | `300`           | Keepalive probe interval (seconds)  |
-| `ClientAliveCountMax`    | `5`             | Max missed probes before disconnect |
-| `TCPKeepAlive`           | `yes`           | Enable TCP-level keepalive          |
+| Setting                      | Value                                                                   | Purpose                                                       |
+| ---------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `PasswordAuthentication`     | `no`                                                                    | Disable password login                                        |
+| `PermitEmptyPasswords`       | `no`                                                                    | Reject empty passwords                                        |
+| `PermitRootLogin`            | `no`                                                                    | Block root SSH access (no effect on Windows; no root concept) |
+| `PubkeyAuthentication`       | `yes`                                                                   | Enable public key authentication                              |
+| `AuthenticationMethods`      | `publickey`                                                             | Enforce key-only authentication                               |
+| `Subsystem sftp`             | `internal-sftp` (non-Windows) / `sftp-server.exe` (Windows)             | OS-appropriate SFTP subsystem                                 |
+| `ClientAliveInterval`        | `300`                                                                   | Keepalive probe interval (seconds)                            |
+| `ClientAliveCountMax`        | `5`                                                                     | Max missed probes before disconnect                           |
+| `TCPKeepAlive`               | `yes`                                                                   | Enable TCP-level keepalive                                    |
+| `Match Group administrators` | `AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys` | Windows only: route admin-group logins to the system key file |
 
 The timeout values (`ClientAliveInterval × ClientAliveCountMax`)
 default to approximately 25 minutes, suitable for mobile connections
@@ -144,15 +145,24 @@ Then re-run `chezmoi apply` and redeploy.
 
 ### Platform notes
 
-- **`PermitRootLogin`** is omitted on Windows because the root
-  user concept does not exist. Use Windows group policies or
-  `DenyGroups` to restrict administrator access instead.
+- **`PermitRootLogin`** is emitted unconditionally, including on
+  Windows, since the directive is harmless there (the root user
+  concept does not exist, so `sshd` has nothing to block). Use
+  Windows group policies or `DenyGroups` to restrict administrator
+  access instead.
 - **Windows administrator accounts** use
   `C:\ProgramData\ssh\administrators_authorized_keys` by default,
-  not `%USERPROFILE%\.ssh\authorized_keys`.
-- **`Subsystem sftp internal-sftp`** uses the OpenSSH built-in
-  SFTP server (available since OpenSSH 4.9), avoiding
-  platform-specific binary paths.
+  not `%USERPROFILE%\.ssh\authorized_keys`. The rendered Windows
+  config wires this up directly with a trailing `Match Group
+  administrators` block whose `AuthorizedKeysFile` points at that
+  system-level file — this is why the block must stay the last
+  section of the file (a `Match` block scopes every directive that
+  follows it, not just the ones immediately under it).
+- **`Subsystem sftp`** is OS-dependent: non-Windows uses the OpenSSH
+  built-in `internal-sftp` server (available since OpenSSH 4.9),
+  avoiding platform-specific binary paths; Windows uses
+  Win32-OpenSSH's own `sftp-server.exe`, since Win32-OpenSSH does not
+  ship an `internal-sftp` equivalent.
 - All other settings not listed above use the OpenSSH defaults
   for the installed version.
 
