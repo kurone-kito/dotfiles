@@ -39,7 +39,7 @@ from defaults:
 | `PermitRootLogin`            | `no`                                                                    | Block root SSH access (no effect on Windows; no root concept) |
 | `PubkeyAuthentication`       | `yes`                                                                   | Enable public key authentication                              |
 | `AuthenticationMethods`      | `publickey`                                                             | Enforce key-only authentication                               |
-| `Subsystem sftp`             | `internal-sftp`                                                         | Cross-platform SFTP support                                   |
+| `Subsystem sftp`             | `internal-sftp` (non-Windows) / `sftp-server.exe` (Windows)             | OS-appropriate SFTP subsystem                                 |
 | `ClientAliveInterval`        | `300`                                                                   | Keepalive probe interval (seconds)                            |
 | `ClientAliveCountMax`        | `5`                                                                     | Max missed probes before disconnect                           |
 | `TCPKeepAlive`               | `yes`                                                                   | Enable TCP-level keepalive                                    |
@@ -158,9 +158,11 @@ Then re-run `chezmoi apply` and redeploy.
   system-level file — this is why the block must stay the last
   section of the file (a `Match` block scopes every directive that
   follows it, not just the ones immediately under it).
-- **`Subsystem sftp internal-sftp`** uses the OpenSSH built-in
-  SFTP server (available since OpenSSH 4.9), avoiding
-  platform-specific binary paths.
+- **`Subsystem sftp`** is OS-dependent: non-Windows uses the OpenSSH
+  built-in `internal-sftp` server (available since OpenSSH 4.9),
+  avoiding platform-specific binary paths; Windows uses
+  Win32-OpenSSH's own `sftp-server.exe`, since Win32-OpenSSH does not
+  ship an `internal-sftp` equivalent.
 - All other settings not listed above use the OpenSSH defaults
   for the installed version.
 
