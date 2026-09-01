@@ -198,18 +198,18 @@ exit 1
   refute_output --partial "no timeout/gtimeout"
 }
 
-@test "fails closed when grep is not found" {
+@test "fails closed when jq is not found" {
   make_mock coderabbit 'exit 1'
   make_mock_timeout timeout 'shift 3; exec "$@"'
 
   # Scope PATH to only the mock bin dir (mocked coderabbit/timeout, no
-  # real grep) -- the grep preflight check runs before auth_status or
-  # review, so nothing past it (mktemp, cat, coderabbit auth/review) is
-  # ever reached in this test.
+  # real jq) -- the jq preflight check runs before auth_status or review,
+  # so nothing past it (mktemp, cat, coderabbit auth/review) is ever
+  # reached in this test.
   run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
 
   assert_failure
-  assert_stderr --partial "grep not found"
+  assert_stderr --partial "jq not found"
 }
 
 @test "fails without calling review when auth status reports signed out" {
@@ -371,6 +371,81 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_no_git_calls
+}
+
+@test "does not trip on an unescaped nested action_required type field inside a finding" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"finding\",\"message\":\"example\",\"example\":{\"type\":\"action_required\",\"phase\":\"billing\"}}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
+@test "does not trip when the top-level key differs from \"type\" only by case" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"Type\":\"action_required\",\"phase\":\"billing\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_no_git_calls
+}
+
+@test "does not trip on an array-valued top-level type property" {
+  # Twin-parity coverage for a PowerShell-specific regression (CodeRabbit
+  # review on this PR): PowerShell's `-ceq` does an element-wise
+  # comparison against a collection value, so `{"type":["action_required"]}`
+  # could wrongly match there unless the value's type is checked first.
+  # jq's raw output for a non-string `.type` value can never equal the
+  # bare `action_required` literal in this script's plain string
+  # comparison, so the shell twin was never exposed to this -- this test
+  # locks that in.
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":[\"action_required\"],\"phase\":\"billing\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_success
   assert_no_git_calls
 }
 
