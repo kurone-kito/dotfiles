@@ -144,8 +144,8 @@ function Invoke-DotfilesRepairGitBashAslr {
       Write-DotfilesFatalError (
         'Could not resolve the Git for Windows install root (checked ' +
         'HKLM:\SOFTWARE\GitForWindows, HKLM:\SOFTWARE\WOW6432Node\GitForWindows, ' +
-        'and git.exe on PATH). Install Git for Windows, or ensure git.exe is on ' +
-        'PATH, then re-run.'
+        'HKCU:\SOFTWARE\GitForWindows, and git.exe on PATH). Install Git for ' +
+        'Windows, or ensure git.exe is on PATH, then re-run.'
       )
       return 1
     }

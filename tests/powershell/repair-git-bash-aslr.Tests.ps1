@@ -181,7 +181,12 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
 
       $result | Should -Be 1
       Should -Invoke Write-DotfilesFatalError -Times 1 -ParameterFilter {
-        $Message -match 'Git for Windows install root'
+        # Must name every hive Resolve-DotfilesGitForWindowsRoot actually
+        # checks (including HKCU, added for the per-user install case) --
+        # guards against the guidance text silently drifting out of sync
+        # with the real candidate list again.
+        $Message -match 'Git for Windows install root' -and
+        $Message -match 'HKCU:\\SOFTWARE\\GitForWindows'
       }
       Should -Invoke Set-ProcessMitigation -Times 0
     }
