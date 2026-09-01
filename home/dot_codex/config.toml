@@ -1,7 +1,7 @@
 approval_policy = "on-request"
 approvals_reviewer = "guardian_subagent"
-model = "gpt-5.4"
-model_reasoning_effort = "high"
+model = "gpt-5.6-luna"
+model_reasoning_effort = "max"
 personality = "pragmatic"
 sandbox_mode = "workspace-write"
 
@@ -12,3 +12,4 @@ sandbox = "unelevated"
 guardian_approval = true
 js_repl = true
 prevent_idle_sleep = true
+memories = true
