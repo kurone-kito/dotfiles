@@ -858,7 +858,7 @@ exit "${FAKE_REVIEW_EXIT:-0}"
         PATH                        = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
         CODERABBIT_CRITIQUE_BASE    = 'master'
         CODERABBIT_CRITIQUE_TIMEOUT = '1'
-        FAKE_REVIEW_SLEEP           = '3'
+        FAKE_REVIEW_SLEEP           = '10'
       }
 
       $result.ExitCode | Should -Be 1
