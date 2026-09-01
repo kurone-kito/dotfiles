@@ -343,11 +343,63 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
       Resolve-DotfilesGitForWindowsRoot | Should -Be $layout.Root
     }
 
-    It 'falls back to git.exe on PATH when the registry keys are absent' {
-      $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'path-fallback')
+    It 'falls back to git.exe on PATH under cmd\git.exe when the registry keys are absent' {
+      $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'path-fallback-cmd')
       $cmdDir = Join-Path $layout.Root 'cmd'
       $gitExe = Join-Path $cmdDir 'git.exe'
       New-Item -ItemType Directory -Path $cmdDir -Force | Out-Null
+      New-Item -ItemType File -Path $gitExe -Force | Out-Null
+      $usrBinPath = $layout.UsrBin
+
+      Mock Test-Path {
+        if ($LiteralPath -in @(
+            'HKLM:\SOFTWARE\GitForWindows'
+            'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+            'HKCU:\SOFTWARE\GitForWindows'
+          )) {
+          return $false
+        }
+        return $LiteralPath -eq $usrBinPath
+      }
+      Mock Get-Command {
+        if ($Name -eq 'git.exe') {
+          return [pscustomobject]@{ Source = $gitExe }
+        }
+        return $null
+      }
+
+      Resolve-DotfilesGitForWindowsRoot | Should -Be $layout.Root
+    }
+
+    It 'falls back to git.exe on PATH under mingw64\bin\git.exe when the registry keys are absent' {
+      $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'path-fallback-mingw64')
+      $gitExe = Join-Path $layout.Mingw64Bin 'git.exe'
+      New-Item -ItemType File -Path $gitExe -Force | Out-Null
+      $usrBinPath = $layout.UsrBin
+
+      Mock Test-Path {
+        if ($LiteralPath -in @(
+            'HKLM:\SOFTWARE\GitForWindows'
+            'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+            'HKCU:\SOFTWARE\GitForWindows'
+          )) {
+          return $false
+        }
+        return $LiteralPath -eq $usrBinPath
+      }
+      Mock Get-Command {
+        if ($Name -eq 'git.exe') {
+          return [pscustomobject]@{ Source = $gitExe }
+        }
+        return $null
+      }
+
+      Resolve-DotfilesGitForWindowsRoot | Should -Be $layout.Root
+    }
+
+    It 'falls back to git.exe on PATH under usr\bin\git.exe when the registry keys are absent' {
+      $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'path-fallback-usrbin')
+      $gitExe = Join-Path $layout.UsrBin 'git.exe'
       New-Item -ItemType File -Path $gitExe -Force | Out-Null
       $usrBinPath = $layout.UsrBin
 

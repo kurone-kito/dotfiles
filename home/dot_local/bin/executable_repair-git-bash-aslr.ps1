@@ -81,9 +81,11 @@ function Resolve-DotfilesGitForWindowsRoot {
   }
 
   # Fallback: resolve git.exe on PATH and walk up its ancestor
-  # directories looking for a sibling usr\bin -- handles cmd\git.exe,
-  # mingw64\bin\git.exe, and usr\bin\git.exe layouts alike without
-  # assuming a fixed directory depth.
+  # directories looking for a sibling usr\bin, instead of hardcoding a
+  # single assumed layout. Three ancestor levels is enough to find the
+  # install root from any of Git for Windows' own git.exe locations --
+  # cmd\git.exe, mingw64\bin\git.exe, or usr\bin\git.exe -- each covered
+  # by a dedicated test below.
   $gitCommand = Get-Command 'git.exe' -ErrorAction SilentlyContinue
   if ($gitCommand) {
     $candidate = Split-Path -Parent $gitCommand.Source
