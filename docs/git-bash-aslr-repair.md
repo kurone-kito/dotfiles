@@ -179,12 +179,11 @@ solved.
 Windows process mitigation policy is keyed by **image name**, not by
 full path. This has two consequences worth knowing:
 
-- Git for Windows' own `bin\bash.exe` is a wrapper that sets
-  environment variables (`MSYSTEM`, `PATH`) and then launches
-  `usr\bin\bash.exe` -- not a junction or hard link. Since both files
-  share the same image name (`bash.exe`), exempting that name covers
-  both locations without extra work regardless of which one a caller
-  invokes.
+- Git for Windows ships both `bin\bash.exe` and `usr\bin\bash.exe`.
+  Since both files share the same image name (`bash.exe`), exempting
+  that name covers both locations without extra work, regardless of
+  which one a caller invokes -- the exact mechanism connecting the two
+  paths does not matter for this point.
 - Any other process on the machine that happens to share a name with
   an exempted binary (for example, a different `perl.exe` install) is
   exempted too, since the policy has no way to distinguish which
