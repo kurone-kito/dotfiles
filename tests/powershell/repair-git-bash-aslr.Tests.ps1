@@ -17,26 +17,37 @@ BeforeAll {
   # declare the same formal parameters the real cmdlets expose so that
   # Mock -ParameterFilter can bind $Name/$System/$Disable the same way
   # it would against the real, richer cmdlet.
+  #
+  # Gated on $IsWindows: this Describe already skips entirely on
+  # non-Windows, so a file-level BeforeAll here never actually executes
+  # for a Linux/macOS Pester run (verified empirically against Pester
+  # 5.6.1 and 6.0.1, single-file and whole-directory invocations, with
+  # and without -CI: a skipped Describe's sibling BeforeAll never
+  # runs). The explicit guard is defense in depth against any future
+  # Pester behavior change, and keeps global: stubs from ever being
+  # defined outside the one platform that needs them.
   $global:DotfilesTestUsedProcessMitigationStub = $false
-  if (-not (Get-Command Get-ProcessMitigation -ErrorAction SilentlyContinue)) {
-    $global:DotfilesTestUsedProcessMitigationStub = $true
-    function global:Get-ProcessMitigation {
-      param(
-        [Parameter()] [string] $Name,
-        [switch] $System,
-        [switch] $RunningProcesses
-      )
+  if ($IsWindows) {
+    if (-not (Get-Command Get-ProcessMitigation -ErrorAction SilentlyContinue)) {
+      $global:DotfilesTestUsedProcessMitigationStub = $true
+      function global:Get-ProcessMitigation {
+        param(
+          [Parameter()] [string] $Name,
+          [switch] $System,
+          [switch] $RunningProcesses
+        )
+      }
     }
-  }
-  if (-not (Get-Command Set-ProcessMitigation -ErrorAction SilentlyContinue)) {
-    $global:DotfilesTestUsedProcessMitigationStub = $true
-    function global:Set-ProcessMitigation {
-      param(
-        [Parameter()] [string] $Name,
-        [string[]] $Disable,
-        [string[]] $Enable,
-        [switch] $System
-      )
+    if (-not (Get-Command Set-ProcessMitigation -ErrorAction SilentlyContinue)) {
+      $global:DotfilesTestUsedProcessMitigationStub = $true
+      function global:Set-ProcessMitigation {
+        param(
+          [Parameter()] [string] $Name,
+          [string[]] $Disable,
+          [string[]] $Enable,
+          [switch] $System
+        )
+      }
     }
   }
 
@@ -298,6 +309,35 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
       Resolve-DotfilesGitForWindowsRoot | Should -Be $layout.Root
     }
 
+    It 'resolves via the per-user HKCU registry key when HKLM keys are absent (non-admin install)' {
+      # A "only for me" (non-admin) Git for Windows install writes
+      # Software\GitForWindows under HKCU instead of HKLM -- same
+      # subkey and value name, different hive (git-for-windows/git#455).
+      $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'hkcu-hit')
+      $usrBinPath = $layout.UsrBin
+
+      Mock Test-Path {
+        if ($LiteralPath -in @(
+            'HKLM:\SOFTWARE\GitForWindows'
+            'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+          )) {
+          return $false
+        }
+        if ($LiteralPath -eq 'HKCU:\SOFTWARE\GitForWindows') {
+          return $true
+        }
+        return $LiteralPath -eq $usrBinPath
+      }
+      Mock Get-ItemProperty {
+        if ($LiteralPath -eq 'HKCU:\SOFTWARE\GitForWindows') {
+          return [pscustomobject]@{ InstallPath = $layout.Root }
+        }
+        return $null
+      }
+
+      Resolve-DotfilesGitForWindowsRoot | Should -Be $layout.Root
+    }
+
     It 'falls back to git.exe on PATH when the registry keys are absent' {
       $layout = New-FakeGitForWindowsLayout -Root (Join-Path 'TestDrive:\' 'path-fallback')
       $cmdDir = Join-Path $layout.Root 'cmd'
@@ -310,6 +350,7 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
         if ($LiteralPath -in @(
             'HKLM:\SOFTWARE\GitForWindows'
             'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+            'HKCU:\SOFTWARE\GitForWindows'
           )) {
           return $false
         }
@@ -330,6 +371,7 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
         if ($LiteralPath -in @(
             'HKLM:\SOFTWARE\GitForWindows'
             'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+            'HKCU:\SOFTWARE\GitForWindows'
           )) {
           return $false
         }

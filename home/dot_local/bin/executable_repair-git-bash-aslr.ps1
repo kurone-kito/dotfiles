@@ -55,12 +55,17 @@ function Resolve-DotfilesGitForWindowsRoot {
   # Prefer the registry key the Git for Windows installer itself writes
   # (the documented, tool-agnostic way to locate a Git for Windows
   # install without guessing a path); 32-bit PowerShell on a 64-bit OS
-  # sees this key redirected under WOW6432Node, so check both. Verify
-  # usr\bin actually exists there too, rather than trusting a stale or
+  # sees this key redirected under WOW6432Node, so check both. A
+  # per-user ("only for me", non-admin) install writes the same
+  # Software\GitForWindows subkey under HKCU instead of HKLM -- no
+  # WOW6432Node redirection applies there -- so check that hive too
+  # (git-for-windows/git#455). Verify usr\bin actually exists at the
+  # resolved path too, rather than trusting a stale or
   # partially-uninstalled registry entry.
   foreach ($registryPath in @(
       'HKLM:\SOFTWARE\GitForWindows'
       'HKLM:\SOFTWARE\WOW6432Node\GitForWindows'
+      'HKCU:\SOFTWARE\GitForWindows'
     )) {
     if (-not (Test-Path -LiteralPath $registryPath)) {
       continue
@@ -173,6 +178,12 @@ function Invoke-DotfilesRepairGitBashAslr {
       # distinct from the true no-op case above, so do not claim
       # "already exempted" when a real run would still change something.
       Write-Host "$neededCount image(s) under $usrBinPath need the ForceRelocateImages exemption; no changes applied (re-run without -WhatIf to apply)."
+    } elseif ($changedCount -lt $neededCount) {
+      # A declined -Confirm prompt on some (not all) images -- report the
+      # partial result explicitly rather than a plain "Disabled N" message
+      # that would silently omit the remainder still needing the fix.
+      $remaining = $neededCount - $changedCount
+      Write-Host "Disabled ForceRelocateImages for $changedCount of $neededCount needed image(s) under $usrBinPath; $remaining still need it (declined?)."
     } else {
       Write-Host "Disabled ForceRelocateImages for $changedCount image(s) under $usrBinPath."
     }
