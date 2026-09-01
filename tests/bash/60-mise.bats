@@ -244,6 +244,21 @@ MOCK
   assert_output --partial '"latest"'
 }
 
+@test "no longer relies on the inert claude-code npm_args opt-in" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -q 'npm_args = "--ignore-scripts=false"' "$config"
+  assert_failure 1
+}
+
+@test "allow-lists claude-code's own build scripts" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"npm:@anthropic-ai/claude-code"' "$config"
+  assert_success
+  assert_output --partial 'allow_builds = ["@anthropic-ai/claude-code"]'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
