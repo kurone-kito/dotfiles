@@ -742,13 +742,25 @@ Describe 'coderabbit-critique' {
           $psi.RedirectStandardError = $true
           $psi.CreateNoWindow = $true
           $proc = [Diagnostics.Process]::Start($psi)
-          $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
-          $stderrTask = $proc.StandardError.ReadToEndAsync()
-          $proc.WaitForExit()
-          return [pscustomobject]@{
-            ExitCode = $proc.ExitCode
-            Stdout   = $stdoutTask.GetAwaiter().GetResult()
-            Stderr   = $stderrTask.GetAwaiter().GetResult()
+          try {
+            $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+            $stderrTask = $proc.StandardError.ReadToEndAsync()
+            # A hard bound, well above every scenario's own expected runtime
+            # (including the timeout scenario's own 1s CODERABBIT_CRITIQUE_TIMEOUT
+            # bound): if the subject script itself regressed into a real hang,
+            # this fails just this one test instead of hanging the entire
+            # Pester run indefinitely.
+            if (-not $proc.WaitForExit(60000)) {
+              try { $proc.Kill() } catch [System.Exception] {}
+              throw 'Invoke-DotfilesSubjectAsSubprocess: subject process did not exit within 60s -- killed'
+            }
+            return [pscustomobject]@{
+              ExitCode = $proc.ExitCode
+              Stdout   = $stdoutTask.GetAwaiter().GetResult()
+              Stderr   = $stderrTask.GetAwaiter().GetResult()
+            }
+          } finally {
+            $proc.Dispose()
           }
         } finally {
           $env:PATH = $originalPath
