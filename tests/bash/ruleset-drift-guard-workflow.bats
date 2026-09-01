@@ -47,13 +47,15 @@ step_field() {
 }
 
 @test "Escalate on failure and the job-failure step react to any of the three checked steps' outcomes" {
+  # Exact-match, not --partial: a substring-only check would still pass
+  # if a future edit silently swapped the `||` joins for `&&` (making
+  # escalation require all three steps to fail at once -- unreachable,
+  # since Check drift is skipped whenever Fetch ruleset rules fails).
+  local expected="always() && (steps.fetch.outcome == 'failure' || steps.check.outcome == 'failure' || steps.find-issue.outcome == 'failure')"
   for step_name in "Escalate on failure" "Fail the job on any check failure"; do
     run step_field "$step_name" '.if'
     assert_success
-    assert_output --partial 'always()'
-    assert_output --partial "steps.fetch.outcome == 'failure'"
-    assert_output --partial "steps.check.outcome == 'failure'"
-    assert_output --partial "steps.find-issue.outcome == 'failure'"
+    assert_output "$expected"
   done
 }
 

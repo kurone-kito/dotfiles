@@ -174,8 +174,8 @@ jobs:
         if: >-
           always() &&
           (steps.fetch.outcome == 'failure' ||
-           steps.check.outcome == 'failure' ||
-           steps.find-issue.outcome == 'failure')
+          steps.check.outcome == 'failure' ||
+          steps.find-issue.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
           TRACKING_ISSUE_NUMBER: ${{ steps.find-issue.outputs.number }}
@@ -259,6 +259,6 @@ jobs:
         if: >-
           always() &&
           (steps.fetch.outcome == 'failure' ||
-           steps.check.outcome == 'failure' ||
-           steps.find-issue.outcome == 'failure')
+          steps.check.outcome == 'failure' ||
+          steps.find-issue.outcome == 'failure')
         run: exit 1
