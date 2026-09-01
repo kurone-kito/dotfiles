@@ -33,7 +33,19 @@ yt-dlp = "latest"
 "aqua:anomalyco/opencode" = "latest"
 "aqua:google-antigravity/antigravity-cli" = "latest"
 
-"npm:@anthropic-ai/claude-code" = { version = "latest", npm_args = "--ignore-scripts=false" }
+# mise's npm backend now defaults to its embedded aube installer
+# (npm.package_manager = "auto"), which never shells out to the npm
+# CLI, so an npm-CLI-only npm_args flag (e.g. --ignore-scripts=false)
+# is silently dropped. aube is default-deny for dependency lifecycle
+# scripts, so @anthropic-ai/claude-code's postinstall never ran, and
+# that postinstall is what hardlinks the platform-native binary over
+# the placeholder bin/claude.exe shipped in the wrapper tarball
+# (without it, that placeholder is just a shell script and `claude`
+# cannot start). allow_builds is the backend-independent tool option
+# aube (and modern npm/pnpm) honors instead; scope it to this one
+# package rather than allow_builds = true so no transitive dependency
+# gets an unreviewed build-script opt-in.
+"npm:@anthropic-ai/claude-code" = { version = "latest", allow_builds = ["@anthropic-ai/claude-code"] }
 "npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
 "npm:@github/copilot" = "latest"
