@@ -120,25 +120,45 @@
     "startingDirectory" "%USERPROFILE%")
 -}}
 
-{{- /* Pull out the incoming profiles.list, tolerating a missing or malformed "profiles"/"list". */ -}}
+{{- /*
+  Pull out the incoming profiles.list, tolerating a missing or
+  malformed "profiles"/"list" -- including a "list" that exists but
+  isn't actually a JSON array (a stray object/string/number under that
+  key). `range` panics on a non-slice/map/string/channel value, and a
+  bare passthrough would otherwise let a malformed "list" corrupt this
+  array with non-object entries; treat anything that isn't a genuine
+  array the same as "no incoming list" rather than erroring or
+  propagating garbage.
+*/ -}}
 {{- $incomingProfileList := list -}}
 {{- if hasKey $incoming "profiles" -}}
   {{- $incomingProfiles := index $incoming "profiles" -}}
   {{- if and (kindIs "map" $incomingProfiles) (hasKey $incomingProfiles "list") -}}
-    {{- $incomingProfileList = index $incomingProfiles "list" -}}
+    {{- $rawProfileList := index $incomingProfiles "list" -}}
+    {{- if kindIs "slice" $rawProfileList -}}
+      {{- $incomingProfileList = $rawProfileList -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 
-{{- /* Keep only the incoming entries this repository does NOT own, in their incoming order. */ -}}
+{{- /*
+  Keep only the incoming entries this repository does NOT own, in
+  their incoming order. Drop -- rather than preserve -- any entry that
+  isn't itself a JSON object: a bare number/string/array has no "guid"
+  to key on and would otherwise land in profiles.list as invalid,
+  non-object content Windows Terminal cannot parse as a profile.
+*/ -}}
 {{- $extraProfiles := list -}}
 {{- range $incomingProfileList -}}
   {{- $entry := . -}}
-  {{- $guid := "" -}}
-  {{- if and (kindIs "map" $entry) (hasKey $entry "guid") -}}
-    {{- $guid = index $entry "guid" -}}
-  {{- end -}}
-  {{- if not (has $guid $managedProfileGuids) -}}
-    {{- $extraProfiles = append $extraProfiles $entry -}}
+  {{- if kindIs "map" $entry -}}
+    {{- $guid := "" -}}
+    {{- if hasKey $entry "guid" -}}
+      {{- $guid = index $entry "guid" -}}
+    {{- end -}}
+    {{- if not (has $guid $managedProfileGuids) -}}
+      {{- $extraProfiles = append $extraProfiles $entry -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 

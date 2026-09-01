@@ -64,10 +64,35 @@ BeforeAll {
     if ($null -ne $SeedJson) {
       [System.IO.File]::WriteAllText($destSettingsPath, $SeedJson, [System.Text.UTF8Encoding]::new($false))
     }
+    # On Windows PowerShell 5.1, `2>&1` turns a native command's stderr
+    # lines into terminating ErrorRecord objects whenever
+    # $ErrorActionPreference is 'Stop' (as this repository's CI job
+    # sets it) -- the invalid-JSON case below writes to stderr and
+    # exits non-zero by design, which would otherwise abort this
+    # function before ExitCode/Content can be captured. Temporarily
+    # relax to 'Continue' around just the native invocation, restoring
+    # the caller's preference afterward even if something still throws.
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+      $ErrorActionPreference = 'Continue'
       $output = & chezmoi apply --source $scratchSource --destination $scratchDest --force 2>&1
       $exitCode = $LASTEXITCODE
-      $content = if (Test-Path $destSettingsPath) { Get-Content -Path $destSettingsPath -Raw } else { $null }
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
+    try {
+      # Read via .NET with an explicit UTF-8 (no BOM) decoder rather
+      # than Get-Content -Raw: chezmoi writes the rendered file as
+      # UTF-8 without a BOM, but Get-Content's default encoding
+      # differs between Windows PowerShell 5.1 (a legacy codepage
+      # absent a BOM) and pwsh 7+ (UTF-8), which would otherwise
+      # mis-decode the non-ASCII Japanese profile name every render
+      # includes on Windows PowerShell 5.1.
+      $content = if (Test-Path $destSettingsPath) {
+        [System.IO.File]::ReadAllText($destSettingsPath, [System.Text.UTF8Encoding]::new($false))
+      } else {
+        $null
+      }
       [pscustomobject]@{
         ExitCode = $exitCode
         Output   = ($output -join "`n")
@@ -171,6 +196,27 @@ Describe 'modify_settings.json' -Skip:(-not $script:HasChezmoi) {
     It 'preserves unmanaged top-level keys (schemes/themes) from the incoming file' {
       $script:Parsed.schemes[0].name | Should -Be 'MyCustomScheme'
       $script:Parsed.themes[0].name | Should -Be 'MyCustomTheme'
+    }
+  }
+
+  Context 'rendering against a malformed profiles.list (valid JSON, unexpected shape)' {
+    It 'drops a non-object profiles.list entry instead of preserving it verbatim' {
+      $seedJson = '{"profiles":{"list":[42,{"guid":"{ubuntu-guid-not-managed-1234}","name":"Ubuntu"}]}}'
+      $render = Invoke-ModifyTemplateApply -SeedJson $seedJson
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      # The bare number must not appear anywhere in profiles.list; every
+      # entry must be a genuine object with its own guid.
+      ($parsed.profiles.list | ForEach-Object { $_.guid }) | Should -Not -Contain $null
+      $parsed.profiles.list.Count | Should -Be 5
+      ($parsed.profiles.list | Where-Object { $_.guid -eq '{ubuntu-guid-not-managed-1234}' }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'falls back to the managed profiles.list only when the incoming "list" is not an array' {
+      $render = Invoke-ModifyTemplateApply -SeedJson '{"profiles":{"list":"not-a-list"}}'
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      ($parsed.profiles.list.guid | Sort-Object) | Should -Be ($script:ManagedGuids | Sort-Object)
     }
   }
 
