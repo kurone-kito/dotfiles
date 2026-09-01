@@ -1,0 +1,202 @@
+{{/*
+  Windows Terminal settings.json -- chezmoi modify-template
+  ===========================================================
+
+  This file's `modify_` prefix (and lack of a `.tmpl` extension) makes
+  it a chezmoi *modify script* rather than a plain managed file: on
+  `chezmoi apply` chezmoi runs it and feeds it the destination file's
+  *current* content, instead of overwriting the destination wholesale
+  with the source's content. Because the source additionally contains
+  the literal string "chezmoi:modify-template" (see the line below),
+  chezmoi v2.72.1 treats it as a *modify-template*: every line
+  containing that string is stripped before parsing, and everything
+  else is interpreted as a Go template. No external interpreter is
+  invoked (this repo declares no [interpreters] and Windows has no
+  POSIX shell by default), and the destination's current bytes arrive
+  as the string `.chezmoi.stdin` (empty when the destination does not
+  exist yet, e.g. on a brand-new machine).
+
+  Why merge instead of overwrite: Windows Terminal owns this file and
+  rewrites the whole thing whenever a setting changes through its UI.
+  It also re-adds any dynamic profile its generators produce that
+  `profiles.list` doesn't already contain -- WSL distros, Azure Cloud
+  Shell, a re-registered PowerShell install -- each with its own
+  per-installation GUID that cannot be committed at all. A plain
+  chezmoi-managed file has the same whole-file overwrite semantics, so
+  the two writers fought forever and `chezmoi diff` never settled
+  (see #349). #347 first settled *which* keys this repository actually
+  owns; this template is the structural fix that enforces exactly
+  those keys on every apply while leaving everything else alone.
+
+  Managed (this repository's values always win, restoring them even
+  if Windows Terminal's UI changed them):
+    - every top-level scalar setting: $help, $schema,
+      compatibility.allowHeadless, copyFormatting, copyOnSelect,
+      defaultProfile, experimental.enableColorSelection, and
+      useAcrylicInTabRow
+    - the whole "actions", "keybindings", and "newTabMenu" arrays
+    - "profiles.defaults"
+    - the four "profiles.list" entries identified by GUID in
+      $managedProfileGuids below (Windows PowerShell, the Japanese
+      Command Prompt entry, Azure Cloud Shell, and the user-defined
+      PowerShell profile that #347 resynced) -- matched by "guid" only,
+      so a Windows-Terminal-side rename/reorder/field edit on one of
+      these four is still overwritten back to this repository's values
+
+  Passed through untouched (whatever the incoming file already has):
+    - any "profiles.list" entry whose "guid" is not one of the four
+      above -- Windows Terminal's own dynamically generated profiles,
+      which this repository structurally cannot own since their GUIDs
+      differ per machine and per WSL (re-)registration
+    - every other top-level key this repository does not manage (for
+      example "schemes"/"themes" -- Windows Terminal's to fill in, not
+      enforced here; deliberately NOT hard-coded as empty arrays either,
+      since that would let this template wipe out a custom scheme or
+      theme added later through Windows Terminal's UI on every apply --
+      exactly the fight this file exists to end). One consequence: the
+      very first render against an empty `.chezmoi.stdin` (destination
+      does not exist yet) omits these keys entirely rather than seeding
+      `[]` -- harmless, since Windows Terminal treats a missing
+      "schemes"/"themes" key the same as an empty array.
+
+  Fidelity limit -- this is a bounded-diff tool, not a byte-identical
+  one: `toPrettyJson` below emits 2-space indentation, alphabetically
+  sorted keys, ASCII-range UTF-8 left un-escaped (e.g. the managed
+  Japanese Command Prompt profile name renders as literal characters),
+  and no trailing space before a bracketed value, while Windows
+  Terminal's own writer uses 4-space indentation, insertion order,
+  `\uXXXX`-escapes non-ASCII characters, and adds a trailing space
+  after a key whose value is a bracketed block (e.g. "actions" followed
+  by a newline -- this directory's .editorconfig entry pins that same
+  4-space/no-trim convention, a carryover from when this file was the
+  tracked static JSON itself; this template's own authored Go-template
+  source does not follow it literally, and nothing in this repository
+  enforces .editorconfig in CI, so the mismatch is cosmetic only).
+  Every Windows-Terminal-driven rewrite of an unmanaged key therefore
+  still produces some diff purely from formatting, on top of any
+  genuinely new unmanaged content -- the goal
+  is shrinking that diff to the managed keys and formatting alone,
+  never the whole file, not eliminating it outright.
+
+  chezmoi:modify-template
+*/}}
+{{- $stdin := .chezmoi.stdin -}}
+{{- $incoming := dict -}}
+{{- if ne $stdin "" -}}
+{{- $incoming = mustFromJson $stdin -}}
+{{- end -}}
+
+{{- /* The four profiles.list GUIDs this repository owns (see header). */ -}}
+{{- $managedProfileGuids := list
+  "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}"
+  "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}"
+  "{b453ae62-4e3d-5e58-b989-0a998ec441b8}"
+  "{ab98be26-311f-4211-a628-661396a1647a}"
+-}}
+
+{{- /* This repository's own values for those four profiles, in a fixed, stable order. */ -}}
+{{- $managedProfileList := list
+  (dict
+    "commandline" "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+    "guid" "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}"
+    "hidden" false
+    "name" "Windows PowerShell")
+  (dict
+    "commandline" "%SystemRoot%\\System32\\cmd.exe"
+    "guid" "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}"
+    "hidden" false
+    "name" "コマンド プロンプト")
+  (dict
+    "guid" "{b453ae62-4e3d-5e58-b989-0a998ec441b8}"
+    "hidden" true
+    "name" "Azure Cloud Shell"
+    "source" "Windows.Terminal.Azure")
+  (dict
+    "commandline" "pwsh.exe"
+    "guid" "{ab98be26-311f-4211-a628-661396a1647a}"
+    "hidden" false
+    "icon" "ms-appx:///ProfileIcons/pwsh.png"
+    "name" "PowerShell"
+    "startingDirectory" "%USERPROFILE%")
+-}}
+
+{{- /* Pull out the incoming profiles.list, tolerating a missing or malformed "profiles"/"list". */ -}}
+{{- $incomingProfileList := list -}}
+{{- if hasKey $incoming "profiles" -}}
+  {{- $incomingProfiles := index $incoming "profiles" -}}
+  {{- if and (kindIs "map" $incomingProfiles) (hasKey $incomingProfiles "list") -}}
+    {{- $incomingProfileList = index $incomingProfiles "list" -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /* Keep only the incoming entries this repository does NOT own, in their incoming order. */ -}}
+{{- $extraProfiles := list -}}
+{{- range $incomingProfileList -}}
+  {{- $entry := . -}}
+  {{- $guid := "" -}}
+  {{- if and (kindIs "map" $entry) (hasKey $entry "guid") -}}
+    {{- $guid = index $entry "guid" -}}
+  {{- end -}}
+  {{- if not (has $guid $managedProfileGuids) -}}
+    {{- $extraProfiles = append $extraProfiles $entry -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /* Managed profiles.list entries first (canonical order), then whatever Windows Terminal added. */ -}}
+{{- $profiles := dict
+  "defaults" (dict
+    "adjustIndistinguishableColors" "never"
+    "colorScheme" "Vintage"
+    "compatibility.allowDECRQCRA" true
+    "experimental.rainbowSuggestions" true
+    "experimental.retroTerminalEffect" false
+    "font" (dict "face" "HackGen Console NF" "size" 10)
+    "opacity" 78
+    "rightClickContextMenu" true
+    "showMarksOnScrollbar" true
+    "useAcrylic" true)
+  "list" (concat $managedProfileList $extraProfiles)
+-}}
+
+{{- /* Every enforced top-level key -- anything not named here is left to the incoming file. */ -}}
+{{- $managed := dict
+  "$help" "https://aka.ms/terminal-documentation"
+  "$schema" "https://aka.ms/terminal-profiles-schema"
+  "actions" (list
+    (dict "command" (dict "action" "sendInput" "input" "\u001b\r") "id" "User.sendInput.8F63D3A9")
+    (dict "command" (dict "action" "swapPane" "direction" "up") "id" "User.swapPane.6CD791B")
+    (dict "command" (dict "action" "swapPane" "direction" "down") "id" "User.swapPane.F747588A")
+    (dict "command" (dict "action" "swapPane" "direction" "right") "id" "User.swapPane.87C324ED")
+    (dict "command" (dict "action" "swapPane" "direction" "left") "id" "User.swapPane.2A0DA8E0"))
+  "compatibility.allowHeadless" true
+  "copyFormatting" "none"
+  "copyOnSelect" false
+  "defaultProfile" "{ab98be26-311f-4211-a628-661396a1647a}"
+  "experimental.enableColorSelection" true
+  "keybindings" (list
+    (dict "id" "Terminal.DuplicatePaneAuto" "keys" "alt+shift+d")
+    (dict "id" "User.sendInput.8F63D3A9" "keys" "shift+enter")
+    (dict "id" "User.swapPane.2A0DA8E0" "keys" "ctrl+alt+shift+left")
+    (dict "id" "Terminal.CopyToClipboard" "keys" "ctrl+c")
+    (dict "id" "Terminal.FindText" "keys" "ctrl+shift+f")
+    (dict "id" "Terminal.PasteFromClipboard" "keys" "ctrl+v")
+    (dict "id" "User.swapPane.87C324ED" "keys" "ctrl+alt+shift+right")
+    (dict "id" "User.swapPane.6CD791B" "keys" "ctrl+alt+shift+up")
+    (dict "id" "User.swapPane.F747588A" "keys" "ctrl+alt+shift+down"))
+  "newTabMenu" (list (dict "type" "remainingProfiles"))
+  "profiles" $profiles
+  "useAcrylicInTabRow" true
+-}}
+
+{{- /* Start from whatever the incoming file carries that this repository doesn't manage... */ -}}
+{{- $result := dict -}}
+{{- range $k, $v := $incoming -}}
+  {{- if not (hasKey $managed $k) -}}
+    {{- $result = set $result $k $v -}}
+  {{- end -}}
+{{- end -}}
+{{- /* ...then force every managed key to this repository's value, overwriting any incoming copy. */ -}}
+{{- range $k, $v := $managed -}}
+  {{- $result = set $result $k $v -}}
+{{- end -}}
+{{ toPrettyJson $result }}

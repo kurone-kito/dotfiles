@@ -14,6 +14,10 @@ indent_size = 4
 [*.md]
 trim_trailing_whitespace = false
 
+# Matches Windows Terminal's own 4-space, trailing-space writer style
+# (see #347). #349 replaced the tracked static settings.json with
+# modify_settings.json, a chezmoi modify-template source; this
+# directory-scoped glob covers that new source path unchanged.
 [home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/*]
 indent_size = 4
 trim_trailing_whitespace = false
