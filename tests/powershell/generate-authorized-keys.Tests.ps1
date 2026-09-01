@@ -204,6 +204,15 @@ Describe 'generate-authorized-keys' {
     ($warnings.Message -join "`n") | Should -Not -Match 'Malformed managed-key markers'
   }
 
+  It 'hints Windows administrator accounts to re-sync administrators_authorized_keys' {
+    'ssh-ed25519 AAAA primary@test' |
+      Set-TestFileUtf8NoBom -Path (Join-Path $script:SshDir.FullName 'primary.pub')
+
+    $warnings = & $script:Fixture 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+
+    ($warnings.Message -join "`n") | Should -Match 'sync-openssh-authorized-keys\.ps1'
+  }
+
   It 'converges on the same block count after repeated runs when the end marker was missing' {
     @('ssh-rsa FOREIGN untouched', $script:BeginMarker, 'ssh-rsa STALE stale-key') |
       Set-TestFileUtf8NoBom -Path $script:Authorized
