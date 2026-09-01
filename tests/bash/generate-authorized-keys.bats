@@ -224,3 +224,12 @@ setup() {
   assert_success
   refute_output --partial 'WARNING: malformed managed-key markers found'
 }
+
+@test "does not mention the Windows-only administrators_authorized_keys sync helper" {
+  echo "ssh-ed25519 AAAA primary@test" > "$SSH_DIR/primary.pub"
+
+  run bash "$FIXTURE"
+  assert_success
+  refute_output --partial 'sync-openssh-authorized-keys.ps1'
+  refute_output --partial 'administrators_authorized_keys'
+}

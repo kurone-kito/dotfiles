@@ -83,3 +83,10 @@ icacls $authorized /inheritance:r `
   /grant "*S-1-5-18:(R)" 2>&1 | Out-Null
 
 Write-Host 'authorized_keys generated.'
+
+# Windows OpenSSH reads administrators_authorized_keys instead of this
+# file for Administrators-group accounts; that copy is not updated
+# automatically since this script runs unelevated. Emitted
+# unconditionally (non-administrator accounts can disregard it) rather
+# than trying to detect group membership from here.
+Write-Warning 'Windows administrator accounts: run ~/.local/bin/sync-openssh-authorized-keys.ps1 (elevated) to propagate these keys into administrators_authorized_keys; see docs/sshd-config-setup.md.'
