@@ -46,3 +46,12 @@ Subsystem sftp internal-sftp
 ClientAliveInterval {{ $clientAliveInterval }}
 ClientAliveCountMax {{ $clientAliveCountMax }}
 TCPKeepAlive yes
+{{- if eq .chezmoi.os "windows" }}
+
+# --- Windows administrator accounts ---
+# Match blocks apply to every directive that follows, so this must
+# remain the last section of the file.
+
+Match Group administrators
+	AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+{{- end }}
