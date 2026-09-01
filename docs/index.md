@@ -36,6 +36,7 @@ describes.
 | ---- | ---- | ----------- |
 | guide | [AI tooling strategy](ai-strategy.md) | Explains why this repository prioritizes GitHub Copilot for AI tooling and how its instruction-file layers relate to each other. |
 | guide | [Using ghq with multiple accounts](ghq-workflow.md) | Explains how to configure ghq so each GitHub or GitLab account automatically uses the correct SSH key, commit identity, and GPG signing key. |
+| guide | [Repairing Git Bash under Windows mandatory ASLR](git-bash-aslr-repair.md) | Explains how to diagnose and repair Git Bash fork() failures caused by Windows mandatory ASLR, and what the chezmoi apply warning means. |
 | guide | [Opt-in local development CA setup (mkcert)](mkcert-local-ca.md) | Explains how to opt into registering a local mkcert CA into the Windows certificate trust store during chezmoi apply, and why it stays off by default. |
 | guide | [Secret manager setup](secret-manager-setup.md) | Explains how to configure chezmoi to retrieve GPG keys, SSH keys, and SSH host configuration from an external secret manager. |
 | guide | [Tool ownership boundary with setup.windows](setup-windows-boundary.md) | Explains which layer — this repository's mise, WinGet/DSC in kurone-kito/setup.windows, or Chocolatey — owns each Windows tool and why. |
