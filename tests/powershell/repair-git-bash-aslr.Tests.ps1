@@ -18,16 +18,22 @@ BeforeAll {
   # Mock -ParameterFilter can bind $Name/$System/$Disable the same way
   # it would against the real, richer cmdlet.
   #
-  # Gated on $IsWindows: this Describe already skips entirely on
-  # non-Windows, so a file-level BeforeAll here never actually executes
-  # for a Linux/macOS Pester run (verified empirically against Pester
-  # 5.6.1 and 6.0.1, single-file and whole-directory invocations, with
-  # and without -CI: a skipped Describe's sibling BeforeAll never
-  # runs). The explicit guard is defense in depth against any future
-  # Pester behavior change, and keeps global: stubs from ever being
-  # defined outside the one platform that needs them.
+  # Gated on $IsWindows -ne $false (not a bare truthy check): $IsWindows
+  # is $null on Windows PowerShell 5.1 (the variable was added in
+  # PowerShell 6), and a bare `if ($IsWindows)` treats that null as
+  # falsy, silently skipping this whole block -- and with it the
+  # native-cmdlet-resolvable check -- on the PS5.1 CI leg. This Describe
+  # already skips entirely on non-Windows via the same null-safe
+  # `-Skip:($IsWindows -eq $false)` idiom, so a file-level BeforeAll
+  # here never actually executes for a Linux/macOS Pester run (verified
+  # empirically against Pester 5.6.1 and 6.0.1, single-file and
+  # whole-directory invocations, with and without -CI: a skipped
+  # Describe's sibling BeforeAll never runs). The explicit guard is
+  # defense in depth against any future Pester behavior change, and
+  # keeps global: stubs from ever being defined outside the platforms
+  # that need them.
   $global:DotfilesTestUsedProcessMitigationStub = $false
-  if ($IsWindows) {
+  if ($IsWindows -ne $false) {
     if (-not (Get-Command Get-ProcessMitigation -ErrorAction SilentlyContinue)) {
       $global:DotfilesTestUsedProcessMitigationStub = $true
       function global:Get-ProcessMitigation {
@@ -120,7 +126,10 @@ Describe 'repair-git-bash-aslr' -Skip:($IsWindows -eq $false) {
       # fired -- otherwise this assertion (and every mocked test below)
       # would pass vacuously against our own stub instead of proving the
       # real ProcessMitigations cmdlets are reachable on this runner.
-      if ($IsWindows) {
+      # Null-safe check (see the BeforeAll comment above): a bare
+      # `if ($IsWindows)` is falsy on PS5.1, which would silently skip
+      # this assertion on that CI leg instead of enforcing it.
+      if ($IsWindows -ne $false) {
         $global:DotfilesTestUsedProcessMitigationStub | Should -Not -BeTrue
       }
     }
