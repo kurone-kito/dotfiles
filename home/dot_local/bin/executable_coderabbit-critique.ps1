@@ -282,6 +282,22 @@ function global:Test-DotfilesActionRequiredType {
   if (-not $typeProperty) {
     return $false
   }
+  # The property's VALUE must also be a string before comparing it,
+  # separately from the property-NAME lookup above: for an array-shaped
+  # value (e.g. `{"type":["action_required"]}`), PowerShell's `-ceq`
+  # performs an *element-wise* comparison when its left operand is a
+  # collection and returns the (non-empty, therefore truthy) matching
+  # subset rather than a single boolean -- so an unguarded
+  # `$typeProperty.Value -ceq 'action_required'` would wrongly return a
+  # truthy result here (confirmed empirically). `jq`'s `.type` on the
+  # shell twin has no equivalent gap: a non-string JSON value serializes
+  # to something that can never equal the bare literal `action_required`
+  # in the shell's plain string comparison, so this guard is what keeps
+  # the twins in lockstep for every non-string `type` value shape (array,
+  # number, boolean, or nested object), not just strings.
+  if ($typeProperty.Value -isnot [string]) {
+    return $false
+  }
   return ($typeProperty.Value -ceq 'action_required')
 }
 

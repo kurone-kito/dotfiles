@@ -387,6 +387,25 @@ Describe 'coderabbit-critique' {
       Test-DotfilesActionRequiredType -Text '{"Type":"action_required"}' |
         Should -BeFalse
     }
+
+    It 'returns $false for an array-valued top-level type property' {
+      # Regression guard (CodeRabbit review on this PR): PowerShell's
+      # `-ceq` performs an element-wise comparison when its left operand
+      # is a collection, so an unguarded comparison against
+      # `$typeProperty.Value` would return a truthy (non-empty) result
+      # for `{"type":["action_required"]}` even though the top-level
+      # `type` property is not itself the string `action_required`.
+      Test-DotfilesActionRequiredType -Text '{"type":["action_required"]}' |
+        Should -BeFalse
+    }
+
+    It 'returns $false for a number-valued top-level type property' {
+      Test-DotfilesActionRequiredType -Text '{"type":42}' | Should -BeFalse
+    }
+
+    It 'returns $false for a boolean-valued top-level type property' {
+      Test-DotfilesActionRequiredType -Text '{"type":true}' | Should -BeFalse
+    }
   }
 
   Context 'Invoke-DotfilesCoderabbitCritique (orchestration)' {
