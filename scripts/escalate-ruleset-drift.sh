@@ -169,8 +169,15 @@ build_drift_body() {
     # the same run), still render below unchanged either way. Leaving
     # `reason` empty keeps this function's output byte-identical to
     # before #317.
+    #
+    # Deliberately does NOT claim "not a drift finding": Check drift and
+    # Find open tracking issue can both fail in the same run (a real
+    # drift plus an infra hiccup looking up the tracking issue), in
+    # which case `missing`/`extra` below ARE populated -- asserting
+    # their absence here would misreport a real drift as if none
+    # occurred (flagged in PR #338 review).
     if [ -n "$reason" ]; then
-      echo "The scheduled ruleset drift guard failed due to an infrastructure error, not a required_status_checks drift finding: ${reason}"
+      echo "The scheduled ruleset drift guard encountered an infrastructure error: ${reason}"
     else
       echo "The scheduled ruleset drift guard detected that the \`master\` branch ruleset's \`required_status_checks\` rule has drifted from the expected context set."
     fi

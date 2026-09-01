@@ -181,6 +181,7 @@ jobs:
           TRACKING_ISSUE_NUMBER: ${{ steps.find-issue.outputs.number }}
           FETCH_OUTCOME: ${{ steps.fetch.outcome }}
           FIND_ISSUE_OUTCOME: ${{ steps.find-issue.outcome }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
         run: |
           set -euo pipefail
           # check-output.txt only exists when Check drift actually ran
@@ -208,6 +209,20 @@ jobs:
             else
               REASON="Find open tracking issue step failed"
             fi
+          fi
+          # Fallback for a THIRD failure shape (flagged in PR #338
+          # review): Check drift can itself fail for a reason other
+          # than a genuine drift/no-drift/zero-rule completion (e.g. an
+          # unexpected crash inside check-ruleset-drift.sh) -- its own
+          # controlled exit-1 paths always populate at least one of
+          # MISSING_CONTEXTS/EXTRA_CONTEXTS, so both staying empty here
+          # while the step still failed means it never reached one of
+          # those paths. Without this, REASON and MISSING/EXTRA would
+          # all be empty and the tracking issue would misreport an
+          # empty/false drift finding -- the same class of bug #317
+          # fixes for the other two steps.
+          if [ -z "$REASON" ] && [ -z "$MISSING" ] && [ -z "$EXTRA" ] && [ "$CHECK_OUTCOME" = "failure" ]; then
+            REASON="Check drift step failed without producing diagnostic output"
           fi
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           # NOTE: when Find open tracking issue itself failed,

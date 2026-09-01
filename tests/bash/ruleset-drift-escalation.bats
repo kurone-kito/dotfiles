@@ -145,11 +145,29 @@ setup() {
   assert_success
 
   run cat "$GH_BODY_LOG"
-  assert_output --partial 'infrastructure error, not a required_status_checks drift finding: Fetch ruleset rules step failed'
+  assert_output --partial 'infrastructure error: Fetch ruleset rules step failed'
   assert_output --partial 'https://example.test/run/4'
   refute_output --partial 'has drifted from the expected context set'
   refute_output --partial 'Missing context(s)'
   refute_output --partial 'Unexpected extra context(s)'
+}
+
+@test "escalate reports both the infra reason and a real drift diff when both occur in the same run" {
+  # PR #338 review (CodeRabbit): a prior wording ("...not a
+  # required_status_checks drift finding") was factually wrong in this
+  # exact combined case -- Check drift can find a real drift in the
+  # same run where Find open tracking issue also fails, so the body
+  # must never claim no drift was found while still listing one.
+  run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
+    --missing "lint" --extra "" \
+    --reason "Find open tracking issue step failed" \
+    --run-url "https://example.test/run/6"
+  assert_success
+
+  run cat "$GH_BODY_LOG"
+  assert_output --partial 'infrastructure error: Find open tracking issue step failed'
+  assert_output --partial 'Missing context(s): lint'
+  refute_output --partial 'not a required_status_checks drift finding'
 }
 
 @test "escalate keeps the drift wording and appends missing/extra lines when --reason is empty" {
