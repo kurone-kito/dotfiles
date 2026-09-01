@@ -17,7 +17,7 @@ it using the helper this repository ships.
 
 Commands run from Git Bash fail with `fork()` errors instead of
 completing. A representative failure looks like this (the process IDs,
-addresses, and Win32 error codes vary per machine and per run --the
+addresses, and Win32 error codes vary per machine and per run -- the
 `child_copy` / `dofork` function names and overall shape are the
 signal to recognize):
 
@@ -139,7 +139,7 @@ prints a warning when it detects that mandatory ASLR is enabled *and*
 `bash.exe` has no exemption:
 
 ```text
-Git Bash (bash.exe) has no per-image exemption from Windows mandatory ASLR (ForceRelocateImages) and every fork() call inside it will fail. Run & "$HOME\.local\bin\repair-git-bash-aslr.ps1" (elevated) to add the exemption.
+WARNING: Git Bash (bash.exe) has no per-image exemption from Windows mandatory ASLR (ForceRelocateImages) and every fork() call inside it will fail. Run & "$HOME\.local\bin\repair-git-bash-aslr.ps1" (elevated) to add the exemption.
 ```
 
 This script only **detects and warns** -- it never modifies any
