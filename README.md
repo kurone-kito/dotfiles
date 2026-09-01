@@ -376,6 +376,35 @@ manual `claude update` keeps working. The stronger `DISABLE_UPDATES`
 (which also blocks manual updates) is deliberately not used, so you can
 still update Claude Code by hand when needed.
 
+`home/dot_config/mise/config.toml`'s `npm:@anthropic-ai/claude-code`
+entry also sets `allow_builds = ["@anthropic-ai/claude-code"]`. mise's
+npm backend now installs through its embedded `aube` installer by
+default, which — unlike the npm CLI — does not run a dependency's
+lifecycle scripts unless the package is explicitly allow-listed.
+Without that opt-in, `@anthropic-ai/claude-code`'s `postinstall` never
+runs, so the platform-native `claude` binary is never placed over the
+placeholder `bin/claude.exe` the package ships, and `claude` cannot
+start at all.
+
+An install that predates this opt-in is stuck with that broken
+placeholder: `mise install` treats an already-installed version as
+done and does not rebuild it just because a tool option changed, so
+the broken install has to be removed and reinstalled explicitly:
+
+```bash
+mise uninstall "npm:@anthropic-ai/claude-code" --all
+mise install "npm:@anthropic-ai/claude-code"
+mise reshim
+```
+
+Run this once per existing machine after updating to a `config.toml`
+that carries the `allow_builds` opt-in. These double-quoted commands
+are also what you need on Windows: `cmd.exe` has no single-quote
+string syntax at all — it passes `'...'` through literally instead of
+stripping the quotes — so keep the double quotes exactly as shown on
+PowerShell and `cmd.exe` alike, rather than reflexively rewriting them
+to single quotes.
+
 ## Testing
 
 Platform-specific unit tests verify the profile generation scripts.
