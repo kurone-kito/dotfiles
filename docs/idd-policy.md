@@ -225,12 +225,12 @@ passes A3's ordinary readiness checks becomes a candidate, with no
 additional gate.
 
 `public-disabled` is the one `orphanFirstPolicy` value that actually
-skips A0-O outright, and only for public repositories (private/internal
-repositories behave the same as `none`) — since this repository is
-public, moving to `public-disabled` would be the change that disables
-the fallback here; moving to `maintainer-approved` instead adds an
-orphan-specific approval gate on top of the fallback that already runs
-under `none`.
+skips A0-O outright, for a public repository or when visibility cannot
+be determined (private/internal repositories behave the same as
+`none`) — since this repository is public, moving to `public-disabled`
+would be the change that disables the fallback here; moving to
+`maintainer-approved` instead adds an orphan-specific approval gate on
+top of the fallback that already runs under `none`.
 
 ## Worktree Guard
 
