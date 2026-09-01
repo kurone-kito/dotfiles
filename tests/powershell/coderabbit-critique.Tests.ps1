@@ -28,10 +28,25 @@ Describe 'coderabbit-critique' {
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
     Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
     Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
+    # Every diagnostic in Invoke-DotfilesCoderabbitCritique now goes through
+    # [Console]::Error.WriteLine rather than Write-Warning -- deliberately,
+    # so a non-interactive `pwsh -File` host can't reroute it onto real
+    # stdout (see the function's own comment). That also means it bypasses
+    # PowerShell's own stream redirection (`3>&1` below no longer captures
+    # anything), so the in-process orchestration tests below would
+    # otherwise print every diagnostic straight to this test run's real
+    # console/CI log. Swap in a throwaway StringWriter for the duration of
+    # each in-process test to keep that output out of the log; the
+    # "Full script as a real subprocess" contexts are unaffected, since
+    # they read a genuine child process's own redirected OS-level stderr,
+    # not this parent process's [Console]::Error.
+    $script:OriginalConsoleError = [Console]::Error
+    [Console]::SetError([System.IO.TextWriter]::Synchronized([System.IO.StringWriter]::new()))
     . $script:Subject
   }
 
   AfterEach {
+    [Console]::SetError($script:OriginalConsoleError)
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $script:OriginalSkip
     if ($null -eq $script:OriginalTimeout) {
       Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
@@ -560,11 +575,12 @@ Describe 'coderabbit-critique' {
       # the production code forwards it via [Console]::Error directly
       # (bypassing PowerShell's own streams entirely, precisely so a
       # non-interactive pwsh host can't silently reroute it onto real
-      # stdout the way Write-Warning does -- see the code comment at the
-      # call site). That real-fd-level forwarding is covered instead by
-      # the Unix-only "Full script as a real subprocess" context below,
-      # which spawns a genuine OS process and reads its actual redirected
-      # stderr handle; on Windows this specific forwarding path is
+      # stdout the way Write-Warning used to -- see the comment at the top
+      # of Invoke-DotfilesCoderabbitCritique). That real-fd-level
+      # forwarding is covered instead by the Unix-only "Full script as a
+      # real subprocess" context below, which spawns a genuine OS process
+      # and reads its actual redirected stderr handle; on Windows this
+      # specific forwarding path is
       # exercised only up to this mock boundary (see that context's own
       # comment for why a Windows-real-process equivalent isn't safe to
       # add here).
@@ -665,6 +681,233 @@ Describe 'coderabbit-critique' {
       $stdoutText | Should -Match 'STDOUT_MARKER_TEXT'
       $stdoutText | Should -Not -Match 'STDERR_MARKER_TEXT'
       $stderrText | Should -Match 'STDERR_MARKER_TEXT'
+    }
+  }
+
+  Context 'Full script as a real subprocess (diagnostic-to-stderr scenarios, Unix pwsh)' -Skip:($IsWindows -ne $false) {
+    # Same rationale and Unix-only constraint as the "Full script as a real
+    # subprocess" context above: only a genuine child process, run under
+    # `pwsh -File`'s actual host routing, can prove a diagnostic never
+    # leaks onto real stdout -- the in-process dot-sourced mocks every
+    # other test in this file uses cannot reproduce that host quirk. This
+    # context drives one configurable fake `coderabbit` fixture (behavior
+    # selected via environment variables) through each of the 6 scenarios
+    # that used to call `Write-Warning` before this issue's fix converted
+    # them to `[Console]::Error.WriteLine`, instead of one fixture file
+    # per scenario.
+    BeforeAll {
+      # Spawns $script:Subject as a real subprocess with an isolated,
+      # scenario-specific environment, and returns its captured
+      # ExitCode/Stdout/Stderr. Always clears
+      # DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN/CODERABBIT_CRITIQUE_BASE/
+      # CODERABBIT_CRITIQUE_TIMEOUT first -- the outer file-level BeforeEach
+      # sets the SKIP_MAIN one for every in-process test in this file, but
+      # this child process must not inherit it, or its own top-level
+      # exit-guarded block (the only place that produces real process
+      # output) never runs -- then applies $EnvironmentOverrides on top.
+      function script:Invoke-DotfilesSubjectAsSubprocess {
+        param([hashtable] $EnvironmentOverrides = @{})
+
+        # The fake coderabbit fixture's own scenario-selector variables --
+        # cleared unconditionally before every run (not just restored to
+        # their prior value like the three named ones below) so a variable
+        # set by one scenario's $EnvironmentOverrides can never leak into
+        # the next scenario's run.
+        $fakeVarNames = @(
+          'FAKE_AUTH_SIGNED_OUT', 'FAKE_REVIEW_SLEEP', 'FAKE_REVIEW_STDOUT',
+          'FAKE_REVIEW_STDERR', 'FAKE_REVIEW_EXIT'
+        )
+
+        $originalPath = $env:PATH
+        $originalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
+        $originalBase = $env:CODERABBIT_CRITIQUE_BASE
+        $originalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
+        try {
+          Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
+          Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
+          Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
+          foreach ($name in $fakeVarNames) {
+            Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
+          }
+          foreach ($key in $EnvironmentOverrides.Keys) {
+            Set-Item -Path "Env:\$key" -Value $EnvironmentOverrides[$key]
+          }
+
+          $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+          $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+            -ArgumentList @('-NoProfile', '-File', $script:Subject)
+          $psi.WorkingDirectory = $TestDrive
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.CreateNoWindow = $true
+          $proc = [Diagnostics.Process]::Start($psi)
+          try {
+            $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+            $stderrTask = $proc.StandardError.ReadToEndAsync()
+            # A hard bound, well above every scenario's own expected runtime
+            # (including the timeout scenario's own 1s CODERABBIT_CRITIQUE_TIMEOUT
+            # bound): if the subject script itself regressed into a real hang,
+            # this fails just this one test instead of hanging the entire
+            # Pester run indefinitely.
+            if (-not $proc.WaitForExit(60000)) {
+              try { $proc.Kill() } catch [System.Exception] {}
+              throw 'Invoke-DotfilesSubjectAsSubprocess: subject process did not exit within 60s -- killed'
+            }
+            return [pscustomobject]@{
+              ExitCode = $proc.ExitCode
+              Stdout   = $stdoutTask.GetAwaiter().GetResult()
+              Stderr   = $stderrTask.GetAwaiter().GetResult()
+            }
+          } finally {
+            $proc.Dispose()
+          }
+        } finally {
+          $env:PATH = $originalPath
+          # $null checks, not truthiness -- matching the outer AfterEach's
+          # own pattern below. A truthy check (`if ($original...)`) would
+          # treat a captured empty string the same as unset and skip
+          # restoring it, silently changing the environment from what the
+          # test actually started with.
+          if ($null -eq $originalSkip) {
+            Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
+          } else {
+            $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $originalSkip
+          }
+          if ($null -eq $originalBase) {
+            Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
+          } else {
+            $env:CODERABBIT_CRITIQUE_BASE = $originalBase
+          }
+          if ($null -eq $originalTimeout) {
+            Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
+          } else {
+            $env:CODERABBIT_CRITIQUE_TIMEOUT = $originalTimeout
+          }
+          foreach ($name in $fakeVarNames) {
+            Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
+          }
+        }
+      }
+    }
+
+    BeforeEach {
+      # A single fixture covers scenarios 2, 4, 5, and 6 below (auth,
+      # timeout, non-zero exit, action_required) by branching on env vars
+      # the test sets before each subprocess run; scenario 1 (not found)
+      # and 3 (base branch unresolved) rely on this fixture's *absence*
+      # from PATH instead (or, for 3, `git`'s absence -- see that test).
+      $script:FakeBinDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:FakeBinDir -Force | Out-Null
+      $script:FakeCoderabbitPath = Join-Path $script:FakeBinDir 'coderabbit'
+      $content = @'
+#!/bin/sh
+if [ "$1" = auth ] && [ "$2" = status ]; then
+  if [ -n "$FAKE_AUTH_SIGNED_OUT" ]; then
+    echo "Status       : signed out"
+  else
+    echo "Account: fake-user"
+  fi
+  exit 0
+fi
+if [ -n "$FAKE_REVIEW_SLEEP" ]; then
+  sleep "$FAKE_REVIEW_SLEEP"
+fi
+if [ -n "$FAKE_REVIEW_STDOUT" ]; then
+  printf '%s' "$FAKE_REVIEW_STDOUT"
+fi
+if [ -n "$FAKE_REVIEW_STDERR" ]; then
+  printf '%s' "$FAKE_REVIEW_STDERR" >&2
+fi
+exit "${FAKE_REVIEW_EXIT:-0}"
+'@
+      [System.IO.File]::WriteAllText($script:FakeCoderabbitPath, $content, [System.Text.ASCIIEncoding]::new())
+      & chmod +x $script:FakeCoderabbitPath
+
+      # An isolated, empty directory: guarantees no real `coderabbit` (or
+      # `git`, for scenario 3) can be found on PATH regardless of what the
+      # host running these tests happens to have installed.
+      $script:EmptyBinDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:EmptyBinDir -Force | Out-Null
+    }
+
+    It 'produces no stdout when coderabbit is not found in PATH' {
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH = $script:EmptyBinDir
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit not found in PATH'
+    }
+
+    It 'produces no stdout when coderabbit is not authenticated' {
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                 = $script:FakeBinDir
+        FAKE_AUTH_SIGNED_OUT = '1'
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit is not authenticated'
+    }
+
+    It 'produces no stdout when the base branch cannot be resolved' {
+      # No `git` on PATH (the fake bin dir holds only `coderabbit`) and no
+      # CODERABBIT_CRITIQUE_BASE override: Get-Command git returns $null
+      # inside Resolve-DotfilesCoderabbitBaseBranch, so this fails
+      # deterministically regardless of the real host's own git/branch
+      # state.
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH = $script:FakeBinDir
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'could not determine the default base branch'
+    }
+
+    It 'produces no stdout when the review times out' {
+      # Unlike the other scenarios, the fake fixture's own `sleep` call
+      # needs a real `sleep` binary resolvable on PATH, so this one
+      # prepends the fixture dir to the real PATH instead of isolating it
+      # -- real `git` being reachable is harmless here since
+      # CODERABBIT_CRITIQUE_BASE is set explicitly, short-circuiting any
+      # git lookup.
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                        = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
+        CODERABBIT_CRITIQUE_BASE    = 'master'
+        CODERABBIT_CRITIQUE_TIMEOUT = '1'
+        FAKE_REVIEW_SLEEP           = '10'
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit review timed out after 1s'
+    }
+
+    It 'produces no stdout when the review exits non-zero' {
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        CODERABBIT_CRITIQUE_BASE = 'master'
+        FAKE_REVIEW_EXIT         = '7'
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit review failed \(exit 7\)'
+    }
+
+    It 'produces no stdout when the review reports action_required' {
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        CODERABBIT_CRITIQUE_BASE = 'master'
+        FAKE_REVIEW_STDOUT       = '{"type":"action_required","phase":"billing"}'
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit review requires operator action'
     }
   }
 
