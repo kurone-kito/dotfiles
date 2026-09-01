@@ -83,9 +83,15 @@ exemption from that system-wide policy:
 Get-ProcessMitigation -Name bash.exe
 ```
 
-Look at `ASLR.ForceRelocateImages` here too: `OFF` means `bash.exe` is
-exempted (fork should work); `ON`, or the same value as the
-system-wide check, means it is not.
+Look at `ASLR.ForceRelocateImages` here too. Three values are possible:
+
+- `OFF` -- `bash.exe` is exempted; fork should work.
+- `ON` -- explicitly not exempted.
+- `NOTSET` -- no per-image override exists, so `bash.exe` **inherits**
+  the system-wide policy. When the system-wide check above reports
+  `ON`, a per-image `NOTSET` means `bash.exe` is *not* exempted, just
+  like an explicit `ON`. Only `OFF` confirms the exemption; `ON` and
+  `NOTSET` both mean fork will still fail.
 
 ### `OverrideForceRelocateImages` is not the signal to read
 
@@ -131,6 +137,15 @@ most people notice failing first -- but the repair itself covers the
 whole `usr\bin` toolchain in one pass, since every MSYS binary in that
 directory has the identical `fork()` limitation.
 
+### Restart Git Bash after repairing
+
+Windows reads a process's mitigation policy when that process starts;
+it does not apply retroactively to already-running instances. **Close
+every open Git Bash window and start a new one** before retesting --
+an existing session launched before the repair keeps its old,
+non-exempt mitigation state for its own lifetime, even though the
+registry has already been updated.
+
 ### The `chezmoi apply` warning
 
 This repository also ships a `chezmoi apply`-time check
@@ -164,9 +179,12 @@ solved.
 Windows process mitigation policy is keyed by **image name**, not by
 full path. This has two consequences worth knowing:
 
-- Git for Windows' own `bin\bash.exe` is a junction to `usr\bin\bash.exe`,
-  so exempting the name `bash.exe` covers both locations without extra
-  work.
+- Git for Windows' own `bin\bash.exe` is a wrapper that sets
+  environment variables (`MSYSTEM`, `PATH`) and then launches
+  `usr\bin\bash.exe` -- not a junction or hard link. Since both files
+  share the same image name (`bash.exe`), exempting that name covers
+  both locations without extra work regardless of which one a caller
+  invokes.
 - Any other process on the machine that happens to share a name with
   an exempted binary (for example, a different `perl.exe` install) is
   exempted too, since the policy has no way to distinguish which
@@ -179,10 +197,20 @@ full path. This has two consequences worth knowing:
 The per-image exemption is stored in the registry (`HKLM`'s Image File
 Execution Options) and keyed by binary name, not tied to a specific
 Git for Windows version or install path. Upgrading Git for Windows in
-place does not need the helper re-run. **Reinstalling Windows does**
-lose it, since that registry hive is part of the OS install, not part
-of Git's own files -- a freshly provisioned host needs the repair
-helper run once, after Git for Windows is installed.
+place does not remove an **existing** exemption. **Reinstalling
+Windows does** lose it, since that registry hive is part of the OS
+install, not part of Git's own files -- a freshly provisioned host
+needs the repair helper run once, after Git for Windows is installed.
+
+**Rerun the helper after an upgrade that adds a new `usr\bin`
+executable.** The repair helper only exempts the `*.exe` files present
+under `usr\bin` at the moment it runs; it has no way to know about a
+binary that does not exist yet. If a later in-place Git for Windows
+upgrade adds a new MSYS executable name that was not present before,
+that new binary starts with no exemption, and the `chezmoi apply`
+warning above would not catch it either, since it only checks
+`bash.exe`. Re-running the repair helper after any Git for Windows
+upgrade is the safest way to pick up newly added executables.
 
 ## See also
 
