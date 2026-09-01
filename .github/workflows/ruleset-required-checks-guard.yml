@@ -97,6 +97,15 @@ jobs:
           persist-credentials: false
 
       - name: Fetch ruleset rules
+        id: fetch
+        # continue-on-error, same as Check drift below: a `gh api`
+        # hiccup here must not silently skip the escalation path via
+        # the implicit success() GitHub Actions adds to a step's
+        # default (absent) `if:` -- see the "escalate/fail on any
+        # checked step" comment below for the actual load-bearing
+        # mechanism (explicit always() + direct outcome checks); this
+        # keeps all three checked steps' own status reporting uniform.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -111,6 +120,15 @@ jobs:
 
       - name: Check drift
         id: check
+        # Only run when Fetch ruleset rules actually succeeded: without
+        # this, a rules.json-fetch failure would still let this step
+        # attempt to read a missing/stale rules.json, failing for an
+        # unrelated ("no such file") reason that would be misreported
+        # as a drift-check failure. Skipping cleanly here keeps failure
+        # attribution unambiguous for the Escalate/Fail steps below,
+        # which read steps.fetch.outcome and steps.check.outcome
+        # separately.
+        if: steps.fetch.outcome == 'success'
         continue-on-error: true
         run: |
           # GitHub Actions' default bash `run:` shell already runs with
@@ -130,6 +148,12 @@ jobs:
       - name: Find open tracking issue
         id: find-issue
         if: always()
+        # continue-on-error for the same reason as Fetch ruleset rules
+        # above: keeps this checked step's own status reporting
+        # uniform with the other two. The actual escalation/job-failure
+        # mechanism below does not depend on it (it already uses
+        # explicit always() + direct outcome checks).
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -139,24 +163,79 @@ jobs:
           echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Escalate on failure
-        if: steps.check.outcome == 'failure'
+        # Explicit always() + direct per-step outcome checks, not a
+        # bare `if:` relying on the implicit success() GitHub Actions
+        # adds to it -- this is what actually reaches this step for
+        # ANY of the three checked steps' failures (Fetch ruleset
+        # rules, Check drift, Find open tracking issue), not only a
+        # real drift finding. See #317 for the incident this closes:
+        # an infra failure in either of the first two steps used to
+        # leave a red X with no escalation at all.
+        if: >-
+          always() &&
+          (steps.fetch.outcome == 'failure' ||
+           steps.check.outcome == 'failure' ||
+           steps.find-issue.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
           TRACKING_ISSUE_NUMBER: ${{ steps.find-issue.outputs.number }}
+          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
+          FIND_ISSUE_OUTCOME: ${{ steps.find-issue.outcome }}
         run: |
           set -euo pipefail
-          MISSING=$(sed -n 's/^MISSING_CONTEXTS=//p' check-output.txt)
-          EXTRA=$(sed -n 's/^EXTRA_CONTEXTS=//p' check-output.txt)
+          # check-output.txt only exists when Check drift actually ran
+          # (it is skipped when Fetch ruleset rules failed) -- guard the
+          # read and default both vars to empty so referencing them
+          # below never trips this step's own `set -u`.
+          MISSING=""
+          EXTRA=""
+          if [ -f check-output.txt ]; then
+            MISSING=$(sed -n 's/^MISSING_CONTEXTS=//p' check-output.txt)
+            EXTRA=$(sed -n 's/^EXTRA_CONTEXTS=//p' check-output.txt)
+          fi
+          # Distinguish an infra failure (this workflow's own steps
+          # misbehaving) from a genuine drift finding, so the tracking
+          # issue names the actual failure instead of an empty diff.
+          # Left empty when neither of these two steps failed, i.e. a
+          # drift-only escalation -- unchanged from before this issue.
+          REASON=""
+          if [ "$FETCH_OUTCOME" = "failure" ]; then
+            REASON="Fetch ruleset rules step failed"
+          fi
+          if [ "$FIND_ISSUE_OUTCOME" = "failure" ]; then
+            if [ -n "$REASON" ]; then
+              REASON="${REASON}; Find open tracking issue step failed"
+            else
+              REASON="Find open tracking issue step failed"
+            fi
+          fi
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # NOTE: when Find open tracking issue itself failed,
+          # TRACKING_ISSUE_NUMBER is unknown/empty, so this may create a
+          # new tracking issue even if one is already open for a real
+          # drift -- a possible duplicate in that rare combined-failure
+          # case. Accepted trade-off: still escalating the infra
+          # failure is more valuable than silently skipping it, and
+          # de-duplication would need find-issue to have succeeded in
+          # the first place.
           bash scripts/escalate-ruleset-drift.sh escalate \
             --title "$TRACKING_ISSUE_TITLE" \
             --issue "$TRACKING_ISSUE_NUMBER" \
             --missing "$MISSING" \
             --extra "$EXTRA" \
+            --reason "$REASON" \
             --run-url "$RUN_URL" \
             --repo "$GITHUB_REPOSITORY"
 
       - name: Recover on success
+        # Unchanged by #317: steps.check.outcome can only be 'success'
+        # when Fetch ruleset rules also succeeded (Check drift's new
+        # `if:` above gates on that), so this condition still only
+        # fires on a genuinely clean run. Note this will also close an
+        # open tracking issue that was opened for a prior *infra*
+        # failure, with this same "ruleset matches again" wording --
+        # behaviorally correct (the check does pass now) even though
+        # the original escalation may not have been a drift finding.
         if: steps.check.outcome == 'success' && steps.find-issue.outputs.number != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,6 +248,17 @@ jobs:
             --run-url "$RUN_URL" \
             --repo "$GITHUB_REPOSITORY"
 
-      - name: Fail the job on drift
-        if: steps.check.outcome == 'failure'
+      - name: Fail the job on any check failure
+        # Renamed from "Fail the job on drift": broadened, same as
+        # Escalate on failure above, so the job still surfaces a red X
+        # for every failure class this workflow can hit (a Fetch
+        # ruleset rules or Find open tracking issue infra failure, not
+        # only a genuine drift finding) -- continue-on-error on those
+        # two steps above would otherwise silently remove their
+        # automatic job-failing behavior.
+        if: >-
+          always() &&
+          (steps.fetch.outcome == 'failure' ||
+           steps.check.outcome == 'failure' ||
+           steps.find-issue.outcome == 'failure')
         run: exit 1
