@@ -55,7 +55,14 @@ function Test-DotfilesGitBashForceRelocateImagesExempt {
   } catch {
     return $null
   }
-  if (-not $imageMitigation -or -not $imageMitigation.ASLR) {
+  if (-not $imageMitigation -or -not $imageMitigation.ASLR -or $null -eq $imageMitigation.ASLR.ForceRelocateImages) {
+    # The extra explicit ForceRelocateImages-null check (absent from the
+    # system-wide function above) matters only here: on the system-wide
+    # side, a missing value already resolves to $null -eq 'ON' -> $false
+    # -> silent, the safe direction. Here, "silent" is $true, and
+    # comparing a missing value with -eq 'OFF' would otherwise resolve
+    # to $false ("not exempt") -- the unsafe direction -- so this shape
+    # is called out explicitly instead of relying on the same coercion.
     return $null
   }
   return $imageMitigation.ASLR.ForceRelocateImages -eq 'OFF'

@@ -200,6 +200,27 @@ Describe '85-warn-git-bash-aslr' -Skip:($IsWindows -eq $false) {
       $result | Should -Be 0
       $warnings | Should -BeNullOrEmpty
     }
+
+    It 'returns 0 and writes no warning when the per-image ASLR object has no ForceRelocateImages value' {
+      # Narrower than the "no ASLR property" case above: the ASLR
+      # sub-object is present, but its ForceRelocateImages field itself
+      # is null/missing. On the per-image side, "exempt" is $true, so a
+      # careless -eq 'OFF' comparison against a missing value would
+      # resolve to $false ("not exempt") and warn -- the unsafe
+      # direction. This must stay silent like every other unreadable
+      # shape.
+      Mock Get-ProcessMitigation { New-MitigationReport -ForceRelocateImages 'ON' } -ParameterFilter {
+        $System -eq $true
+      }
+      Mock Get-ProcessMitigation { [pscustomobject]@{ ASLR = [pscustomobject]@{} } } -ParameterFilter {
+        $Name -eq 'bash.exe'
+      }
+
+      $result = Invoke-DotfilesWarnGitBashAslr -WarningVariable warnings -WarningAction SilentlyContinue
+
+      $result | Should -Be 0
+      $warnings | Should -BeNullOrEmpty
+    }
   }
 }
 
