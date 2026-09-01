@@ -684,7 +684,7 @@ Describe 'coderabbit-critique' {
     }
   }
 
-  Context 'Full script as a real subprocess (Write-Warning-to-stderr scenarios, Unix pwsh)' -Skip:($IsWindows -ne $false) {
+  Context 'Full script as a real subprocess (diagnostic-to-stderr scenarios, Unix pwsh)' -Skip:($IsWindows -ne $false) {
     # Same rationale and Unix-only constraint as the "Full script as a real
     # subprocess" context above: only a genuine child process, run under
     # `pwsh -File`'s actual host routing, can prove a diagnostic never
@@ -692,8 +692,9 @@ Describe 'coderabbit-critique' {
     # other test in this file uses cannot reproduce that host quirk. This
     # context drives one configurable fake `coderabbit` fixture (behavior
     # selected via environment variables) through each of the 6 scenarios
-    # that used to call `Write-Warning`, instead of one fixture file per
-    # scenario.
+    # that used to call `Write-Warning` before this issue's fix converted
+    # them to `[Console]::Error.WriteLine`, instead of one fixture file
+    # per scenario.
     BeforeAll {
       # Spawns $script:Subject as a real subprocess with an isolated,
       # scenario-specific environment, and returns its captured
@@ -751,18 +752,25 @@ Describe 'coderabbit-critique' {
           }
         } finally {
           $env:PATH = $originalPath
-          if ($originalSkip) {
+          # $null checks, not truthiness -- matching the outer AfterEach's
+          # own pattern below. A truthy check (`if ($original...)`) would
+          # treat a captured empty string the same as unset and skip
+          # restoring it, silently changing the environment from what the
+          # test actually started with.
+          if ($null -eq $originalSkip) {
+            Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
+          } else {
             $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $originalSkip
           }
-          if ($originalBase) {
-            $env:CODERABBIT_CRITIQUE_BASE = $originalBase
-          } else {
+          if ($null -eq $originalBase) {
             Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
-          }
-          if ($originalTimeout) {
-            $env:CODERABBIT_CRITIQUE_TIMEOUT = $originalTimeout
           } else {
+            $env:CODERABBIT_CRITIQUE_BASE = $originalBase
+          }
+          if ($null -eq $originalTimeout) {
             Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
+          } else {
+            $env:CODERABBIT_CRITIQUE_TIMEOUT = $originalTimeout
           }
           foreach ($name in $fakeVarNames) {
             Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
