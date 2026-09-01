@@ -398,12 +398,13 @@ mise reshim
 ```
 
 Run this once per existing machine after updating to a `config.toml`
-that carries the `allow_builds` opt-in. These double-quoted commands
-are also what you need on Windows: `cmd.exe` has no single-quote
-string syntax at all — it passes `'...'` through literally instead of
-stripping the quotes — so keep the double quotes exactly as shown on
-PowerShell and `cmd.exe` alike, rather than reflexively rewriting them
-to single quotes.
+that carries the `allow_builds` opt-in. On Windows, `cmd.exe` requires
+the double-quoted form exactly as shown — it has no single-quote
+string syntax at all and passes `'...'` through literally instead of
+stripping the quotes, breaking the command. PowerShell tolerates
+either quote style here, but keep the double quotes anyway so these
+commands stay copy-paste-safe across bash, PowerShell, and `cmd.exe`
+alike.
 
 ## Testing
 
