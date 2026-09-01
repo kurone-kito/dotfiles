@@ -211,13 +211,26 @@ for the readiness buckets, output chooser, and approval boundary.
 roadmap #144).
 
 `roadmap-first`'s upstream-documented semantics prefer roadmap-linked
-candidates and fall back to orphan discovery (A0-O) when none are
-ready — but this repository's **`orphanFirstPolicy`** stays `none`
-(distributed default), which disables the orphan fallback path
-outright. In this repository, no orphan-discovery fallback runs;
-`roadmap-first` behaves identically to `roadmap` until
-`orphanFirstPolicy` is deliberately loosened to
-`maintainer-approved` or `public-disabled`.
+candidates and fall back to orphan discovery (A0-O) when the roadmap
+path yields no viable candidate. This repository's
+**`orphanFirstPolicy`** stays `none` (the distributed default), which
+does **not** disable that fallback: per
+`.github/instructions/idd-discover.instructions.md`'s A0-O section,
+both `none` and `maintainer-approved` continue with A0-O — `none` only
+means A0-O applies no extra approval gate before passing candidates to
+A3.5 (the gate that `maintainer-approved` adds instead). In this
+repository, when the roadmap path yields no viable, startable,
+unclaimed candidate, A0-O runs and every discovered orphan issue that
+passes A3's ordinary readiness checks becomes a candidate, with no
+additional gate.
+
+`public-disabled` is the one `orphanFirstPolicy` value that actually
+skips A0-O outright, for a public repository or when visibility cannot
+be determined (private/internal repositories behave the same as
+`none`) — since this repository is public, moving to `public-disabled`
+would be the change that disables the fallback here; moving to
+`maintainer-approved` instead adds an orphan-specific approval gate on
+top of the fallback that already runs under `none`.
 
 ## Worktree Guard
 
