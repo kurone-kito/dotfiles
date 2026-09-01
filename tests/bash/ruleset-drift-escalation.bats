@@ -134,6 +134,38 @@ setup() {
   refute_output --partial 'Missing context(s)'
 }
 
+@test "escalate reports an infrastructure-failure reason instead of a drift diff when --reason is given" {
+  # #317: a failure in the caller's own ruleset-fetch or tracking-issue-
+  # lookup step must be escalated too, distinguishably from a genuine
+  # required_status_checks drift finding -- not silently skipped, and
+  # not misreported as an empty drift diff.
+  run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
+    --missing "" --extra "" --reason "Fetch ruleset rules step failed" \
+    --run-url "https://example.test/run/4"
+  assert_success
+
+  run cat "$GH_BODY_LOG"
+  assert_output --partial 'infrastructure error, not a required_status_checks drift finding: Fetch ruleset rules step failed'
+  assert_output --partial 'https://example.test/run/4'
+  refute_output --partial 'has drifted from the expected context set'
+  refute_output --partial 'Missing context(s)'
+  refute_output --partial 'Unexpected extra context(s)'
+}
+
+@test "escalate keeps the drift wording and appends missing/extra lines when --reason is empty" {
+  # Omitting --reason (the default) must render byte-identical to the
+  # pre-#317 drift-only body -- existing callers/behavior are
+  # unaffected by the new optional flag.
+  run bash "$SCRIPT" escalate --title "$TRACKING_TITLE" --issue "" \
+    --missing "lint" --extra "" --run-url "https://example.test/run/5"
+  assert_success
+
+  run cat "$GH_BODY_LOG"
+  assert_output --partial 'has drifted from the expected context set'
+  assert_output --partial 'Missing context(s): lint'
+  refute_output --partial 'infrastructure error'
+}
+
 @test "recover closes the tracking issue with an explanatory comment" {
   run bash "$SCRIPT" recover --issue 42 --run-url "https://example.test/run/3"
   assert_success

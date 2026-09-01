@@ -15,7 +15,14 @@
 #
 #   scripts/escalate-ruleset-drift.sh escalate --title <title> \
 #     --issue <number-or-empty> --missing <csv-or-empty> \
-#     --extra <csv-or-empty> --run-url <url> [--repo <owner/repo>]
+#     --extra <csv-or-empty> --run-url <url> [--reason <text>] \
+#     [--repo <owner/repo>]
+#
+# `--reason` is optional and empty by default; pass it to report an
+# infrastructure failure (e.g. the caller's own ruleset-fetch or
+# tracking-issue-lookup step failing) instead of, or alongside, a
+# required_status_checks drift diff -- see build_drift_body below. Omit
+# it (or pass an empty string) for the original drift-only body.
 #
 #   scripts/escalate-ruleset-drift.sh recover --issue <number> \
 #     --run-url <url> [--repo <owner/repo>]
@@ -150,9 +157,23 @@ ensure_label_exists() {
 }
 
 build_drift_body() {
-  local missing="$1" extra="$2" run_url="$3"
+  local missing="$1" extra="$2" run_url="$3" reason="${4:-}"
   {
-    echo "The scheduled ruleset drift guard detected that the \`master\` branch ruleset's \`required_status_checks\` rule has drifted from the expected context set."
+    # `reason`, when non-empty, means the caller hit an infrastructure
+    # failure (its own ruleset-fetch or tracking-issue-lookup step
+    # failing) rather than -- or in addition to -- a genuine
+    # required_status_checks drift finding (#317). Swap the opening
+    # sentence to name that explicitly so the tracking issue doesn't
+    # read as an empty/false drift report; `missing`/`extra`, if also
+    # non-empty (both an infra failure and a real drift can occur in
+    # the same run), still render below unchanged either way. Leaving
+    # `reason` empty keeps this function's output byte-identical to
+    # before #317.
+    if [ -n "$reason" ]; then
+      echo "The scheduled ruleset drift guard failed due to an infrastructure error, not a required_status_checks drift finding: ${reason}"
+    else
+      echo "The scheduled ruleset drift guard detected that the \`master\` branch ruleset's \`required_status_checks\` rule has drifted from the expected context set."
+    fi
     echo
     if [ -n "$missing" ]; then
       echo "- Missing context(s): ${missing}"
@@ -179,7 +200,7 @@ build_recovery_body() {
 # given issue instead when one is already open, so repeated daily
 # failures never spam a second issue.
 cmd_escalate() {
-  local title="" issue="" missing="" extra="" run_url="" repo=""
+  local title="" issue="" missing="" extra="" run_url="" repo="" reason=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --title) title="$2"; shift 2 ;;
@@ -187,6 +208,7 @@ cmd_escalate() {
       --missing) missing="$2"; shift 2 ;;
       --extra) extra="$2"; shift 2 ;;
       --run-url) run_url="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
       --repo) repo="$2"; shift 2 ;;
       *) die "unknown argument: $1" ;;
     esac
@@ -195,7 +217,7 @@ cmd_escalate() {
   run_url="$(require_arg run-url "$run_url")"
 
   local body
-  body="$(build_drift_body "$missing" "$extra" "$run_url")"
+  body="$(build_drift_body "$missing" "$extra" "$run_url" "$reason")"
 
   if [ -z "$issue" ]; then
     ensure_label_exists "$TRACKING_LABEL" "$repo"
