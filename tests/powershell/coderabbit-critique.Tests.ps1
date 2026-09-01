@@ -28,10 +28,25 @@ Describe 'coderabbit-critique' {
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
     Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
     Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
+    # Every diagnostic in Invoke-DotfilesCoderabbitCritique now goes through
+    # [Console]::Error.WriteLine rather than Write-Warning -- deliberately,
+    # so a non-interactive `pwsh -File` host can't reroute it onto real
+    # stdout (see the function's own comment). That also means it bypasses
+    # PowerShell's own stream redirection (`3>&1` below no longer captures
+    # anything), so the in-process orchestration tests below would
+    # otherwise print every diagnostic straight to this test run's real
+    # console/CI log. Swap in a throwaway StringWriter for the duration of
+    # each in-process test to keep that output out of the log; the
+    # "Full script as a real subprocess" contexts are unaffected, since
+    # they read a genuine child process's own redirected OS-level stderr,
+    # not this parent process's [Console]::Error.
+    $script:OriginalConsoleError = [Console]::Error
+    [Console]::SetError([System.IO.TextWriter]::Synchronized([System.IO.StringWriter]::new()))
     . $script:Subject
   }
 
   AfterEach {
+    [Console]::SetError($script:OriginalConsoleError)
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $script:OriginalSkip
     if ($null -eq $script:OriginalTimeout) {
       Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
@@ -560,11 +575,12 @@ Describe 'coderabbit-critique' {
       # the production code forwards it via [Console]::Error directly
       # (bypassing PowerShell's own streams entirely, precisely so a
       # non-interactive pwsh host can't silently reroute it onto real
-      # stdout the way Write-Warning does -- see the code comment at the
-      # call site). That real-fd-level forwarding is covered instead by
-      # the Unix-only "Full script as a real subprocess" context below,
-      # which spawns a genuine OS process and reads its actual redirected
-      # stderr handle; on Windows this specific forwarding path is
+      # stdout the way Write-Warning used to -- see the comment at the top
+      # of Invoke-DotfilesCoderabbitCritique). That real-fd-level
+      # forwarding is covered instead by the Unix-only "Full script as a
+      # real subprocess" context below, which spawns a genuine OS process
+      # and reads its actual redirected stderr handle; on Windows this
+      # specific forwarding path is
       # exercised only up to this mock boundary (see that context's own
       # comment for why a Windows-real-process equivalent isn't safe to
       # add here).
