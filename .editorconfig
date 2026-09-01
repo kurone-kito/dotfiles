@@ -13,3 +13,7 @@ indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
+
+[home/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/*]
+indent_size = 4
+trim_trailing_whitespace = false
