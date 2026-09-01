@@ -53,6 +53,7 @@ Describe 'coderabbit-critique' {
       'ConvertTo-DotfilesQuotedArgumentString'
       'Start-DotfilesProcessWithTimeout'
       'Invoke-DotfilesCoderabbitReviewWithTimeout'
+      'Test-DotfilesActionRequiredType'
       'Invoke-DotfilesCoderabbitCritique'
       'script:coderabbit'
       'script:git'
@@ -330,6 +331,64 @@ Describe 'coderabbit-critique' {
     }
   }
 
+  Context 'Test-DotfilesActionRequiredType' {
+    It 'returns $false for an empty string' {
+      Test-DotfilesActionRequiredType -Text '' | Should -BeFalse
+    }
+
+    It 'returns $false for non-JSON text' {
+      Test-DotfilesActionRequiredType -Text 'diagnostic noise on stderr' |
+        Should -BeFalse
+    }
+
+    It 'returns $true for a compact top-level action_required object' {
+      Test-DotfilesActionRequiredType `
+        -Text '{"type":"action_required","phase":"billing"}' | Should -BeTrue
+    }
+
+    It 'returns $true for a pretty-printed action_required object with whitespace around the marker' {
+      $text = "{`n  `"type`" : `"action_required`",`n  `"phase`": `"billing`"`n}"
+      Test-DotfilesActionRequiredType -Text $text | Should -BeTrue
+    }
+
+    It 'returns $false for a top-level finding, even with a nested action_required type field' {
+      $text = '{"type":"finding","message":"example",' +
+        '"example":{"type":"action_required","phase":"billing"}}'
+      Test-DotfilesActionRequiredType -Text $text | Should -BeFalse
+    }
+
+    It 'returns $false when the top-level type does not case-sensitively match' {
+      Test-DotfilesActionRequiredType -Text '{"type":"Action_Required"}' |
+        Should -BeFalse
+    }
+
+    It 'returns $false for a single-element top-level array wrapping an action_required object' {
+      # Regression guard: ConvertFrom-Json's pipeline output silently
+      # unwraps a single-element array into a bare object on assignment,
+      # so a naive `-is [pscustomobject]` check on the *parsed* result
+      # alone would wrongly treat this the same as a genuine top-level
+      # object (see the function's own comment).
+      Test-DotfilesActionRequiredType `
+        -Text '[{"type":"action_required","reason":"a"}]' | Should -BeFalse
+    }
+
+    It 'returns $false for a multi-element top-level array containing an action_required object' {
+      Test-DotfilesActionRequiredType `
+        -Text '[{"type":"action_required"},{"type":"finding"}]' |
+        Should -BeFalse
+    }
+
+    It 'returns $false when the top-level key differs from "type" only by case' {
+      # Regression guard: PowerShell property access (`$parsed.type`) is
+      # case-insensitive and would resolve a "Type" key just as readily,
+      # but jq's `.type` key lookup on the shell twin would not -- a
+      # bare value-comparison fix alone would leave this diverging from
+      # the shell twin (see the function's own comment).
+      Test-DotfilesActionRequiredType -Text '{"Type":"action_required"}' |
+        Should -BeFalse
+    }
+  }
+
   Context 'Invoke-DotfilesCoderabbitCritique (orchestration)' {
     It 'fails when coderabbit is not found' {
       Mock Get-DotfilesCoderabbitCommand { $null }
@@ -427,6 +486,24 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+    }
+
+    It 'does not trip on an unescaped nested action_required type field inside a finding' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = '{"type":"finding","message":"example","example":{"type":"action_required","phase":"billing"}}'
+          Stderr   = ''
+        }
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      $outcome = $result | Where-Object { $_ -is [pscustomobject] }
+      $outcome.Success | Should -BeTrue
+      $outcome.Output | Should -Match '"type":"finding"'
     }
 
     It 'succeeds and passes through a clean structured-findings response' {

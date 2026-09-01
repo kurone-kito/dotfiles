@@ -195,6 +195,96 @@ function global:Invoke-DotfilesCoderabbitReviewWithTimeout {
     -TimeoutSeconds $TimeoutSeconds
 }
 
+# Anchors action_required detection to the captured stream's own
+# top-level JSON "type" property, rather than an unanchored substring/
+# regex scan of the whole stream (#329): an unescaped nested JSON object
+# shaped like `"type": "action_required"` elsewhere in a legitimate
+# finding (e.g. inside its "message" or an example/documentation field)
+# is otherwise indistinguishable from a genuine top-level marker to any
+# pattern that does not track JSON's arbitrary nesting depth --
+# `coderabbit review --agent`'s serialization is not a pinned contract,
+# so the marker's own top-level key is not guaranteed to be the first
+# byte of the payload either. `ConvertFrom-Json` parses the stream as
+# real JSON and `.type` reads only the direct top-level property of the
+# resulting object, so a nested occurrence several levels deep never
+# surfaces through it -- no external-tool absence risk here, unlike the
+# shell twin's `jq` dependency, since JSON parsing is native to .NET.
+# This also preserves #327's whitespace tolerance around the key, the
+# colon, and the value for free: JSON whitespace between tokens is
+# syntactically insignificant, so a pretty-printed marker parses
+# identically to a compact one.
+#
+# `-ceq` (case-sensitive) throughout, rather than the default
+# case-insensitive `-eq`/property-access behavior: jq's `==` and its
+# `.type` key lookup on the shell twin are both byte-exact case-sensitive
+# (a `"Type":"action_required"` payload's key is simply not `.type` to
+# jq), so matching that here keeps the twins in lockstep rather than
+# reintroducing the latent case-insensitivity the prior `-match` regex
+# (also case-insensitive by default) already carried. This has to cover
+# both the property NAME and its VALUE: PowerShell's own `.type` property
+# access resolves a differently-cased `Type` key too (confirmed
+# empirically), so a plain `$parsed.type -ceq 'action_required'` would
+# still diverge from jq on a `{"Type":"action_required"}` payload even
+# with a case-sensitive value comparison -- see the property-name lookup
+# below.
+function global:Test-DotfilesActionRequiredType {
+  param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+
+  if (-not $Text) {
+    return $false
+  }
+  # A JSON object literal must start with '{' (after insignificant
+  # leading whitespace) by grammar -- checked on the raw text, before
+  # parsing, because the *parsed* result's .NET type is not a reliable
+  # way to tell a top-level object apart from a top-level array here:
+  # PowerShell's pipeline silently unwraps a single-element array
+  # returned by ConvertFrom-Json into a bare [pscustomobject] on
+  # assignment (`$parsed = $Text | ConvertFrom-Json`), so a
+  # single-element top-level array like `[{"type":"action_required"}]`
+  # would otherwise satisfy an `-is [pscustomobject]` check exactly as
+  # though it were a genuine top-level object (confirmed empirically --
+  # `jq`'s `type == "object"` guard on the shell twin does not share this
+  # gap, since jq reports "array" for a JSON array regardless of element
+  # count). Rejecting non-object syntax from the raw text up front closes
+  # this gap entirely, independent of any pipeline unwrapping.
+  if (-not $Text.TrimStart().StartsWith('{')) {
+    return $false
+  }
+  # `ConvertFrom-Json` throws when a top-level object has two keys that
+  # differ only by case (e.g. both "type" and "Type" present) -- a known
+  # .NET/PSObject limitation, since PSObject property names are
+  # case-insensitive internally and the two keys collide when the object
+  # is constructed. `jq`, being case-sensitive with no such collision
+  # restriction, has no trouble with the identical payload. This is
+  # accepted as a rare, untested edge case (a real coderabbit payload
+  # emitting two case-colliding top-level keys would itself be unusual)
+  # rather than worth a case-sensitive hand-rolled parser here: the
+  # brace-gate above and the property-name lookup below already cover
+  # every payload shape this delegate's own tests exercise. The `catch`
+  # below still fails closed to "no match" on this collision, consistent
+  # with every other parse failure in this function.
+  try {
+    $parsed = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  # No further object-vs-scalar check is needed here: the brace-gate
+  # above already guarantees that a value which parses successfully
+  # without throwing must be a JSON object (that is the only value shape
+  # JSON grammar permits to start with '{').
+  # `.type` property access is case-insensitive in PowerShell (it would
+  # resolve a `Type` key just as readily), so the key name itself is
+  # matched case-sensitively by enumerating PSObject.Properties instead
+  # of relying on dot-access -- the case-sensitive equivalent of jq's own
+  # key lookup on the shell twin.
+  $typeProperty = $parsed.PSObject.Properties |
+    Where-Object { $_.Name -ceq 'type' } | Select-Object -First 1
+  if (-not $typeProperty) {
+    return $false
+  }
+  return ($typeProperty.Value -ceq 'action_required')
+}
+
 function global:Invoke-DotfilesCoderabbitCritique {
   $coderabbitCommand = Get-DotfilesCoderabbitCommand
   if (-not $coderabbitCommand) {
@@ -227,16 +317,14 @@ function global:Invoke-DotfilesCoderabbitCritique {
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
-  # `coderabbit review --agent`'s serialization is not a pinned contract,
-  # so a pretty-printer emitting whitespace around the key, the colon, or
-  # the value (e.g. `"type": "action_required"`) must still be caught --
-  # `\s*` tolerates that without an external tool, since .NET regex is
-  # part of the runtime itself. Both streams are checked (not only the
-  # one presumed to carry findings) because the emission point is
-  # unverified; this keeps today's detection reach even though only
-  # Stdout is returned as findings below.
-  $actionRequiredPattern = '"type"\s*:\s*"action_required"'
-  if ($result.Stdout -match $actionRequiredPattern -or $result.Stderr -match $actionRequiredPattern) {
+  # See Test-DotfilesActionRequiredType's own comment for why this is
+  # anchored to each stream's top-level JSON "type" property rather than
+  # a substring/regex scan. Both streams are checked (not only the one
+  # presumed to carry findings) because the emission point is unverified;
+  # this keeps today's detection reach even though only Stdout is
+  # returned as findings below.
+  if ((Test-DotfilesActionRequiredType -Text $result.Stdout) -or
+    (Test-DotfilesActionRequiredType -Text $result.Stderr)) {
     Write-Warning 'coderabbit review requires operator action; treating as unavailable'
     return [pscustomobject]@{ Success = $false; Output = '' }
   }

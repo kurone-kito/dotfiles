@@ -60,19 +60,20 @@ if [ -z "$TIMEOUT_CMD" ]; then
   exit 1
 fi
 
-# The action_required guard below matches its literal via `grep -E`
-# instead of a bare `case` (see the comment at the match site for why).
-# `grep`'s own absence must not be misread as "no marker present" -- the
-# exact failure this whole guard exists to prevent -- so it is checked
+# The action_required guard below anchors its match to the captured
+# stream's own top-level JSON "type" field (see the comment at the match
+# site for why this needs real JSON parsing, not a shell pattern). `jq`'s
+# own absence must not be misread as "no marker present" -- the exact
+# failure this whole guard exists to prevent -- so it is checked
 # explicitly up front, before any output exists to examine. This check is
 # genuinely load-bearing rather than a nicety: the match itself has to
-# run inside an `if grep ...; then` condition, which `set -e` does not
-# cover (POSIX exempts commands in an `if` condition from triggering
-# it), so without this preflight a missing `grep` there would silently
-# read as "no match" -- the identical blind spot the existing `grep -q`
-# rejection below already describes.
-if ! command -v grep >/dev/null 2>&1; then
-  echo "coderabbit-critique: grep not found; failing closed rather than risking an unmatched action_required marker" >&2
+# run inside an `if is_top_level_action_required ...; then` condition,
+# which `set -e` does not cover (POSIX exempts commands in an `if`
+# condition from triggering it), so without this preflight a missing `jq`
+# there would silently read as "no match" instead of the fail-closed exit
+# this guard exists to guarantee.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "coderabbit-critique: jq not found; failing closed rather than risking an unanchored action_required marker" >&2
   exit 1
 fi
 
@@ -141,21 +142,29 @@ if [ "$status" -ne 0 ]; then
   exit 1
 fi
 
-# `grep -E` rather than a bare `case`: `coderabbit review --agent`'s
-# serialization is not a pinned contract, so a pretty-printer emitting
-# whitespace around the key, the colon, or the value (e.g.
-# `"type": "action_required"`) must still be caught, and a `case` glob
-# cannot express "zero or more whitespace characters" without either
-# over-matching (a wildcard would also swallow unrelated text between the
-# tokens, risking a false positive against, say, a finding whose own
-# message quotes that exact literal as an example) or enumerating a
-# handful of specific whitespace-run lengths, which is not robust. A
-# narrowly-scoped extended regex expresses the requirement precisely
-# without mutating the text at all, so it cannot fuse unrelated tokens
-# together the way a whitespace-stripping normalization pass could.
-# `grep`'s own absence was already turned into a fail-closed exit above,
-# so using it here for the match itself does not reopen the failure mode
-# the original `grep -q` rejection describes.
+# Anchored to the captured stream's own top-level JSON "type" field (#329)
+# rather than an unanchored substring/regex scan of the whole stream: an
+# unescaped nested JSON object shaped like `"type": "action_required"`
+# elsewhere in a legitimate finding (e.g. inside its "message" or an
+# example/documentation field) is otherwise indistinguishable from a
+# genuine top-level marker to any pattern that does not track JSON's
+# arbitrary nesting depth -- and neither a `case` glob nor a regex (even
+# one anchored to the start of the stream) can safely track that depth,
+# since `coderabbit review --agent`'s serialization is not a pinned
+# contract and the marker's own top-level key is not guaranteed to be the
+# first byte of the payload. Genuine JSON parsing is required instead,
+# which is why `jq` is used here: `.type` reads only the direct top-level
+# property of a JSON object, so a nested occurrence several levels deep
+# never surfaces through it. This also preserves #327's whitespace
+# tolerance around the key, the colon, and the value for free -- JSON
+# whitespace between tokens is syntactically insignificant, so `jq`
+# parses a pretty-printed marker identically to a compact one.
+# `jq`'s own absence was already turned into a fail-closed exit above, so
+# using it here for the match itself does not reopen the failure mode the
+# preflight above exists to prevent. A stream that is not valid JSON (or
+# is JSON without a top-level "type": "action_required") makes `jq` exit
+# non-zero or print an empty/mismatched value -- both are a genuine
+# no-match, not a sign `jq` itself is missing.
 #
 # Both streams are scanned independently (not concatenated) because the
 # emission point is unverified; scanning both keeps today's detection
@@ -163,11 +172,15 @@ fi
 # them independently rather than joined also avoids a false match built
 # from a token split across the stream boundary -- a real marker write is
 # atomic to one fd anyway, so this loses no genuine positive.
-action_required_pattern='"type"[[:space:]]*:[[:space:]]*"action_required"'
+is_top_level_action_required() {
+  parsed_type="$(printf '%s' "$1" | jq -r 'if type == "object" then (.type // empty) else empty end' 2>/dev/null)" || return 1
+  [ "$parsed_type" = "action_required" ]
+}
+
 action_required=false
-if printf '%s' "$stdout_output" | grep -Eq -- "$action_required_pattern"; then
+if is_top_level_action_required "$stdout_output"; then
   action_required=true
-elif printf '%s' "$stderr_output" | grep -Eq -- "$action_required_pattern"; then
+elif is_top_level_action_required "$stderr_output"; then
   action_required=true
 fi
 
