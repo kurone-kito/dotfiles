@@ -302,21 +302,29 @@ function global:Test-DotfilesActionRequiredType {
 }
 
 function global:Invoke-DotfilesCoderabbitCritique {
+  # Every diagnostic below goes through [Console]::Error.WriteLine, never
+  # Write-Warning: under `pwsh -File` non-interactive execution (this
+  # script's actual invocation shape), the default host writes the warning
+  # stream onto the process's real stdout, not stderr -- confirmed
+  # empirically -- which would corrupt a caller (like IDD's C1 critique
+  # step) expecting this script's stdout to carry only structured
+  # findings/report output. `[Console]::Error` writes directly to the
+  # OS-level stderr handle, bypassing that host routing entirely.
   $coderabbitCommand = Get-DotfilesCoderabbitCommand
   if (-not $coderabbitCommand) {
-    Write-Warning 'coderabbit not found in PATH'
+    [Console]::Error.WriteLine('coderabbit not found in PATH')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
   if (-not (Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $coderabbitCommand)) {
-    Write-Warning 'coderabbit is not authenticated (run: coderabbit auth login)'
+    [Console]::Error.WriteLine('coderabbit is not authenticated (run: coderabbit auth login)')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
   $timeoutSeconds = Resolve-DotfilesCoderabbitTimeoutSeconds
   $baseBranch = Resolve-DotfilesCoderabbitBaseBranch
   if (-not $baseBranch) {
-    Write-Warning 'could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly'
+    [Console]::Error.WriteLine('could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
@@ -325,11 +333,11 @@ function global:Invoke-DotfilesCoderabbitCritique {
     -TimeoutSeconds $timeoutSeconds
 
   if ($result.TimedOut) {
-    Write-Warning "coderabbit review timed out after ${timeoutSeconds}s"
+    [Console]::Error.WriteLine("coderabbit review timed out after ${timeoutSeconds}s")
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
   if ($result.ExitCode -ne 0) {
-    Write-Warning "coderabbit review failed (exit $($result.ExitCode))"
+    [Console]::Error.WriteLine("coderabbit review failed (exit $($result.ExitCode))")
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
@@ -341,22 +349,16 @@ function global:Invoke-DotfilesCoderabbitCritique {
   # returned as findings below.
   if ((Test-DotfilesActionRequiredType -Text $result.Stdout) -or
     (Test-DotfilesActionRequiredType -Text $result.Stderr)) {
-    Write-Warning 'coderabbit review requires operator action; treating as unavailable'
+    [Console]::Error.WriteLine('coderabbit review requires operator action; treating as unavailable')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
   # Only Stdout becomes findings text -- a progress line or diagnostic on
   # Stderr must never reach C1 as findings, where C3 could score it as a
-  # real issue. Stderr is not silently dropped, though: it is forwarded
-  # to the delegate's own real stderr, mirroring the shell twin's
-  # equivalent forward-to-stderr-on-success behavior. `Write-Warning` was
-  # tried first and rejected: under `pwsh -File` non-interactive
-  # execution (this script's actual invocation shape), the default host
-  # writes the warning stream onto the process's real stdout, not
-  # stderr -- confirmed empirically -- which would silently recreate the
-  # exact leak this whole change exists to close. `[Console]::Error`
-  # writes directly to the OS-level stderr handle, bypassing that host
-  # routing entirely.
+  # real issue. Stderr is not silently dropped, though: it is forwarded to
+  # the delegate's own real stderr here too, mirroring the shell twin's
+  # equivalent forward-to-stderr-on-success behavior, via the same
+  # [Console]::Error mechanism explained at the top of this function.
   if ($result.Stderr) {
     [Console]::Error.WriteLine($result.Stderr)
   }
