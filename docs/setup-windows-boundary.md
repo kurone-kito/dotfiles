@@ -221,6 +221,37 @@ tools above. See setup.windows's own
 README section for the full prerequisite wording rather than this page
 restating its package list.
 
+## Exception: Git Bash process mitigations
+
+The "OS settings" cell in the [Ownership at a
+glance](#ownership-at-a-glance) table above is not a literal claim that
+setup.windows owns *every* OS-level setting on the machine. Windows
+process-mitigation policy (Exploit Protection's per-image exemptions,
+`Get-ProcessMitigation` / `Set-ProcessMitigation`) is an explicit
+exception, owned by **this** repository instead, for three reasons:
+
+1. **setup.windows manages no process mitigations at all.** Nothing in
+   its WinGet/DSC configuration touches Exploit Protection or per-image
+   mitigation policy, so there is no existing setup.windows surface to
+   extend or defer to.
+2. **This repository already ships an elevated `HKLM` helper under the
+   same manual contract.** `executable_set-openssh-default-shell.ps1.tmpl`
+   already writes to `HKLM:\SOFTWARE\OpenSSH\DefaultShell` under the
+   "manual and elevated -- chezmoi never applies it automatically"
+   contract (see [Windows: Changing the default SSH
+   shell](sshd-config-setup.md#windows-changing-the-default-ssh-shell)).
+   `executable_repair-git-bash-aslr.ps1` follows the identical contract
+   for a different `HKLM` surface (Image File Execution Options), so it
+   belongs alongside that existing helper rather than as a new
+   setup.windows responsibility.
+3. **This repository is the consumer that depends on Git Bash
+   working.** Its own bash-side `run_*` twins, `tests/bash/`, and
+   `home/dot_local/bin/` POSIX helpers all require a working Git Bash;
+   setup.windows has no equivalent dependency on it.
+
+See [docs/git-bash-aslr-repair.md](git-bash-aslr-repair.md) for the
+full symptom, cause, and repair procedure.
+
 ## mkcert: settings ownership, not exclusive takeover
 
 This repository owns an opt-in local CA setup
