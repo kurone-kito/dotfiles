@@ -109,7 +109,16 @@ Describe 'modify_settings.json' -Skip:(-not $script:HasChezmoi) {
   Context 'empty destination (fresh machine, no prior settings.json)' {
     BeforeAll {
       $script:Render = Invoke-ModifyTemplateApply -SeedJson $null
-      $script:Parsed = $script:Render.Content | ConvertFrom-Json
+      # Best-effort: a BeforeAll exception aborts every It in this
+      # Context before 'renders successfully'/'produces valid JSON' can
+      # report a clear, individual failure. Fall back to $null instead,
+      # so those two assertions still run and the rest fail on a null
+      # comparison rather than an opaque setup exception.
+      try {
+        $script:Parsed = $script:Render.Content | ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        $script:Parsed = $null
+      }
     }
 
     It 'renders successfully' {
@@ -164,7 +173,12 @@ Describe 'modify_settings.json' -Skip:(-not $script:HasChezmoi) {
         useAcrylicInTabRow                  = $false
       }
       $script:Render = Invoke-ModifyTemplateApply -SeedJson ($seed | ConvertTo-Json -Depth 10)
-      $script:Parsed = $script:Render.Content | ConvertFrom-Json
+      # Best-effort, mirroring the empty-destination Context above.
+      try {
+        $script:Parsed = $script:Render.Content | ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        $script:Parsed = $null
+      }
     }
 
     It 'renders successfully' {
