@@ -246,6 +246,23 @@ defaultShellFallbackToLegacy = false  # ignored unless defaultShell is
 An unrecognized `defaultShell` value fails loudly and lists the three
 valid choices.
 
+**Real-binary requirement**: both `"modern-powershell"` resolution
+above and the explicit `-Shell` override below require a real,
+non-aliased `pwsh.exe` -- not a Store/MSIX App Execution Alias. A
+per-user Store install of PowerShell 7 leaves exactly this kind of
+alias on `PATH` (`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`); it
+is an `IO_REPARSE_TAG_APPEXECLINK` reparse point, not a plain
+executable, and writing it into `DefaultShell` breaks every SSH
+session with `ERROR_UNTRUSTED_MOUNT_POINT` -- the same failure class
+documented in
+[docs/setup-windows-boundary.md](setup-windows-boundary.md#why-cli-tools-live-in-mise-not-winget)
+for a different tool. This script rejects such a path in both resolution
+paths, falling back to `powershell.exe` when
+`defaultShellFallbackToLegacy = true` allows it (same as the
+not-found case), and otherwise fails loudly. If a machine only has the
+Store alias, [`kurone-kito/setup.windows#147`](https://github.com/kurone-kito/setup.windows/issues/147)
+is the route to a stable, machine-scope `pwsh.exe` path.
+
 ### Usage
 
 **Set the default shell from `chezmoi.toml` (config-driven):**
