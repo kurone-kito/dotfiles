@@ -176,8 +176,12 @@ loop on hardware-touch prompts.
    - If the project-blessed `git commit-ssh` (or `tag-ssh` /
      `rebase-ssh`) alias is available, use it. This honors the
      declaratively configured fallback key and keeps signing scoped
-     to the invocation.
-   - Otherwise make a per-invocation transient SSH commit:
+     to the invocation. Check availability with `git config --get
+     alias.commit-ssh`: empty output (non-zero exit) means the
+     alias is not defined for this repository's effective config.
+   - Otherwise (the check above came back empty) make a
+     per-invocation transient SSH commit immediately — do not search
+     further, retry with variations, or stop to ask the user:
      `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
      This is per-invocation only; it must not modify `~/.gitconfig`
      or any chezmoi template. Pick the SSH key without assuming a

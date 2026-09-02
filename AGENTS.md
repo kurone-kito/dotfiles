@@ -71,7 +71,10 @@ whole ladder is **at most three signing attempts**; each step is a
    non-interactive CI.
 4. **SSH fallback (attempt 3, allowed for any category).** Prefer
    the project-blessed `git commit-ssh` (or `tag-ssh` /
-   `rebase-ssh`) alias when available; otherwise transient
+   `rebase-ssh`) alias when available — check with `git config
+   --get alias.commit-ssh` (empty output / non-zero exit means it
+   is not defined for the current scope); otherwise, with no
+   further search, retry, or asking, use the transient
    `git -c gpg.format=ssh -c user.signingkey="<key>" commit -S`.
    Discover `<key>` without a fixed path: respect existing
    SSH-signing config if `git config gpg.format` is already `ssh`,
