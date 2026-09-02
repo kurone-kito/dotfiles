@@ -61,9 +61,10 @@
 
   Fidelity limit -- this is a bounded-diff tool, not a byte-identical
   one: `toPrettyJson` below emits 2-space indentation, alphabetically
-  sorted keys, ASCII-range UTF-8 left un-escaped (e.g. the managed
-  Japanese Command Prompt profile name renders as literal characters),
-  and no trailing space before a bracketed value, while Windows
+  sorted keys, non-ASCII characters as literal UTF-8 rather than
+  `\uXXXX`-escaped (e.g. the managed Japanese Command Prompt profile
+  name renders as literal characters, not escape sequences), and no
+  trailing space before a bracketed value, while Windows
   Terminal's own writer uses 4-space indentation, insertion order,
   `\uXXXX`-escapes non-ASCII characters, and adds a trailing space
   after a key whose value is a bracketed block (e.g. "actions" followed
@@ -152,11 +153,24 @@
 {{- range $incomingProfileList -}}
   {{- $entry := . -}}
   {{- if kindIs "map" $entry -}}
+    {{- /*
+      A profiles.list entry's guid also identifies it to Windows
+      Terminal itself (the schema requires one); an object entry
+      with no guid at all, or a non-string/empty one, isn't a valid
+      profile to begin with, so drop it here too rather than
+      preserving a value we could never re-identify as "the same
+      entry" on a later apply anyway.
+    */ -}}
+    {{- $hasGuid := false -}}
     {{- $guid := "" -}}
     {{- if hasKey $entry "guid" -}}
-      {{- $guid = index $entry "guid" -}}
+      {{- $rawGuid := index $entry "guid" -}}
+      {{- if and (kindIs "string" $rawGuid) (ne $rawGuid "") -}}
+        {{- $guid = $rawGuid -}}
+        {{- $hasGuid = true -}}
+      {{- end -}}
     {{- end -}}
-    {{- if not (has $guid $managedProfileGuids) -}}
+    {{- if and $hasGuid (not (has $guid $managedProfileGuids)) -}}
       {{- $extraProfiles = append $extraProfiles $entry -}}
     {{- end -}}
   {{- end -}}

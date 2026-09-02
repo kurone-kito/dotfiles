@@ -218,6 +218,25 @@ Describe 'modify_settings.json' -Skip:(-not $script:HasChezmoi) {
       $parsed = $render.Content | ConvertFrom-Json
       ($parsed.profiles.list.guid | Sort-Object) | Should -Be ($script:ManagedGuids | Sort-Object)
     }
+
+    It 'drops an object profiles.list entry that has no guid at all' {
+      $seedJson = '{"profiles":{"list":[{"name":"NoGuidProfile"},{"guid":"{ubuntu-guid-not-managed-1234}","name":"Ubuntu"}]}}'
+      $render = Invoke-ModifyTemplateApply -SeedJson $seedJson
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      $parsed.profiles.list.Count | Should -Be 5
+      ($parsed.profiles.list | Where-Object { $_.name -eq 'NoGuidProfile' }) | Should -BeNullOrEmpty
+      ($parsed.profiles.list | Where-Object { $_.guid -eq '{ubuntu-guid-not-managed-1234}' }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'drops an object profiles.list entry whose guid is an empty string' {
+      $seedJson = '{"profiles":{"list":[{"guid":"","name":"EmptyGuid"},{"guid":"{ubuntu-guid-not-managed-1234}","name":"Ubuntu"}]}}'
+      $render = Invoke-ModifyTemplateApply -SeedJson $seedJson
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      $parsed.profiles.list.Count | Should -Be 5
+      ($parsed.profiles.list | Where-Object { $_.name -eq 'EmptyGuid' }) | Should -BeNullOrEmpty
+    }
   }
 
   Context 'rendering against invalid JSON input' {
