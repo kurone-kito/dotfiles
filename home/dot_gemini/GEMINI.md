@@ -89,8 +89,11 @@ the repository specifies a different convention.
        `rebase-ssh` which wrap a declared fallback key with
        `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
        commit.gpgsign=true`). Do **not** assume the alias exists
-       in every repo.
-     - Otherwise use per-command flags:
+       in every repo. Check with `git config --get alias.commit-ssh`:
+       empty output (non-zero exit) means the alias is not
+       defined for the current repository/profile scope.
+     - Otherwise (confirmed absent) use per-command flags
+       immediately, with no further search, retry, or asking:
        `git -c gpg.format=ssh -c user.signingkey="<ssh-public-key>" commit -S`.
      - If you start an SSH-signed rebase via such an alias,
        continue it with the alias's own `--continue` form
