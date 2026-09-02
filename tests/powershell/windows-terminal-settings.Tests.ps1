@@ -239,6 +239,29 @@ Describe 'modify_settings.json' -Skip:(-not $script:HasChezmoi) {
     }
   }
 
+  Context 'rendering against a non-object top-level value (valid JSON, unexpected shape)' {
+    It 'falls back to the complete managed document for a top-level array' {
+      $render = Invoke-ModifyTemplateApply -SeedJson '[1,2,3]'
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      ($parsed.profiles.list.guid | Sort-Object) | Should -Be ($script:ManagedGuids | Sort-Object)
+    }
+
+    It 'falls back to the complete managed document for a top-level string' {
+      $render = Invoke-ModifyTemplateApply -SeedJson '"oops"'
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      $parsed.defaultProfile | Should -Be '{ab98be26-311f-4211-a628-661396a1647a}'
+    }
+
+    It 'falls back to the complete managed document for a top-level number' {
+      $render = Invoke-ModifyTemplateApply -SeedJson '42'
+      $render.ExitCode | Should -Be 0
+      $parsed = $render.Content | ConvertFrom-Json
+      $parsed.defaultProfile | Should -Be '{ab98be26-311f-4211-a628-661396a1647a}'
+    }
+  }
+
   Context 'rendering against invalid JSON input' {
     BeforeAll {
       $script:SeedContent = 'not { valid json'

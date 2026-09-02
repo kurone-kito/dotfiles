@@ -84,7 +84,19 @@
 {{- $stdin := .chezmoi.stdin -}}
 {{- $incoming := dict -}}
 {{- if ne $stdin "" -}}
-{{- $incoming = mustFromJson $stdin -}}
+  {{- /*
+    mustFromJson panics loudly on genuinely invalid JSON (the fail-loud
+    behavior this template requires), but valid JSON whose top-level
+    value isn't an object (a bare array/string/number) parses fine and
+    would otherwise panic downstream at the first `hasKey`/`range`
+    over $incoming, which expects a map. Treat that case the same as
+    "nothing incoming" (like empty .chezmoi.stdin) rather than
+    crashing the whole apply over an unexpected-but-parseable shape.
+  */ -}}
+  {{- $parsedStdin := mustFromJson $stdin -}}
+  {{- if kindIs "map" $parsedStdin -}}
+    {{- $incoming = $parsedStdin -}}
+  {{- end -}}
 {{- end -}}
 
 {{- /* The four profiles.list GUIDs this repository owns (see header). */ -}}
