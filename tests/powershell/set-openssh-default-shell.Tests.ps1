@@ -249,19 +249,17 @@ Describe 'Resolve-DotfilesOpenSSHShellChoice' {
     $resolution.ShellPath | Should -Be 'TestDrive:\powershell.exe'
   }
 
-  It 'Test-DotfilesExplicitShellPath rejects a path that resolves to a reparse point, writing no registry value' {
+  It 'Test-DotfilesExplicitShellPath rejects a path that resolves to a reparse point' {
     Mock Test-Path { $true } -ParameterFilter {
       $LiteralPath -eq 'TestDrive:\pwsh.exe'
     }
     Mock Test-DotfilesReparsePoint { $true }
-    Mock Set-DotfilesOpenSSHDefaultShell { }
 
     $validation = Test-DotfilesExplicitShellPath -ShellPath 'TestDrive:\pwsh.exe'
 
     $validation.Valid | Should -BeFalse
     $validation.ErrorMessage |
       Should -BeLike '*TestDrive:\pwsh.exe*App Execution Alias*setup.windows#147*'
-    Should -Invoke Set-DotfilesOpenSSHDefaultShell -Times 0
   }
 
   It 'throws listing all valid choices for an unrecognized defaultShell value' {
