@@ -19,7 +19,9 @@ Describe 'set-openssh-default-shell' -Skip:($IsWindows -eq $false) {
 
     foreach ($name in @(
       'Test-DotfilesAdminElevation'
+      'Test-DotfilesReparsePoint'
       'Resolve-DotfilesOpenSSHShellChoice'
+      'Test-DotfilesExplicitShellPath'
       'Set-DotfilesOpenSSHDefaultShell'
       'Reset-DotfilesOpenSSHDefaultShell'
       'Restart-DotfilesSshdService'
@@ -129,7 +131,9 @@ Describe 'Resolve-DotfilesOpenSSHShellChoice' {
 
     foreach ($name in @(
       'Test-DotfilesAdminElevation'
+      'Test-DotfilesReparsePoint'
       'Resolve-DotfilesOpenSSHShellChoice'
+      'Test-DotfilesExplicitShellPath'
       'Set-DotfilesOpenSSHDefaultShell'
       'Reset-DotfilesOpenSSHDefaultShell'
       'Restart-DotfilesSshdService'
@@ -213,6 +217,51 @@ Describe 'Resolve-DotfilesOpenSSHShellChoice' {
     $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $true
 
     { Resolve-DotfilesOpenSSHShellChoice } | Should -Throw '*pwsh.exe*powershell.exe*'
+  }
+
+  It 'rejects a reparse-point pwsh.exe and throws when "modern-powershell" fallback is disabled' {
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\pwsh.exe' }
+    } -ParameterFilter { $Name -eq 'pwsh' }
+    Mock Test-DotfilesReparsePoint { $true }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $false
+
+    { Resolve-DotfilesOpenSSHShellChoice } |
+      Should -Throw '*TestDrive:\pwsh.exe*App Execution Alias*setup.windows#147*'
+  }
+
+  It 'falls back to powershell.exe when the resolved "modern-powershell" pwsh.exe is a reparse point and fallback is enabled' {
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\pwsh.exe' }
+    } -ParameterFilter { $Name -eq 'pwsh' }
+    Mock Get-Command {
+      [pscustomobject]@{ Source = 'TestDrive:\powershell.exe' }
+    } -ParameterFilter { $Name -eq 'powershell' }
+    Mock Test-DotfilesReparsePoint { $true }
+
+    $script:DotfilesOpenSSHDefaultShellChoice = 'modern-powershell'
+    $script:DotfilesOpenSSHDefaultShellFallbackToLegacy = $true
+    $resolution = Resolve-DotfilesOpenSSHShellChoice
+
+    $resolution.Action | Should -Be 'Set'
+    $resolution.ShellPath | Should -Be 'TestDrive:\powershell.exe'
+  }
+
+  It 'Test-DotfilesExplicitShellPath rejects a path that resolves to a reparse point, writing no registry value' {
+    Mock Test-Path { $true } -ParameterFilter {
+      $LiteralPath -eq 'TestDrive:\pwsh.exe'
+    }
+    Mock Test-DotfilesReparsePoint { $true }
+    Mock Set-DotfilesOpenSSHDefaultShell { }
+
+    $validation = Test-DotfilesExplicitShellPath -ShellPath 'TestDrive:\pwsh.exe'
+
+    $validation.Valid | Should -BeFalse
+    $validation.ErrorMessage |
+      Should -BeLike '*TestDrive:\pwsh.exe*App Execution Alias*setup.windows#147*'
+    Should -Invoke Set-DotfilesOpenSSHDefaultShell -Times 0
   }
 
   It 'throws listing all valid choices for an unrecognized defaultShell value' {

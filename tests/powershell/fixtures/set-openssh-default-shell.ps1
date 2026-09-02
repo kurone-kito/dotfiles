@@ -26,6 +26,26 @@ function Test-DotfilesAdminElevation {
   return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Test-DotfilesReparsePoint {
+  param([Parameter(Mandatory)] [string] $Path)
+  # Works for symlinks, junctions, and other reparse points uniformly,
+  # via the underlying .IO.FileAttributes flag rather than any
+  # version-specific symlink API -- reliable on both PS5.1 (.NET
+  # Framework) and PS7+ (.NET). -Force so a hidden item, or a symlink
+  # whose target is missing, is still found and inspected. Matches the
+  # Test-ReparsePoint pattern in
+  # run_after_90-reconcile-claude-code.ps1.tmpl, renamed to this
+  # script's Dotfiles-prefixed naming convention. Used to reject a
+  # Store/MSIX App Execution Alias pwsh.exe, which is a reparse point
+  # rather than a real binary and breaks SSH sessions with
+  # ERROR_UNTRUSTED_MOUNT_POINT (see issue #360).
+  $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+  if (-not $item) {
+    return $false
+  }
+  return [bool]($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+}
+
 function Resolve-DotfilesOpenSSHShellChoice {
   switch ($script:DotfilesOpenSSHDefaultShellChoice) {
     '' {
@@ -44,17 +64,26 @@ function Resolve-DotfilesOpenSSHShellChoice {
     }
     'modern-powershell' {
       $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
-      if ($cmd) {
+      $isReparsePoint = $cmd -and (Test-DotfilesReparsePoint $cmd.Source)
+      if ($cmd -and -not $isReparsePoint) {
         return [pscustomobject]@{ Action = 'Set'; ShellPath = $cmd.Source }
       }
 
       if ($script:DotfilesOpenSSHDefaultShellFallbackToLegacy) {
-        $cmd = Get-Command powershell -ErrorAction SilentlyContinue
-        if ($cmd) {
-          return [pscustomobject]@{ Action = 'Set'; ShellPath = $cmd.Source }
+        $legacyCmd = Get-Command powershell -ErrorAction SilentlyContinue
+        if ($legacyCmd) {
+          return [pscustomobject]@{ Action = 'Set'; ShellPath = $legacyCmd.Source }
+        }
+
+        if ($isReparsePoint) {
+          throw "defaultShell = ""modern-powershell"" resolved pwsh.exe to '$($cmd.Source)', which is a Store/MSIX App Execution Alias reparse point, not a real binary; rejecting it and falling back to powershell.exe (defaultShellFallbackToLegacy = true), but powershell.exe was also not found on this system. See kurone-kito/setup.windows#147 for the machine-scope pwsh.exe remedy."
         }
 
         throw 'defaultShell = "modern-powershell" with defaultShellFallbackToLegacy = true requires pwsh.exe or powershell.exe, but neither was found on this system.'
+      }
+
+      if ($isReparsePoint) {
+        throw "defaultShell = ""modern-powershell"" resolved pwsh.exe to '$($cmd.Source)', which is a Store/MSIX App Execution Alias reparse point, not a real binary, and cannot be used as the OpenSSH DefaultShell (it fails SSH sessions with ERROR_UNTRUSTED_MOUNT_POINT). See kurone-kito/setup.windows#147 for the machine-scope pwsh.exe remedy, or set defaultShellFallbackToLegacy = true to fall back to powershell.exe."
       }
 
       throw 'defaultShell = "modern-powershell" requires pwsh.exe, but it was not found on this system. Set defaultShellFallbackToLegacy = true to fall back to powershell.exe.'
@@ -63,6 +92,30 @@ function Resolve-DotfilesOpenSSHShellChoice {
       throw "Unrecognized [data.ssh.server].defaultShell value: '$($script:DotfilesOpenSSHDefaultShellChoice)'. Valid choices: cmd, legacy-powershell, modern-powershell."
     }
   }
+}
+
+function Test-DotfilesExplicitShellPath {
+  param([Parameter(Mandatory)] [string] $ShellPath)
+  # Extracted out of the main script block (below) so this validation
+  # is unit-testable in isolation: the main block is gated behind
+  # $env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN and performs a live
+  # admin-elevation check plus an `exit`, so dot-sourcing it with that
+  # gate open (to exercise this logic) would terminate the test
+  # process itself. Returns a validation result instead of writing to
+  # the error stream directly, so the main block keeps its existing
+  # Write-Error + exit 1 shape for both outcomes.
+  if (-not (Test-Path -LiteralPath $ShellPath -PathType Leaf)) {
+    return [pscustomobject]@{ Valid = $false; ErrorMessage = "Shell not found: $ShellPath" }
+  }
+
+  if (Test-DotfilesReparsePoint $ShellPath) {
+    return [pscustomobject]@{
+      Valid        = $false
+      ErrorMessage = "Shell at '$ShellPath' is a Store/MSIX App Execution Alias reparse point, not a real binary, and cannot be used as the OpenSSH DefaultShell (it fails SSH sessions with ERROR_UNTRUSTED_MOUNT_POINT). See kurone-kito/setup.windows#147 for the machine-scope pwsh.exe remedy."
+    }
+  }
+
+  return [pscustomobject]@{ Valid = $true; ErrorMessage = $null }
 }
 
 function Set-DotfilesOpenSSHDefaultShell {
@@ -138,8 +191,9 @@ if ($env:DOTFILES_TEST_OPENSSH_SHELL_SKIP_MAIN -ne '1') {
   } else {
     $shellPath = $Shell
 
-    if (-not (Test-Path -LiteralPath $shellPath -PathType Leaf)) {
-      Write-Error "Shell not found: $shellPath"
+    $shellValidation = Test-DotfilesExplicitShellPath -ShellPath $shellPath
+    if (-not $shellValidation.Valid) {
+      Write-Error $shellValidation.ErrorMessage
       exit 1
     }
 
