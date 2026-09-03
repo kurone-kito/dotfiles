@@ -21,6 +21,7 @@ BeforeAll {
     $paths.StaleMiseBin = Join-Path (
       (Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages') 'jdx.mise_Microsoft.Winget.Source_stale') 'mise')
     ) 'bin'
+    $paths.MiseShims = Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims'
     $paths.UnrelatedA = 'TestDrive:\unrelated-a'
     $paths.UnrelatedB = 'TestDrive:\unrelated-b'
 
@@ -31,6 +32,7 @@ BeforeAll {
       $paths.HomeLocalBin
       $paths.HomeCargoBin
       $paths.CurrentMiseBin
+      $paths.MiseShims
     )) {
       New-Item -ItemType Directory -Path $managed -Force | Out-Null
     }
@@ -116,6 +118,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
     $env:PATH | Should -Be (@(
       $script:Paths.CurrentMiseBin
+      $script:Paths.MiseShims
       $script:Paths.WinGetLinks
       $script:Paths.Zellij
       $script:Paths.GnuWin32
@@ -124,6 +127,16 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $script:Paths.UnrelatedA
       $script:Paths.UnrelatedB
     ) -join ';')
+  }
+
+  It 'orders mise shims ahead of WinGet\Links' {
+    . $script:Subject
+
+    $entries = @($env:PATH -split ';')
+    $entries | Should -Contain $script:Paths.MiseShims
+    $entries | Should -Contain $script:Paths.WinGetLinks
+    ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }
 
   It 'is idempotent across repeated profile loads' {
@@ -406,6 +419,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       . $script:Subject
 
       $env:PATH | Should -Be (@(
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32
@@ -431,6 +445,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       . $script:Subject
 
       $env:PATH | Should -Be (@(
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32

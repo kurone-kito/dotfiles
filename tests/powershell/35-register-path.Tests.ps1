@@ -22,6 +22,7 @@ BeforeAll {
     $paths.StaleMiseBin = Join-Path (
       (Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages') 'jdx.mise_Microsoft.Winget.Source_stale') 'mise')
     ) 'bin'
+    $paths.MiseShims = Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims'
     $paths.UnrelatedA = 'TestDrive:\unrelated-a'
     $paths.UnrelatedB = 'TestDrive:\unrelated-b'
 
@@ -32,6 +33,7 @@ BeforeAll {
       $paths.HomeLocalBin
       $paths.HomeCargoBin
       $paths.CurrentMiseBin
+      $paths.MiseShims
     )) {
       New-Item -ItemType Directory -Path $managed -Force | Out-Null
     }
@@ -108,6 +110,7 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
 
     $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
       $script:Paths.CurrentMiseBin
+      $script:Paths.MiseShims
       $script:Paths.WinGetLinks
       $script:Paths.Zellij
       $script:Paths.GnuWin32
@@ -116,6 +119,16 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       $script:Paths.UnrelatedA
       $script:Paths.UnrelatedB
     ) -join ';')
+  }
+
+  It 'orders mise shims ahead of WinGet\Links' {
+    . $script:Fixture 6>&1 | Out-Null
+
+    $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
+    $entries | Should -Contain $script:Paths.MiseShims
+    $entries | Should -Contain $script:Paths.WinGetLinks
+    ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }
 
   It 'is idempotent across repeated runs' {
@@ -267,6 +280,7 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       . $script:Fixture 6>&1 | Out-Null
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32
@@ -292,6 +306,7 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       . $script:Fixture 6>&1 | Out-Null
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.Zellij
         $script:Paths.GnuWin32

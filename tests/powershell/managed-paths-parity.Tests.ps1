@@ -25,6 +25,7 @@ BeforeAll {
     $paths.CurrentMiseBin = Join-Path (
       (Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages') 'jdx.mise_Microsoft.Winget.Source_test') 'mise')
     ) 'bin'
+    $paths.MiseShims = Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims'
 
     foreach ($managed in @(
       $paths.WinGetLinks
@@ -33,6 +34,7 @@ BeforeAll {
       $paths.HomeLocalBin
       $paths.HomeCargoBin
       $paths.CurrentMiseBin
+      $paths.MiseShims
     )) {
       New-Item -ItemType Directory -Path $managed -Force | Out-Null
     }
