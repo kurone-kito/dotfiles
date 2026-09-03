@@ -25,24 +25,24 @@ for the cross-section consistency convention this repository uses.
 `[data.git]` is the **primary** identity, applied to every repository
 unless a profile overrides it:
 
-| Field            | Type   | Required | Default      | Purpose                                                                                                                                          |
-| ---------------- | ------ | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`           | string | yes      | —            | Git user name used for commits.                                                                                                                  |
-| `email`          | string | yes      | —            | Git email address used for commits.                                                                                                              |
-| `signingkey`     | string | yes      | `""`         | GPG signing key fingerprint; an empty string disables GPG signing.                                                                               |
-| `signing_format` | string | no       | `""` (unset) | Forces the **primary** signing backend to `"gpg"` or `"ssh"`; only needed to break a tie when an SSH fallback key also exists at the same scope. |
+| Field            | Type   | Required | Default      | Purpose                                                                                                                                                                                   |
+| ---------------- | ------ | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | string | yes      | —            | Git user name used for commits.                                                                                                                                                           |
+| `email`          | string | yes      | —            | Git email address used for commits.                                                                                                                                                       |
+| `signingkey`     | string | no       | `""`         | GPG signing key fingerprint; an empty string disables GPG signing.                                                                                                                        |
+| `signing_format` | string | no       | `""` (unset) | Forces the **primary** signing backend to `"gpg"` or `"ssh"`; `"ssh"` is validated at render time and requires exactly one `data.secret.ssh.keys.*` entry with `signing_fallback = true`. |
 
 `[data.git.profiles.<label>]` entries are **directory-scoped overrides**
 for repositories under a given path:
 
-| Field            | Type   | Required | Default      | Purpose                                                                                              |
-| ---------------- | ------ | -------- | ------------ | ---------------------------------------------------------------------------------------------------- |
-| `name`           | string | yes      | —            | Display name used for commits under `gitdir`.                                                        |
-| `email`          | string | yes      | —            | Commit email used under `gitdir`.                                                                    |
-| `signingkey`     | string | no       | `""`         | GPG fingerprint for this profile; an empty string disables GPG signing for it.                       |
-| `gitdir`         | string | yes      | —            | Repository path prefix (must end with `/`) that activates this profile.                              |
-| `signing_format` | string | no       | `""` (unset) | Same override semantics as `data.git.signing_format`, scoped to this profile.                        |
-| `sshhost`        | string | no       | `""`         | Optional SSH host alias; when set, `ghq` clones under `gitdir` route through it via `url.insteadOf`. |
+| Field            | Type   | Required | Default      | Purpose                                                                                                                                                                                        |
+| ---------------- | ------ | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | string | yes      | —            | Display name used for commits under `gitdir`.                                                                                                                                                  |
+| `email`          | string | yes      | —            | Commit email used under `gitdir`.                                                                                                                                                              |
+| `signingkey`     | string | no       | `""`         | GPG fingerprint for this profile; an empty string disables GPG signing for it.                                                                                                                 |
+| `gitdir`         | string | yes      | —            | Repository path prefix (must end with `/`) that activates this profile.                                                                                                                        |
+| `signing_format` | string | no       | `""` (unset) | Forces this profile's primary signing backend; `"ssh"` is validated at render time and requires exactly one `data.secret.ssh.keys.*` entry listing this profile's label in `signing_profiles`. |
+| `sshhost`        | string | no       | `""`         | Optional SSH host alias; when set, `ghq` clones under `gitdir` route through it via `url.insteadOf`.                                                                                           |
 
 See [Secret manager setup](secret-manager-setup.md) for the full identity
 model (how `data.git.*` connects to `data.secret.gpg.*` and
@@ -264,6 +264,11 @@ signing_profiles = ["work"]  # also scopes the aliases to the work profile
 hostname = "github.com"
 user = "git"
 identity = "id_ed25519_personal"
+
+[data.secret.ssh.hosts.github-work]
+hostname = "github.com"
+user = "git"
+identity = "id_ed25519_work"
 
 [data.secret.ssh.hosts.gitlab-work]
 hostname = "gitlab.example.com"
