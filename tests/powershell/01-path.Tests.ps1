@@ -133,6 +133,8 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     . $script:Subject
 
     $entries = @($env:PATH -split ';')
+    $entries | Should -Contain $script:Paths.MiseShims
+    $entries | Should -Contain $script:Paths.WinGetLinks
     ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
       Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }

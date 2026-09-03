@@ -125,6 +125,8 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     . $script:Fixture 6>&1 | Out-Null
 
     $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
+    $entries | Should -Contain $script:Paths.MiseShims
+    $entries | Should -Contain $script:Paths.WinGetLinks
     ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
       Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }
