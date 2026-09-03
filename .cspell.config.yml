@@ -46,6 +46,7 @@ words:
   - bufnr
   - CAROOT
   - catppuccin
+  - cuda
   - curlrc
   - cygheap
   - dbrgn
@@ -63,6 +64,7 @@ words:
   - fgpg
   - Fira
   - gdefault
+  - ggml
   - Gdiffsplit
   - GHES
   - gpgconf
@@ -84,6 +86,7 @@ words:
   - kylechui
   - lspconfig
   - luac
+  - llamacpp
   - luks
   - mergo
   - mfussenegger
@@ -109,6 +112,7 @@ words:
   - resynced
   - rollup
   - sheerun
+  - sycl
   - tabdo
   - taskrc
   - TOCTOU

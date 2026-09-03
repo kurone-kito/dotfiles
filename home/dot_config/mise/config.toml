@@ -16,6 +16,34 @@ fastfetch = "latest"
 fzf = "latest"
 grok = "latest"
 jq = "latest"
+# ggml-org/llama.cpp is in the mise registry as the llama.cpp shorthand
+# (github:ggml-org/llama.cpp, version_prefix = "b"). The key is quoted
+# because an unquoted llama.cpp is a TOML dotted key (tools.llama.cpp)
+# and mise rejects that table. GitHub flags every current bNNNN release
+# as prerelease; the non-prerelease "latest" (v0.3.0) ships only
+# nightly-tag.txt, no binaries. prerelease = true makes 2026.8.14 track
+# rolling bNNNN the same way the mise 2026.9.0+ registry already does.
+#
+# Unresolved-point-1 (asset variant): each OS publishes CPU plus
+# Vulkan/CUDA/ROCm/SYCL/OpenVINO archives (macOS is CPU-only). A
+# throwaway Linux install of latest selected
+# llama-b<ver>-bin-ubuntu-x64.tar.gz (generic CPU), not vulkan/cuda.
+# Leave matching/asset_pattern unset so one entry stays portable.
+# winget's ggml.llamacpp pins Vulkan x64, which has no macOS asset and
+# would break this three-OS config. Windows CPU-vs-vulkan is the same
+# generic-vs-named-variant scoring, not verified on Windows hardware.
+#
+# Unresolved-point-2 (shims): the archive has no bin/ subdirectory;
+# binaries sit at the extract root. llama-cli and llama-server are
+# present there, the registry bins list already names both, and
+# `mise which` resolves them without filter_bins/bin_path. Extra
+# llama-* tools also shim. Linux .so files are executable so they
+# appear in bin-names; not filtering them avoids hiding llama-bench
+# and llama-quantize.
+#
+# Linux, macOS, and Windows GitHub assets exist and mise resolved the
+# Linux CPU archive, so os is not restricted (unlike pstop).
+"llama.cpp" = { version = "latest", prerelease = true }
 mkcert = "latest"
 tealdeer = "latest"
 terraform = "latest"

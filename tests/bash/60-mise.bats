@@ -214,6 +214,22 @@ MOCK
   assert_output --partial 'os = ["windows"]'
 }
 
+@test "declares the quoted llama.cpp registry tool with prerelease" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -E '^"llama\.cpp"' "$config"
+  assert_success
+  assert_output --partial 'prerelease = true'
+}
+
+@test "does not restrict the llama.cpp tool by os" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -E '^"llama\.cpp"' "$config"
+  assert_success
+  refute_output --partial 'os ='
+}
+
 @test "restricts the ttyd tool to Linux and Windows" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
