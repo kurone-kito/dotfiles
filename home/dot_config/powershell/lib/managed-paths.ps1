@@ -52,9 +52,16 @@ function Get-StaticManagedPaths {
   $paths = @()
 
   if (-not [string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
+    # mise\shims must precede WinGet\Links: a same-named tool
+    # duplicated across both is drift under this repo's
+    # exclusive-ownership model (docs/setup-windows-boundary.md), and
+    # WinGet\Links entries are NTFS reparse points that an inbound SSH
+    # session's network logon token cannot traverse
+    # (ERROR_UNTRUSTED_MOUNT_POINT). PATH resolution has no fallthrough
+    # to a later working entry, so the working mise shim must win.
+    $paths += (Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims')
     $paths += (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
     $paths += (Join-Path $env:LOCALAPPDATA 'Zellij')
-    $paths += (Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims')
   }
 
   if (-not [string]::IsNullOrEmpty(${env:ProgramFiles(x86)})) {
