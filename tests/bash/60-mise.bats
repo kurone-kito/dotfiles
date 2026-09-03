@@ -217,7 +217,7 @@ MOCK
 @test "declares the quoted llama.cpp registry tool with prerelease" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep '^"llama.cpp"' "$config"
+  run grep -E '^"llama\.cpp"' "$config"
   assert_success
   assert_output --partial 'prerelease = true'
 }
@@ -225,7 +225,7 @@ MOCK
 @test "does not restrict the llama.cpp tool by os" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep '^"llama.cpp"' "$config"
+  run grep -E '^"llama\.cpp"' "$config"
   assert_success
   refute_output --partial 'os ='
 }
