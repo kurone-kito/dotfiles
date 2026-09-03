@@ -206,7 +206,8 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # .env deployment ([data.env.deploy.<label>]) and user-global secret files
 # ([data.secret.files.<label>]):
 # docs/chezmoi-toml-reference.md#env-deployment-dataenvdeploylabel and
-# #secret-files-datasecretfileslabel, plus docs/secret-manager-setup.md.
+# docs/chezmoi-toml-reference.md#secret-files-datasecretfileslabel, plus
+# docs/secret-manager-setup.md.
 # Both deploy with mode 600 (Linux/macOS) / user-only ACL (Windows); the
 # env deploy script also warns when the target project's .gitignore is
 # missing the deployed filename, and multiple entries for the same repo
