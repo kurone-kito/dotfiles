@@ -196,10 +196,10 @@ See [Secret manager setup](secret-manager-setup.md).
 
 `[data.zellij.web.tailscale]`:
 
-| Field        | Type    | Required | Default | Purpose                                           |
-| ------------ | ------- | -------- | ------- | ------------------------------------------------- |
-| `enabled`    | boolean | no       | `false` | Publish the web server through `tailscale serve`. |
-| `https_port` | integer | no       | `443`   | Tailnet HTTPS port used for the published route.  |
+| Field        | Type    | Required | Default | Purpose                                                                                                                                                       |
+| ------------ | ------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`    | boolean | no       | `false` | Publish the web server through `tailscale serve`. Requires `data.zellij.web.bind` to remain `"127.0.0.1"` — the `ensure-zellij-web` wrapper throws otherwise. |
+| `https_port` | integer | no       | `443`   | Tailnet HTTPS port used for the published route.                                                                                                              |
 
 `[data.zellij.web.windows]`, `[data.zellij.web.linux]`, and
 `[data.zellij.web.macos]` each carry a single field:
