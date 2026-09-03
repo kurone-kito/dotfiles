@@ -136,7 +136,7 @@ Restart-Service sshd
 
 ### Timeout values
 
-Override the defaults for `clientAliveInterval` /  `clientAliveCountMax`
+Override the defaults for `clientAliveInterval` / `clientAliveCountMax`
 under `[data.ssh.server]` in `~/.config/chezmoi/chezmoi.toml` (see the
 [reference doc](chezmoi-toml-reference.md#ssh-server-hardening-datasshserver)
 for the field types and defaults), then re-run `chezmoi apply` and
