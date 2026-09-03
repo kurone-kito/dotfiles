@@ -45,5 +45,6 @@ describes.
 | guide | [VS Code Integrated Terminal](vscode-terminal.md) | Explains how this dotfiles PowerShell profile adapts to VS Code's integrated terminal and lists recommended VS Code settings. |
 | guide | [Declaring WinGet package directories in the User PATH](winget-user-path.md) | Explains how to declare a WinGet portable package's real directory so it is registered in the managed User PATH independent of WinGet's symlinks. |
 | guide | [Zellij Web Client — Mobile Usage Guide](zellij-web-mobile.md) | Covers known limitations and recommended workarounds for using the Zellij web client from mobile devices. |
+| reference | [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md) | Documents every chezmoi.toml configuration path, with each field's type, default, and a link to its deployment guide. |
 | reference | [IDD Policy Configuration](idd-policy.md) | Records this repository's confirmed IDD policy decisions alongside their machine-readable mirror in .github/idd/config.json. |
 <!-- dprint-ignore-end -->
