@@ -10,6 +10,10 @@ This guide explains how to configure ghq so that each GitHub (or
 GitLab) account automatically uses the correct SSH key, commit
 identity, and GPG signing key.
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md)
+for the complete field-by-field schema of `data.git.profiles.*`,
+`data.secret.ssh.hosts.*`, and `data.ghq.clone.*`.
+
 ## How the chain works
 
 ```text
@@ -131,59 +135,19 @@ ssh -T github-work      # → "Hi alice-work! You've successfully..."
 
 ## Complete two-account example
 
-```toml
-# ── Primary (personal) ──
-[data.git]
-name = "Alice"
-email = "alice@personal.dev"
-signingkey = "AAAA1111BBBB2222"
+For a full worked `chezmoi.toml` combining a primary identity, a
+directory-scoped work profile, GPG keys, SSH keys, and SSH hosts, see
+the ["Complete example"](chezmoi-toml-reference.md#complete-example)
+section of the chezmoi.toml Configuration Reference. To scope the SSH
+commit-signing fallback aliases (`signing_fallback` / `signing_profiles`)
+to one identity only, or to override the default connection for a bare
+hostname like `github.com` (quote the key, e.g.
+`[data.secret.ssh.hosts."github.com"]`), see
+[Secret manager setup](secret-manager-setup.md).
 
-# ── Work ──
-[data.git.profiles.work]
-name = "Alice Corporate"
-email = "alice@acme.com"
-signingkey = "CCCC3333DDDD4444"
-gitdir = "~/ghq/github.com/acme-corp/"
-sshhost = "github-work"
-
-# ── Secret manager ──
-[data.secret]
-manager = "bitwarden"
-
-# GPG keys
-[data.secret.gpg.personal]
-item = "GPG Key - Personal"
-
-[data.secret.gpg.work]
-item = "GPG Key - Work"
-
-# SSH keys
-[data.secret.ssh.keys.personal]
-item = "SSH Key - Personal"
-filename = "id_ed25519_personal"
-# Opt in to SSH-based commit signing as a fallback alias
-# (`git commit-ssh` etc.; plain `git commit` keeps using GPG):
-# signing_fallback = true
-
-[data.secret.ssh.keys.work]
-item = "SSH Key - Work"
-filename = "id_ed25519_work"
-# Opt in for the `work` profile's commits only:
-# signing_profiles = ["work"]
-
-# SSH hosts
-[data.secret.ssh.hosts."github.com"]
-hostname = "github.com"
-user = "git"
-identity = "id_ed25519_personal"
-
-[data.secret.ssh.hosts.github-work]
-hostname = "github.com"
-user = "git"
-identity = "id_ed25519_work"
-```
-
-In this setup:
+In a two-account setup with `github-work` routed to `~/ghq/github.com/acme-corp/`
+via `sshhost` (as in [Step 1](#step-1-define-identities) above) and the
+default `github.com` SSH host left pointed at the personal key:
 
 | Account  | ghq get                             | SSH key                                       | Git identity           |
 | -------- | ----------------------------------- | --------------------------------------------- | ---------------------- |
@@ -241,12 +205,9 @@ token_item = "GitHub PAT - Personal"
 The table key (`"personal"`, `"work"`, etc.) is an arbitrary unique
 label — it only appears in log messages and does not affect behaviour.
 
-| Field        | Required | Description                                                    |
-| ------------ | -------- | -------------------------------------------------------------- |
-| `owner`      | Yes      | GitHub username or organization                                |
-| `token_item` | Yes      | Secret manager item containing the PAT (stored as password)    |
-| `hostname`   | No       | GitHub host (default: `github.com`; set for GHE instances)     |
-| `ssh`        | No       | Clone via SSH (default: `true`); set `false` for HTTPS cloning |
+See
+[chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#bulk-repo-cloning-dataghqclonelabel)
+for the full field list (including `mise_trust`), types, and defaults.
 
 ### How it works
 

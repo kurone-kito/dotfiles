@@ -49,6 +49,10 @@ words:
   - cuda
   - curlrc
   - cygheap
+  - dataenvdeploylabel
+  - datamkcertinstall
+  - datazellij
+  - datazellijweb
   - dbrgn
   - DECRQCRA
   - dedup

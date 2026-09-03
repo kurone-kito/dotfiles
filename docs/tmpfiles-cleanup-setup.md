@@ -13,6 +13,9 @@ chezmoi does not deploy it automatically. This guide explains the
 masking semantics involved, how to deploy it manually, and what this
 setting can and cannot fix.
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#systemd-tmpfiles-cleanup-age-datatmpfilesage)
+for the `data.tmpfiles.age` field schema.
+
 ## Why manual deployment?
 
 chezmoi is a **user-level** dotfiles manager. `systemd-tmpfiles`

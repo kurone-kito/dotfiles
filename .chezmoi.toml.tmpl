@@ -153,236 +153,69 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 {{- end }}
 {{- end }}
 
-# To add a directory-specific profile, append the following to
-# ~/.config/chezmoi/chezmoi.toml and run `chezmoi apply`:
+# Optional [data.*] sections below extend what the prompts above collect.
+# Field-by-field schema, defaults, and a complete worked example for every
+# section live in docs/chezmoi-toml-reference.md; this block only calls
+# out live template/script *behavior* not captured by that schema
+# reference, with a pointer to the matching anchor and deployment guide
+# for the full shape.
 #
-#   [data.git.profiles.<label>]     # <label> is any user-chosen name
-#   name       = "Display Name"
-#   email      = "user@example.com"
-#   signingkey = ""         # leave empty to disable signing for this profile
-#   gitdir     = "~/ghq/github.com/<org>/"  # must end with /
-#   sshhost    = ""         # optional SSH host alias for url.insteadOf
-#   # signing_format = "ssh"  # optional; "gpg" (default when signingkey is a
-#   #                         # GPG fingerprint) or "ssh" (required when both
-#   #                         # GPG signingkey and signing_profiles target
-#   #                         # this profile, to break the tie)
+# Directory-specific Git profiles ([data.git.profiles.<label>]):
+# docs/chezmoi-toml-reference.md#git-identity-datagit-datagitprofileslabel
+# and docs/secret-manager-setup.md.
 #
-# To configure secret manager integration, see docs/secret-manager-setup.md
+# Secret manager ([data.secret], [data.secret.gpg/.ssh.keys/.ssh.hosts/.files]):
+# docs/chezmoi-toml-reference.md#secret-manager-datasecret (see that page
+# for the per-subsection anchors) and docs/secret-manager-setup.md for the
+# setup walkthrough, the SSH commit-signing fallback
+# (signing_fallback / signing_profiles / signing_format) resolution order
+# and validation, and the manager = "local" directory layout
+# (<local_dir>/<item>/<param>).
 #
-# Section keys (e.g., "personal", "work") are user-defined labels.
-# Use consistent labels across gpg, ssh.keys, and ssh.hosts for
-# traceability. You may add as many entries as needed.
+# Bulk repo cloning ([data.ghq.clone.<label>]):
+# docs/chezmoi-toml-reference.md#bulk-repo-cloning-dataghqclonelabel and
+# docs/ghq-workflow.md.
 #
-# Example Bitwarden GPG key:
+# WinGet User PATH packages ([data.wingetUserPath.packages.<label>]):
+# docs/chezmoi-toml-reference.md#winget-user-path-packages-datawingetuserpathpackageslabel
+# and docs/winget-user-path.md. `bin` may contain one `*` wildcard path
+# segment (e.g. "ffmpeg-*-full_build/bin"); when more than one directory
+# matches, the lexicographically last one (plain string sort) wins.
 #
-#   [data.secret.gpg.<label>]       # <label> matches a signingkey identity
-#   item = "GPG Key - Personal"
+# SSH server hardening ([data.ssh.server]):
+# docs/chezmoi-toml-reference.md#ssh-server-hardening-datasshserver and
+# docs/sshd-config-setup.md. defaultShell drives
+# set-openssh-default-shell.ps1's bare-invocation resolution: absent is a
+# no-op; "cmd" removes the DefaultShell registry values;
+# "legacy-powershell"/"modern-powershell" resolve powershell.exe/pwsh.exe
+# (fails loudly unless defaultShellFallbackToLegacy = true lets
+# "modern-powershell" fall back). This registry change stays manual and
+# elevated -- chezmoi never applies it automatically.
 #
-# Example SSH key (Bitwarden SSH Key item type):
+# systemd-tmpfiles /tmp cleanup age ([data.tmpfiles]):
+# docs/chezmoi-toml-reference.md#systemd-tmpfiles-cleanup-age-datatmpfilesage
+# and docs/tmpfiles-cleanup-setup.md. Linux-only; the generated file is a
+# staging copy at ~/.config/tmpfiles.d/tmp.conf, deployed to
+# /etc/tmpfiles.d/tmp.conf manually.
 #
-#   [data.secret.ssh.keys.<label>]
-#   item     = "SSH Key - Personal"
-#   filename = "id_ed25519_personal" # target file under ~/.ssh/
+# mkcert local CA ([data.mkcert]):
+# docs/chezmoi-toml-reference.md#mkcert-local-ca-datamkcertinstall and
+# docs/mkcert-local-ca.md. Windows-only; runs `mkcert -install` during
+# `chezmoi apply`.
 #
-#   # Optional: register this key as a fallback signing key. GPG
-#   # remains the primary signing backend; the flag adds git aliases
-#   # (commit-ssh, tag-ssh, rebase-ssh) that wrap commands with
-#   # `-c gpg.format=ssh -c user.signingkey=<absolute>/.ssh/<file>.pub`
-#   # so non-interactive callers (CI, AI agents, gpg-agent timeout)
-#   # can sign with SSH on demand. Default is OFF.
-#   signing_fallback = false           # global commit-ssh alias
-#   signing_profiles = []              # per-profile commit-ssh alias
-#   # signing_profiles = ["work", "oss"] # register fallback aliases
-#   #                                    # in multiple profile scopes
+# .env deployment ([data.env.deploy.<label>]) and user-global secret files
+# ([data.secret.files.<label>]):
+# docs/chezmoi-toml-reference.md#env-deployment-dataenvdeploylabel and
+# docs/chezmoi-toml-reference.md#secret-files-datasecretfileslabel, plus
+# docs/secret-manager-setup.md.
+# Both deploy with mode 600 (Linux/macOS) / user-only ACL (Windows); the
+# env deploy script also warns when the target project's .gitignore is
+# missing the deployed filename, and multiple entries for the same repo
+# are supported. Target paths are home-relative, forward-slash-separated,
+# and must not contain "..".
 #
-#   # Set `git.signing_format = "ssh"` to make SSH the *primary*
-#   # signing backend instead of a fallback (requires
-#   # signing_fallback = true). See `docs/secret-manager-setup.md`
-#   # for details.
-#
-# Example SSH host:
-#
-#   [data.secret.ssh.hosts.<service>-<label>]
-#   hostname = "github.com"
-#   user     = "git"
-#   identity = "id_ed25519_personal" # must match a filename above
-#   port     = 2222                  # optional; omit for default (22)
-#
-# To override the default connection for a domain (e.g., github.com),
-# quote the key to prevent TOML from splitting on the dot:
-#
-#   [data.secret.ssh.hosts."github.com"]
-#   hostname = "github.com"
-#   user     = "git"
-#   identity = "id_ed25519_personal"
-#
-# To bulk-clone repositories for a GitHub user/org, add:
-#
-#   [data.ghq.clone.<label>]
-#   owner      = "your-github-username"
-#   token_item = "GitHub PAT"  # secret manager item (repo scope)
-#   hostname   = "github.com"  # optional; defaults to github.com
-#   ssh        = true          # optional; false to use HTTPS instead of SSH
-#   mise_trust = false         # optional; true to auto-trust mise configs
-#
-# See docs/ghq-workflow.md for details.
-#
-# To register a WinGet-installed portable tool's real package
-# directory in the persisted Windows User PATH (needed when the
-# %LOCALAPPDATA%\Microsoft\WinGet\Links symlinks don't resolve, e.g.
-# inbound SSH sessions to Windows), add:
-#
-#   [data.wingetUserPath.packages.<label>]  # <label> is any unique name
-#   id      = "jdx.mise"       # WinGet package id (Packages\<id>_* prefix)
-#   bin     = "mise/bin"       # optional; subpath within the package dir
-#   enabled = true             # optional; false disables an inherited entry
-#
-# bin may contain a `*` segment (e.g. "ffmpeg-*-full_build/bin") to
-# match a version-suffixed subdirectory whose name changes on every
-# WinGet update; the lexicographically last match wins when more than
-# one is present. The real Packages\<id>_* directory (with bin
-# resolved and appended, if set) is placed in the managed User PATH
-# ahead of WinGet\Links. See docs/winget-user-path.md for details.
-#
-# To customize sshd_config hardening defaults, add:
-#
-#   [data.ssh.server]
-#   clientAliveInterval = 300  # seconds between keepalive probes (default: 300)
-#   clientAliveCountMax = 5    # missed probes before disconnect (default: 5)
-#   defaultShell = "modern-powershell"    # "cmd", "legacy-powershell", or
-#                                         # "modern-powershell"; absent = no-op
-#   defaultShellFallbackToLegacy = false  # ignored unless defaultShell is
-#                                         # "modern-powershell" (default: false)
-#
-# defaultShell drives set-openssh-default-shell.ps1's Windows bare-invocation
-# (no -Shell/-Reset) resolution:
-#   (absent)            -> no-op; the script prints guidance and exits
-#   "cmd"               -> equivalent to -Reset (removes the DefaultShell /
-#                          DefaultShellCommandOption registry values)
-#   "legacy-powershell" -> resolves and sets powershell.exe (fails loudly if
-#                          not found)
-#   "modern-powershell" -> resolves and sets pwsh.exe; fails loudly if not
-#                          found, unless defaultShellFallbackToLegacy = true,
-#                          in which case it falls back to powershell.exe
-#                          (and still fails loudly if that is also missing)
-#
-# This registry change stays manual and elevated -- chezmoi never applies it
-# automatically. The generated file is at ~/.config/ssh/sshd_config.
-# See docs/sshd-config-setup.md for deployment instructions.
-#
-# To customize the systemd-tmpfiles /tmp cleanup age (default: "10d"),
-# add:
-#
-#   [data.tmpfiles]
-#   age = "2d"  # systemd time-span syntax, e.g. "2d", "36h"
-#
-# This is Linux-only; it is ignored entirely on non-Linux hosts and on
-# Linux hosts without the systemd-tmpfiles binary. The generated file
-# is at ~/.config/tmpfiles.d/tmp.conf (a staging copy; deployment to
-# /etc/tmpfiles.d/tmp.conf is manual).
-# See docs/tmpfiles-cleanup-setup.md for deployment instructions.
-#
-# To opt in to local mkcert CA setup on Windows (default: not
-# installed):
-#
-#   [data.mkcert]
-#   install = true  # runs `mkcert -install` on Windows via chezmoi apply
-#
-# See docs/mkcert-local-ca.md for details, including $CAROOT /
-# TRUST_STORES handling and non-interactive-session caveats.
-#
-# To deploy .env files from the secret manager into cloned projects:
-#
-#   [data.env.deploy.<label>]        # <label> is any unique name
-#   repo       = "github.com/you/project"  # ghq-style repo path
-#   item       = "Project .env"      # secret manager item with .env attached
-#   filename   = ".env"              # optional; defaults to ".env"
-#   subpath    = ""                  # optional subdirectory within the repo
-#   attachment = ""                  # optional; attachment name override
-#
-# Store the .env content as an attachment on the secret manager item.
-# The script deploys with mode 600 and warns if .gitignore is missing
-# the target filename. Multiple entries for the same repo are supported.
-#
-# To deploy user-global secret files (e.g., ~/.aws/credentials):
-#
-#   [data.secret.files.<label>]      # <label> is any unique name
-#   item       = "AWS Credentials"   # secret manager item name
-#   target     = ".aws/credentials"  # home-relative path (forward slashes)
-#   attachment = "credentials"       # optional; defaults to target basename
-#
-# Store the file content as an attachment on the secret manager item.
-# The script deploys with mode 600 / user-only ACL. Target paths must
-# be relative, forward-slash-separated, and must not contain "..".
-# See docs/secret-manager-setup.md for details.
-#
-# Zellij Web configuration (optional):
-#
-#   [data.zellij]
-#   simplified_ui = false             # true replaces Nerd Font glyphs with ASCII
-#
-#   [data.zellij.web]
-#   server = true
-#   sharing = "on"
-#   bind = "127.0.0.1"
-#   port = 8082
-#   base_url = ""                    # optional reverse-proxy subpath
-#   enforce_https_on_localhost = false
-#   client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"
-#   client_cursor_blink = true
-#   client_cursor_style = "bar"      # "block", "bar", or "underline"
-#   client_cursor_inactive_style = "outline"  # "outline", "block", "bar", "underline"
-#
-#   [data.zellij.web.tailscale]
-#   enabled = true                   # optional; publish through tailscale serve
-#   https_port = 443                 # optional tailnet HTTPS port
-#
-#   [data.zellij.web.windows]
-#   autostart = "onlogon"            # or "disabled" (default)
-#   [data.zellij.web.linux]
-#   autostart = "systemd-user"       # or "disabled" (default)
-#   [data.zellij.web.macos]
-#   autostart = "launchagent"        # or "disabled" (default)
-#
-# When tailscale publication is enabled, keep bind on 127.0.0.1 and let the
-# wrapper reconcile `tailscale serve` against the local Zellij listener.
-#
-# If you intentionally bind beyond localhost instead, configure:
-#
-#   cert = ""                        # required off localhost
-#   key = ""                         # required off localhost
-#
-# On Windows, the autostart task calls ~/.local/bin/ensure-zellij-web.ps1.
-# If Tailscale publication is enabled, the same wrapper also ensures
-# `tailscale serve` points at the local Zellij listener.
-#
-# The wrapper can also be invoked manually over OpenSSH after a reboot:
-#
-#   pwsh ~/.local/bin/ensure-zellij-web.ps1
-#
-# On Ubuntu native, `systemd-user` expects real systemd access. For boot-time
-# persistence outside an interactive login, enable linger once:
-#
-#   sudo loginctl enable-linger "$USER"
-#
-# Local file storage (manager = "local"):
-#
-# Instead of an external secret manager, secrets can be read from a
-# local directory. Set manager = "local" and optionally configure
-# local_dir (defaults to ~/.config/chezmoi/secrets):
-#
-#   [data.secret]
-#   manager   = "local"
-#   local_dir = "~/.config/chezmoi/secrets"  # optional
-#
-# Organize files as: <local_dir>/<item>/<param>
-# The "item" field becomes a subdirectory name, and the template
-# parameter (field, filename, or key type) becomes the filename:
-#
-#   <local_dir>/gpg-personal/private.asc   # GPG key attachment
-#   <local_dir>/ssh-work/private           # SSH private key
-#   <local_dir>/ssh-work/public            # SSH public key
-#   <local_dir>/github-pat/password        # PAT for ghq clone
-#   <local_dir>/myapp-env/.env             # .env file attachment
-#
-# See docs/secret-manager-setup.md for details.
+# Zellij Web ([data.zellij], [data.zellij.web], [data.zellij.web.tailscale],
+# [data.zellij.web.windows/.linux/.macos]):
+# docs/chezmoi-toml-reference.md#zellij-web-datazellij-datazellijweb and
+# the "Zellij Web" section of README.md -- full schema, example, and
+# autostart/tailscale deployment steps for each OS.

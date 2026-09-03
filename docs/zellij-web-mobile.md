@@ -10,6 +10,11 @@ The Zellij web client allows browser-based access to terminal sessions.
 This guide covers known limitations and recommended workarounds when
 accessing the web client from mobile devices (e.g. iPhone, Android).
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#zellij-web-datazellij-datazellijweb)
+for the full `data.zellij` / `data.zellij.web` field schema, and the
+[README's Zellij Web section](../README.md#zellij-web) for enabling the
+server and Tailscale publication.
+
 ## Setup
 
 Enable the web server and Tailscale publication in your

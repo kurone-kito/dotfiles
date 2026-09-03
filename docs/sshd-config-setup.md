@@ -12,6 +12,9 @@ configuration is system-level (requiring root/administrator
 privileges), chezmoi does not deploy it automatically. This guide
 explains how to manually deploy it.
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#ssh-server-hardening-datasshserver)
+for the `data.ssh.server` field-by-field schema.
+
 ## Why manual deployment?
 
 chezmoi is a **user-level** dotfiles manager. The SSH daemon
@@ -133,15 +136,18 @@ Restart-Service sshd
 
 ### Timeout values
 
-Override the defaults in `~/.config/chezmoi/chezmoi.toml`:
+Override the defaults for `clientAliveInterval` / `clientAliveCountMax`
+under `[data.ssh.server]` in `~/.config/chezmoi/chezmoi.toml` (see the
+[reference doc](chezmoi-toml-reference.md#ssh-server-hardening-datasshserver)
+for the field types and defaults), then re-run `chezmoi apply` and
+redeploy. For example, to tolerate longer network gaps on a mobile
+connection:
 
 ```toml
 [data.ssh.server]
 clientAliveInterval = 600  # 10-minute probe interval
 clientAliveCountMax = 3    # 3 missed probes → ~30 min total
 ```
-
-Then re-run `chezmoi apply` and redeploy.
 
 ### Platform notes
 
@@ -223,14 +229,15 @@ registry change automatically.
 
 ### Configuring `chezmoi.toml`
 
-Add to `[data.ssh.server]` in `chezmoi.toml`:
+Add `defaultShell` (and, for the fallback case below,
+`defaultShellFallbackToLegacy`) to `[data.ssh.server]` in `chezmoi.toml`
+— see the
+[reference doc](chezmoi-toml-reference.md#ssh-server-hardening-datasshserver)
+for the field types and defaults:
 
 ```toml
 [data.ssh.server]
-defaultShell = "modern-powershell"    # "cmd", "legacy-powershell", or
-                                       # "modern-powershell"
-defaultShellFallbackToLegacy = false  # ignored unless defaultShell is
-                                       # "modern-powershell"
+defaultShell = "modern-powershell"
 ```
 
 `defaultShell` controls what the script's **bare invocation** (no

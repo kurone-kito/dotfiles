@@ -25,6 +25,10 @@ directory so it gets registered directly in the managed User PATH,
 ordered ahead of `WinGet\Links`, independent of whether the symlinks
 resolve.
 
+See also:
+[chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#winget-user-path-packages-datawingetuserpathpackageslabel)
+for the field-by-field schema.
+
 ## Declaring a package
 
 Add an entry to `~/.config/chezmoi/chezmoi.toml`:
