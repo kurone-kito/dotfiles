@@ -68,12 +68,12 @@ See [Secret manager setup](secret-manager-setup.md).
 
 ## SSH keys (`data.secret.ssh.keys.<label>`)
 
-| Field              | Type           | Required | Default | Purpose                                                                                                                   |
-| ------------------ | -------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `item`             | string         | yes      | —       | Secret manager item (SSH Key type) holding the key pair.                                                                  |
-| `filename`         | string         | yes      | —       | Target filename written under `~/.ssh/`.                                                                                  |
-| `signing_fallback` | boolean        | no       | `false` | Registers this key for the `commit-ssh`/`tag-ssh`/`rebase-ssh` **global** fallback aliases; at most one key may set this. |
-| `signing_profiles` | array\<string> | no       | `[]`    | Profile labels (matching `data.git.profiles.*`) that also get scope-local fallback aliases.                               |
+| Field              | Type            | Required | Default | Purpose                                                                                                                   |
+| ------------------ | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `item`             | string          | yes      | —       | Secret manager item (SSH Key type) holding the key pair.                                                                  |
+| `filename`         | string          | yes      | —       | Target filename written under `~/.ssh/`.                                                                                  |
+| `signing_fallback` | boolean         | no       | `false` | Registers this key for the `commit-ssh`/`tag-ssh`/`rebase-ssh` **global** fallback aliases; at most one key may set this. |
+| `signing_profiles` | `array<string>` | no       | `[]`    | Profile labels (matching `data.git.profiles.*`) that also get scope-local fallback aliases.                               |
 
 See [Secret manager setup](secret-manager-setup.md).
 
