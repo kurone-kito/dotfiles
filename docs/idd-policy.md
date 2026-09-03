@@ -463,14 +463,17 @@ distributed default as of this track. `.github/idd/config.json` was
 unchanged by this audit. See the
 [0.4.0](#new-040-schema-keys-left-at-default) and
 [0.5.0/0.6.0](#new-050060-schema-keys-left-at-default) sections above
-for the same convention.
+for the same convention. A later issue (#368) adopted
+`critiqueLoop.delegate` after that audit; the table row below records
+the explicit value and does not rewrite this track's historical
+result.
 
 ### Genuinely new in 0.7.0
 
 | Key | Status | Notes |
 | --- | --- | --- |
 | `authoringLanguage` | default: unset (0.7.0) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. Left unset: this repository already authors issues and PRs in English, and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
-| `critiqueLoop.delegate` | default: unset (0.7.0) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. Left unset: this repository has no external critique-delegate command in use; the per-agent critique table stays the sole C1 mechanism. |
+| `critiqueLoop.delegate` | **explicit: set** (`command: "coderabbit-critique"`, `mode: "combined"`; was default unset at #293) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. Adopted by #368 as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, which this pin (`v0.7.0`) cannot yet read. The committed `command` is the PATH-resolved wrapper name (no username, no absolute personal path). `docs/idd-workflow.md` treats `critiqueLoop.delegate.command` as a generic shell command, so this name may map to either the POSIX wrapper or the `.ps1` twin depending on the runtime shell; both are deployed to `~/.local/bin`, which `managed-paths.ps1` already publishes. A future `idd-skill` re-import whose target runtime reads that user-global file must delete this key (and revert this row to unset / fall-through) so C1 uses the already-deployed user-global source of truth instead of a second, repository-local copy. |
 
 ### Advisory-convergence report schema (not a policy key)
 
