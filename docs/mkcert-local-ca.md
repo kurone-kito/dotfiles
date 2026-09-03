@@ -11,6 +11,9 @@ Windows certificate trust store by running `mkcert -install` as part
 of `chezmoi apply`. This is **opt-in and disabled by default** — see
 [Why opt-in](#why-opt-in) below.
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#mkcert-local-ca-datamkcertinstall)
+for the `data.mkcert.install` field schema.
+
 ## Why opt-in
 
 `mkcert -install` registers a locally-generated root CA into the OS

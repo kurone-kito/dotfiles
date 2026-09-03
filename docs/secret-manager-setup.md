@@ -9,6 +9,10 @@ description: Explains how to configure chezmoi to retrieve GPG keys, SSH keys, a
 This guide explains how to configure chezmoi to retrieve GPG keys,
 SSH keys, and SSH host configuration from an external secret manager.
 
+See also: [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md)
+for the complete field-by-field schema of every `data.secret.*` section
+(and every other `[data.*]` section) covered here.
+
 ## Identity model
 
 This dotfiles setup supports **multiple identities** (e.g., personal,
@@ -332,75 +336,10 @@ Host gitlab-work
 
 ### Complete multi-identity example
 
-Below is a full `chezmoi.toml` configuration with three identities.
-The **primary** identity (`data.git.*`) is used globally; the others
-override it in specific directories.
-
-```toml
-# Primary (default) git identity
-[data.git]
-name = "Alice"
-email = "alice@personal.dev"
-signingkey = "AAAA1111BBBB2222"  # GPG fingerprint
-
-# Work identity — overrides in ~/work/ repositories
-[data.git.profiles.work]
-name = "Alice Corporate"
-email = "alice@example.com"
-signingkey = "CCCC3333DDDD4444"
-gitdir = "~/work/"
-sshhost = "github-work"   # optional — routes ghq clones via this SSH alias
-
-# OSS identity — overrides in ~/oss/ repositories
-[data.git.profiles.oss]
-name = "alice-dev"
-email = "alice-dev@users.noreply.github.com"
-signingkey = "EEEE5555FFFF6666"
-gitdir = "~/oss/"
-
-# GPG keys — one per signingkey fingerprint
-[data.secret]
-manager = "bitwarden"
-
-[data.secret.gpg.personal]
-item = "GPG Key - Personal"      # imports key AAAA1111BBBB2222
-
-[data.secret.gpg.work]
-item = "GPG Key - Work"          # imports key CCCC3333DDDD4444
-
-[data.secret.gpg.oss]
-item = "GPG Key - OSS"           # imports key EEEE5555FFFF6666
-
-# SSH keys — filename is the target file under ~/.ssh/
-[data.secret.ssh.keys.personal]
-item = "SSH Key - Personal"
-filename = "id_ed25519_personal"
-
-[data.secret.ssh.keys.work]
-item = "SSH Key - Work"
-filename = "id_ed25519_work"
-
-[data.secret.ssh.keys.oss]
-item = "SSH Key - OSS"
-filename = "id_ed25519_oss"
-
-# SSH hosts — identity references a filename above
-[data.secret.ssh.hosts.github-personal]
-hostname = "github.com"
-user = "git"
-identity = "id_ed25519_personal"
-
-[data.secret.ssh.hosts.gitlab-work]
-hostname = "gitlab.example.com"
-user = "git"
-identity = "id_ed25519_work"
-port = 2222
-
-[data.secret.ssh.hosts.github-oss]
-hostname = "github.com"
-user = "git"
-identity = "id_ed25519_oss"
-```
+For a full worked `chezmoi.toml` combining a primary identity, two
+directory-scoped profiles, GPG keys, SSH keys, and SSH hosts, see the
+["Complete example"](chezmoi-toml-reference.md#complete-example) section
+of the chezmoi.toml Configuration Reference.
 
 ## Applying
 
@@ -630,13 +569,9 @@ item = "npm Registry Token"
 target = ".npmrc"
 ```
 
-**Fields:**
-
-| Field        | Required | Default              | Description                                  |
-| ------------ | -------- | -------------------- | -------------------------------------------- |
-| `item`       | yes      |                      | Secret manager item name                     |
-| `target`     | yes      |                      | Home-relative path (forward slashes only)    |
-| `attachment` | no       | basename of `target` | Attachment name override in secret manager   |
+See
+[chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#secret-files-datasecretfileslabel)
+for the full field list, types, and defaults.
 
 ### Path requirements
 
@@ -713,15 +648,9 @@ item = "MyApp API - .env"
 subpath = "packages/api"
 ```
 
-**Fields:**
-
-| Field        | Required | Default            | Description                                           |
-| ------------ | -------- | ------------------ | ----------------------------------------------------- |
-| `repo`       | yes      |                    | ghq-style repo path (e.g., `github.com/user/project`) |
-| `item`       | yes      |                    | Secret manager item name                              |
-| `filename`   | no       | `.env`             | Target filename                                       |
-| `subpath`    | no       | *(root)*           | Subdirectory within the repo                          |
-| `attachment` | no       | same as `filename` | Attachment name override in the secret manager        |
+See
+[chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#env-deployment-dataenvdeploylabel)
+for the full field list, types, and defaults.
 
 ### Security notes
 

@@ -133,6 +133,11 @@ During init, chezmoi generates `~/.config/chezmoi/chezmoi.toml` from
 - `git.email`
 - `git.signingkey` (optional, can be empty)
 
+Every other `[data.*]` section (secret manager, SSH server hardening,
+Zellij Web, WinGet User PATH packages, and more) is optional and
+documented field-by-field in
+[docs/chezmoi-toml-reference.md](docs/chezmoi-toml-reference.md).
+
 After initialization, apply updates with:
 
 ```bash
@@ -179,20 +184,15 @@ by default. For tailnet-only access from phones or other remote devices,
 prefer keeping Zellij itself on `127.0.0.1` and publishing it through
 `tailscale serve`.
 
-Add the following to `~/.config/chezmoi/chezmoi.toml`:
+The web server itself is already enabled and bound to `127.0.0.1` by
+default; enable Tailscale publication and (on Windows) autostart in
+`~/.config/chezmoi/chezmoi.toml` — see
+[docs/chezmoi-toml-reference.md](docs/chezmoi-toml-reference.md#zellij-web-datazellij-datazellijweb)
+for the full field list and defaults:
 
 ```toml
-[data.zellij.web]
-server = true
-sharing = "on"
-bind = "127.0.0.1"
-port = 8082
-base_url = ""
-enforce_https_on_localhost = false
-
 [data.zellij.web.tailscale]
 enabled = true
-https_port = 443
 
 [data.zellij.web.windows]
 autostart = "onlogon"
@@ -284,13 +284,15 @@ This repository manages `~/.config/git/config` via
 
 ### Add directory-specific Git profiles
 
-Edit `~/.config/chezmoi/chezmoi.toml` and add one or more profiles:
+Edit `~/.config/chezmoi/chezmoi.toml` and add one or more profiles (see
+[docs/chezmoi-toml-reference.md](docs/chezmoi-toml-reference.md#git-identity-datagit-datagitprofileslabel)
+for the full field list, including the optional `sshhost` and
+`signing_format` fields):
 
 ```toml
 [data.git.profiles.work]
 name = "Work Name"
 email = "work@example.com"
-signingkey = "" # optional
 gitdir = "~/ghq/github.com/your-org/" # must end with /
 ```
 
