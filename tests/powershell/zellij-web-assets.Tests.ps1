@@ -52,13 +52,11 @@ Describe 'zellij web assets' {
     $lines | Should -Contain '  cursor_inactive_style {{ $zellijWebClientCursorInactiveStyle | quote }}'
   }
 
-  It 'documents simplified_ui and web_client settings in the chezmoi config template' {
-    $lines = Get-Content $script:ChezmoiConfigTemplate
+  It 'points to the chezmoi.toml reference doc for Zellij Web settings' {
+    $content = Get-Content $script:ChezmoiConfigTemplate -Raw
 
-    $lines | Should -Contain '#   simplified_ui = false             # true replaces Nerd Font glyphs with ASCII'
-    $lines | Should -Contain '#   client_font = "''HackGen Console NF'', ''Hack Nerd Font'', monospace"'
-    $lines | Should -Contain '#   client_cursor_blink = true'
-    $lines | Should -Contain '#   client_cursor_style = "bar"      # "block", "bar", or "underline"'
+    $content | Should -Match 'docs/chezmoi-toml-reference\.md#zellij-web-datazellij-datazellijweb'
+    $content | Should -Match 'Zellij Web.*section of README\.md'
   }
 
   It 'keeps certificate and key comment blocks on their own template lines' {
@@ -68,12 +66,10 @@ Describe 'zellij web assets' {
     $content | Should -Match '\{\{ if \$zellijWebKey \}\}\r?\nweb_server_key \{\{ \$zellijWebKey \| quote \}\}\r?\n\{\{ else \}\}\r?\n// web_server_key "/path/to/key\.pem"\r?\n\{\{ end \}\}\r?\n/// Whether to enforce https connections to the web server'
   }
 
-  It 'documents tailscale publication knobs in the chezmoi config template' {
-    $lines = Get-Content $script:ChezmoiConfigTemplate
+  It 'names the tailscale sub-table alongside the chezmoi.toml reference pointer' {
+    $content = Get-Content $script:ChezmoiConfigTemplate -Raw
 
-    $lines | Should -Contain '#   [data.zellij.web.tailscale]'
-    $lines | Should -Contain '#   enabled = true                   # optional; publish through tailscale serve'
-    $lines | Should -Contain '#   https_port = 443                 # optional tailnet HTTPS port'
+    $content | Should -Match '\[data\.zellij\.web\.tailscale\]'
   }
 
   It 'ignores platform-specific zellij artifacts on unsupported platforms' {
