@@ -25,24 +25,24 @@ for the cross-section consistency convention this repository uses.
 `[data.git]` is the **primary** identity, applied to every repository
 unless a profile overrides it:
 
-| Field            | Type   | Required | Default | Purpose                                                                                                                                          |
-| ---------------- | ------ | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`           | string | yes      | —       | Git user name used for commits.                                                                                                                  |
-| `email`          | string | yes      | —       | Git email address used for commits.                                                                                                              |
-| `signingkey`     | string | yes      | `""`    | GPG signing key fingerprint; an empty string disables GPG signing.                                                                               |
-| `signing_format` | string | no       | unset   | Forces the **primary** signing backend to `"gpg"` or `"ssh"`; only needed to break a tie when an SSH fallback key also exists at the same scope. |
+| Field            | Type   | Required | Default      | Purpose                                                                                                                                          |
+| ---------------- | ------ | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`           | string | yes      | —            | Git user name used for commits.                                                                                                                  |
+| `email`          | string | yes      | —            | Git email address used for commits.                                                                                                              |
+| `signingkey`     | string | yes      | `""`         | GPG signing key fingerprint; an empty string disables GPG signing.                                                                               |
+| `signing_format` | string | no       | `""` (unset) | Forces the **primary** signing backend to `"gpg"` or `"ssh"`; only needed to break a tie when an SSH fallback key also exists at the same scope. |
 
 `[data.git.profiles.<label>]` entries are **directory-scoped overrides**
 for repositories under a given path:
 
-| Field            | Type   | Required | Default | Purpose                                                                                              |
-| ---------------- | ------ | -------- | ------- | ---------------------------------------------------------------------------------------------------- |
-| `name`           | string | yes      | —       | Display name used for commits under `gitdir`.                                                        |
-| `email`          | string | yes      | —       | Commit email used under `gitdir`.                                                                    |
-| `signingkey`     | string | no       | `""`    | GPG fingerprint for this profile; an empty string disables GPG signing for it.                       |
-| `gitdir`         | string | yes      | —       | Repository path prefix (must end with `/`) that activates this profile.                              |
-| `signing_format` | string | no       | unset   | Same override semantics as `data.git.signing_format`, scoped to this profile.                        |
-| `sshhost`        | string | no       | `""`    | Optional SSH host alias; when set, `ghq` clones under `gitdir` route through it via `url.insteadOf`. |
+| Field            | Type   | Required | Default      | Purpose                                                                                              |
+| ---------------- | ------ | -------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| `name`           | string | yes      | —            | Display name used for commits under `gitdir`.                                                        |
+| `email`          | string | yes      | —            | Commit email used under `gitdir`.                                                                    |
+| `signingkey`     | string | no       | `""`         | GPG fingerprint for this profile; an empty string disables GPG signing for it.                       |
+| `gitdir`         | string | yes      | —            | Repository path prefix (must end with `/`) that activates this profile.                              |
+| `signing_format` | string | no       | `""` (unset) | Same override semantics as `data.git.signing_format`, scoped to this profile.                        |
+| `sshhost`        | string | no       | `""`         | Optional SSH host alias; when set, `ghq` clones under `gitdir` route through it via `url.insteadOf`. |
 
 See [Secret manager setup](secret-manager-setup.md) for the full identity
 model (how `data.git.*` connects to `data.secret.gpg.*` and
@@ -185,6 +185,8 @@ See [Secret manager setup](secret-manager-setup.md).
 | `sharing`                      | string  | no       | `"on"`                                                | Session-sharing policy passed through to `web_sharing`.                                    |
 | `bind`                         | string  | no       | `"127.0.0.1"`                                         | Address the local web server listens on.                                                   |
 | `port`                         | integer | no       | `8082`                                                | Port the local web server listens on.                                                      |
+| `cert`                         | string  | no       | `""` (required off localhost)                         | TLS certificate file path; only required when `bind` is not on `127.0.0.0/8`.              |
+| `key`                          | string  | no       | `""` (required off localhost)                         | TLS key file path; only required when `bind` is not on `127.0.0.0/8`.                      |
 | `base_url`                     | string  | no       | `""`                                                  | Optional reverse-proxy subpath.                                                            |
 | `enforce_https_on_localhost`   | boolean | no       | `false`                                               | Enforce HTTPS even when bound to `127.0.0.0/8` (always enforced off-localhost).            |
 | `client_font`                  | string  | no       | `"'HackGen Console NF', 'Hack Nerd Font', monospace"` | Web client terminal font stack.                                                            |
@@ -202,9 +204,9 @@ See [Secret manager setup](secret-manager-setup.md).
 `[data.zellij.web.windows]`, `[data.zellij.web.linux]`, and
 `[data.zellij.web.macos]` each carry a single field:
 
-| Field       | Type   | Required | Default      | Purpose                                                                                                                                     |
-| ----------- | ------ | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autostart` | string | no       | `"disabled"` | Windows: `"onlogon"` registers a per-user Scheduled Task. Linux: `"systemd-user"` installs a user service. macOS: `"launchagent"` (future). |
+| Field       | Type   | Required | Default      | Purpose                                                                                                                                                    |
+| ----------- | ------ | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autostart` | string | no       | `"disabled"` | Windows: `"onlogon"` registers a per-user Scheduled Task. Linux: `"systemd-user"` installs a user service. macOS: `"launchagent"` registers a LaunchAgent. |
 
 See the [Zellij Web](../README.md#zellij-web) section of the README.
 
@@ -317,6 +319,8 @@ server = true
 sharing = "on"
 bind = "127.0.0.1"
 port = 8082
+# cert = ""  # required when bind is not on 127.0.0.0/8
+# key = ""   # required when bind is not on 127.0.0.0/8
 base_url = ""
 enforce_https_on_localhost = false
 client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"
