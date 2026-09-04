@@ -275,6 +275,14 @@ MOCK
   assert_output --partial 'allow_builds = ["@anthropic-ai/claude-code"]'
 }
 
+@test "pins playwright/cli away from the untrusted 0.1.19 release" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"npm:@playwright/cli"' "$config"
+  assert_success
+  assert_output --partial '"0.1.18"'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
