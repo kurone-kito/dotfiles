@@ -263,7 +263,7 @@ enabled and default approval actors to
 <!-- dprint-ignore-start -->
 | Name | Commands |
 | --- | --- |
-| **fix-validate** | `npx markdownlint-cli2 --fix && npx markdownlint-cli2` |
+| **fix-validate** | `npx markdownlint-cli2 --fix && npx markdownlint-cli2 && npx cspell lint "**" --no-progress` |
 | **pre-push-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed -CI"` |
 | **post-fix-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed -CI"` |
 | **install-deps** | `git submodule update --init --recursive` |
