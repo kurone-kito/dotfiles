@@ -14,7 +14,8 @@
   ],
   "advisoryBotLogins": [
     "copilot-pull-request-reviewer[bot]",
-    "coderabbitai[bot]"
+    "coderabbitai[bot]",
+    "chatgpt-codex-connector[bot]"
   ],
   "workshop": {
     "exampleRepository": ""
