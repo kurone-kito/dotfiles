@@ -301,16 +301,19 @@ upstream.
 ## Advisory Bot Logins
 
 **`advisoryBotLogins`**:
-`["copilot-pull-request-reviewer[bot]", "coderabbitai[bot]"]`.
+`["copilot-pull-request-reviewer[bot]", "coderabbitai[bot]", "chatgpt-codex-connector[bot]"]`.
 
-Both logins were confirmed against live review events on
+The first two logins were confirmed against live review events on
 [PR #193](https://github.com/kurone-kito/dotfiles/pull/193), which
-carries review activity from both bots. Settle/wait
+carries review activity from both bots. `chatgpt-codex-connector[bot]`
+was confirmed on
+[PR #374](https://github.com/kurone-kito/dotfiles/pull/374), which
+received a Codex usage-limit notice from that login. Settle/wait
 ([`idd-advisory-wait.instructions.md`](../.github/instructions/idd-advisory-wait.instructions.md))
 stays Copilot-only regardless of this list — **`advisoryWait.primaryBotLogin`**
-and **`advisoryWait.secondaryBotLogin`** are left unset, so CodeRabbit
-reviews are dispositioned on arrival via this list but never gate the
-advisory-wait clock.
+and **`advisoryWait.secondaryBotLogin`** are left unset, so every
+configured login here (including a non-review notice) is dispositioned
+on arrival but never gates the advisory-wait clock.
 
 ## Autopilot Suitability
 
