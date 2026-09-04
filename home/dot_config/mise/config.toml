@@ -80,7 +80,19 @@ yt-dlp = "latest"
 "npm:@google/gemini-cli" = "latest"
 "npm:@microsoft/inshellisense" = "latest"
 "npm:@openai/codex" = "latest"
-"npm:@playwright/cli" = "latest"
+
+# mise's embedded aube installer rejects the "latest"-resolved 0.1.19
+# release under its trustPolicy=no-downgrade check: every version from
+# 0.1.0 through 0.1.18 was published by microsoft/playwright-cli's
+# GitHub Actions workflow via npm's OIDC trusted-publisher (carrying
+# Sigstore/SLSA provenance), but 0.1.19 was instead published from
+# Microsoft's internal ESRP pipeline (microsoft/playwright-cli#456),
+# which attaches no such trust evidence, so `mise install` fails hard.
+# Pin to 0.1.18, the last OIDC-trusted release, until a newer version
+# restores trust evidence -- GitHub Actions + OIDC publishing was
+# already restored upstream in microsoft/playwright-cli#459, so this
+# pin should be revisited once that lands in a published release.
+"npm:@playwright/cli" = "0.1.18"
 "npm:bash-language-server" = "latest"
 "npm:fast-cli" = "latest"
 
