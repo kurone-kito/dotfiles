@@ -60,6 +60,7 @@ yt-dlp = "latest"
 
 "aqua:anomalyco/opencode" = "latest"
 "aqua:google-antigravity/antigravity-cli" = "latest"
+"aqua:supabase/cli" = "latest"
 
 # mise's npm backend now defaults to its embedded aube installer
 # (npm.package_manager = "auto"), which never shells out to the npm
