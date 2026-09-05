@@ -85,6 +85,8 @@ input line editing
 - [mkcert](https://github.com/FiloSottile/mkcert) — local TLS
   certificates (opt-in local CA setup on Windows; see
   [docs/mkcert-local-ca.md](docs/mkcert-local-ca.md))
+- [Supabase CLI](https://github.com/supabase/cli) — command-line interface
+  for Supabase
 - [tealdeer](https://github.com/tealdeer-rs/tealdeer) — `tldr` client
   (the installed command is `tldr`, not `tealdeer`)
 - [Terraform](https://www.terraform.io/) — infrastructure as code
