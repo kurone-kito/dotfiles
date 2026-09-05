@@ -157,7 +157,7 @@ Never a WinGet `portable` duplicate on the setup.windows side — these
 did not "move," they were only ever defined here:
 
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
-`aqua:google-antigravity/antigravity-cli`, `antigravity-cli`, `grok`,
+`aqua:google-antigravity/antigravity-cli`, `aqua:supabase/cli`, `grok`,
 `npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`,
 `npm:@executeautomation/playwright-mcp-server`,
 `npm:@google/gemini-cli`, `npm:@microsoft/inshellisense`,
