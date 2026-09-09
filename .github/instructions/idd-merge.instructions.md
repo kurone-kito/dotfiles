@@ -417,6 +417,7 @@ Before any mutating action in F3, apply the
      After apply, record the outcome by the apply `status`. See
      `docs/idd-comment-minimization.md` for the exact formats:
 
+     <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
      If the apply `status` is `applied` (residual candidates minimized)
      or `clean` (no-op, nothing left to minimize): run the fresh
      re-check above **now, immediately before posting** and skip only
@@ -460,7 +461,9 @@ Before any mutating action in F3, apply the
    For the GraphQL fallback (helper unavailable): check
    `viewerCanMinimize` and `isMinimized` before minimizing; skip
    already-minimized comments and ones the viewer cannot minimize.
-   Re-validate the active claim before each mutation. Afterward, run
+   Re-validate the active claim before each mutation.
+   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+   Afterward, run
    the fresh re-check above **now, immediately before posting** and
    skip only under its both-converged condition; otherwise post an
    evidence comment summarizing the outcome (status, applied/skipped

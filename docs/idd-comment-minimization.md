@@ -440,8 +440,8 @@ workflow run — can detect that evidence was already posted. Both the
 prior **success** record.
 <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
 **Skip the post when a fresh, immediate
-re-check (see [Double-posting is
-prevented by...](#server-side-fallback-optional)) finds the latest
+re-check (see [the double-checked-locking re-check under Server-side
+fallback](#server-side-fallback-optional)) finds the latest
 trusted `<!-- idd-cleanup-evidence:` comment recording a successful
 outcome (`applied` / `clean`)**, narrowing — not fully preventing —
 duplicate success records, even when this run's own apply returned
