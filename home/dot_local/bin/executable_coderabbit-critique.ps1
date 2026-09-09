@@ -328,6 +328,13 @@ function global:Invoke-DotfilesCoderabbitCritique {
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
+  # A progress line for an operator watching the terminal during the
+  # potentially multi-minute wait below (#388): stderr-only, via the same
+  # [Console]::Error mechanism as every other diagnostic in this function,
+  # so it can never leak into Stdout's findings text.
+  [Console]::Error.WriteLine(
+    "coderabbit-critique: invoking coderabbit review --agent --base $baseBranch (timeout ${timeoutSeconds}s)")
+
   $result = Invoke-DotfilesCoderabbitReviewWithTimeout `
     -CoderabbitCommand $coderabbitCommand -BaseBranch $baseBranch `
     -TimeoutSeconds $timeoutSeconds

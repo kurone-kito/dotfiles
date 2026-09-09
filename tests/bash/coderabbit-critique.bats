@@ -244,6 +244,42 @@ exit 0
   assert_no_git_calls
 }
 
+@test "emits a progress line to stderr only, as the first stderr line, before invoking review" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"finding\"}"
+  echo "review-own-stderr-diagnostic" >&2
+  exit 0
+fi
+exit 1
+'
+  # Non-default base/timeout values (not "master"/300s) so this proves the
+  # line actually interpolates $BASE_BRANCH/$TIMEOUT_SECONDS rather than
+  # merely matching a hardcoded literal that happened to equal the defaults.
+  export CODERABBIT_CRITIQUE_BASE=develop
+  export CODERABBIT_CRITIQUE_TIMEOUT=45
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_success
+  # Position: the progress line is the very first line this script writes
+  # to its own stderr -- ahead of anything the wrapped `coderabbit review`
+  # call itself produces (buffered and only forwarded afterward).
+  assert_stderr_line --index 0 \
+    "coderabbit-critique: invoking coderabbit review --agent --base develop (timeout 45s)"
+  assert_stderr --partial "review-own-stderr-diagnostic"
+  # Stream: never on stdout, and never mixed into the findings text.
+  refute_output --partial "invoking coderabbit review"
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
 @test "fails closed when mktemp fails" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 3; exec "$@"'

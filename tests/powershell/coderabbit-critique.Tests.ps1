@@ -590,6 +590,44 @@ Describe 'coderabbit-critique' {
       $result.Output | Should -Match 'stdout marker text'
       $result.Output | Should -Not -Match 'stderr marker text'
     }
+
+    It 'writes a progress line to stderr, naming the base branch and timeout, before invoking the review' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'develop' }
+      $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
+      # Keep a direct reference to a plain StringWriter and read the buffer
+      # back through that reference -- [Console]::SetError wraps whatever is
+      # passed in a synchronized TextWriter internally regardless, so
+      # calling ToString() on [Console]::Error itself (as the outer
+      # BeforeEach's own writer would require) returns that wrapper's type
+      # name, not the underlying buffered text (confirmed empirically).
+      # Reading through this local reference instead sidesteps that.
+      $capturedError = [System.IO.StringWriter]::new()
+      [Console]::SetError($capturedError)
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = '{"type":"finding"}'
+          Stderr   = 'review-own-stderr-diagnostic'
+        }
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique
+
+      $result.Success | Should -BeTrue
+      $errorText = $capturedError.ToString()
+      $errorText | Should -Match (
+        [regex]::Escape('coderabbit-critique: invoking coderabbit review --agent --base develop (timeout 45s)')
+      )
+      # Position: the progress line precedes the review's own forwarded
+      # stderr text, which this function only writes once the (mocked)
+      # review call has already returned.
+      $errorText.IndexOf('invoking coderabbit review') |
+        Should -BeLessThan $errorText.IndexOf('review-own-stderr-diagnostic')
+      # Stream: the progress line never reaches stdout / the findings text.
+      $result.Output | Should -Not -Match 'invoking coderabbit review'
+    }
   }
 
   Context 'Full script as a real subprocess (stdout/stderr separation, Unix pwsh)' -Skip:($IsWindows -ne $false) {
@@ -681,6 +719,56 @@ Describe 'coderabbit-critique' {
       $stdoutText | Should -Match 'STDOUT_MARKER_TEXT'
       $stdoutText | Should -Not -Match 'STDERR_MARKER_TEXT'
       $stderrText | Should -Match 'STDERR_MARKER_TEXT'
+    }
+
+    It 'writes the progress line as the first real stderr output, never on stdout' {
+      $originalPath = $env:PATH
+      $originalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
+      try {
+        $env:PATH = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
+        Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
+        # Non-default base/timeout values (not "master"/300s) so this proves
+        # the line actually interpolates $baseBranch/$timeoutSeconds rather
+        # than merely matching a hardcoded literal that happened to equal
+        # the defaults. The outer file-level BeforeEach/AfterEach already
+        # saves and restores both variables.
+        $env:CODERABBIT_CRITIQUE_BASE = 'develop'
+        $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
+
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+        $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+          -ArgumentList @('-NoProfile', '-File', $script:Subject)
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $proc = [Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+        $stderrText = $stderrTask.GetAwaiter().GetResult()
+      } finally {
+        $env:PATH = $originalPath
+        if ($originalSkip) {
+          $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $originalSkip
+        }
+      }
+
+      $proc.ExitCode | Should -Be 0
+      # Stream: never on stdout, and never mixed into the findings text.
+      $stdoutText | Should -Not -Match 'invoking coderabbit review'
+      $stdoutText | Should -Match 'STDOUT_MARKER_TEXT'
+      # Position: the progress line is the very first line of real stderr --
+      # ahead of the reviewed (fake coderabbit) process's own
+      # STDERR_MARKER_TEXT, which that process only emits once it has
+      # already started running.
+      $stderrLines = $stderrText -split "`r?`n"
+      $stderrLines[0] | Should -Match (
+        '^coderabbit-critique: invoking coderabbit review --agent --base develop \(timeout 45s\)$'
+      )
+      $stderrText.IndexOf('invoking coderabbit review') |
+        Should -BeLessThan $stderrText.IndexOf('STDERR_MARKER_TEXT')
     }
   }
 
