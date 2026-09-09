@@ -4,54 +4,57 @@ name: IDD advisory-convergence gate
 # workflow is proven green -- see #149). Adapted from
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# f51a8bb73a47452eff5799e8a27251b660ba4ae0 (v0.7.0; reconciled from the
-# prior v0.6.0 pin by #296, which also keeps this file's helper pin in
+# d005098bf3a54a27ac79b22fb5eeb88186d235c6 (v0.9.0; reconciled from the
+# prior v0.7.0 pin by #384, which also keeps this file's helper pin in
 # sync with the rest of the repository's ephemeral-npx invocations --
-# see docs/idd-policy.md "Helper Runtime Profile"). This round's
-# reconciliation is the fix for the PR #291 false negative -- see
-# roadmap #292's "Why this matters" for the root cause. The
+# see docs/idd-policy.md "Helper Runtime Profile"). The
 # maintainer-authorized waiver escape is already configured in
 # `.github/idd/config.json` `ciGate.*`; see docs/idd-policy.md "CI Gate
 # External Check Waivers" for the waiver path.
 #
 # Runner override: `runs-on` below reads the `runner` workflow_dispatch
 # / workflow_call input first, then the `CI_RUNNER_LABEL` repository
-# variable, falling back to `ubuntu-latest` when both are unset (as
-# they are today -- no such variable is configured, so ordinary
-# pull_request-triggered behavior is unchanged). `workflow_dispatch`'s
-# `runner` input carries its own default (`ubuntu-latest`), so a manual
-# dispatch always resolves the input before `CI_RUNNER_LABEL` is ever
-# consulted -- inert today since no other default is configured, and
-# matches upstream's own equivalent precedence. This only imports the
-# override mechanism upstream added in v0.6.0/v0.7.0; adopting a
-# non-default runner is a separate, deliberate decision this
-# reconciliation does not make. Preserving this repository's own
-# `ubuntu-latest` default rather than adopting upstream's `ubuntu-slim`
-# flip at v0.7.0 is itself a deliberate decision, not an oversight --
-# see docs/idd-policy.md "Post-Merge Cleanup Automation" and the sibling
-# `post-merge-cleanup.yml` header for the same repository-wide runner
-# convention.
+# variable, falling back to `ubuntu-slim` when both are unset. #384
+# adopts upstream's `ubuntu-slim` default (reversing the prior
+# deliberate `ubuntu-latest` divergence recorded by #296/#303) as part
+# of roadmap #380's "adopt all opt-in features" decision -- no
+# `CI_RUNNER_LABEL` repository variable is configured, so ordinary
+# pull_request-triggered behavior now runs on `ubuntu-slim` instead of
+# `ubuntu-latest`. `workflow_dispatch`'s `runner` input carries its own
+# default (also `ubuntu-slim` now), so a manual dispatch always
+# resolves the input before `CI_RUNNER_LABEL` is ever consulted --
+# matches upstream's own equivalent precedence. The sibling
+# `post-merge-cleanup.yml` adopts the identical override mechanism and
+# default in the same round, for cross-workflow consistency -- see its
+# own header.
 #
 # CI topology: convergence can change WITHOUT a new push -- when
 # Copilot submits its review (pull_request_review) -- so that trigger is
-# added alongside pull_request. As of the v0.7.0 reconciliation,
-# upstream moved review-thread-comment-triggered refresh
-# (pull_request_review_comment) exclusively to the new, non-required
-# `idd-advisory-convergence-comment.yml` companion workflow; this
-# repository defers adopting that companion this round (see PR body for
-# the concrete packaged-CLI gap that motivated deferral), so a
-# disposition reply alone no longer auto-refreshes this required check
-# -- fall back to the manual `gh run rerun`/`workflow_dispatch` recovery
-# path below (or the `idd-rerun-advisory-convergence` helper bin) when
-# that happens. Several pull_request/pull_request_review events can
-# still fire in quick succession during review triage, so `concurrency:`
-# below debounces them to at most one active run per pull request
-# instead of several stacked ones -- this exact multi-run pattern is a
-# documented, previously-investigated upstream incident:
-# kurone-kito/idd-skill#1381 (empirically reproduced on that
-# repository's own PR #1383; see that repository's identically-pinned
-# idd-advisory-convergence.yml header for the full writeup) -- ported
-# here after #226 hit the same friction without it.
+# added alongside pull_request. Upstream moved review-thread-comment-
+# triggered refresh (pull_request_review_comment) exclusively to the
+# non-required `idd-advisory-convergence-comment.yml` companion
+# workflow at v0.7.0; this repository deferred adopting that companion
+# at the time because the ephemeral-npx helper pin then lacked a
+# packaged `idd-review-comment-origin` bin (see PR #303's "Decisions
+# recorded" for the confirmed gap). #384 confirmed that gap closed at
+# the v0.9.0 pin (`idd-review-comment-origin`,
+# `idd-advisory-comment-debounce`, and `idd-rerun-advisory-convergence`
+# all resolve to packaged bins) and adds
+# `idd-advisory-convergence-comment.yml` alongside this file, so a
+# disposition reply on a review thread now auto-refreshes this required
+# check again via that companion. The manual `gh run rerun`/
+# `workflow_dispatch` recovery path below (or the
+# `idd-rerun-advisory-convergence` helper bin) remains available for any
+# case the companion's own debounce/classification does not cover.
+# Several pull_request/pull_request_review events can still fire in
+# quick succession during review triage, so `concurrency:` below
+# debounces them to at most one active run per pull request instead of
+# several stacked ones -- this exact multi-run pattern is a documented,
+# previously-investigated upstream incident: kurone-kito/idd-skill#1381
+# (empirically reproduced on that repository's own PR #1383; see that
+# repository's identically-pinned idd-advisory-convergence.yml header
+# for the full writeup) -- ported here after #226 hit the same friction
+# without it.
 #
 # `cancel-in-progress: true` does not fully close the gap: a stale
 # CANCELLED run can still race a later SUCCESS run for the identical
@@ -84,14 +87,14 @@ on:
         required: true
         type: number
       runner:
-        description: Runner label (default ubuntu-latest)
+        description: Runner label (default ubuntu-slim)
         required: false
         type: string
-        default: ubuntu-latest
+        default: ubuntu-slim
   workflow_call:
     inputs:
       runner:
-        default: ubuntu-latest
+        default: ubuntu-slim
         required: false
         type: string
       pr_number:
@@ -108,7 +111,7 @@ defaults:
     # Actions otherwise picks bash on Linux/macOS but PowerShell Core on
     # Windows, which would silently misinterpret this file's POSIX
     # shell syntax instead of failing loudly. No-op on this repository's
-    # own ubuntu-latest default; imported for parity with upstream and
+    # own ubuntu-slim default; imported for parity with upstream and
     # to keep any future non-default `runner` input safe.
     shell: bash
 concurrency:
@@ -116,11 +119,12 @@ concurrency:
   # Grouped by PR number, not github.ref: pull_request_review is not a
   # pull_request-family event, so github.ref does not resolve the same
   # way for it as it does for a pull_request-only workflow. Review-thread
-  # comments live in the deferred idd-advisory-convergence-comment.yml
-  # companion workflow (see header) and would not share this group if
-  # adopted later. workflow_dispatch/workflow_call have no pull_request
-  # context either, so both fall back to their own pr_number input.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr_number }}
+  # comments live in the idd-advisory-convergence-comment.yml companion
+  # workflow (see header) and do not share this group. Keep pull_request
+  # and pull_request_review in their existing group, but isolate
+  # workflow_dispatch so a manual re-check cannot cancel an in-flight
+  # PR-linked run.
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}', inputs.pr_number) || github.event.pull_request.number || inputs.pr_number }}
 jobs:
   # The job id `idd-advisory-convergence` is the exact check-run context
   # consumed by the rerun helper, advisory-wait policy, required status
@@ -129,7 +133,7 @@ jobs:
   # preventive; no observed incident yet. If either edit is intentional,
   # update every consumer to the new literal context together.
   idd-advisory-convergence:
-    runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -152,7 +156,8 @@ jobs:
       # vendored scripts/ directory), so invoke the packaged CLI
       # rather than upstream's `node scripts/advisory-convergence.mjs`
       # form. See docs/idd-policy.md "Helper Runtime Profile".
-      - env:
+      - name: Run advisory-convergence check
+        env:
           GH_TOKEN: ${{ github.token }}
           # gh reads whichever of these two matches its resolved host
           # (`gh help environment`), so setting both is inert on
@@ -166,5 +171,9 @@ jobs:
           # expression directly into the run: script.
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/f51a8bb73a47452eff5799e8a27251b660ba4ae0 \
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::PR_NUMBER is empty"
+            exit 1
+          fi
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
             idd-advisory-convergence --pr "$PR_NUMBER" --assert
