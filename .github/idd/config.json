@@ -34,6 +34,9 @@
   },
   "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",
+  "advisoryWait": {
+    "secondaryBotLogin": "coderabbitai[bot]"
+  },
   "ciWait": {
     "runningTimeout": "PT10M",
     "generationTimeout": "PT10M",
@@ -50,6 +53,9 @@
     },
     "trustSourcePinnedRequiredChecks": true,
     "trustEmptyProtectionReads": true
+  },
+  "providerOutage": {
+    "declarationTarget": 393
   },
   "skipIssueAuthorApprovalGate": true,
   "maintainerApprovalActorPolicy": "owners-and-maintainers-only",
