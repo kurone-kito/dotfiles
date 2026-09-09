@@ -57,7 +57,15 @@ name: IDD advisory-convergence comment refresh
 # Runner: reads the `CI_RUNNER_LABEL` repository variable, matching
 # the required idd-advisory-convergence.yml companion, falling back to
 # `ubuntu-slim` when unset -- this workflow has no `workflow_dispatch`
-# trigger of its own, so there is no `runner` input to check first.
+# trigger of its own, so there is no `runner` input to check first. This
+# matches the `idd-template/` copy's own v0.9.0 content exactly (root's
+# copy hardcodes `ubuntu-slim` with no override at all). Likewise, the
+# `PR_NUMBER` empty-guard in the "Rerun required HEAD check" step below
+# matches `idd-template/`'s v0.9.0 content; this copy additionally
+# applies the same guard to "Check for newer qualifying event", which
+# neither upstream copy does -- a small, repository-added hardening
+# consistent with how the sibling `idd-advisory-convergence.yml` /
+# `post-merge-cleanup.yml` files already guard every `PR_NUMBER` use.
 #
 # Debounce (upstream #1381, #2023, #2638): a burst of IDD-originated
 # comments fired `idd-rerun-advisory-convergence --apply` once per
@@ -132,6 +140,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
+      # Both upstream copies replace this step with an inline "Assert
+      # Node.js floor" `node -e` check instead (their runner's
+      # preinstalled Node is already known-good, so they only assert
+      # the version rather than provisioning one). This repository
+      # instead provisions the exact `.nvmrc`-pinned version via
+      # `setup-node`, matching the sibling `idd-advisory-convergence.yml`
+      # / `post-merge-cleanup.yml` files' own convention (this file also
+      # needs `npx` itself, which the plain assertion does not provide).
+      #
       # This repository runs the ephemeral-npx helper profile (no
       # vendored scripts/ directory), so invoke the packaged CLIs
       # rather than upstream's `node scripts/*.mjs` forms. See
