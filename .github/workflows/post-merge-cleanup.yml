@@ -219,6 +219,22 @@ jobs:
           RETRY_ATTEMPTS: ${{ steps.cleanup.outputs.retry_attempts }}
           RETRY_BOUND_EXHAUSTED: ${{ steps.cleanup.outputs.retry_bound_exhausted }}
         run: |
+          # <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+          # #397: this step already re-fetches PR comments (COMMENTS_TSV
+          # below) and decides skip-vs-post immediately adjacent to the
+          # `gh pr comment` call at the end of this step, with no other
+          # GitHub-mutating call in between -- i.e. it already performs
+          # the "immediate, freshly-fetched re-check right before POST"
+          # side of #397's double-checked-locking fix, unchanged by that
+          # issue. #397 instead corrected the agent-side F4 step in
+          # idd-merge.instructions.md, which lacked an equivalently
+          # literal, freshly-fetched re-check at that same point, and
+          # corrected docs/idd-comment-minimization.md's "prevented by"
+          # framing, which understated the residual race between this
+          # workflow and that agent step. See docs/idd-policy.md's
+          # Divergence Register (`cleanup-evidence-dedup-recheck`) for
+          # the recorded local correction and its accepted-risk framing.
+          #
           # Avoid duplicate evidence comments, but only on a genuinely
           # converged outcome. Workflow-level concurrency only serialises
           # this workflow's own runs; an agent F4 (or a maintainer
