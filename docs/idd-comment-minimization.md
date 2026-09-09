@@ -437,7 +437,9 @@ HTML comment token on the first line acts as a stable machine-readable
 marker so a resuming agent — or a concurrent `post-merge-cleanup`
 workflow run — can detect that evidence was already posted. Both the
 **agent-side** F4 step and the `post-merge-cleanup` workflow key on the
-prior **success** record: **skip the post when a fresh, immediate
+prior **success** record.
+<!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+**Skip the post when a fresh, immediate
 re-check (see [Double-posting is
 prevented by...](#server-side-fallback-optional)) finds the latest
 trusted `<!-- idd-cleanup-evidence:` comment recording a successful

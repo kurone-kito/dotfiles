@@ -347,7 +347,8 @@ Before any mutating action in F3, apply the
    command below — with no other GitHub-mutating call in between, and
    never reusing a comment list gathered during dry-run or apply — run
    this fresh re-check (mirrors `post-merge-cleanup.yml`'s own dedup
-   logic, including its `#2213` both-converged rule):
+   logic, including its `#2213` both-converged rule; requires `bash`,
+   like that workflow's own `defaults.run.shell: bash`):
 
    ```sh
    TRUSTED_LOGINS=$(
@@ -357,7 +358,7 @@ Before any mutating action in F3, apply the
      } | tr '[:upper:]' '[:lower:]'
    )
    COMMENTS_TSV=$(gh api --paginate \
-     "repos/<owner>/<repo>/issues/<pr-number>/comments" \
+     "repos/{owner}/{repo}/issues/{pr-number}/comments" \
      --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login, (.body | split("\n")[0])] | @tsv')
    EXISTING_STATUS=""
    while IFS=$'\t' read -r candidate_id candidate_login candidate_marker_line; do
