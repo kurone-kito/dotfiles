@@ -3065,7 +3065,8 @@ same as `AW4`/`AW5`.
 - Read-only boundary: the helper performs no minimization, no posting, and no
   issue creation. **Handoff**: the JSON is the input an operator hands to the
   issue-authoring skill, which re-verifies each candidate against current
-  `main` (reuse-first / not-already-fixed) and drafts follow-up issues
+  <!-- dotfiles-divergence: master-branch -->
+  `master` (reuse-first / not-already-fixed) and drafts follow-up issues
   bucketed by readiness. The helper does deterministic detection; the
   judgment-heavy re-verification, drafting, and publish stay operator-gated.
 - **Operator runbook**: this helper is a **manual spot-check audit**, not a

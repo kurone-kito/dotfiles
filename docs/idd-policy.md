@@ -1117,6 +1117,20 @@ is re-imported:
   the pinned tag/commit the surrounding guidance otherwise insists on
   ("keep imports pinned" applies everywhere else in this same file).
   Not fixed ad hoc here for the same reason as the item above.
+- (`v0.9.0`, `d005098bf3a54a27ac79b22fb5eeb88186d235c6`, newly flagged
+  this round by a CodeRabbit review comment on #383's PR, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import)
+  [`docs/idd-concept-ownership.md`](idd-concept-ownership.md)'s
+  ownership-and-mutation row for `advisory-wait` / `advisory-wait-recovery`
+  markers omits `advisory-reroll`, while the lifecycle-transition table
+  further down the same file lists `advisory-reroll:` alongside those
+  two in its own "Superseded / minimized" row. `advisory-reroll` is a
+  real, still-supported marker kind elsewhere in this file set
+  (`idd-helper-scripts.md`, `idd-review-fix.instructions.md`), so the
+  ownership row's omission is inconsistent with the rest of the same
+  document. Not fixed ad hoc here for the same reason as the two items
+  above.
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
