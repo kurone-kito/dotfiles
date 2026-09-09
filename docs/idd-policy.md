@@ -191,9 +191,10 @@ bump did not open a fresh skew window there; `.claude/skills/` (the
 issue-authoring companion bundle) opened the same kind of transitional
 skew window the `v0.7.0` round saw between #293 and #298, until
 [`#386`](https://github.com/kurone-kito/dotfiles/issues/386) (PR #398)
-closed it by moving the bundle's `SKILL.md` and
-`references/contract.md` to the same `v0.9.0` baseline. This
-repository's final-verification track
+closed it by moving the whole bundle -- `SKILL.md`,
+`references/contract.md`, `references/draft-patterns.md`, and
+`references/workflow-boundary.md` -- to the same `v0.9.0` baseline.
+This repository's final-verification track
 ([`#387`](https://github.com/kurone-kito/dotfiles/issues/387))
 confirmed the pin, the instructions, and the skills bundle now all
 track `v0.9.0` uniformly, mirroring #298's role in the prior round.
