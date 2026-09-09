@@ -74,6 +74,16 @@ qualifying human decision resolves the hold, a later session removes
 the label and re-claims. A response that leaves the decision open
 does not re-enter.
 
+<!-- dotfiles-divergence: claim-timing -->
+**Provider-outage park**: release the claim immediately, no 6 h
+heartbeat -- see idd-ci.instructions.md's Hold-and-report failure shapes.
+
+**Parked-change bound** (conditional, only when responding to a known
+provider outage): before claiming a new issue, check
+`node scripts/provider-outage-park.mjs`'s `boundReached`. If `true`, do
+not claim -- route elsewhere or wait instead of manufacturing another
+unmergeable pull request.
+
 ## Roadmap markers
 
 For roadmap markers and their usage rules, see
@@ -158,13 +168,14 @@ Codex CLI / Antigravity CLI (formerly Gemini CLI)) and the optional
 repository-configurable `critiqueLoop.delegate` surface, see
 [`docs/idd-workflow.md` → Critique pass invocation](../../docs/idd-workflow.md#critique-pass-invocation).
 
-### Mutation / write-side helper lens
+### Critique lenses
 
-When the diff under critique implements a helper that mutates GitHub or
-git state, or performs a merge, also apply the additional write-side
-checks (fail-closed inputs, validate/execute scope parity, unsafe-output
-suppression, schema strictness parity) in
-[`docs/idd-workflow.md` → Mutation / write-side helper lens](../../docs/idd-workflow.md#mutation--write-side-helper-lens).
+Two lenses in `docs/idd-workflow.md` apply on top of the general
+critique, and compose when both fit. Apply
+[Mutation / write-side](../../docs/idd-workflow.md#mutation--write-side-helper-lens)
+to a helper that mutates GitHub or git state or merges, and
+[Gate-mirroring](../../docs/idd-workflow.md#gate-mirroring-helper-lens)
+to one that mirrors or pre-checks another gate's decision.
 
 ## Template sync
 

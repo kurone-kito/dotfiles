@@ -134,8 +134,7 @@ by reasoned rejection of peripheral or verified-false items — not every
 comment needs a code change. Record the reason in the disposition reply;
 "a bot raised it" alone never forces a change (e.g., a "credential
 leak" flag on a placeholders-only config file:
-`**Rejected** — verified placeholders-only<!-- {markerPrefix}-review-reply -->`,
-including the reply-identity stamp from E6 below).
+`**Rejected** — verified placeholders-only`).
 
 ## E6 — Post disposition replies
 
@@ -163,8 +162,9 @@ reviewer feedback:
 - After posting your reply, **immediately resolve the thread** — except
   for `**Awaiting maintainer decision**`. When helper runtime is enabled,
   the profile-selected resolve-review-thread command (`--pr <number>
-  --comment-id <id> --apply`, with `--body`/`--claim-issue`/`--claim-id`;
-  see `docs/idd-helper-scripts.md`) posts the reply and resolves in one
+  --comment-id <id> --apply`, with `--body`/`--claim-issue`/`--claim-id`
+  or `--claimless`; see `docs/idd-helper-scripts.md`) posts the reply
+  and resolves in one
   call, replying before resolving so a failed reply never leaves a
   silently-resolved thread; the manual REST + GraphQL
   `resolveReviewThread` sequence is the fallback. Resolving means "agent
@@ -320,8 +320,7 @@ review-ack: {agent-id} {PR_HEAD_SHA} {ISO8601-acknowledged-at}
 
 _Worked example_: a review posts a regular-comment finding plus a
 suppressed one. Disposition the regular-comment finding normally
-(`**Rejected** — verified placeholders-only<!-- {markerPrefix}-review-reply -->`,
-the reply-identity stamp from above), then also post
+(`**Rejected** — verified placeholders-only`), then also post
 `review-ack: claude-code-1a2b3c4d 4b825dc642cb6eb9a060e54bf8d69288fbee4904 2026-08-19T00:10:00Z`
 (plain text, no HTML comment) to cover the suppressed one — the
 regular-comment rejection alone never sets `converged`, and this is
@@ -447,11 +446,14 @@ Otherwise continue to `idd-review-fix.instructions.md`.
 
 ## E-phase branch-sync check
 
-<!-- dotfiles-divergence: master-branch -->
 After the review loop confirms no PATH A items remain (from E3 or E8),
 check the current branch state before routing to F-phase. This gate uses
-merge-from-`master` (never rebase) when synchronization is required,
-preserving review history on the already-published PR branch.
+merge-from-`{development-branch}` (never rebase) when synchronization is
+required, preserving review history on the already-published PR branch.
+`{development-branch}` is the value resolved in
+`idd-work.instructions.md`'s B1
+[Resolve the development branch](idd-work.instructions.md#b1--create-worktree-with-branch)
+step.
 
 When helper runtime is enabled, call:
 `idd-branch-conflict-state --pr {pr-number}`
@@ -473,10 +475,9 @@ Route based on `branchState` from the helper (or `mergeable` /
   (recompute `{max-activity-updatedAt}` / `{total-item-count}` /
   `{latest-ci-completed-at}`, following the E1 Step 2 rules) — otherwise
   F2's review-currency check treats your own dispositions as new
-  activity and bounces back to E1 needlessly.
-  <!-- dotfiles-divergence: master-branch -->
-  Skip the refresh on the
-  sync path (E1 re-snapshots after merging `master`) or on a hold. `clean`
+  activity and bounces back to E1 needlessly. Skip the refresh on the
+  sync path (E1 re-snapshots after merging `{development-branch}`) or on
+  a hold. `clean`
   here means conflict-freeness only — see the `baseAdvancedSinceMergeBase`
   note under F1 in `idd-pre-merge.instructions.md`. **Then** proceed to
   `idd-pre-merge.instructions.md` (F1).
@@ -496,20 +497,20 @@ Route based on `branchState` from the helper (or `mergeable` /
   a PR comment documenting the state and stop. Do not proceed to F-phase
   without confirmed branch-state evidence.
 
-<!-- dotfiles-divergence: master-branch -->
-**Sync path** (merge-from-`master`):
+**Sync path** (merge-from-`{development-branch}`):
 
 1. **Active review gate**: unresolved review threads, unreplied
    comments, or a reviewer's `CHANGES_REQUESTED` state require explicit
    operator confirmation before this merge, since the merge commit will
    appear in PR history.
-2. Merge `master` into the feature branch:
-   `git fetch origin master && git merge origin/master`. Use the
+2. Merge `{development-branch}` into the feature branch:
+   `git fetch origin {development-branch} && git merge
+   origin/{development-branch}`. Use the
    [signed-commit merge wrapper](../../docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure)
    when primary signing is non-interactive-hostile. That wrapper's
    merge invocation includes a conventional `-m` subject (for example
-   `chore: merge origin/master into the claimed branch`) so a commitlint
-   `commit-msg` hook does not reject the merge commit.
+   `chore: merge origin/{development-branch} into the claimed branch`)
+   so a commitlint `commit-msg` hook does not reject the merge commit.
 3. If conflicts arise, resolve them and complete the merge with that
    same procedure — mirrors the D1 rebase note.
 4. Run **post-fix-validate**.
@@ -517,18 +518,17 @@ Route based on `branchState` from the helper (or `mergeable` /
    commits).
 6. Return to `idd-review-snapshot.instructions.md` (E1).
 
-<!-- dotfiles-divergence: master-branch -->
-## Merge-master livelock under fast-moving `master`
+## Merge-development-branch livelock under fast-moving {development-branch}
 
-Under heavy concurrent-session load, `master` can advance faster than one
-sync cycle finishes, livelocking naive retries before ever reaching F3
-(background:
-[design rationale](../../docs/idd-design-rationale.md#merge-master-livelock-under-fast-moving-master)).
+Under heavy concurrent-session load, `{development-branch}` can advance
+faster than one sync cycle finishes, livelocking naive retries before
+ever reaching F3 (background:
+[design rationale](../../docs/idd-design-rationale.md#merge-main-livelock-under-fast-moving-main)).
 
 **Rule**: post the watermark as the **last** action before F3's
 `idd-merge-execute.mjs --apply`, every pass — anything after (a CI
-rerun settling, a new disposition reply, another `master` advance)
-stales it, failing `--apply` closed on `review-currency` regardless
+rerun settling, a new disposition reply, another `{development-branch}`
+advance) stales it, failing `--apply` closed on `review-currency` regardless
 of CI color; re-post before retrying. A stale `idd-advisory-convergence`
 rollup: see [rerun mechanics](idd-ci.instructions.md#rerun-mechanics).
 

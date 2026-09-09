@@ -149,6 +149,23 @@ that set instead of re-deriving it.
    <profile-selected-ci-wait-state-command> --pr {pr-number}
    ```
 
+   **Label-gated or other opt-in gate surfacing as a job step, not a
+   check.** `gh pr checks` (and `ci-wait-state`) lists jobs/checks, not
+   the steps inside them. An opt-in heavy CI gate wired to run as a
+   step inside an already-present job — rather than its own discrete
+   check — never appears as a new entry there; only the parent job
+   does, and only once, regardless of whether the gated step ran. Do
+   not conclude such a gate is not-running or already-done solely
+   because `gh pr checks` shows no new check for it; confirm it
+   actually executed by inspecting the job's own steps instead:
+
+   ```sh
+   gh run view {run-id} --json jobs
+   ```
+
+   and read the target job's `steps[]` for the gate's step name and
+   conclusion.
+
 2. Normalize check states:
    - treat `skipped`, `neutral`, and `not_applicable` as pass-equivalent
    - treat `pending`, `requested`, `waiting`, `queued`,
@@ -259,13 +276,28 @@ next.
 rerun this SAME existing run via the mechanic above — never
 `workflow_dispatch`.
 
+<!-- dotfiles-divergence: master-branch -->
+**Stale workflow definition on the PR branch.** `gh run rerun`
+re-resolves the failing check against the workflow **definition
+file** as it exists on the PR branch, not on `master` — a sibling
+track's already-merged fix to a shared CI check's own `.yml` file is
+invisible to a rerun here until this branch pulls that fix in. If a
+required check keeps failing the same way after a rerun and its
+workflow file changed recently on `master`, diff the PR branch's copy
+against `master`'s; a mismatch means a branch-sync merge (merge `master`
+in, never rebase — see the E-phase branch-sync check in
+`idd-review-triage.instructions.md`) is the diagnostic recovery step.
+Treat this as reachable at D4/pre-review, not only after E8 — the
+ordering dependency a shared check-definition change creates is
+invisible to disjoint-file-set track planning.
+
 ## Interpretation
 
 <!-- dprint-ignore-start -->
 | State (required checks only, normalized) | Action |
 | --- | --- |
 | All required checks are generated and pass-equivalent | → **on-success** (caller-defined) |
-| Any required check is non-pass `failure`, `action_required`, `startup_failure`, or `stale` | Inspect the log. Infra/flaky: apply `ciWait.rerunPolicy` (default `rerun-once`) — rerun the exact failed run once and resume polling, or hold and stop. Code-caused: fix, **fix-validate**, commit atomically, return to caller's pre-push step. `action_required`/`startup_failure`/`stale` rarely clear on a blind rerun — if it needs a maintainer action or fresh run, hold rather than loop reruns. Exception: `idd-advisory-convergence` stuck at `action_required` from a gated bot run recovers by rerunning the existing run per `ciWait.rerunPolicy` (see §Rerun mechanics). Exception 2: `idd-advisory-convergence` alone non-pass with `pending: false` and outstanding review reasons — D4/E15 exit to E1 (both carve out a just-posted maintainer waiver, which still needs the rerun — see D4); F2/F3 unaffected. |
+| Any required check is non-pass `failure`, `action_required`, `startup_failure`, or `stale` | Inspect the log. Infra/flaky: apply `ciWait.rerunPolicy` (default `rerun-once`) — rerun the exact failed run once and resume polling, or hold and stop. Code-caused: fix, **fix-validate**, commit atomically, return to caller's pre-push step. `action_required`/`startup_failure`/`stale` rarely clear on a blind rerun — if it needs a maintainer action or fresh run, hold rather than loop reruns. Exception 1: `idd-advisory-convergence` stuck at `action_required` from a gated bot run recovers by rerunning the existing run per `ciWait.rerunPolicy` (see §Rerun mechanics). Exception 2: `idd-advisory-convergence` alone non-pass with `pending: false` and outstanding review reasons — D4/E15 exit to E1 (both carve out a just-posted maintainer waiver, which still needs the rerun — see D4); F2/F3 unaffected. Exception 3: `idd-advisory-convergence` alone non-pass with `pending: true` (the check evaluated before Copilot's review exists for this HEAD SHA, e.g. "Copilot has not reviewed this pull request yet") — the literal opposite boolean from Exception 2, and an expected, self-resolving timing race rather than infra/flaky or code-caused: apply D4's `pending: true` recovery check (`idd-skill#2622`). |
 | Any required check is non-pass `cancelled` or `timed_out` | Code-caused: fix, **fix-validate**, commit atomically, return to caller's pre-push step. Infra-caused: apply `ciWait.rerunPolicy`; rerun/re-push only within budget, otherwise hold and stop. |
 | Any required check is running (`pending`/`requested`/`waiting`/`expected`/...) | Continue waiting. After `ciWait.runningTimeout` (from server `startedAt`; default 30 min) with no completion, apply `ciWait.rerunPolicy` — rerun once and resume, or hold and stop if the route recurs or policy is `hold`. |
 | Required checks are not generated after `ciWait.generationTimeout` | Treat as running (default 10 min). If the workflow run doesn't exist at all when that window elapses, hold and escalate to a maintainer, then stop. |
@@ -282,12 +314,18 @@ infra-vs-code triage above:
   Non-transient — a rerun reproduces it, no code change fixes it. Skip
   `ciWait.rerunPolicy`; post a hold comment naming the block and stop for
   a maintainer.
+- **Sole blocker is an unavailable provider service** (`providerHealth`
+  `unavailable`): park, don't hold, then release the claim -- see
+  [Provider outage park helper](../../docs/idd-helper-scripts.md#provider-outage-park-helper)
+  for the `--park` command and its required flags.
 
 ## Wake-up discipline
 
 This advisory, tool-agnostic note keeps the **wait itself cheap**: the
 dominant cost is each re-invocation's context re-read (worse past the
-prompt-cache TTL), not the idle time.
+prompt-cache TTL), not the idle time. It applies to a session pushing a
+commit and waiting on CI or bot review outside a formal IDD claim too
+(issue `#2464`) — nothing below depends on being mid-phase.
 
 **Portability**: under supervisor/worker topologies, a background
 wait's completion notification often reaches only the supervisor, so
