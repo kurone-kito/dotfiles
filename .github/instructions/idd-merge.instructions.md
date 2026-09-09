@@ -372,6 +372,15 @@ Before any mutating action in F3, apply the
          | sed -n 's/^<!-- idd-cleanup-evidence: \([^ ]*\) .*/\1/p')
      fi
    done <<< "$COMMENTS_TSV"
+   THIS_RUN_STATUS="<this-run-status>"
+   if [ "$COMMENTS_FETCH_FAILED" = "1" ]; then
+     echo "RECHECK_RESULT=FETCH_FAILED"
+   elif { [ "$EXISTING_STATUS" = "applied" ] || [ "$EXISTING_STATUS" = "clean" ]; } \
+     && { [ "$THIS_RUN_STATUS" = "applied" ] || [ "$THIS_RUN_STATUS" = "clean" ]; }; then
+     echo "RECHECK_RESULT=SKIP"
+   else
+     echo "RECHECK_RESULT=POST"
+   fi
    ```
 
    `{owner}`/`{repo}` are `gh api`'s own auto-templated placeholders
@@ -380,35 +389,51 @@ Before any mutating action in F3, apply the
    `gh api` only auto-fills `{owner}`/`{repo}`/`{branch}` — so it stays
    in this file's angle-bracket convention for an already-resolved
    value the agent substitutes itself, matching the node-script
-   examples earlier in this same F4 section. The `if ! COMMENTS_TSV=$(…)`
-   guard is deliberate: a normal Bash invocation of this snippet has no
-   implicit `-e`, so an unguarded assignment on a failed `gh api` call
-   (auth, rate limit, transient network error) would silently leave
-   `COMMENTS_TSV` empty and read as "no prior record" — precisely the
-   false negative this whole re-check exists to prevent. **If
-   `COMMENTS_FETCH_FAILED` is `1` after this block, stop here: do not
-   evaluate the skip condition below and do not post the success
-   evidence comment** — an empty result from a **failed** fetch is
+   examples earlier in this same F4 section. `<this-run-status>` is
+   likewise agent-substituted: the apply `status` this F4 pass already
+   computed earlier in this section (`applied`/`clean`/`failed`/
+   `incomplete`). The `if ! COMMENTS_TSV=$(…)` guard is deliberate: a
+   normal Bash invocation of this snippet has no implicit `-e`, so an
+   unguarded assignment on a failed `gh api` call (auth, rate limit,
+   transient network error) would silently leave `COMMENTS_TSV` empty
+   and read as "no prior record" — precisely the false negative this
+   whole re-check exists to prevent.
+
+   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+   **Read the printed `RECHECK_RESULT` line, not the shell variables
+   above it, as the durable answer.** This snippet is commonly run as
+   its own standalone tool invocation, and shell state — including
+   `EXISTING_STATUS` and `COMMENTS_FETCH_FAILED` — does not survive
+   past the shell process that set it once that invocation ends; a
+   later, separate step cannot read them back. The script's own last
+   line of output carries the decision instead, so it stays available
+   in this call's own recorded result. Act on it as your very next
+   step, with no other GitHub-mutating call in between:
+   `RECHECK_RESULT=FETCH_FAILED` → stop, do not post the success
+   evidence comment (an empty result from a **failed** fetch is
    unknown state, never the same as an empty result from a
-   **successful** one. Follow the `failed`/`incomplete` cleanup-failure
-   path instead (noting the re-check fetch itself failed, distinct
-   from an apply failure) so F4 still exits with a recorded reason per
-   the Mandatory F4 Cleanup Contract, rather than terminating the
-   agent's shell outright — a raw `exit` here would abandon F4 with no
-   recorded outcome at all, a worse failure mode than the duplicate
-   this re-check exists to prevent.
+   **successful** one) — follow the `failed`/`incomplete`
+   cleanup-failure path instead (noting the re-check fetch itself
+   failed, distinct from an apply failure) so F4 still exits with a
+   recorded reason per the Mandatory F4 Cleanup Contract, rather than
+   terminating the agent's shell outright, which would abandon F4 with
+   no recorded outcome at all — a worse failure mode than the
+   duplicate this re-check exists to prevent.
+   `RECHECK_RESULT=SKIP` → do not post.
+   `RECHECK_RESULT=POST` → construct and send the evidence comment now.
 
    The API returns comments in creation-ascending order and the loop
    never `break`s, so `EXISTING_STATUS` ends up holding the **latest**
    trusted record, not merely the first one found — the same "latest
-   wins" reading `post-merge-cleanup.yml` uses. Skip the post only when
-   **both** `EXISTING_STATUS` and this run's own outcome are in
-   `applied`/`clean` (the `#2213` both-converged rule: a prior success
-   alone must never suppress this run's own non-success evidence, and a
-   prior non-success alone must never suppress this run's own success
-   evidence). This narrows the race window from "an entire
-   workflow/agent run" to the gap between this re-check and the POST
-   call actually landing — it does not close the race: GitHub's REST
+   wins" reading `post-merge-cleanup.yml` uses. `RECHECK_RESULT` is
+   `SKIP` only when **both** `EXISTING_STATUS` and
+   `THIS_RUN_STATUS` are in `applied`/`clean` (the `#2213`
+   both-converged rule: a prior success alone must never suppress this
+   run's own non-success evidence, and a prior non-success alone must
+   never suppress this run's own success evidence). This narrows the
+   race window from "an entire workflow/agent run" to the gap between
+   this re-check and the POST call actually landing — it does not
+   close the race: GitHub's REST
    API for issue/PR comments has no atomic create-if-absent /
    compare-and-swap primitive, so two independent processes can still
    both observe "no success record" if their fresh reads interleave
@@ -447,11 +472,13 @@ Before any mutating action in F3, apply the
      <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
      If the apply `status` is `applied` (residual candidates minimized)
      or `clean` (no-op, nothing left to minimize): run the fresh
-     re-check above **now, immediately before posting** and skip only
-     under its both-converged condition; otherwise post the evidence
-     comment (`status`, `applied`, `failed`, `skipped`,
-     `viewer-cannot-minimize` counts for `applied`, or a converged
-     `clean` record) so this run's work is recorded. Proceed to step 3.
+     re-check above **now, immediately before posting**, with
+     `<this-run-status>` substituted as this apply `status`, and act on
+     its printed `RECHECK_RESULT` (`FETCH_FAILED` / `SKIP` / `POST`);
+     on `POST`, send the evidence comment (`status`, `applied`,
+     `failed`, `skipped`, `viewer-cannot-minimize` counts for
+     `applied`, or a converged `clean` record) so this run's work is
+     recorded. Proceed to step 3.
 
      The helper internally retries a whole scan-and-minimize pass, bounded,
      when a fresh rescan still reports candidates after applying (a
@@ -491,8 +518,9 @@ Before any mutating action in F3, apply the
    Re-validate the active claim before each mutation.
    <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
    Afterward, run
-   the fresh re-check above **now, immediately before posting** and
-   skip only under its both-converged condition; otherwise post an
+   the fresh re-check above **now, immediately before posting**, with
+   `<this-run-status>` substituted as this fallback pass's own outcome
+   status, and act on its printed `RECHECK_RESULT`; on `POST`, post an
    evidence comment summarizing the outcome (status, applied/skipped
    counts with reasons). If the viewer cannot minimize any detected
    candidates, post a cleanup-permission-blocked comment instead of
