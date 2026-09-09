@@ -259,7 +259,11 @@ if [ "$1" = "review" ]; then
 fi
 exit 1
 '
-  export CODERABBIT_CRITIQUE_BASE=master
+  # Non-default base/timeout values (not "master"/300s) so this proves the
+  # line actually interpolates $BASE_BRANCH/$TIMEOUT_SECONDS rather than
+  # merely matching a hardcoded literal that happened to equal the defaults.
+  export CODERABBIT_CRITIQUE_BASE=develop
+  export CODERABBIT_CRITIQUE_TIMEOUT=45
 
   run --separate-stderr "$SCRIPT"
 
@@ -268,7 +272,7 @@ exit 1
   # to its own stderr -- ahead of anything the wrapped `coderabbit review`
   # call itself produces (buffered and only forwarded afterward).
   assert_stderr_line --index 0 \
-    "coderabbit-critique: invoking coderabbit review --agent --base master (timeout 300s)"
+    "coderabbit-critique: invoking coderabbit review --agent --base develop (timeout 45s)"
   assert_stderr --partial "review-own-stderr-diagnostic"
   # Stream: never on stdout, and never mixed into the findings text.
   refute_output --partial "invoking coderabbit review"

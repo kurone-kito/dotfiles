@@ -596,11 +596,13 @@ Describe 'coderabbit-critique' {
       Mock Test-DotfilesCoderabbitAuthenticated { $true }
       Mock Resolve-DotfilesCoderabbitBaseBranch { 'develop' }
       $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
-      # Swap in a plain (non-synchronized) StringWriter so its buffered text
-      # can be read back afterward -- the outer BeforeEach's synchronized
-      # wrapper exists only for cross-thread safety, and its own ToString()
-      # returns the wrapper's type name rather than the underlying buffered
-      # text (confirmed empirically).
+      # Keep a direct reference to a plain StringWriter and read the buffer
+      # back through that reference -- [Console]::SetError wraps whatever is
+      # passed in a synchronized TextWriter internally regardless, so
+      # calling ToString() on [Console]::Error itself (as the outer
+      # BeforeEach's own writer would require) returns that wrapper's type
+      # name, not the underlying buffered text (confirmed empirically).
+      # Reading through this local reference instead sidesteps that.
       $capturedError = [System.IO.StringWriter]::new()
       [Console]::SetError($capturedError)
       Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
@@ -725,7 +727,13 @@ Describe 'coderabbit-critique' {
       try {
         $env:PATH = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
         Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
-        $env:CODERABBIT_CRITIQUE_BASE = 'master'
+        # Non-default base/timeout values (not "master"/300s) so this proves
+        # the line actually interpolates $baseBranch/$timeoutSeconds rather
+        # than merely matching a hardcoded literal that happened to equal
+        # the defaults. The outer file-level BeforeEach/AfterEach already
+        # saves and restores both variables.
+        $env:CODERABBIT_CRITIQUE_BASE = 'develop'
+        $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
 
         $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
         $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
@@ -757,7 +765,7 @@ Describe 'coderabbit-critique' {
       # already started running.
       $stderrLines = $stderrText -split "`r?`n"
       $stderrLines[0] | Should -Match (
-        '^coderabbit-critique: invoking coderabbit review --agent --base master \(timeout 300s\)$'
+        '^coderabbit-critique: invoking coderabbit review --agent --base develop \(timeout 45s\)$'
       )
       $stderrText.IndexOf('invoking coderabbit review') |
         Should -BeLessThan $stderrText.IndexOf('STDERR_MARKER_TEXT')
