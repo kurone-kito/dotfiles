@@ -71,6 +71,7 @@ words:
   - gdefault
   - ggml
   - Gdiffsplit
+  - GHEC
   - GHES
   - gpgconf
   - greppable
@@ -113,6 +114,7 @@ words:
   - pylint
   - qwen
   - rafamadriz
+  - remediations
   - rerere
   - resynced
   - rollup
@@ -135,6 +137,7 @@ words:
   - viml
   - vimrc
   - virtiofs
+  - vrchat
   - waivable
   - warnf
   - wekyb

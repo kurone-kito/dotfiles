@@ -1,3 +1,10 @@
+---
+type: workflow
+title: IDD workflow guide
+description: Routes each agent to its entry file and the phase file matching its current state.
+tags: [workflow, phase-routing]
+---
+
 # IDD workflow guide
 
 This document is the neutral entry point for the repository's
@@ -11,6 +18,14 @@ Use it when you need to answer three questions quickly:
 - Which IDD instruction files load automatically for my agent?
 - When does the workflow rely on GitHub Copilot review state rather than
   on my local CLI?
+
+This guide's `.github/` distribution, tooling, and Copilot-advisory
+review steps describe today's only implemented provider, GitHub. IDD
+defines a provider-neutral adapter boundary internally as a staged
+foundation for future non-GitHub adapters; see
+[Provider Portability](customization.md#provider-portability) for the
+capability-group model and staged rollout order. Nothing below assumes
+that boundary is exercised by a shipped adapter yet.
 
 ## Start sequence
 
@@ -175,7 +190,8 @@ When a lightweight-tier model runs any part of this loop:
 - Do not run the autonomous merge phases (F3 onward) on this tier. See
   the merge-policy recommendation for weak-model sessions in
   <!-- dotfiles-divergence: onboarding-doc-trim -->
-  [Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/f51a8bb73a47452eff5799e8a27251b660ba4ae0/idd-template/docs/onboarding/policy-decisions.md#merge-policy)
+  [Onboarding Reference — Policy
+  Decisions](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/policy-decisions.md#merge-policy)
   (not vendored locally; this repository links the pinned upstream copy,
   matching `docs/idd-policy.md`'s own reference).
 - This is additional to, not a replacement for, the uniform C-phase
@@ -368,7 +384,7 @@ session would.
 | `.github/instructions/idd-advisory-wait.instructions.md`     | AW1-AW5 helper: shared Copilot advisory-wait protocol (E14, F2, F3)                                                                                                                             |
 | `.github/instructions/idd-review-snapshot.instructions.md`   | E1–E3: fetch activity snapshot, run critique, check if ReviewItems_snapshot is empty                                                                                                            |
 | `.github/instructions/idd-review-triage.instructions.md`     | E4–E8: classify items, score, record dispositions, and run E-phase branch-sync check before F-phase                                                                                             |
-| `.github/instructions/idd-review-fix.instructions.md`        | E9-E15: fix accepted review items and push follow-up commits (merge-from-master, not rebase) <!-- dotfiles-divergence: master-branch -->                                                        |
+| `.github/instructions/idd-review-fix.instructions.md`        | E9-E15: fix accepted review items and push follow-up commits (merge-from-`{development-branch}`, not rebase)                                                                                    |
 | `.github/instructions/idd-pre-merge.instructions.md`         | F1: final read-only branch-state check; F2: verify all pre-merge conditions                                                                                                                     |
 | `.github/instructions/idd-merge-handoff.instructions.md`     | F2.5: resolve merge-policy handoff vs autonomous merge routing                                                                                                                                  |
 | `.github/instructions/idd-merge.instructions.md`             | F3–F5: execute the merge, clean up, and loop back to discover                                                                                                                                   |
@@ -380,19 +396,34 @@ session would.
 
 ## ReviewItems_snapshot lifecycle
 
-`ReviewItems_snapshot` is the immutable collection created from E1's
-activity-universe fetch.
+`ReviewItems_snapshot` is a session-local collection, scoped to the
+current claim, created from E1's activity-universe fetch — not a
+literally immutable value a later session may reuse as-is.
 
-| Phase | Operation                                                                                                   | State     |
-| ----- | ----------------------------------------------------------------------------------------------------------- | --------- |
-| E1    | Fetch threads/reviews/comments, exclude trusted operational markers, and freeze the current item universe   | created   |
-| E2    | Run critique pass and append newly found findings to the same snapshot scope                                | extended  |
-| E3    | Evaluate empty/non-empty routing based on the frozen snapshot plus E2 findings                              | evaluated |
-| E4-E8 | Classify, score, disposition, and verify each snapshot item (PATH A/PATH B) without redefining the snapshot | triaged   |
-| E9    | Fix Accepted PATH A items that were selected from the snapshot                                              | actioned  |
+| Phase   | Operation                                                                                                   | State     |
+| ------- | ----------------------------------------------------------------------------------------------------------- | --------- |
+| E1      | Fetch threads/reviews/comments, exclude trusted operational markers, and freeze the current item universe   | created   |
+| E2      | Run critique pass and append newly found findings to the same snapshot scope                                | extended  |
+| E3      | Evaluate empty/non-empty routing based on the frozen snapshot plus E2 findings                              | evaluated |
+| E4-E8   | Classify, score, disposition, and verify each snapshot item (PATH A/PATH B) without redefining the snapshot | triaged   |
+| E9-E11  | Fix Accepted PATH A items, validate with a critique pass, and resolve conflicts with `{development-branch}` | actioned  |
+| E12     | Lint, test, and push the commit(s) addressing the actioned items                                            | committed |
+| E13-E14 | Reply to each snapshot item with its disposition, resolve its thread, and request re-review                 | replied   |
+| E15     | CI resolves for the pushed commit(s) and the loop returns to E1, ending this snapshot's role for the round  | complete  |
 
 The name intentionally emphasizes snapshot semantics: E1-E3 builds and
-gates on a time-locked view, while E4-E8 triages that view.
+gates on a time-locked view, E4-E8 triages that view, and E9-E15 drives
+it to completion within the current session before the next E1 fetch
+supersedes it.
+
+**Cross-session hygiene**: because the snapshot is session-local, a
+resumed or forced-handoff session must not inherit a prior session's
+`ReviewItems_snapshot`, watermark, or baseline markers as still
+authoritative for its own review pass. Rebuild from a fresh E1 fetch
+instead, and treat prior-claim operational markers as non-reusable even
+when the branch and HEAD are unchanged — see
+`idd-resume.instructions.md`'s CI/review routing table and its
+forced-handoff recovery note for the authoritative rule.
 
 ## Artifact taxonomy and ownership
 
@@ -434,6 +465,34 @@ target directly before Claim. The shortcut avoids broad roadmap
 enumeration, but it still applies targeted readiness checks, the A4
 viability gate, and the A4.5 suitability gate before the normal A5 claim
 safety checks.
+
+## External-signal entry path
+
+The Discover -> Claim -> Work loop above only reads issues already
+present in your tracker. A repository fed by an external signal source
+(error tracker, alert, support intake) needs a distinct on-ramp into
+issue-authoring before that loop ever sees anything.
+
+1. **Triage** (optional, agent-local): classify the incoming signal and
+   dedupe it against existing open issues or roadmap nodes before
+   drafting anything new. IDD does not define this stage's tooling — a
+   webhook receiver, a scheduled poll, or a manual review are all
+   equally valid, repository- or agent-specific integrations.
+2. **Hand off to issue-authoring**: once a signal survives triage as a
+   genuinely new, actionable item, feed its content to the
+   `issue-authoring` companion the same way a human-authored idea
+   would be if your repository has installed one (see
+   [Artifact taxonomy and ownership](#artifact-taxonomy-and-ownership)
+   above). The companion produces a normal, schema-conformant IDD
+   issue.
+3. **Rejoin the normal loop**: the produced issue is claimable by
+   Discover like any other issue — nothing about its external origin is
+   visible to A0-A5.
+
+Because the triage stage is optional and agent-local, an issue produced
+this way must never cite the triage tooling itself as a completion
+dependency: its acceptance criteria stay implementable by any agent,
+including one lacking that specific integration.
 
 ## Issue-author approval contract
 
@@ -478,6 +537,75 @@ for labels, comment-and-stop defaults, and close boundaries:
   customization before close/label side effects;
 - configured ready-label approval ownership is separate from trusted
   marker actor authority for operational claim/review markers.
+
+## Grooming pass for rejected and below-floor issues (optional)
+
+A4.5 rejections and below-floor autopilot-suitability scores
+accumulate into a backlog that ordinary Discover never revisits on its
+own. An optional, human-initiated **Groom** phase lets an operator
+batch-review that backlog and clear entries whose blocker has become
+answerable. This is distinct from durably recording a rejection so it
+does not silently resurface (a separate concern, tracked upstream as
+[kurone-kito/idd-skill#2243](https://github.com/kurone-kito/idd-skill/issues/2243)
+in the source repository) -- grooming is about _reversing_ a rejection
+later, once circumstances change.
+
+**Classify before spending operator time.** Sort each candidate into
+one of three buckets:
+
+- **execution-blocked** -- no operator input helps; only further agent
+  work can resolve it. Leave these for Discover/Claim to pick up
+  normally once unblocked.
+- **decision-blocked** -- a genuine human call is required (a product
+  tradeoff, an ambiguous acceptance criterion, an already-recorded
+  policy choice). A bounded question set can resolve these.
+- **fact-blocked** -- the rejection cited a fact (a dependency, a
+  blocking issue) that may no longer hold.
+
+**Re-check facts before drafting a question.** For a fact-blocked
+candidate, check whether any issue or PR the original rejection cited
+as a blocker has since closed or merged -- a cached readiness snapshot
+can be stale, and a closed blocker is a "free" suitability lever that
+costs nothing to re-apply.
+
+**Never override a deliberate decision.** When the original rejection
+recorded a genuinely deliberate empirical or product decision (not
+merely an unanswered question), grooming must never resolve it
+unilaterally. Offer "keep the existing decision" as one of the
+operator's own answer choices instead.
+
+**Explain before asking.** Give the operator the background and
+tradeoffs behind each question before asking it, rather than bundling
+several unrelated technical topics into one dense batch.
+
+**Apply the operator's answers back onto the issue**: update the score
+footer, remove or update the `triage:{outcome}` label, revise
+acceptance criteria to reflect the decision, and record the decision as
+inline prose in the issue body: `Maintainer decision (<provenance>,
+Groom hearing, <date>): <resolution text>` -- the shape
+`suitability-triage.mjs`'s Check 7 recognizes as a resolved
+decision
+([kurone-kito/idd-skill#2661](https://github.com/kurone-kito/idd-skill/issues/2661)
+in the source repository); a comment may additionally note the
+decision, but the body itself is what re-triage reads. The next
+ordinary Discover pass then
+picks the issue up normally -- grooming itself never claims or works
+the issue (see
+[Mutation Policy and Coordination Rule](../.github/instructions/idd-suitability.instructions.md#mutation-policy-and-coordination-rule)).
+
+**Worked example.** An issue was rejected `needs-decision` at score
+`2/5` because its acceptance criteria read "add caching, or document
+why caching is unsafe here" -- an unresolved subjective call under
+A4.5's escape-hatch guidance. Grooming classifies it decision-blocked,
+explains the caching-correctness-vs-simplicity tradeoff, and asks the
+operator to choose between TTL-based expiry and explicit
+invalidation-on-write. After the operator picks TTL-based expiry, the
+acceptance criteria are rewritten to "cache reads for up to 60 seconds
+via TTL-based expiry; no explicit invalidation path is required", the
+score footer is raised to `4/5`, and the `triage:needs-decision` label
+is removed after the body records `Maintainer decision (Groom hearing,
+2026-06-27): TTL-based expiry, chosen over explicit
+invalidation-on-write for simplicity`.
 
 ## Roadmap completion audits
 
@@ -564,6 +692,20 @@ external scheduler.
 
 Running this variant safely requires:
 
+- **A non-context-inheriting delegation mechanism for the full
+  B-through-F4 worker role, when the calling tool offers one.** A
+  context-inheriting worker (one that receives the orchestrator's
+  complete conversation, such as Claude Code's `fork` subagent) can let
+  the orchestrator's own recent framing compete with, and sometimes
+  override, the delegation brief's own role statement — the same
+  problem [Critique pass invocation](#critique-pass-invocation) already
+  avoids for Claude Code's narrower critique-pass role, since that row
+  also picks a fresh `general-purpose` agent rather than a
+  context-inheriting one. Extend that same preference to this full
+  worker role, whenever the tool exposes the choice, and fall back to
+  the explicit role-statement wording in [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation)
+  as defense-in-depth when only a context-inheriting mechanism is
+  available.
 - **A small concurrency cap**, sized against CI-minute cost and
   shared-file contention rather than raised without bound. The optional
   `discover-shared-file-overlap` helper (see
@@ -596,13 +738,13 @@ Running this variant safely requires:
   recomputes the nonce winner and confirms it still matches the carried
   value, the same safety check a self-posting session performs. See
   [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).
-<!-- dotfiles-divergence: master-branch -->
 - **Serialized worktree/clone lifecycle operations when workers share
   one clone.** Concurrent `git fetch` / `git worktree add` / `git
-  worktree remove` / local-`master` updates from the same primary clone
-  can collide; serialize these specific operations behind a per-clone
-  lock, or give concurrent workers separate clones, once the
-  concurrency cap allows more than one worker at a time.
+  worktree remove` / local `{development-branch}` updates from the
+  same primary clone can collide; serialize these specific operations
+  behind the [clone-scoped lock](idd-helper-scripts.md#clone-scoped-lock),
+  or give concurrent workers separate clones, once the concurrency cap
+  allows more than one worker at a time.
 - **Resume-specific recovery when a worker dies mid-turn.** Re-verify
   claim ownership and worktree state before continuing; treat any
   uncommitted work found in the worktree as unverified input to check,
@@ -810,6 +952,11 @@ helper-generated comment is the auditable authorization surface because
 self-approval cannot express the required claim, head, check, and expiry
 proof.
 
+A waiver posted before its own effectiveness precondition is met is
+valid but inert until then; see
+[`idd-pr-submit.instructions.md`'s D4](../.github/instructions/idd-pr-submit.instructions.md)
+for the mechanical check.
+
 ## Optional helper scripts
 
 The idd-skill source repository that ships this template currently includes the
@@ -887,31 +1034,88 @@ mechanism above by setting `critiqueLoop.delegate` in
 [Customization Surfaces](customization.md#customization-surfaces) and
 [Configuration Authority Hierarchy](policy-constants.md#configuration-authority-hierarchy)):
 a `command` string is a shell command run against the branch's current
-diff, and `mode` selects `fallback` (default: run `command`; fall
-through to the per-agent mechanism above when it is absent, exits
-non-zero, times out, or its output cannot be read as a findings list)
-or `combined` (run both every pass and union their reported issues).
+diff, and `mode` selects **when the per-agent mechanism above also
+runs**:
+
+<!-- dprint-ignore-start -->
+| `mode` | delegate succeeded | delegate failed |
+| --- | --- | --- |
+| `combined` | per-agent pass runs | per-agent pass runs |
+| `fallback` (default) | no per-agent pass | per-agent pass runs |
+| `on-success` | per-agent pass runs | no per-agent pass |
+| `never` | no per-agent pass | no per-agent pass |
+<!-- dprint-ignore-end -->
+
+`combined` is the one value that does not consult the delegate's
+outcome — it runs both mechanisms on every pass. The other three
+observe that outcome first. Wherever both mechanisms run in the same
+pass (always under `combined`, and after a successful delegate under
+`on-success`), their reported issues are unioned.
+
+**Delegate failed** means the same set of conditions in every mode: the
+command is absent, exits non-zero, times out, or its output cannot be
+read as a findings list. It is never narrowed to the process exit
+status alone, so a delegate that exits `0` but returns unreadable
+output counts as failed under `fallback` and `on-success` alike.
+Exit-code conventions differ between reviewers — a lint-style tool
+signals _findings exist_ with a non-zero exit rather than _the tool
+broke_ — which is why `on-success` exists at all.
+
+**Fail-closed hold.** Under `on-success` and `never`, a failed delegate
+can leave C1 with no critique findings at all. The hold condition is
+that state itself, not the failure classification: when the mechanisms
+that actually ran produced no readable findings list, C1 records a hold
+rather than a clean "zero issues reported" verdict, and C2 does not
+advance to PR submission on that vacuous result. A delegate that trips
+one of the conditions above but still emitted a readable findings list
+has produced critique — those findings are the pass's output and C1
+continues to C3 scoring on them. `fallback`'s fall-through to the
+per-agent mechanism is unchanged.
+
+The hold turns on a **missing or unreadable** findings list, never on
+an empty one. A delegate that succeeded and reported no issues has
+produced a readable findings list that happens to be empty: that is a
+genuine clean verdict, and C2 proceeds to the objective diff validation
+floor exactly as it would with no delegate configured. Only the
+no-readable-list state is vacuous.
+
 Delegate output is read the same way a subagent's critique response is
 read today — free-form findings scored through the existing C3
 High/Medium/Low process; no new machine-readable output schema is
 introduced. Absent `critiqueLoop.delegate` entirely keeps today's
 per-agent-only behavior with zero change.
 
-Configuration-time fail-safe (distinct from the `mode: fallback`
-runtime behavior above): a non-object `critiqueLoop.delegate`, or one
-whose `command` is missing, empty, whitespace-only, or non-string, is
-treated the same as an absent delegate — C1 uses the per-agent
-mechanism, never attempting the delegate at all. A valid `command`
-paired with an unrecognized `mode` value still configures the
-delegate, defaulting `mode` to `fallback`; `.github/idd/config.json`
-schema validation separately rejects an unsupported `mode` value or
-any key other than `command`/`mode` before the file is accepted.
+Configuration-time fail-safe (distinct from the runtime behavior
+above): a non-object `critiqueLoop.delegate`, one whose `command` is
+missing, empty, whitespace-only, non-string, or supplied through the
+prototype chain rather than as an own property, or one carrying any key
+beyond `command`/`mode`, is treated the same as an absent delegate — C1
+uses the per-agent mechanism, never attempting the delegate at all. A
+present but non-object **`critiqueLoop`** parent (a string, array, or
+`null`) is a repository-local configuration error rather than an absent
+key: it fails closed to the per-agent mechanism and, like a malformed
+`delegate`, blocks user-global inheritance instead of letting a global
+delegate stand in for it. A present but **unrecognized `mode`** is
+unusable the same way: effective C1 resolution reports a
+repository-local one as malformed, so it neither runs nor inherits the
+user-global layer, and reports an unusable user-global fragment as
+absent. Either way C1 falls back to the per-agent mechanism rather than
+running the delegate under an assumed default. (A direct
+`normalizePolicyConfig` caller — a different consumer, not the C1
+resolution path — still collapses such a value to the `fallback`
+default, which is why both behaviors have their own regression tests.)
+`.github/idd/config.json` schema validation separately rejects an
+unsupported `mode` value or any key other than `command`/`mode` before
+the file is accepted, so this state normally reaches C1 only through
+the unvalidated user-global file.
 
 The C-phase's objective diff validation floor described below applies
-**uniformly** whether a delegate is configured or not, in either mode,
+**uniformly** whether a delegate is configured or not, in every mode,
 and regardless of what the delegate reports — this surface changes
 which mechanism produces critique findings, never the load-bearing
-`fix-validate` gate.
+`fix-validate` gate. That holds for the fail-closed hold above too: the
+hold stops a vacuous clean verdict from advancing, it never lets one
+through.
 
 When a runtime falls back to structured same-response self-review
 instead of an independent subagent mechanism (see the table above; a
@@ -928,6 +1132,72 @@ subagent-capable ones — rather than being conditioned on a runtime
 self-classifying as "no-subagent". Uniform application keeps the gate
 deterministic and avoids relying on fragile runtime self-detection that
 a weak model could get wrong.
+
+### User-global critique delegate default
+
+A local runtime (one that reads the operator's own `$HOME`) may also
+inherit a `critiqueLoop.delegate` from a user-global file when the
+repository leaves the repo-local field genuinely absent — a
+GitHub-hosted or other remote agent surface has no such operator home
+directory and never consults this layer. Resolution order: repo-local
+`critiqueLoop.delegate` (a configured object, an explicit JSON `null`
+disable, or a malformed value) always wins outright and never inherits
+the global layer — an explicit repo-local `null` forces the per-agent
+mechanism even when a global delegate exists, and a malformed
+repo-local value fails closed to the per-agent mechanism the same way;
+only when repo-local is entirely absent does the global file apply;
+absent both, the per-agent mechanism above runs unchanged. A malformed
+or explicit-`null` **global** fragment is treated the same as a
+missing one — silently falls back to the per-agent mechanism — which
+is distinct from repo-local `null`'s stronger role of actively
+disabling any inherited delegate.
+
+The global file lives at `$XDG_CONFIG_HOME/idd-skill/config.json`,
+falling back to `$HOME/.config/idd-skill/config.json` when
+`XDG_CONFIG_HOME` is unset or not a **qualified root**. A qualified
+root is judged against the **running platform**, not accepted in any
+form: on Windows only a drive-letter root (`C:\…` or `C:/…`) or a UNC
+root (`\\server\…`) qualifies, and on POSIX only a `/…` path does —
+`//…` is excluded there, as is a Windows-shaped value, and a
+current-drive root such as `\config` is excluded on Windows even though
+`path.isAbsolute` calls it absolute. A relative or otherwise unqualified
+value is ignored rather than joined against the process's working
+directory, so the global config can never resolve inside the checkout
+under review. A missing, unreadable,
+invalid-JSON, or non-object global file is silently treated as
+absent — this layer is opt-in and never required for OSS adopters.
+Only the
+`critiqueLoop.delegate` fragment is read from it; every other key is
+ignored, and repository-local `.github/idd/config.json` stays the sole
+authority for every other policy surface.
+
+Example (a generic local reviewer, not a specific product):
+
+```json
+{ "critiqueLoop": { "delegate": { "command": "my-local-reviewer --diff" } } }
+```
+
+Any configured delegate command — repo-local or user-global — is
+executable configuration: it may transmit source code or other data
+available to its process to an external service, so enabling one is a
+deliberate operator/repository choice, and neither config file should
+hold secrets. This surface changes only which mechanism supplies
+critique findings; the C-phase objective diff validation floor above,
+the E-phase Copilot advisory-convergence policy, required checks, and
+merge gates are all unchanged.
+
+The critique content passed to a configured delegate is the branch diff
+only — never the two lenses below or the rest of the per-agent
+checklist. (This is about what the delegate invocation sends as
+critique input, not a sandboxing guarantee on what the command can
+otherwise access — see the executable-configuration warning above.)
+Passing checklist content to an external command is a capability change
+with its own design questions (whether the reviewer accepts input at
+all, what happens if it ignores it) that this surface does not make
+today. Under a successful delegate with `mode: fallback` (the default),
+or under `mode: never`, the per-agent pass does not run at all, so an
+operator relying solely on a delegate should expect the lenses below
+are not applied to that PR's diff.
 
 ### Mutation / write-side helper lens
 
@@ -950,3 +1220,47 @@ review then surfaced one finding per round:
   helper actually produces and mirror sibling-helper strictness (SHA
   patterns, enums), so the published contract is no looser than the
   runtime.
+
+### Gate-mirroring helper lens
+
+When the diff under critique implements a helper whose purpose is to
+**predict, mirror, or pre-check a decision some other gate makes** —
+where "agrees with that gate" is the whole contract — also apply this
+lens. It is orthogonal to the write-side lens above rather than an
+alternative to it: a helper that both mutates state and mirrors a gate
+gets both, and their checks do not overlap.
+
+Extracting the shared decision into one function is the right first
+move and does not finish the job, because **sharing a function
+equalizes the computation, not the arguments**. Two callers still
+diverge whenever one passes fewer inputs, a laxer validation path, an
+older snapshot, or a stale point in time. Enumerate the gate's inputs
+once, against this list, rather than discovering them one per review
+round:
+
+- **Validation-path parity**: the helper reads configuration through the
+  same validating reader the gate uses, not a rawer resolver that skips
+  a schema or subtree check. A gate that rejects a whole config section
+  when any sibling key is invalid, and falls back to a default, must not
+  be mirrored by a helper that reads the one key directly.
+- **Input completeness**: every optional argument that widens or narrows
+  the gate's own verdict is passed, not just the ones the happy path
+  needs. An omitted exception parameter silently removes the exception.
+- **Whole-identity comparison**: every field the gate binds on is
+  compared — both the fields the shared value carries and the ones it
+  does not, which the caller must then supply itself. A shared record
+  that omits an identity field is not evidence that the field does not
+  matter.
+- **Snapshot identity**: all inputs to one verdict come from a single
+  read. Two reads that can straddle a change produce a verdict about no
+  state that ever existed.
+- **Point-in-time parity**: state re-read after a mutation is
+  re-resolved rather than reused from before it, whenever the gate would
+  see the newer state.
+
+Each check names a way a mirror can disagree with its gate while the
+shared code is itself correct, so a passing unit test on the shared
+function is not evidence for any of them. The gap class was observed on
+[kurone-kito/idd-skill#2330](https://github.com/kurone-kito/idd-skill/pull/2330),
+where a correct extraction still took seven advisory rounds, five of
+them this one shape.

@@ -1,3 +1,10 @@
+---
+type: reference
+title: IDD Detailed Reference
+description: Maps each operational question to the authoritative phase file or policy page that answers it.
+tags: [reference, navigation]
+---
+
 # IDD Detailed Reference
 
 Use this page when you already know the IDD loop exists and need the
@@ -42,11 +49,19 @@ or [Core concepts](concepts.md) before using this reference.
 | Live digest and comment cleanup        | [IDD comment minimization](idd-comment-minimization.md)                                                               |
 | Helper-script adoption policy          | [IDD helper script evaluation](idd-helper-scripts.md)                                                                 |
 | Reversible vs. gated mutations         | [IDD autonomy contract](idd-autonomy-contract.md)                                                                     |
+| Docs bundle frontmatter convention     | [Customizing IDD § Docs Bundle Frontmatter Convention (OKF)](customization.md#docs-bundle-frontmatter-convention-okf) |
 
 ## Maintainer Note
 
-If you maintain an IDD distribution source repository, keep exported
+**If you maintain an IDD distribution source repository**, keep exported
 template files and generated onboarding lists in sync when adding or
 removing reference pages. In the idd-skill source repository, that means
 updating `audit/sync-manifest.json`, `idd-template/ONBOARDING.md`, and
 `idd-template/README.md` in the same change.
+
+**If you imported IDD into your own repository**, you keep no exported
+template directory of your own — instead, compare an upstream change to
+this reference set against your repository's recorded local policy
+before your next re-import, rather than assuming a routine template
+update carries no local impact. See
+[Re-importing](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#re-importing-import-named-gaps-not-a-blind-resync).
