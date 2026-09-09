@@ -1,3 +1,10 @@
+---
+type: guide
+title: IDD Review Policy Profiles
+description: Names the supported PR review policy profiles and the instruction files an adopter must edit to select one other than the Copilot-advisory default.
+tags: [review-policy, profiles]
+---
+
 # IDD Review Policy Profiles
 
 IDD separates the execution loop from the pull request review policy as
@@ -287,14 +294,10 @@ warning.
   `idd-advisory-convergence` job is **not** created by an unmarked
   human `pull_request_review_comment`. IDD-originated comments
   (disposition prefix, reply-identity stamp, or an operational
-  marker the check already honors) refresh the existing HEAD run.
-  Upstream `v0.7.0` moved that refresh to a companion
-  `idd-advisory-convergence-comment.yml` workflow; this repository has
-  not yet adopted it (see `docs/customization.md`'s
-  "Advisory-convergence required check" section), so the refresh still
-  runs through the required workflow's own existing
-  `pull_request_review_comment` trigger. Ordinary human prose does not
-  create or cancel the required check.
+  marker the check already honors) refresh the existing HEAD run
+  from the companion `idd-advisory-convergence-comment.yml`
+  workflow. Ordinary human prose does not create or cancel the
+  required check.
 - **`reviewPolicy`.** `human-required` and `no-advisory` make
   `advisory-convergence` `not_applicable` (ready without Copilot
   clauses). `copilot-advisory`, `external-bot`, absent, or an

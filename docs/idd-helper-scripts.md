@@ -1,12 +1,113 @@
+---
+type: design
+title: IDD Helper Script Evaluation
+description: Records the current adoption decision and trade-offs for IDD's optional helper scripts so future reviews do not re-evaluate them from scratch.
+tags: [helper-scripts, tooling]
+---
+
 # IDD Helper Script Evaluation
 
 This document records the current decision on optional helper scripts for
 the IDD workflow. It exists so future reviews can reference the trade-off
 directly instead of re-evaluating the same suggestion from scratch.
 
+## Flag-name and field-name conventions
+
+Several helpers require a specific flag name that does not match
+instinct, and throw rather than defaulting to a same-named flag from a
+different helper. `--issue` is the sharpest trap: it is a genuine,
+functioning flag on several other helpers -- required outright on
+`forced-handoff-marker.mjs` and `claim-approval-gate.mjs`, and
+required as one of a small set of mutually exclusive input flags on
+`discover-viability-gate.mjs` (or `--issues`) and
+`suitability-triage.mjs` (or `--body-file` / `--stdin`) -- which primes
+the instinct to reach for it elsewhere. `audit-authored-issue.mjs` also
+accepts a genuine, functioning `--issue`: normally optional (it only
+sharpens the `authoring-owner-marker-trail` check's target match), but
+required once `--new-issue` and `--journal-comments-file` are both
+given, so the journal cross-check always has a resolvable issue
+identity to verify against. But the claim-revalidation flag
+on most mutation-capable helpers is named `--claim-issue` instead, and
+requiredness varies by helper:
+
+- **Unconditionally required** (modulo an explicit opt-out):
+  `pre-merge-readiness.mjs` throws without `--claim-issue` unless
+  `--claimless` is passed.
+- **Required only under `--apply`, with an explicit opt-out**:
+  `audit-pr-cleanup.mjs` and `live-status-digest.mjs` both accept
+  `--skip-claim-check` in place of `--claim-issue`/`--claim-id`.
+- **Required only under `--apply`, with no opt-out**:
+  `disposition-non-review-notices.mjs` and `resolve-review-thread.mjs`.
+  None of these four ever need the flag outside `--apply`.
+- **Optional, with auto-discovery when omitted**:
+  `advisory-convergence.mjs` (falls back to the PR's closing-issue
+  references) and `idd-roadmap-audit-execute.mjs` (the flag, when
+  given, is only cross-checked against `--roadmap`; the apply-mode
+  identity flag there is `--claim-id`, not `--claim-issue`).
+
+`live-status-digest.mjs` is the one helper where `--issue` and
+`--claim-issue` coexist as genuinely different flags: `--issue` is the
+digest's own target (mutually exclusive with `--pr`), and
+`--claim-issue` is the separate claim-revalidation flag -- the two are
+not interchangeable there either. (`idd-merge-execute.mjs` forwards
+any flag it does not recognize verbatim to `pre-merge-readiness.mjs`,
+so `--claim-issue` reaches it transitively even though it declares no
+such flag of its own.)
+
+No single top-level decision/verdict field name is consistent across
+the evidence-collector family. This reflects organic accretion across
+many independently authored helpers rather than a recorded design
+decision, and no normalization is currently planned. Read each
+helper's own `--help` output or its documented JSON shape rather than
+assuming a field name carries over -- a name that looks like a field in
+the source (a type or local-variable name) is not necessarily one of
+the printed object's own top-level keys. Representative examples:
+`advisory-convergence.mjs` and `pre-merge-readiness.mjs` both return a
+top-level `ready` boolean (the latter alongside `blockers`);
+`idd-roadmap-audit-execute.mjs` also returns `ready`;
+`discover-readiness-check.mjs` returns `ready` in its default
+per-issue mode, but a structurally different `{eligible,
+eligible_count, total}` shape under `--swarm-floor`;
+`discover-viability-gate.mjs` returns `viable` and `discarded` (not
+`passed` -- that name exists only on an internal per-issue helper,
+never copied into the printed output); `suitability-triage.mjs`
+returns `passed` for its live `--issue` invocation, but its offline
+`--body-file`/`--stdin` mode intentionally carries no aggregate
+`passed` value at all; `claim-approval-gate.mjs` returns `approved`.
+The mutation-style helpers overlap rather than cleanly splitting on
+one field: `audit-pr-cleanup.mjs` exposes both `mode`
+(`dry-run`/`apply`) and `status` (a seven-value vocabulary: `clean`,
+`needs-apply`, `permission-blocked`, `rescan-failed`, `failed`,
+`incomplete`, `applied`); `disposition-non-review-notices.mjs` prints
+no `status` key at all in its default dry-run mode, and only
+`applied`/`failed` under `--apply`; `resolve-review-thread.mjs`
+returns `mode` (`dry-run`/`apply`) alongside its own separate
+`status?` (`applied`/`failed`).
+
 ## Decision
 
 In the idd-skill source repository, the following optional helpers were adopted:
+
+### Helper contract classes
+
+Every helper below falls into one of two contract classes:
+
+- **Evidence collectors** — read-only. They never post comments, resolve
+  review threads, merge, or close anything; they emit machine-readable
+  evidence (usually JSON) for the calling phase to interpret.
+- **Dry-run-by-default authoring helpers** — capable of mutating GitHub
+  state (posting a comment, resolving a thread, merging, closing), but
+  only under an explicit `--apply` flag (plus interactive confirmation
+  where noted); the default invocation always prints what it would do
+  without acting.
+
+Going forward, a per-helper bullet should state only what doesn't
+already follow from its class — an additional confirmation step, a
+narrower evidence scope, an unusual flag name — not a restatement of
+the class itself; existing bullets are not retrofitted by this
+preamble. Whenever a helper cannot complete autonomously, its own
+bullet documents the fallback path beside the helper's invocation, not
+in this preamble, since the fallback differs per helper.
 
 **Discover & Claim Phase Helpers (Phase 1):**
 
@@ -16,7 +117,14 @@ In the idd-skill source repository, the following optional helpers were adopted:
   with opt-in `--with-claim-state` / `--current-claim-id` active-claim
   annotation parity with `discover-roadmap-graph`'s flag of the same name
   (referenced in
-  [kurone-kito/idd-skill#1395](https://github.com/kurone-kito/idd-skill/issues/1395))
+  [kurone-kito/idd-skill#1395](https://github.com/kurone-kito/idd-skill/issues/1395)).
+  Default-on (not opt-in): excludes a candidate whose most recent trusted
+  `A4.5 suitability gate rejection` comment carries a still-current
+  `<!-- {prefix}-triage-verdict: <outcome> -->` marker for one of the four
+  non-label outcomes, bucketed under `filtered.triage_verdict_rejected`
+  (referenced in
+  [kurone-kito/idd-skill#2243](https://github.com/kurone-kito/idd-skill/issues/2243);
+  see its `--help` for the fetch-scope and staleness details)
 - `scripts/discover-roadmap-graph.mjs` for A1.5/A2 recursive roadmap graph
   enumeration and classification
 - `scripts/idd-roadmap-audit-execute.mjs` for the A1.5 roadmap-completion
@@ -32,7 +140,12 @@ In the idd-skill source repository, the following optional helpers were adopted:
   [kurone-kito/idd-skill#1071](https://github.com/kurone-kito/idd-skill/issues/1071))
 - `scripts/discover-readiness-check.mjs` for A3 readiness criterion
   evaluation (referenced in
-  [kurone-kito/idd-skill#391](https://github.com/kurone-kito/idd-skill/issues/391))
+  [kurone-kito/idd-skill#391](https://github.com/kurone-kito/idd-skill/issues/391)).
+  Default-on (not opt-in): the same triage-verdict marker exclusion as
+  `discover-orphan-filter.mjs` above, surfaced as a
+  `triage_verdict:<outcome>` entry in `filteredOut[].reasons` (referenced
+  in
+  [kurone-kito/idd-skill#2243](https://github.com/kurone-kito/idd-skill/issues/2243))
 - `scripts/discover-viability-gate.mjs` for A4 viability gate evaluation
   across limited scope, clear verification, and autonomous completion
   criteria (referenced in
@@ -92,7 +205,7 @@ In the idd-skill source repository, the following optional helpers were adopted:
 
 - `scripts/branch-conflict-state.mjs` for read-only branch conflict and
   synchronization state classification; used by D/E/F routing to decide
-  whether `merge-main`, `hold-unknown`, or no action is needed without
+  whether `merge-base`, `hold-unknown`, or no action is needed without
   mutating the worktree or PR branch (added in 0.2.0)
 - `scripts/verify-install-deps.mjs` for B1 Step 3 `install-deps`: runs
   the underlying install command, verifies a key post-install binary
@@ -102,6 +215,11 @@ In the idd-skill source repository, the following optional helpers were adopted:
   [kurone-kito/idd-skill#1237](https://github.com/kurone-kito/idd-skill/issues/1237)).
   Source-repo internal helper; not distributed via the package-manager
   / ephemeral-npx profiles.
+- `scripts/idd-critique-delegate.mjs` for the C1 effective
+  `critiqueLoop.delegate` verdict: `usable`, `source`, `command`,
+  `mode`, and a machine-readable `reason` when unusable, delegating
+  entirely to the existing exported resolvers (referenced in
+  [kurone-kito/idd-skill#2329](https://github.com/kurone-kito/idd-skill/issues/2329))
 
 **Review & Merge Phase Helpers:**
 
@@ -304,10 +422,18 @@ default below is unchanged.
   - `leaves`: `[{ number: number, title: string, state: string,`
     `labels: string[], classification: "execution",`
     `roadmapMarkerId: string, autopilotSuitability: number | null,`
-    `effort: "S" | "M" | "L" | null, sourceRoots: number[] }]` — the union of
-    open execution leaves. Each leaf records every roadmap root it is reachable
-    from in `sourceRoots` (provenance); a leaf shared by sibling epics appears
-    **once** and is never double-counted.
+    `effort: "S" | "M" | "L" | null, milestone: string | null,`
+    `sourceRoots: number[] }]` — the union of open execution leaves. Each
+    leaf records every roadmap root it is reachable from in `sourceRoots`
+    (provenance); a leaf shared by sibling epics appears **once** and is
+    never double-counted. `milestone` (`#2340`) is the leaf's **open**
+    milestone title, or `null` when it has no milestone, the milestone is closed,
+    or the field is absent from the API response — the input to
+    `discover.milestoneScope`'s A4 Step 2 tie-breaker (see
+    [Discover](../.github/instructions/idd-discover.instructions.md)); this
+    same field is emitted by `discover-orphan-filter.mjs`'s `orphans` /
+    `routed_to_human` candidates too, though that helper does not itself
+    read `discover.milestoneScope`.
   - **Opt-in leaf annotations** (additive; absent flags leave the leaf shape
     byte-stable and make no extra API call). `--with-claim-state` adds
     `activeClaim` (always an object: `{ present, stale, claimId, agentId,`
@@ -359,9 +485,11 @@ default below is unchanged.
     "is there more startable work?" without iterating every leaf; both are
     absent otherwise so the flag-absent shape stays byte-stable.
   - **Ranking** (global-by-score): `leaves` is sorted by
-    `autopilotSuitability` **descending**, tie-broken by issue number
-    **ascending** (stable). A missing or out-of-range score is treated as
-    the configured suitability floor for ordering so unscored work is not
+    `autopilotSuitability` **descending**, then an optional
+    `discover.milestoneScope` match (`#2340`), then `effort`
+    **ascending** (`S` < `M` < `L`), then issue number **ascending**
+    (stable). A missing or out-of-range score is treated as the
+    configured suitability floor for ordering so unscored work is not
     buried, but a coherently scored leaf never ranks below an unscored leaf
     at the same effective value — scored work always sorts first at a tie.
     The score is an advisory ranking hint only; it never replaces the
@@ -435,6 +563,12 @@ node scripts/discover-readiness-check.mjs --swarm-floor <N>
 - **Boundary**: read-only and advisory — selecting the next issue still runs
   the A3/A4/A4.5/A5 gates. Optional flags: `--owner` / `--repo` / `--policy`
   / `--now`.
+- **kurone-kito/idd-skill#2243 triage-verdict cost note**: the default-on
+  triage-verdict exclusion (see the `discover-readiness-check.mjs` bullet
+  above) runs for every candidate every cheaper check already lets
+  through, so a full repo-wide `--swarm-floor` sweep makes one extra
+  comments-plus-timeline API call pair per otherwise-ready candidate, not
+  just per swept issue.
 
 ### Discover Viability Gate Contract
 
@@ -494,6 +628,15 @@ A4 Step 2 de-prioritization order. Evidence-only: it claims nothing.
 - **JSON output**:
   - `repository`: `{ owner: string, repo: string }`
   - `checkedOverlap`: `boolean`
+  - `manifestMissing`: `boolean` — `true` when `--manifest`'s target file does
+    not exist (`ENOENT`); the CLI still exits 0, with `highContentionFiles`
+    reported as an empty set rather than fabricated from the manifest path
+    itself. A manifest that fails to parse (invalid JSON syntax) keeps the
+    prior fail-closed behavior (the CLI throws), unchanged. A manifest that
+    parses but has an unexpected shape (e.g. `{}`, a non-array
+    `bundleBudgets`) is not validated here — `resolveHighContentionFiles`
+    silently treats it as contributing no bundle files, a pre-existing
+    behavior this change does not alter.
   - `highContentionFiles`: `string[]` (sorted)
   - `candidates`: `[{ number: number, score: number | null,`
     `effectiveScore: number, candidateFiles: string[],`
@@ -509,7 +652,13 @@ A4 Step 2 de-prioritization order. Evidence-only: it claims nothing.
 - **Behavior boundary**: evidence-only and heuristic. `## Candidate files` are
   advisory cues, not an exhaustive manifest, so the overlap signal must stay a
   soft A4 Step 2 tie-breaker — never a claim gate. The written discover
-  instructions remain authoritative.
+  instructions remain authoritative. A candidate whose issue body carries no
+  `## Candidate files` section is a structural no-op for this check —
+  `candidateFiles` comes back `[]` and `overlapFlag` comes back `false`
+  regardless of real file contention, not a signal that no contention exists
+  (`#2462`); the
+  `issue-authoring` skill's roadmap-child contract requires the section for
+  exactly this reason.
 
 The exported template remains portable without a `scripts/` directory.
 Adopters can copy the helper separately when they want the same
@@ -817,6 +966,12 @@ The adopted helper boundaries are intentionally narrow:
   (dry-run); add `--apply --claim-issue <n> --claim-id <id>` to post.
   Pass `--advisory-bot-logins` / `--trusted-marker-logins` to override the
   defaults.
+- A rate-limit/usage-limit notice this helper dispositions can coexist
+  with a passing GitHub _check_ from the same bot -- the check is a
+  liveness signal only, not confirmation of a genuine review against
+  current HEAD;
+  see [re-trigger guidance](policy-constants.md#advisory-review-defaults)
+  (#2466).
 - Detects advisory-bot regular comments that the single-sourced
   `isAdvisoryNonReviewNotice` classifier (`protocol-helpers`) recognizes
   (rate-limit / usage-limit), and emits / posts the canonical
@@ -863,7 +1018,10 @@ The adopted helper boundaries are intentionally narrow:
   `node scripts/resolve-review-thread.mjs --pr <number> --comment-id <id>`
   (dry-run); add `--body "<disposition>" --apply --claim-issue <n>
   --claim-id <id>` to post the reply and resolve the thread. Optional
-  `--owner` / `--repo` / `--agent-id` / `--trusted-marker-logins`.
+  `--owner` / `--repo` / `--agent-id` / `--trusted-marker-logins`. For a
+  claimless PR (`closingIssuesReferences` empty), pass `--claimless`
+  instead of `--claim-issue`/`--claim-id` (#2616, mirrors
+  `pre-merge-readiness.mjs`'s `--claimless`, #2017).
 - Maps `--comment-id` (the review comment's REST id) to its owning review
   thread by matching it against the `databaseId` of the comments inside each
   GraphQL `reviewThreads` node (both the threads and the nested comments
@@ -884,14 +1042,16 @@ The adopted helper boundaries are intentionally narrow:
 - **Dry-run** reports the resolved `threadId` and current `alreadyResolved`
   state without posting; a comment with no owning thread omits `threadId`
   and includes an `error` note.
-- **Fail-closed**: `--apply` requires `--body` and the
-  `--claim-issue` / `--claim-id` pair, re-validates the active claim before
-  **each** of the reply and the resolve (scoped to trusted marker authors,
-  aborting on a targeting `forced-handoff`), and binds the mutation to the
-  claimed PR by requiring the active claim's branch to equal the PR's head
-  branch. GraphQL `errors` fail fast rather than masquerading as a missing
-  thread, and a partial apply (reply posted, resolve not confirmed) still
-  reports the posted `replyId`.
+- **Fail-closed**: `--apply` requires `--body` and, unless `--claimless`,
+  the `--claim-issue` / `--claim-id` pair; absent `--claimless` it
+  re-validates the active claim before **each** of the reply and the
+  resolve (scoped to trusted marker authors, aborting on a targeting
+  `forced-handoff`), and binds the mutation to the claimed PR by requiring
+  the active claim's branch to equal the PR's head branch. `--claimless`
+  itself fails closed against a non-empty `closingIssuesReferences`.
+  GraphQL `errors` fail fast rather than masquerading as a missing thread,
+  and a partial apply (reply posted, resolve not confirmed) still reports
+  the posted `replyId`.
 - Stable contract: [`resolve-review-thread.schema.json`][resolve-review-thread-schema].
 - The written E13 reply-and-resolve rule in
   `idd-review-fix.instructions.md` stays authoritative; this helper is the
@@ -966,6 +1126,52 @@ default `instructions-only` profile keep using the written shell /
     the consumer-side gate (`summarizeExternalCheckWaivers` in
     `protocol-helpers.mts`) when no claim resolves there, so posting one
     against a claimed PR would just be rejected `wrongClaim`.
+  - for the `idd-advisory-convergence` selector specifically (#2328), the
+    report carries `advisoryConvergenceWaiverPrecondition`, built by the
+    same shared function `pre-merge-readiness` publishes it from, and a
+    closed hatch is a blocking reason. That check never treats a posted
+    waiver as active until its precondition opens, so posting one earlier
+    produces a marker the gate ignores. Only the exact selector is gated:
+    the gate itself never counts a glob waiver for this check either.
+  - the helper evaluates only the **deadline** opener, never terminal
+    Copilot unavailability, which needs trusted advisory-wait
+    recovery-marker state it does not collect. The report says so with
+    `terminalEvaluated: false`, and the blocking reason states that the
+    deadline has not passed rather than claiming no opener applies.
+    `--allow-closed-precondition` posts anyway, for an operator who knows
+    the terminal opener does apply; the precondition is still reported as
+    closed, so the override is visible in the output.
+  - the deadline itself is read from the **raw** policy document, not the
+    normalized one: `normalizePolicyConfig` does not carry
+    `advisoryWait.convergenceDeadline` through, so reading it from the
+    normalized policy would silently substitute the 24h default for a
+    repository that configured something shorter.
+  - `--apply` is idempotent (#2328): it reuses an existing valid waiver
+    for the same selector, HEAD, and claim instead of appending a second
+    marker, reporting `reusedWaiver` with that comment's id and url and
+    posting nothing. The earliest match wins, so a retry converges on one
+    marker. Validity comes from `summarizeExternalCheckWaivers`, so an
+    expired, wrong-HEAD, or wrong-claim waiver is never reused. Reuse wins
+    over a freshly requested expiry: re-running with a different
+    `--expires-in` reports the existing marker rather than posting a second
+    one carrying the new value, matching the release-marker rule that a
+    retry must never append an indistinguishable duplicate. To change an
+    expiry, let the existing waiver lapse or supersede it deliberately.
+  - the reuse check and the post are **not** one atomic step, and GitHub
+    comments have no compare-and-swap -- the same limitation the claim
+    protocol records for its own markers. Two concurrent `--apply` runs
+    can therefore both observe no waiver and both post. That is reconciled
+    after the fact rather than prevented: the helper re-reads once the post
+    lands, and when more than one valid waiver exists for the selector it
+    reports them all in `concurrentWaivers`, warns on stderr, and names the
+    earliest, which is the one a deterministic reader resolves to. It does
+    not delete the extras -- removing a marker another session just posted
+    is a maintainer's call, not the helper's -- so minimize them by hand.
+    That post-write read degrades to a warning rather than failing closed:
+    the waiver already exists and the write cannot be undone, so a read
+    failure reports `reconcileInconclusive` and still renders the applied
+    result with its comment url. Only the pre-write read fails closed, where
+    an unreadable list could actually cause the duplicate.
 
 ### External-check waiver contract
 
@@ -988,6 +1194,16 @@ Interpretation rules:
   marker body.
 - `check` may be an exact selector or a glob pattern, matching the
   `ciGate.externalChecks.*[].selector` plus `matchMode` contract.
+- `check:` and `reason:` hold single whitespace-free tokens in the raw
+  marker body: the authoring helper percent-encodes the check selector
+  and reason text with `encodeURIComponent` when writing the marker,
+  and decodes them back via `decodeURIComponent` on read (falling back
+  to an empty string -- which fails closed -- on a decode error). A
+  hand-written value containing a space or another character outside
+  the `check:\S+`/`reason:\S+` shape parses as malformed with no
+  automatic warning or reply unless percent-encoded first (a space
+  becomes `%20`); prefer the authoring helper below over hand-writing
+  the marker so this encoding is applied automatically.
 - Missing or unparseable body fields, unknown selectors, expired
   comments, wrong HEAD, wrong claim, or untrusted authors must fail
   closed.
@@ -1042,6 +1258,197 @@ Interpretation rules:
     marker comments into the PR
   - in solo-maintainer repositories, this helper-generated comment is
     the authorization path; a normal PR approval is not equivalent
+
+### Provider health helper
+
+- Command: `node scripts/provider-health.mjs [--owner <owner>] [--repo <repo>]`
+- Published bin: `idd-provider-health`
+- Stable contract:
+  [`provider-health.schema.json`][provider-health-schema]
+- Purpose (#2319): IDD already observes advisory-review and Actions
+  degradation, but only one pull request at a time, in three
+  unconnected places (an advisory bot's rate-limit/quota comment
+  classified as a non-review notice, the Actions billing/spend-limit
+  block CI shape, and `advisory-wait-state.mts`'s own per-pull-request
+  terminal state). Nothing aggregates those signals across pull
+  requests, so a session cannot distinguish "this pull request is
+  stuck" from "the service is down for everything". This read-only
+  classifier supplies the shared, cross-pull-request verdict other
+  tracks may read.
+- Emits a `healthy | degraded | unavailable | unknown` verdict for each
+  of two services, `advisory-review` and `ci-actions`, aggregated from
+  already-observable per-pull-request evidence:
+  - `advisory-review`: a trusted `advisory-wait:` request marker with
+    neither a subsequent `review_requested` timeline event nor a
+    submitted review from the primary bot, anchored to the marker's own
+    embedded requested-at timestamp and gated by the same
+    `advisoryWait.settledWindowMinutes` grace period
+    `evaluateStaleRequestRecoveryAction` (#2327, `advisory-wait-state.mts`)
+    already applies for a single pull request -- reused here, read
+    across several, rather than re-derived.
+  - `ci-actions`: a completed workflow run whose every job executed zero
+    steps -- the documented account-level Actions billing/spend-limit
+    block shape (the run starts but no steps run, unlike an ordinary
+    step failure); an ordinary code-caused failure contributes no
+    evidence either way.
+- Corroboration is counted over **distinct pull-request identities**,
+  never observation count, per the configured
+  `providerHealth.minCorroboratingPrs` (default `2`): a single pull
+  request's failure burst always caps at `degraded`, never
+  `unavailable`. `unknown` is the floor for every insufficient,
+  contradictory, or unreadable evidence path -- never `unavailable`.
+- Read-only by construction: emits no marker, mutates no issue, pull
+  request, or check, and exposes no field named or shaped as a
+  merge-readiness or CI-gate result. Nothing in this repository's F2/F3
+  merge gate or `idd-advisory-convergence` check consumes this helper's
+  output -- see the provider outage declaration helper below for the
+  decoupling this implies for `providerOutage`.
+
+### Provider outage declaration helper
+
+- Command:
+  `node scripts/provider-outage-declaration.mjs --service <name>
+  [--declare | --record-advanced | --list-advanced] [options]`
+- Published bin: `idd-provider-outage-declaration`
+- Stable contract:
+  [`provider-outage-declaration.schema.json`][provider-outage-declaration-schema]
+- Purpose (#2320): substitute one repository-scoped, time-boxed
+  declaration for repeatedly posting a per-pull-request
+  external-check-waiver during a sustained provider outage, read from
+  the configured `providerOutage.declarationTarget` issue so no
+  repository file has to change while the outage is in progress.
+- Modes:
+  - default (resolve): reports whether an active, valid declaration
+    exists for `--service`, recomputed live on every call -- nothing is
+    cached, and an expired declaration reverts with no cleanup step.
+  - `--declare`: renders a new declaration marker; `--apply` posts it to
+    the declaration-target issue only after the acting GitHub user
+    passes the same `ciGate.externalCheckWaivers.authorityPolicy`
+    authority check the external-check-waiver helper's create path uses
+    (owner, Maintain, or Admin by default) -- reusing that resolver
+    rather than adding a second trust path. Requires exactly one of
+    `--expires` or `--expires-in`; the requested window is rejected when
+    it exceeds `providerOutage.maxValidity` (default `PT24H`).
+  - `--record-advanced --pr <n> --head-sha <40-hex>`: records that a
+    pull request was advanced under the currently active declaration,
+    so a post-recovery sweep can re-request its advisory review.
+    `--apply` refuses when no declaration is active for `--service`.
+  - `--list-advanced`: lists every recorded advancement from trusted
+    markers on the declaration-target issue. Entries are **HEAD-pinned**
+    -- a later push to the same pull request produces a distinct entry
+    rather than overwriting the earlier one, so the sweep re-requests
+    review per recorded HEAD.
+- Non-bypassing by construction: an active declaration alone never
+  relieves anything. The consuming caller must independently prove the
+  pull request's own terminal advisory-unavailable state (the same
+  per-pull-request proof the `idd-advisory-convergence` waiver
+  precondition already requires) before a declaration-relieved selector
+  applies, and relief is scoped to exactly the selectors listed in
+  `ciGate.externalChecks.waivable` -- it never relieves a CI conclusion,
+  branch freshness, claim state, or unresolved threads, which stay
+  evaluated exactly as they already are.
+- Decoupled from the provider-health classifier (#2319/#2327):
+  declaration validity is actor authority, service, timestamps, and
+  expiry only. An absent or `unknown` provider-health verdict never
+  invalidates an otherwise-valid declaration, and this helper accepts no
+  verdict input at all.
+- Consumed by both gates the `idd-advisory-convergence` waiver already
+  relieves
+  ([kurone-kito/idd-skill#2353](https://github.com/kurone-kito/idd-skill/issues/2353)):
+  `advisory-convergence.mjs`'s own CI-check verdict and
+  `pre-merge-readiness.mjs`'s F2/F3 merge gate each independently resolve
+  a declaration for service `idd-advisory-convergence` on the configured
+  `providerOutage.declarationTarget` issue, gated exactly as the
+  non-bypassing bullet above describes -- and both additionally require
+  `ciGate.externalCheckWaivers.mode` to be `maintainer-authorized`, the
+  same mode gate a direct per-pull-request waiver already requires.
+  Declare with that exact service name (`--service
+  idd-advisory-convergence`) for either gate to honor it; a declaration
+  for any other service name relieves nothing here.
+
+### Provider outage park helper
+
+- Command:
+  `node scripts/provider-outage-park.mjs [--park --pr <n> --issue <n>
+  --service <name> --blockers <name1,name2> --claim-id <id> --agent-id
+  <id>] [--apply]`
+- Published bin: `idd-provider-outage-park`
+- Stable contract (the posted `idd-provider-outage-park` marker payload,
+  not the list-mode stdout shape below):
+  [`provider-outage-park.schema.json`][provider-outage-park-schema]
+- Purpose (#2321): every current route for an unavailable external
+  service ends in a hold, which keeps the claim live until
+  `claimTiming.staleAge` elapses -- the session can neither continue nor
+  pick up different work, and the outage keeps producing more pull
+  requests stuck the same way. Parking releases the claim immediately
+  instead, at no cost to any quality gate: it never resolves a thread,
+  satisfies a gate, or merges.
+- Modes:
+  - default (list, read-only): lists every open pull request carrying a
+    trusted `idd-provider-outage-park` marker, each with its parked
+    service's current `provider-health` verdict and `resumable` (true
+    only once that verdict is `healthy`). Sorted by `parkedAt` then pull
+    request number for deterministic re-entry order. Reports `count` and
+    `boundReached` against `providerOutage.maxParkedChanges` (default
+    `10`) as information only -- this mode never blocks a park. The open
+    pull request read is bounded (default 50, most-recently-updated
+    first); `sampleTruncated` is `true` when more open pull requests may
+    exist beyond that sample, and `boundReached` fails closed to `true`
+    in that case regardless of the sampled `count`.
+  - `--park`: fetches the pull request's live head SHA, re-checks the
+    named service's live `provider-health` verdict is `unavailable`, and
+    requires every entry in `--blockers` (the caller's own fresh
+    `pre-merge-readiness` blocker-gate names) to map to that service --
+    `advisory-review` only for `advisory-wait` /
+    `copilot-terminal-unavailable`; `ci-actions` only for `ci` /
+    `discarded-required-check-siblings`. Any other blocker, or an empty
+    `--blockers`, refuses to park. `--apply` posts the marker (naming the
+    service and the full `--blockers` list, per the issue's own
+    acceptance criteria) to the pull request; releasing the originating
+    issue's claim is a separate, existing step the caller takes
+    afterward (`unclaimed-by`), not performed by this command.
+- Same claim-gating contract as `post-idd-marker.mjs`: this command
+  performs no claim/state gating itself -- the calling phase runs its
+  own claim-revalidation gate before `--apply`.
+- Read-only by construction in list mode: exposes no field named or
+  shaped as a merge-readiness or CI-gate result, mirroring the
+  provider-health helper above.
+
+### Local validation evidence helper
+
+- Command:
+  `node scripts/local-validation-evidence.mjs --pr <n> --head-sha <40-hex>
+  [--record] [options]`
+- Published bin: `idd-local-validation-evidence`
+- Stable contract:
+  [`local-validation-evidence.schema.json`][local-validation-evidence-schema]
+- Purpose (#2323): record that a local command set (typically
+  `pre-push-validate`) ran against a pull request's exact HEAD, as
+  HEAD-pinned, actor-trust-filtered, expiring evidence -- so a queue
+  caused by a required-check Actions outage recovers on a rerun rather
+  than a re-review.
+- Modes:
+  - default (resolve): reports whether unexpired, actor-trusted evidence
+    exists for `--head-sha` covering every `--required-checks` name,
+    **only while** an active provider-outage declaration
+    ([above](#provider-outage-declaration-helper)) exists for
+    `--service` (default `ci-actions`). Recency is measured from the
+    marker comment's own `created_at` against `localValidationEvidence.maxAge`
+    (default `PT4H`), never an embedded timestamp.
+  - `--record --covers <names> --outcome <pass|fail>`: renders and (with
+    `--apply`) posts the evidence marker to the pull request.
+- **Never a merge gate.** `pre-merge-readiness.mts` reports this
+  helper's resolution as its own additive `localValidationEvidence`
+  field; `computePreMergeReadinessBlockers` (protocol-helpers.mts) has
+  no reference to that field, so it can never remove or downgrade a
+  required-check blocker. Evidence changes what is _known_, never what
+  is _green_ -- an unavailable required platform check stays listed as
+  a blocker regardless of evidence. Restoring the platform check rollup
+  is an out-of-band privileged operation outside the autonomous loop.
+- On recovery, drive re-verification from the evidence marker's own
+  `headSha` (`evaluateLocalValidationEvidenceRecovery`): a pull request
+  whose HEAD advanced past the recorded evidence is re-validated, never
+  merged on the stale record.
 
 ### A4 viability gate
 
@@ -1172,6 +1579,64 @@ Interpretation rules:
   authorized takeover instead. Both profiles share the `idd-claim.lock`
   namespace, so a helper-runtime session and an instructions-only
   session see the same lock.
+
+### Clone-scoped lock
+
+- Source repo / vendored-node commands:
+
+  ```sh
+  node scripts/clone-lock.mjs --exec --agent-id <id> [--repo <path>] \
+    [--timeout-ms <n>] -- <command> [args...]
+
+  node scripts/clone-lock.mjs --check [--repo <path>]
+  ```
+
+- Package-manager / ephemeral-npx command: use the profile-selected
+  `idd:clone-lock` command from the helper runtime manifest wiring
+  above; the literal invocations are:
+
+  ```sh
+  npx --yes --package <helper-package-spec> \
+    idd-clone-lock --exec --agent-id <id> [--repo <path>] \
+    [--timeout-ms <n>] -- <command> [args...]
+
+  npx --yes --package <helper-package-spec> \
+    idd-clone-lock --check [--repo <path>]
+  ```
+
+- A mutual-exclusion mutex around `git worktree add`/`remove` and
+  `git fetch` against the _shared_ primary clone — unlike the
+  worktree-local claim lock above, this blocks (retrying with backoff)
+  rather than reporting an immediate collision, and serializes
+  concurrent workers sharing one clone rather than guarding one
+  worktree's own claim identity. See the
+  [Orchestrator fan-out variant](idd-workflow.md#orchestrator-fan-out-variant)
+  for when to reach for it.
+- `--exec` acquires, runs `<command>` with stdio inherited and `cwd`
+  set to `--repo`, then releases the lock even if the command fails,
+  exiting with the command's own exit code; exits `3` if the lock
+  could not be acquired within `--timeout-ms` (default 120000).
+- `--check` reports `{ path, present, holder?, malformed?,
+  holderAlive? }` read-only; `holderAlive` (diagnostic only, from
+  `process.kill(pid, 0)`) reports whether the recorded holder still
+  appears to be running.
+- **No automatic stale-lock recovery**: a held lock is never taken
+  over, regardless of how long it has been held or whether its
+  recorded holder is still alive. `--exec` exits `3` on a
+  `--timeout-ms` timeout, naming the lock path and the recorded
+  holder's pid in the error message; once you have independently
+  confirmed that holder is gone, remove the lock file by hand and
+  retry — the same recovery git's own `index.lock` expects on a
+  stale-lock collision.
+- **`instructions-only` helper-free fallback (no helper runtime
+  available)**: this lock is a same-machine convenience for
+  parallel autonomous fan-out, not a correctness requirement — an
+  `instructions-only` session running one worker at a time never
+  contends for it. Where an `instructions-only` profile does run
+  concurrent workers sharing one clone, serialize `git worktree
+  add`/`remove`/`fetch` by giving each worker its own clone instead
+  (see the Orchestrator fan-out variant linked above), rather than
+  hand-rolling this lock's protocol.
 
 ### Canonical branch name
 
@@ -1569,15 +2034,31 @@ to post it is the consuming track's job.
   `runAttempt` already exhausted the `"rerun-once"` budget, withholds the
   corresponding plan entries with an explanatory `rerunPolicyHoldNotice`
   instead of silently omitting them
+- Also reports a `liveCoverageRecoveryPlan` (kurone-kito/idd-skill#2549):
+  a narrow, separately-bounded exception for an instance that is
+  BOTH the live-coverage-recovery case above AND itself
+  `rerun-budget-held` (its own `runAttempt` already exhausted the
+  `"rerun-once"` budget) AND has a sibling instance for the same check
+  that already classifies `pass` -- proof the rollup is otherwise
+  already resolved, so rerunning this one is bounded cleanup of a
+  redundant stale sibling on an already-covered HEAD, never a second
+  automated rerun-budget grant. Every other `rerun-budget-held`
+  instance (including the waiver-rebind case below) keeps the
+  unconditional withholding unchanged; each promoted instance's
+  original hold reason is named both in the plan document
+  (`originalHoldReason`) and in the `--apply` summary
 - Without `--apply`, it never calls `gh run rerun` (or any other mutating
   command) itself. Pass `--apply` (#1766) to execute the printed plan:
-  it reruns each rerun-eligible instance in order (recovery-refresh first
-  when one applies), waits for each to reach a genuinely new completed
-  attempt (polled via the actions/runs API, not `gh run watch`, to avoid
-  racing a just-issued rerun's stale pre-rerun status) before starting
-  the next, and stops early once the recomputed plan is fully resolved --
+  it reruns each rerun-eligible instance in order (recovery-refresh
+  first, then the sequential plan, then `liveCoverageRecoveryPlan`
+  last), waits for each to reach a genuinely new completed attempt
+  (polled via the actions/runs API, not `gh run watch`, to avoid racing
+  a just-issued rerun's stale pre-rerun status) before starting the
+  next, and stops early once the recomputed plan is fully resolved --
   a `bot-gated-skip`, `awaiting-fresh-review`, or rerun-budget-held
-  instance is never rerun
+  instance is never rerun outside the narrow `liveCoverageRecoveryPlan`
+  exception just above, and the same `MAX_APPLY_RERUNS` safety bound
+  covers all three plan sections together, not a second loop
 - `--check-name <name>` (#1935) overrides the check-run name searched for
   and reported, defaulting to `idd-advisory-convergence` when omitted
   (byte-identical output to before this flag existed). Use it when the
@@ -1597,7 +2078,12 @@ to post it is the consuming track's job.
 instance (see above) -- that withholding is correct and load-bearing
 on its own, and this section does not change it: the script keeps
 withholding these instances from its own plan, and gains no
-`--override-budget` flag or equivalent. A specific combination sits
+`--override-budget` flag or equivalent. `liveCoverageRecoveryPlan`
+above (#2549) is a separate, much narrower automated exception (a
+live-coverage-recovered instance with an already-passing sibling
+proving the rollup is otherwise resolved) -- it does not apply to the
+waiver-rebind case below, which still requires this manual procedure.
+A specific combination sits
 outside what the withholding alone can resolve: an
 `idd-advisory-convergence` instance already went `rerun-budget-held`
 from a genuinely-failed attempt, and only afterward does a maintainer
@@ -1883,6 +2369,16 @@ reflexively as any other CLI option.
   does not match this exact shape — a different error, an ineligible
   topology, or the opt-in `hold-and-report` policy — falls through
   unchanged to the pre-#1521 hold-and-report path.
+- **Local-head-drift warning (#2453).** In both dry-run and `--apply`,
+  the helper best-effort reads the invoking process's local git branch
+  and HEAD. When that local branch equals the PR's own `headRefName`
+  and the local HEAD differs from `prHeadSha`, the verdict's
+  `localHeadDrift` field is set to `{ localHeadSha, remoteHeadSha }` and
+  a warning is also printed on stderr — the signature of an unpushed
+  commit about to be silently left behind. It is advisory only: `null`
+  whenever the check cannot run (no git repo, a different or detached
+  branch, or an unreadable local/remote read) or finds no divergence,
+  and it never gates `ready` or blocks the merge.
 - Fail closed: if helper execution fails, output is invalid JSON,
   required fields are missing, or helper evidence conflicts with live
   GitHub state, discard helper output and run the manual F3 gate +
@@ -2118,14 +2614,14 @@ the same order the `eligible` conjunction is written in
 structurally unable to disagree.
 
 <!-- dprint-ignore-start -->
-| Token | Fires when... |
+| Token                                    | Fires when...                                                                                                                                          |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `scope-not-applicable` | `applicability.status` is `not_applicable` OR `indeterminate` (#1686) -- either `advisoryWait.convergenceScope: "idd-claimed"` and this PR has no verified linked claim/branch or has a broken/ambiguous claim linkage, or (#1906) `advisoryWait.exemptBotAuthoredPrs: true` under `"all-prs"` scope exempted a Bot-authored PR with no claim history. Offering a same-HEAD reroll is pointless in any of these cases. |
-| `review-pending` | The primary bot has not yet reviewed current HEAD (`pending: true`). Always co-occurs with `review-item-count-unknown` below, since an off-HEAD review reports no usable item count. |
-| `unresolved-copilot-threads` | `threads.satisfied` is `false` -- at least one Copilot-authored thread is neither resolved nor validly dispositioned. |
-| `missing-regular-comment-disposition` | `dispositionEvidence.missingRegularCommentCount` is non-zero -- an outstanding regular (non-thread) PR comment still lacks a fresh disposition marker. |
-| `review-item-count-unknown` | The latest review's comment count is unavailable -- either the review is off-HEAD (co-firing with `review-pending` above, since `resolveLatestCopilotReviewClause` reports `itemCount: null` for any non-matching-HEAD review), or it is on current HEAD but the count itself is unavailable (a GraphQL nullable-field edge case). |
-| `review-item-count-not-positive` | The latest review's `itemCount` is a known `0` AND `suppressedCount` (#1880) is also `0` -- already fully converged, nothing (posted or suppressed) to reroll for. |
+| `scope-not-applicable`                    | `applicability.status` is `not_applicable` OR `indeterminate` (#1686) -- either `advisoryWait.convergenceScope: "idd-claimed"` and this PR has no verified linked claim/branch or has a broken/ambiguous claim linkage, or (#1906) `advisoryWait.exemptBotAuthoredPrs: true` under `"all-prs"` scope exempted a Bot-authored PR with no claim history. Offering a same-HEAD reroll is pointless in any of these cases. |
+| `review-pending`                          | The primary bot has not yet reviewed current HEAD (`pending: true`). Always co-occurs with `review-item-count-unknown` below, since an off-HEAD review reports no usable item count. |
+| `unresolved-copilot-threads`              | `threads.satisfied` is `false` -- at least one Copilot-authored thread is neither resolved nor validly dispositioned.                                   |
+| `missing-regular-comment-disposition`     | `dispositionEvidence.missingRegularCommentCount` is non-zero -- an outstanding regular (non-thread) PR comment still lacks a fresh disposition marker.  |
+| `review-item-count-unknown`               | The latest review's comment count is unavailable -- either the review is off-HEAD (co-firing with `review-pending` above, since `resolveLatestCopilotReviewClause` reports `itemCount: null` for any non-matching-HEAD review), or it is on current HEAD but the count itself is unavailable (a GraphQL nullable-field edge case). |
+| `review-item-count-not-positive`          | The latest review's `itemCount` is a known `0` AND `suppressedCount` (#1880) is also `0` -- already fully converged, nothing (posted or suppressed) to reroll for.                        |
 <!-- dprint-ignore-end -->
 
 **Updated by kurone-kito/idd-skill#2050** (revised after PR #2054 review --
@@ -2392,7 +2888,7 @@ same as `AW4`/`AW5`.
   `dirty`, `force-push-exception`, `computing`, `unknown` (`computing` is the
   transient still-computing mergeability that callers re-poll; `unknown` stays
   terminal)
-- `syncRecommendation` values: `none`, `merge-main`, `policy-required-update`,
+- `syncRecommendation` values: `none`, `merge-base`, `policy-required-update`,
   `force-push-exception`, `recheck`, `hold-unknown` (`recheck` pairs with
   `computing`)
 - `baseAdvancedSinceMergeBase` (boolean): `true` when the base ref has moved
@@ -2417,6 +2913,53 @@ same as `AW4`/`AW5`.
 - Fail closed: if execution fails, output is invalid JSON, or required
   fields are missing, discard helper output and apply written D4/E-phase
   branch-sync checks directly.
+
+### Effective C1 critique delegate
+
+- Preferred command when helper runtime is enabled:
+  `idd-critique-delegate [--policy <path>] [--no-user-global]`
+- Source repository equivalent:
+  `node scripts/idd-critique-delegate.mjs [--policy <path>] [--no-user-global]`
+- Output schema (stable fields):
+
+  ```json
+  {
+    "usable": true,
+    "source": "repository-local",
+    "command": "my-local-reviewer --diff",
+    "mode": "fallback",
+    "reason": null
+  }
+  ```
+
+- `source` values: `repository-local`, `user-global`, `none`
+- `reason` values (only when `usable` is `false`):
+  `repository-local-explicit-disable` (repo-local `critiqueLoop.delegate`
+  is the JSON `null` sentinel), `invalid-repository-local-delegate` (a
+  malformed repo-local value, which fails closed and never inherits a
+  user-global delegate), `not-configured` (absent at every layer)
+- `usable: true` always carries a non-null `command`/`mode` and a null
+  `reason`; `usable: false` always carries null `command`/`mode` and a
+  non-null `reason`
+- Resolution order matches
+  [User-global critique delegate default](idd-workflow.md#user-global-critique-delegate-default)
+  exactly: a configured, disabled (`null`), or malformed repository-local
+  `critiqueLoop.delegate` always wins outright and never inherits the
+  user-global layer; only when repository-local is entirely absent does
+  an optional `$XDG_CONFIG_HOME/idd-skill/config.json` (or
+  `$HOME/.config/idd-skill/config.json`) fragment apply
+- Under `GITHUB_ACTIONS=true` the user-global layer is always skipped
+  (repository-local resolution is unaffected), matching the documented
+  invariant that a GitHub-hosted or other remote agent surface never
+  consults it; `--no-user-global` skips it explicitly on any other
+  remote surface the caller recognizes but this helper cannot
+  auto-detect from a single provider variable
+- Deterministic and network-free; delegates entirely to the existing
+  exported resolvers (`resolveEffectiveCritiqueLoopDelegateFromEnv` in
+  `idd-config.mts`, `resolveEffectiveCritiqueLoopDelegate` /
+  `parseCritiqueLoopDelegate` in `policy-helpers.mts`) with no
+  reimplemented validation rule (referenced in
+  [kurone-kito/idd-skill#2329](https://github.com/kurone-kito/idd-skill/issues/2329))
 
 ### S2 quiet-window evidence
 
@@ -2522,8 +3065,7 @@ same as `AW4`/`AW5`.
 - Read-only boundary: the helper performs no minimization, no posting, and no
   issue creation. **Handoff**: the JSON is the input an operator hands to the
   issue-authoring skill, which re-verifies each candidate against current
-  `master` (reuse-first / not-already-fixed) and drafts follow-up
-  issues
+  `main` (reuse-first / not-already-fixed) and drafts follow-up issues
   bucketed by readiness. The helper does deterministic detection; the
   judgment-heavy re-verification, drafting, and publish stay operator-gated.
 - **Operator runbook**: this helper is a **manual spot-check audit**, not a
@@ -2712,6 +3254,10 @@ replace the written decision tables.
 [disposition-non-review-notices-schema]: https://kurone-kito.github.io/idd-skill/schemas/disposition-non-review-notices.schema.json
 [forced-handoff-marker-schema]: https://kurone-kito.github.io/idd-skill/schemas/forced-handoff-marker.schema.json
 [idd-merge-execute-schema]: https://kurone-kito.github.io/idd-skill/schemas/idd-merge-execute.schema.json
+[local-validation-evidence-schema]: https://kurone-kito.github.io/idd-skill/schemas/local-validation-evidence.schema.json
 [post-idd-marker-schema]: https://kurone-kito.github.io/idd-skill/schemas/post-idd-marker.schema.json
 [pre-merge-readiness-schema]: https://kurone-kito.github.io/idd-skill/schemas/pre-merge-readiness.schema.json
+[provider-health-schema]: https://kurone-kito.github.io/idd-skill/schemas/provider-health.schema.json
+[provider-outage-declaration-schema]: https://kurone-kito.github.io/idd-skill/schemas/provider-outage-declaration.schema.json
+[provider-outage-park-schema]: https://kurone-kito.github.io/idd-skill/schemas/provider-outage-park.schema.json
 [resolve-review-thread-schema]: https://kurone-kito.github.io/idd-skill/schemas/resolve-review-thread.schema.json

@@ -1,3 +1,10 @@
+---
+type: reference
+title: IDD Comment Minimization
+description: Defines the live status digest contract and the safe procedure for minimizing completed review feedback and stale operational markers after merge.
+tags: [comment-minimization, cleanup]
+---
+
 # IDD Comment Minimization
 
 <!-- cspell:words AAAAB Unminimize Wpaqs unminimized -->
@@ -168,21 +175,17 @@ canonical, mandatory contract. The server-side workflow is a
 backstop, not a replacement: same helper, same candidate rules,
 same evidence comment shape, non-blocking on errors. Double-posting is
 prevented by the cleanup-evidence record itself, not by Actions
-concurrency, and the two consumers use the same guard: the workflow
-skips posting when the latest **trusted-author**
-`<!-- idd-cleanup-evidence: ... -->` comment already records a
-successful outcome (`applied` or `clean`) — the workflow only counts a
-prior comment as a duplicate when its author is `github-actions[bot]`
-or a login listed in `.github/idd/config.json`'s `trustedMarkerActors`
-(closed by #237; formerly matched on the marker prefix alone,
-regardless of author) — while the agent F4 step skips its own post
-under the same success-record rule — including a success record the
-workflow itself posted. A trusted comment recording any other status
-(`failed`, `incomplete`, `permission-blocked`, `rescan-failed`) does
-not suppress either side, so a `workflow_dispatch` rerun after a
-`rescan-failed` post still posts fresh evidence (preventive; no
-observed incident yet — #2043) (see
-[Mandatory F4 Cleanup Contract](#mandatory-f4-cleanup-contract)). The
+concurrency: the workflow skips when the latest trusted-author
+`<!-- idd-cleanup-evidence:` comment already records a successful
+outcome (`applied` or `clean`; posted by `github-actions[bot]` or a
+configured `trustedMarkerActors` login — an untrusted commenter's
+marker-prefixed comment never counts), and the agent F4 step skips its
+own post under the same success-record rule — including a success
+record the workflow itself posted. A trusted comment recording any
+other status (`failed`, `incomplete`, `permission-blocked`,
+`rescan-failed`) does not suppress either side, so a
+`workflow_dispatch` rerun after a `rescan-failed` post still posts
+fresh evidence (preventive; no observed incident yet — #2043). The
 workflow's PR-keyed `concurrency` group only serializes workflow runs
 against each other; it does not gate the agent's local F4.
 
@@ -438,7 +441,7 @@ non-zero, include the blocked count in the same comment rather than
 posting a separate permission-blocked comment:
 
 ```markdown
-<!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} retry-attempts:{N} retry-bound-exhausted:{true|false} -->
+<!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
 
 **F4 Cleanup Failure**
 
@@ -448,7 +451,6 @@ Cleanup candidates were detected but not all could be applied.
 - Failed: N candidates (reason: ...)
 - Unapplied: N candidates
 - Permission-blocked: N candidates (if any)
-- Retry attempts (bound-exhausted): N (true / false)
 
 This does not re-block the merge. A maintainer may run cleanup
 manually: `node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check`
