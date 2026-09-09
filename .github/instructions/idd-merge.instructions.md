@@ -357,9 +357,12 @@ Before any mutating action in F3, apply the
        echo 'github-actions[bot]'
      } | tr '[:upper:]' '[:lower:]'
    )
-   COMMENTS_TSV=$(gh api --paginate \
-     "repos/{owner}/{repo}/issues/{pr-number}/comments" \
-     --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login, (.body | split("\n")[0])] | @tsv')
+   COMMENTS_FETCH_FAILED=0
+   if ! COMMENTS_TSV=$(gh api --paginate \
+     "repos/{owner}/{repo}/issues/<pr-number>/comments" \
+     --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login, (.body | split("\n")[0])] | @tsv'); then
+     COMMENTS_FETCH_FAILED=1
+   fi
    EXISTING_STATUS=""
    while IFS=$'\t' read -r candidate_id candidate_login candidate_marker_line; do
      [ -z "$candidate_id" ] && continue
@@ -370,6 +373,30 @@ Before any mutating action in F3, apply the
      fi
    done <<< "$COMMENTS_TSV"
    ```
+
+   `{owner}`/`{repo}` are `gh api`'s own auto-templated placeholders
+   (filled from the current repository context, like `gh pr view`'s
+   own implicit repo resolution); `<pr-number>` is not one of them —
+   `gh api` only auto-fills `{owner}`/`{repo}`/`{branch}` — so it stays
+   in this file's angle-bracket convention for an already-resolved
+   value the agent substitutes itself, matching the node-script
+   examples earlier in this same F4 section. The `if ! COMMENTS_TSV=$(…)`
+   guard is deliberate: a normal Bash invocation of this snippet has no
+   implicit `-e`, so an unguarded assignment on a failed `gh api` call
+   (auth, rate limit, transient network error) would silently leave
+   `COMMENTS_TSV` empty and read as "no prior record" — precisely the
+   false negative this whole re-check exists to prevent. **If
+   `COMMENTS_FETCH_FAILED` is `1` after this block, stop here: do not
+   evaluate the skip condition below and do not post the success
+   evidence comment** — an empty result from a **failed** fetch is
+   unknown state, never the same as an empty result from a
+   **successful** one. Follow the `failed`/`incomplete` cleanup-failure
+   path instead (noting the re-check fetch itself failed, distinct
+   from an apply failure) so F4 still exits with a recorded reason per
+   the Mandatory F4 Cleanup Contract, rather than terminating the
+   agent's shell outright — a raw `exit` here would abandon F4 with no
+   recorded outcome at all, a worse failure mode than the duplicate
+   this re-check exists to prevent.
 
    The API returns comments in creation-ascending order and the loop
    never `break`s, so `EXISTING_STATUS` ends up holding the **latest**

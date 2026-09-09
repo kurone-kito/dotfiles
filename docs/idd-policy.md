@@ -630,8 +630,9 @@ this round's five PRs, so it carries no new attribution; its marker is
 still present and correct.
 
 **Reaffirmed this round (v0.9.0, 2026-09-09)**: roadmap #380's six
-tracks (#381-#386) were cross-referenced against each of the 9
-registered slugs' live marker instances using the same method as the
+tracks (#381-#386) were cross-referenced against each of the then-9
+registered slugs' live marker instances (before #397 added the tenth,
+`cleanup-evidence-dedup-recheck`, above) using the same method as the
 `v0.7.0` round above (each track's merged-PR file list diffed against
 the files carrying each marker). Track #382 (`.github/instructions/`
 re-import, PR #395) additionally touched `claim-timing`,
