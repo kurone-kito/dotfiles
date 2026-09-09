@@ -645,10 +645,20 @@ PR #394) touched only `.github/idd/config.json`, which carries no
 divergence marker, so neither gains a new attribution.
 `vendored-file-header` (`scripts/minimize-superseded-markers.mjs`) was
 not touched by a file diff in any of this round's six PRs either, but
-unlike the `v0.7.0` round, track #383 actively re-verified it
-byte-identical against the pinned `v0.9.0` source while auditing the
-deferred-upstream items below, so its existing `#383` attribution
-reflects that verification-only basis rather than a content diff. A
+unlike the `v0.7.0` round, track #383 actively re-verified this file
+against the pinned `v0.9.0` source while auditing the deferred-upstream
+items below: upstream's own
+`idd-template/scripts/minimize-superseded-markers.mjs` is
+byte-identical between `v0.7.0` and `v0.9.0` (independently
+reconfirmed here), and the local file's body past its
+deliberately-diverged header (`scripts/minimize-superseded-markers.mjs:2-10`,
+the `vendored-file-header` divergence itself) matches that upstream
+body exactly, so no local code update was needed. The header
+correction itself is **not** byte-identical to upstream by design and
+must stay that way -- a future re-import overwriting it with
+upstream's own shorter auto-generated-file notice would be a
+regression, not a sync. Its existing `#383` attribution reflects that
+verification-only basis rather than a content diff. A
 repository-wide `dotfiles-divergence` grep confirms all 9 slugs still
 have at least one live, findable marker instance — none has silently
 reverted to upstream's default. Final verification performed by
