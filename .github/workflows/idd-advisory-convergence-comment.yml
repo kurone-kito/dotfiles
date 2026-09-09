@@ -1,0 +1,183 @@
+name: IDD advisory-convergence comment refresh
+# Non-required companion to idd-advisory-convergence.yml (upstream
+# #2136, #2411). Human review-thread and regular-comment chatter must
+# not create or cancel the required `idd-advisory-convergence`
+# check-run, so this workflow has a different name, job id, and
+# concurrency group -- it cannot overwrite that SHA verdict or cancel
+# an in-flight required run.
+#
+# Compared against both of kurone-kito/idd-skill's copies of this file
+# at pin d005098bf3a54a27ac79b22fb5eeb88186d235c6 (v0.9.0): its own root
+# `.github/workflows/idd-advisory-convergence-comment.yml` (the simpler
+# dogfooded original -- a single, non-branching `node scripts/*.mjs`
+# call per step, no profile-resolution scaffolding) and the
+# `idd-template/` copy of the same path (an adopter-facing wrapper
+# around that same original, adding generic
+# `helperRuntime.profile`-driven branching across
+# `vendored-node`/`package-manager`/`ephemeral-npx`/`instructions-only`
+# adopters). The two copies are identical for every part of this file
+# that is not that branching (triggers, concurrency, permissions, and
+# each step's underlying invocation). This workflow already existed
+# upstream before v0.7.0, but this repository deferred adopting it at
+# the v0.7.0 pin round (#296/#303): the ephemeral-npx helper pin then
+# had no packaged `idd-review-comment-origin` bin, so the workflow's
+# classification step could not actually run under this repository's
+# helper profile. #384 confirmed that gap closed at the v0.9.0 pin --
+# `idd-review-comment-origin`, `idd-advisory-comment-debounce`, and
+# `idd-rerun-advisory-convergence` all resolve to packaged bins
+# (verified live with `npx --yes --package
+# https://codeload.github.com/kurone-kito/idd-skill/tar.gz/<pin> idd-*
+# --help` for each) -- and adopts the workflow now, taking the root
+# copy's simpler shape (matching how the sibling `post-merge-cleanup.yml`
+# is itself adapted from root, not `idd-template/`) and substituting
+# each `node scripts/*.mjs` call with the matching packaged
+# ephemeral-npx CLI at a pinned tarball URL, exactly like both sibling
+# files already do -- this repository does not need
+# `idd-template/`'s generic helper-runtime-profile resolution or
+# package-manager-detection scaffolding, having already committed to
+# one helper profile (see docs/idd-policy.md "Helper Runtime Profile").
+#
+# When the comment is IDD-originated (reply-identity stamp,
+# disposition prefix, or an operational marker the required check
+# already honors), it reuses `idd-rerun-advisory-convergence --apply`
+# to refresh the existing pull_request-family required run for the
+# current HEAD SHA. It never asserts `ready` itself.
+#
+# Two trigger families land here: `pull_request_review_comment`
+# (inline review-thread comments) and `issue_comment` (regular PR
+# comments -- where post-idd-marker and disposition-non-review-notices
+# actually post every marker/disposition type, since both use the
+# issues-comments API). `issue_comment` also fires for a comment on a
+# plain issue, not only a PR; the job-level `if:` below skips those
+# (`github.event.issue.pull_request` is only present when the
+# commented-on issue is a PR).
+#
+# Job id is deliberately NOT `idd-advisory-convergence`.
+#
+# Runner: reads the `CI_RUNNER_LABEL` repository variable, matching
+# the required idd-advisory-convergence.yml companion, falling back to
+# `ubuntu-slim` when unset -- this workflow has no `workflow_dispatch`
+# trigger of its own, so there is no `runner` input to check first.
+#
+# Debounce (upstream #1381, #2023, #2638): a burst of IDD-originated
+# comments fired `idd-rerun-advisory-convergence --apply` once per
+# comment, exhausting every same-HEAD instance's one-time rerun budget
+# mid-burst. The "Check for newer qualifying event" step below waits a
+# short quiet window, then re-queries whether a newer IDD-originated
+# comment/review has since landed on the same PR; if so, this run
+# skips its own `--apply` call and leaves it to the later-triggered
+# run (which asks the same question in turn). This is a job-body-level
+# check -- it does not alter `cancel-in-progress: false` below, which
+# stays exactly as upstream established it. (Note on that setting's
+# actual scope: it protects only the currently in-progress run in this
+# group from cancellation; a merely *pending*, not-yet-started run is
+# still cancelled and replaced by the newest pending run when another
+# is queued behind it, since no `queue:` key is set here -- the
+# debounce below exists for the case where a run has already started
+# and must itself decide whether a newer event supersedes it, which
+# that pending-run replacement does not cover.) If the debounce step's
+# own live-data collection fails, the step fails and GitHub Actions'
+# default sequential-failure behavior skips "Rerun required HEAD
+# check" entirely for that run -- safe, since this is a non-required
+# companion refresh, and a later qualifying event (or the required
+# check's own polling) will trigger a fresh attempt.
+concurrency:
+  # Do not cancel: a later human LGTM must not abort an in-flight
+  # IDD-originated refresh before it reruns the required check.
+  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+on:
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: write
+defaults:
+  run:
+    # Pins every run: step's shell regardless of runner OS -- GitHub
+    # Actions otherwise picks bash on Linux/macOS but PowerShell Core
+    # on Windows, which would silently misinterpret this file's POSIX
+    # shell syntax instead of failing loudly. No-op on this repository's
+    # own ubuntu-slim default; imported for parity with the sibling
+    # idd-advisory-convergence.yml / post-merge-cleanup.yml files.
+    shell: bash
+jobs:
+  refresh-if-idd-originated:
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
+    timeout-minutes: 10
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Trusted default-branch checkout, not the PR head -- same
+          # rationale as idd-advisory-convergence.yml's own checkout
+          # step: the classification/debounce/rerun logic and its
+          # config (.github/idd/config.json) must be the trusted copy,
+          # not the PR's own.
+          # <!-- dotfiles-divergence: master-branch -->
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+      # This repository runs the ephemeral-npx helper profile (no
+      # vendored scripts/ directory), so invoke the packaged CLIs
+      # rather than upstream's `node scripts/*.mjs` forms. See
+      # docs/idd-policy.md "Helper Runtime Profile".
+      - name: Classify review comment
+        id: origin
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+            idd-review-comment-origin
+      - name: Check for newer qualifying event
+        id: debounce
+        if: steps.origin.outputs.idd_originated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # gh reads whichever of these two matches its resolved host
+          # (`gh help environment`), so setting both is inert on
+          # github.com and lets this same step authenticate on a
+          # self-hosted GHES host too.
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
+          # pull_request_review_comment carries the PR number at
+          # github.event.pull_request.number; issue_comment carries it
+          # at github.event.issue.number instead.
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # Both pull_request_review_comment and issue_comment carry
+          # the triggering comment's own timestamps at
+          # github.event.comment (matching COMMENT_BODY above). Prefer
+          # updated_at: pull_request_review_comment also fires on
+          # edited/deleted (see on: above), and created_at would then
+          # still name the comment's original post time, not this edit
+          # -- making every comment posted between the original post
+          # and the edit look "newer than the trigger" and wrongly
+          # skip this run. updated_at equals created_at for a
+          # never-edited comment, so this is safe for the
+          # created-event case too.
+          TRIGGERED_AT: ${{ github.event.comment.updated_at || github.event.comment.created_at }}
+        run: |
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::PR_NUMBER is empty"
+            exit 1
+          fi
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+            idd-advisory-comment-debounce --pr "$PR_NUMBER" --triggered-at "$TRIGGERED_AT"
+      - name: Rerun required HEAD check
+        if: steps.origin.outputs.idd_originated == 'true' && steps.debounce.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::PR_NUMBER is empty"
+            exit 1
+          fi
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+            idd-rerun-advisory-convergence --pr "$PR_NUMBER" --apply
