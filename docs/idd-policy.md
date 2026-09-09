@@ -507,7 +507,7 @@ result.
 | Key | Status | Notes |
 | --- | --- | --- |
 | `authoringLanguage` | `"en"` (explicit, #381, roadmap #380; was `default: unset` through the `v0.7.0` round) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. #381 set it explicitly to `"en"` in `.github/idd/config.json`; this repository already authored issues and PRs in English under the prior unset default, so the explicit value is a no-op in practice and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
-| `critiqueLoop.delegate` | reverted to unset (#381, roadmap #380; was explicit: set from #368 through the `v0.7.0` round) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. #368 adopted `command: "coderabbit-critique"`, `mode: "combined"` as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, since the `v0.7.0` pin could not yet read that file. `v0.9.0` gained user-global-config inheritance for this key, so #381 removed the repository-local `critiqueLoop` object from `.github/idd/config.json` entirely -- C1 now falls through to the already-deployed user-global source of truth (`home/dot_config/idd-skill/config.json.tmpl`, still pointing at the same PATH-resolved `coderabbit-critique` wrapper) instead of a second, repository-local copy, exactly as this row previously predicted. |
+| `critiqueLoop.delegate` | reverted to unset (#381, roadmap #380; was explicit: set from #368 through the `v0.7.0` round) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined` \| `on-success` \| `never`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. #368 adopted `command: "coderabbit-critique"`, `mode: "combined"` as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, since the `v0.7.0` pin could not yet read that file. `v0.9.0` gained user-global-config inheritance for this key, so #381 removed the repository-local `critiqueLoop` object from `.github/idd/config.json` entirely -- C1 now falls through to the already-deployed user-global source of truth (`home/dot_config/idd-skill/config.json.tmpl`, still pointing at the same PATH-resolved `coderabbit-critique` wrapper) instead of a second, repository-local copy, exactly as this row previously predicted. |
 
 ### Advisory-convergence report schema (not a policy key)
 
@@ -1087,6 +1087,36 @@ is re-imported:
   only falls through on `null`/`undefined`, so a `gh` timeout with no
   stderr output loses `error.message`'s useful timeout text (see the
   `vendored-file-header` divergence above).
+- (`v0.9.0`, `d005098bf3a54a27ac79b22fb5eeb88186d235c6`, newly flagged
+  this round by a Copilot review comment on #383's PR, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/onboarding/template-distribution.md`'s
+  ["`.gitattributes` linguist-generated
+  convention"](onboarding/template-distribution.md#gitattributes-linguist-generated-convention-vendored-node)
+  section tells `vendored-node`-profile adopters to mark their copied
+  helper files `linguist-generated=true`, while
+  `docs/onboarding/optional-host-setup.md`'s ["mark the vendored helper
+  bundle
+  `linguist-vendored`"](onboarding/optional-host-setup.md#optional--mark-the-vendored-helper-bundle-linguist-vendored)
+  section recommends `linguist-vendored` for the same copied files and
+  explicitly frames the two attributes as semantically distinct
+  ("generated = first-party build output, vendored = copied third-party
+  code"). The two adopter-facing recommendations conflict for the exact
+  same file set; not fixed ad hoc here since doing so would mean
+  rewriting one of two verbatim-imported upstream files, which is
+  outside this track's re-import/verification scope.
+- (`v0.9.0`, `d005098bf3a54a27ac79b22fb5eeb88186d235c6`, newly flagged
+  this round by a Copilot review comment on #383's PR, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import)
+  [`docs/onboarding/template-distribution.md`'s "Option
+  A"](onboarding/template-distribution.md) `gh api` fetch loop queries
+  `repos/kurone-kito/idd-skill/contents/idd-template/${FILE}` with no
+  `?ref=` query parameter, so it resolves whatever the source
+  repository's default branch currently is at fetch time rather than
+  the pinned tag/commit the surrounding guidance otherwise insists on
+  ("keep imports pinned" applies everywhere else in this same file).
+  Not fixed ad hoc here for the same reason as the item above.
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
