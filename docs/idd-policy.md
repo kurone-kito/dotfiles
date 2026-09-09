@@ -165,26 +165,38 @@ the import baseline for `.github/instructions/` and `.claude/skills/`,
 so the helper surface never drifts ahead of the checked-in templates —
 bump that commit deliberately whenever the IDD instructions are
 re-imported, and do **not** point the spec at a mutable
-`refs/heads/main` ref.
-[`#383`](https://github.com/kurone-kito/dotfiles/issues/383) bumped
-this pin to `v0.9.0` (`d005098bf3a54a27ac79b22fb5eeb88186d235c6`);
+`refs/heads/main` ref. Roadmap #292's schema-audit track (#293) bumped
+this pin to `v0.7.0` (`f51a8bb73a47452eff5799e8a27251b660ba4ae0`,
+confirmed working via `idd-doctor`, `ajv-cli`, and
+`idd-helper-bundle-manifest` against this repository) ahead of the
+instructions/skills re-import landing, opening a **transitional skew
+window** where audited helper commands resolved against the `v0.7.0`
+schema while `.github/instructions/` and `.claude/skills/` themselves
+stayed on the prior `v0.6.0`-round import. That window closed once
+roadmap #292's sibling tracks re-imported both surfaces to the same
+`v0.7.0` baseline — #294 for `.github/instructions/` (PR #305), #297
+for the `.claude/skills/issue-authoring/` companion bundle (PR #306)
+(#295 covered the remaining docs/profiles/githooks/scripts file set,
+not `.claude/skills/`). #298's final verification sweep confirmed the
+pin, the instructions, and the skills bundle now all track `v0.7.0`
+uniformly.
+
+Roadmap #380's docs track
+([`#383`](https://github.com/kurone-kito/dotfiles/issues/383)) bumped
+this same pin to `v0.9.0`
+(`d005098bf3a54a27ac79b22fb5eeb88186d235c6`).
 [`#382`](https://github.com/kurone-kito/dotfiles/issues/382) had
 already moved `.github/instructions/` to the same baseline, so this
-bump lands without a transitional skew window there. `.claude/skills/`
-(the issue-authoring companion bundle,
+bump does not open a fresh skew window there; `.claude/skills/` (the
+issue-authoring companion bundle,
 [`#386`](https://github.com/kurone-kito/dotfiles/issues/386)) is still
-pending as of this pin bump -- roadmap #380's final-verification track
-([`#387`](https://github.com/kurone-kito/dotfiles/issues/387)) confirms
-the pin, the instructions, and the skills bundle all track `v0.9.0`
-uniformly once #386 lands, mirroring how the `v0.7.0` round's
-schema-audit track (#293) bumped this same pin ahead of that round's
-instructions/skills landing, opening a transitional skew window that
-roadmap #292's sibling tracks closed -- #294 for
-`.github/instructions/` (PR #305), #297 for the
-`.claude/skills/issue-authoring/` companion bundle (PR #306) (#295
-covered the remaining docs/profiles/githooks/scripts file set, not
-`.claude/skills/`) -- and #298's final verification sweep confirmed
-uniformly.
+pending as of this pin bump, opening the same kind of transitional
+skew window the `v0.7.0` round saw between #293 and #298. That
+roadmap's final-verification track
+([`#387`](https://github.com/kurone-kito/dotfiles/issues/387)) is
+expected to confirm the pin, the instructions, and the skills bundle
+all track `v0.9.0` uniformly once #386 lands, mirroring #298's role in
+the prior round.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -494,7 +506,7 @@ result.
 
 | Key | Status | Notes |
 | --- | --- | --- |
-| `authoringLanguage` | default: unset (0.7.0) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. Left unset: this repository already authors issues and PRs in English, and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
+| `authoringLanguage` | `"en"` (explicit, #381, roadmap #380; was `default: unset` through the `v0.7.0` round) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. #381 set it explicitly to `"en"` in `.github/idd/config.json`; this repository already authored issues and PRs in English under the prior unset default, so the explicit value is a no-op in practice and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
 | `critiqueLoop.delegate` | reverted to unset (#381, roadmap #380; was explicit: set from #368 through the `v0.7.0` round) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. #368 adopted `command: "coderabbit-critique"`, `mode: "combined"` as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, since the `v0.7.0` pin could not yet read that file. `v0.9.0` gained user-global-config inheritance for this key, so #381 removed the repository-local `critiqueLoop` object from `.github/idd/config.json` entirely -- C1 now falls through to the already-deployed user-global source of truth (`home/dot_config/idd-skill/config.json.tmpl`, still pointing at the same PATH-resolved `coderabbit-critique` wrapper) instead of a second, repository-local copy, exactly as this row previously predicted. |
 
 ### Advisory-convergence report schema (not a policy key)
@@ -977,12 +989,16 @@ newly appeared** (confirmed present in upstream
 `idd-template/.markdownlint.yml` at both `v0.6.0` and `v0.7.0`, so it
 did not "appear since" the prior round -- it has simply gone
 unabsorbed since at least the `v0.6.0` round): the local
-`.markdownlint.yml` is missing upstream's `table-column-style: false`
+`.markdownlint.yml` was missing upstream's `table-column-style: false`
 override entirely. Recorded here as a follow-up per this issue's own
 instruction, rather than adopted unilaterally -- relaxing
 markdownlint's table-column-alignment rule is a deliberate lint-policy
 decision, not a mechanical sync, and this repository's tables
-(Divergence Register included) currently rely on manual alignment.
+(Divergence Register included) relied on manual alignment. **Resolved
+at the `v0.9.0` round (#383)**: `.markdownlint.yml` is now a wholesale
+copy of upstream's `v0.9.0` file (closing #314's adopt decision), so
+`table-column-style: false` is present and this gap no longer exists;
+kept here as the historical record of when and why it was deferred.
 
 ### PR #291 regression check (`idd-advisory-convergence`)
 

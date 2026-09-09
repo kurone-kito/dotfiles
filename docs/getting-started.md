@@ -54,7 +54,8 @@ node scripts/idd-doctor.mjs
 ```
 
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
-This repository has no local `scripts/` directory; its
+This repository's `scripts/` directory does not contain
+`scripts/idd-doctor.mjs`; its
 [Helper Runtime Profile](idd-policy.md#helper-runtime-profile) is
 `ephemeral-npx`, so run the doctor via the pinned `npx` invocation
 documented there instead of the `node scripts/idd-doctor.mjs` form
