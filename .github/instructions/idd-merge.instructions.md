@@ -412,13 +412,29 @@ Before any mutating action in F3, apply the
    `RECHECK_RESULT=FETCH_FAILED` → stop, do not post the success
    evidence comment (an empty result from a **failed** fetch is
    unknown state, never the same as an empty result from a
-   **successful** one) — follow the `failed`/`incomplete`
-   cleanup-failure path instead (noting the re-check fetch itself
-   failed, distinct from an apply failure) so F4 still exits with a
-   recorded reason per the Mandatory F4 Cleanup Contract, rather than
-   terminating the agent's shell outright, which would abandon F4 with
-   no recorded outcome at all — a worse failure mode than the
-   duplicate this re-check exists to prevent.
+   **successful** one). **Do not relabel a genuinely successful apply
+   as `failed`/`incomplete` here** — those are apply-level outcomes
+   with their own established meaning elsewhere in this contract
+   (notably: they never suppress a later run's post, unlike
+   `applied`/`clean`), so reusing either for a re-check-only failure
+   would misrepresent what actually happened to any later reader of
+   this PR's evidence trail and could itself skew that later run's own
+   both-converged decision. Post a **`recheck-failed`** record instead
+   — distinct from `failed`/`incomplete`/`rescan-failed`, and
+   preserving `<this-run-status>` (the real apply outcome) alongside
+   it — using the format in
+   [docs/idd-comment-minimization.md](../../docs/idd-comment-minimization.md#re-check-fetch-failure-comment):
+
+   ```text
+   <!-- idd-cleanup-evidence: recheck-failed apply-status:{this-run-status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
+   ```
+
+   plus a Notes line naming the re-check fetch failure. This still
+   gives F4 a recorded reason per the Mandatory F4 Cleanup Contract,
+   without terminating the agent's shell outright (which would abandon
+   F4 with no recorded outcome at all — worse than the duplicate this
+   re-check exists to prevent) and without falsely reporting a
+   converged apply as failed.
    `RECHECK_RESULT=SKIP` → do not post.
    `RECHECK_RESULT=POST` → construct and send the evidence comment now.
 

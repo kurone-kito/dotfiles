@@ -513,6 +513,54 @@ This does not re-block the merge. A maintainer may run cleanup
 manually: `node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check`
 ```
 
+### Re-check-fetch-failure comment
+
+<!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+Agent-side F4 only (#397): post this comment when the [double-checked
+re-check](#server-side-fallback-optional) immediately before posting
+prints `RECHECK_RESULT=FETCH_FAILED` — the apply itself may have fully
+converged, but the pre-post duplicate-record fetch (`gh api`) failed
+(auth, rate limit, transient network error), so this run cannot safely
+know whether a prior success record already exists. **Never relabel
+this as `failed`/`incomplete`/`rescan-failed`**: those are established
+apply-level outcomes with their own meaning elsewhere in this
+contract — notably, they never suppress a later run's own success
+post, unlike `applied`/`clean` — so reusing one here would misrepresent
+a possibly-fully-converged apply as broken to any later reader of this
+PR's evidence trail, and could skew a later run's own both-converged
+decision. `recheck-failed` is its own status value instead, carrying
+the real apply outcome (`apply-status`) alongside it so nothing is
+lost. The server-side `post-merge-cleanup.yml` workflow has no
+equivalent failure mode — a failed `gh api` fetch there aborts the
+whole step under the workflow's own `bash -eo pipefail` before any
+comment is attempted, rather than reaching a posting decision at all:
+
+```markdown
+<!-- idd-cleanup-evidence: recheck-failed apply-status:{applied|clean|failed|incomplete} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
+
+**F4 Re-check Fetch Failure**
+
+The duplicate-record re-check itself failed immediately before
+posting; the apply outcome below may still be fully converged.
+
+| Field               | Value                                  |
+| ------------------- | --------------------------------------- |
+| Status               | recheck-failed                         |
+| Apply status (actual) | applied / clean / failed / incomplete |
+| Applied              | N                                       |
+| Failed               | N                                       |
+| Skipped              | N                                       |
+| Permission-blocked   | N                                       |
+| Notes                | re-check `gh api` fetch failure reason (auth / rate-limit / network) |
+
+This does not re-block the merge. A maintainer or a later F4/workflow
+pass may re-run the re-check to confirm convergence.
+```
+
+A `recheck-failed` record does not suppress a later run's own success
+post, the same non-suppression behavior `failed`/`incomplete`/
+`rescan-failed` already have.
+
 ### Cleanup-permission-blocked comment
 
 Post this comment when dry-run `status` is `permission-blocked` (no
