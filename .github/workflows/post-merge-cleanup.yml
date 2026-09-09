@@ -36,9 +36,10 @@
 # re-review this trust model before merging that change.
 #
 # Adapted from kurone-kito/idd-skill's
-# .github/workflows/post-merge-cleanup.yml at pin
-# f51a8bb73a47452eff5799e8a27251b660ba4ae0 (v0.7.0; reconciled from the
-# prior v0.6.0 pin by #296). This
+# .github/workflows/post-merge-cleanup.yml (upstream's own dogfooded
+# copy, not the idd-template/ adopter-facing template) at pin
+# d005098bf3a54a27ac79b22fb5eeb88186d235c6 (v0.9.0; reconciled from the
+# prior v0.7.0 pin by #384). This
 # repository runs the ephemeral-npx helper profile (no vendored
 # scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
 # CLI rather than upstream's `node scripts/audit-pr-cleanup.mjs` form --
@@ -46,24 +47,40 @@
 # resolution (which falls back to a mutable default archive URL under
 # ephemeral-npx when `helperRuntime.packageSpec` is unset), so this copy
 # is not exposed to that wider fetch-at-run-time surface. `runs-on`
-# (`ubuntu-latest`) matches upstream's own default for this specific
-# file directly -- upstream's `idd-template` copy of
-# `post-merge-cleanup.yml` has never shipped `ubuntu-slim` (unlike
-# `idd-advisory-convergence.yml`, whose upstream template copy is
-# `ubuntu-slim`); this repository's real divergence for this file is
-# reusing the ephemeral-npx packaged `idd-audit-pr-cleanup` CLI directly
-# (a single pinned-tarball invocation) instead of upstream's
-# profile-resolving `node scripts/audit-pr-cleanup.mjs` /
-# multi-package-manager branching. The checkout/setup-node action pins
-# are copied verbatim from upstream's own pinned-SHA choices, since this
-# workflow's elevated `pull_request_target` permissions warrant the same
-# supply-chain hardening upstream already applied. The duplicate
-# evidence-comment check below is trust-scoped to match upstream's
-# v0.7.0 hardening (#296, following the v0.6.0-round #237 precedent):
-# skip posting only when the **latest** trusted
-# `idd-cleanup-evidence` comment already recorded `applied` or `clean`
-# -- a stale `failed`/`incomplete`/`rescan-failed`/`permission-blocked`
-# record no longer suppresses a fresh retry's evidence post, and an
+# now reads the `runner` workflow_dispatch input first, then the
+# `CI_RUNNER_LABEL` repository variable, falling back to `ubuntu-slim`
+# when both are unset -- #384 adopts both upstream's dogfooded copy's
+# hardcoded `ubuntu-slim` default (upstream's own copy has no override
+# knob at all, at either v0.7.0 or v0.9.0) and the
+# `runner`/`CI_RUNNER_LABEL` override mechanism the sibling
+# `idd-advisory-convergence.yml` already exposes, reversing this
+# repository's prior deliberate `ubuntu-latest` divergence (#296/#303)
+# for cross-workflow consistency. This repository's real remaining
+# divergence for this file is invoking the packaged ephemeral-npx
+# `idd-audit-pr-cleanup` CLI at a pinned tarball URL in place of
+# upstream's own vendored `node scripts/audit-pr-cleanup.mjs` call --
+# upstream's dogfooded copy is itself a single, non-branching
+# invocation with no profile-resolution or package-manager-detection
+# scaffolding (that generic, multi-profile-branching form belongs to
+# the separate `idd-template/` adopter-facing copy of this file, which
+# this repository does not use), so this substitution is a mechanical
+# one-for-one CLI swap, not a structural divergence from the copy this
+# file is actually adapted from. The checkout/setup-node action pins
+# are copied verbatim
+# from upstream's own pinned-SHA choices, since this workflow's
+# elevated `pull_request_target` permissions warrant the same
+# supply-chain hardening upstream already applied -- #384 bumps the
+# `actions/checkout` pin to upstream's current `v7.0.1` choice
+# (`actions/setup-node`'s `v7.0.0` pin is unchanged upstream). The
+# duplicate evidence-comment check below now also imports upstream's
+# v0.9.0 (#2213) fix: skip posting only when **both** the latest
+# trusted `idd-cleanup-evidence` comment already recorded `applied`/
+# `clean` **and** this run's own outcome is also `applied`/`clean` -- a
+# prior success alone must never suppress this run's own non-success
+# evidence (masking a later failure), and a prior non-success alone
+# must never suppress this run's own success evidence (masking a later
+# recovery). "Trusted" scoping is unchanged from the v0.7.0-round
+# hardening (#296, following the v0.6.0-round #237 precedent): an
 # untrusted commenter's marker-prefixed comment must never suppress the
 # genuine evidence post either way.
 name: Post-merge cleanup
@@ -77,6 +94,11 @@ on:
         description: PR number to clean up
         required: true
         type: number
+      runner:
+        description: Runner label (default ubuntu-slim)
+        required: false
+        type: string
+        default: ubuntu-slim
 permissions:
   contents: read
   issues: write
@@ -90,16 +112,16 @@ defaults:
     # Actions otherwise picks bash on Linux/macOS but PowerShell Core on
     # Windows, which would silently misinterpret this file's POSIX
     # command substitution and shell variable expansion instead of
-    # failing loudly. No-op on this repository's ubuntu-latest runner;
+    # failing loudly. No-op on this repository's ubuntu-slim runner;
     # imported for parity with upstream.
     shell: bash
 jobs:
   cleanup:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -133,7 +155,7 @@ jobs:
             fi
           fi
           set +e
-          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/f51a8bb73a47452eff5799e8a27251b660ba4ae0 \
+          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
             --apply \
@@ -202,12 +224,18 @@ jobs:
           # this workflow's own runs; an agent F4 (or a maintainer
           # rerunning workflow_dispatch on the same PR) can still have
           # posted an evidence comment outside this run. Skip only when
-          # the latest trusted <!-- idd-cleanup-evidence: {status} ... -->
-          # comment already records `applied` or `clean` -- a trusted
-          # comment recording any other status (`failed`, `incomplete`,
-          # `rescan-failed`, `permission-blocked`) invites a retry, so a
-          # rerun must post fresh evidence for its own outcome instead of
-          # leaving stale non-success evidence as the PR's only record.
+          # BOTH the latest trusted <!-- idd-cleanup-evidence: {status}
+          # ... --> comment already records `applied`/`clean` AND this
+          # run's own outcome is also `applied`/`clean` (#2213) -- a
+          # prior success alone must never suppress this run's own
+          # non-success evidence (masking a later failure), and a prior
+          # non-success alone must never suppress this run's own success
+          # evidence (masking a later recovery). Only a run that is
+          # ALSO converged when the prior record was already converged
+          # gets skipped -- `applied` <-> `clean` between two already-
+          # converged runs stays silent, but any transition between a
+          # converged and a non-converged state always posts fresh
+          # evidence.
           # "Trusted" scoping: this workflow's own posts are authored by
           # `github-actions[bot]` (the GITHUB_TOKEN actor), and an agent's
           # local F4 post is authored by a configured `trustedMarkerActors`
@@ -249,8 +277,10 @@ jobs:
                 | sed -n 's/^<!-- idd-cleanup-evidence: \([^ ]*\) .*/\1/p')
             fi
           done <<< "$COMMENTS_TSV"
-          if [ -n "$EXISTING" ] && { [ "$EXISTING_STATUS" = "applied" ] || [ "$EXISTING_STATUS" = "clean" ]; }; then
-            echo "::notice::PR #${PR_NUMBER} already has a trusted-author idd-cleanup-evidence comment recording '${EXISTING_STATUS}' (id: ${EXISTING}); skipping workflow post."
+          if [ -n "$EXISTING" ] \
+            && { [ "$EXISTING_STATUS" = "applied" ] || [ "$EXISTING_STATUS" = "clean" ]; } \
+            && { [ "$STATUS" = "applied" ] || [ "$STATUS" = "clean" ]; }; then
+            echo "::notice::PR #${PR_NUMBER} already has a trusted-author idd-cleanup-evidence comment recording '${EXISTING_STATUS}', and this run's own outcome '${STATUS}' is also converged (id: ${EXISTING}); skipping workflow post."
             exit 0
           fi
           BODY=$(printf '%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
