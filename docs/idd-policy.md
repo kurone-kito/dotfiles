@@ -198,10 +198,11 @@ This repository's final-verification track
 ([`#387`](https://github.com/kurone-kito/dotfiles/issues/387))
 confirmed the pin, the instructions, and the skills bundle now all
 track `v0.9.0` uniformly, mirroring #298's role in the prior round.
-The companion prerequisite #96 pins Node.js 24.15.0 via
+The companion prerequisite #96 pins Node.js ~~24.15.0~~ via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
 always resolves in a fresh worktree.
+_(We've since updated to the latest LTS version)_
 
 ## Issue-Author Approval Gate
 
@@ -475,7 +476,7 @@ unchanged at `v0.6.0`:
   merely "not chosen"; do not set this key (already recorded in
   [`docs/idd-workflow.md`](./idd-workflow.md#lite-instruction-profile-opt-in)
   and [`docs/customization.md`](./customization.md)).
-- **`CI_RUNNER_LABEL`**: a repository Actions *variable* consumed by
+- **`CI_RUNNER_LABEL`**: a repository Actions _variable_ consumed by
   `idd-advisory-convergence.yml`, not a `.github/idd/config.json` /
   `policy.schema.json` key. No entry needed in this schema-focused
   section; its actual adoption is deferred to #237 (the
@@ -521,7 +522,7 @@ here per the issue's audit scope:
 - **`reviewId`** (new required string field on the `review` object):
   the matched primary-bot review's own GraphQL node id, read only when
   `matchesHead` is true (empty otherwise). Binds Clause 1's
-  itemCount-half thread evidence to the *specific* triggering review
+  itemCount-half thread evidence to the _specific_ triggering review
   via each thread's originating comment's `pullRequestReview.id`, per
   idd-skill #2050 — confirmed present in `review-clause.mts` source,
   per the **Pinned upstream commit** confirmation near the top of this
@@ -971,7 +972,7 @@ future verification sweep does not have to rediscover them:
   changes (as happened during #298's own PR #307 review, more than
   once) -- read the raw count directly with an occurrence-counting form
   (for example `grep -o '{{TOKEN}}' <file> | wc -l`; a plain `grep -c`
-  counts matching *lines*, not occurrences, and undercounts if more
+  counts matching _lines_, not occurrences, and undercounts if more
   than one instance ever lands on the same line) rather than trusting
   any number recorded here. `docs/customization.md`'s own occurrences
   are confirmed unchanged and still present by manual grep. Both files'
