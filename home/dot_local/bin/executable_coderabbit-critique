@@ -129,6 +129,13 @@ stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
 }
 trap 'rm -f "$stderr_tmp"' EXIT
 
+# A progress line for an operator watching the terminal during the
+# potentially multi-minute wait below (#388): stderr-only so it can never
+# leak into stdout's findings text, matching the stdout/stderr split
+# documented above.
+printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeout %ss)\n' \
+  "$BASE_BRANCH" "$TIMEOUT_SECONDS" >&2
+
 set +e
 stdout_output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>"$stderr_tmp")"
 status=$?
