@@ -951,6 +951,18 @@ future verification sweep does not have to rediscover them:
   unexplained `{{...}}` residue as of this round (see
   `.github/ISSUE_TEMPLATE/idd-task.yml`'s fix above for the one
   genuine instance found and fixed, prior to this round).
+  **Updated at the `v0.9.0` round (#383)**: the newly-imported
+  `docs/onboarding/project-tuning.md` (one of the two new `v0.9.0`
+  onboarding pages) carries two more raw `{{TRUSTED_MARKER_ACTOR}}`
+  occurrences of the same documentation-as-example shape (one in
+  prose, one as pinned-link text describing the placeholder itself),
+  flagged by a chatgpt-codex-connector review comment on #383's PR.
+  Same disposition as the two files above: a fresh `idd-onboard
+  --verify` run now reports this file too under `placeholderResidue`,
+  and that is expected, not a defect -- `idd-doctor`'s
+  separately-scoped check still passes clean since it targets genuine
+  unresolved substitution, not literal documentation-as-example
+  mentions.
 
 ### Shared lint/settings config parity
 
