@@ -175,12 +175,15 @@ canonical, mandatory contract. The server-side workflow is a
 backstop, not a replacement: same helper, same candidate rules,
 same evidence comment shape, non-blocking on errors. Each side keys
 off the same trusted-author `<!-- idd-cleanup-evidence:` record: the
-workflow skips when the **latest** trusted-author comment already
-records a successful outcome (`applied` or `clean`; posted by
-`github-actions[bot]` or a configured `trustedMarkerActors` login — an
-untrusted commenter's marker-prefixed comment never counts), and the
-agent F4 step skips its own post under the same success-record rule —
-including a success record the workflow itself posted. A trusted
+workflow skips only when **both** the **latest** trusted-author
+comment already records a successful outcome (`applied` or `clean`;
+posted by `github-actions[bot]` or a configured `trustedMarkerActors`
+login — an untrusted commenter's marker-prefixed comment never
+counts) **and this run's own outcome is also `applied`/`clean`**
+(`#2213`'s both-converged rule — a prior success alone must never
+suppress this run's own non-success evidence), and the agent F4 step
+skips its own post under that same both-converged rule — including
+when the workflow itself posted the prior success record. A trusted
 comment recording any other status (`failed`, `incomplete`,
 `permission-blocked`, `rescan-failed`) does not suppress either side,
 so a `workflow_dispatch` rerun after a `rescan-failed` post still
@@ -439,12 +442,15 @@ workflow run — can detect that evidence was already posted. Both the
 **agent-side** F4 step and the `post-merge-cleanup` workflow key on the
 prior **success** record.
 <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-**Skip the post when a fresh, immediate
+**Skip the post only when both a fresh, immediate
 re-check (see [the double-checked-locking re-check under Server-side
 fallback](#server-side-fallback-optional)) finds the latest
 trusted `<!-- idd-cleanup-evidence:` comment recording a successful
-outcome (`applied` / `clean`)**, narrowing — not fully preventing —
-duplicate success records, even when this run's own apply returned
+outcome (`applied` / `clean`) and this run's own outcome is also
+`applied`/`clean`** (`#2213`'s both-converged rule) — narrowing, not
+fully preventing, duplicate success records; a prior success record
+alone must never suppress this run's own `failed`/`incomplete`/
+`rescan-failed` evidence, even when this run's own apply returned
 `applied` for residual markers the other side already minimized
 first; still post when no
 prior success record exists, or to correct an existing `failed` /
