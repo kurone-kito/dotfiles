@@ -187,16 +187,17 @@ this same pin to `v0.9.0`
 (`d005098bf3a54a27ac79b22fb5eeb88186d235c6`).
 [`#382`](https://github.com/kurone-kito/dotfiles/issues/382) had
 already moved `.github/instructions/` to the same baseline, so this
-bump does not open a fresh skew window there; `.claude/skills/` (the
-issue-authoring companion bundle,
-[`#386`](https://github.com/kurone-kito/dotfiles/issues/386)) is still
-pending as of this pin bump, opening the same kind of transitional
-skew window the `v0.7.0` round saw between #293 and #298. That
-roadmap's final-verification track
-([`#387`](https://github.com/kurone-kito/dotfiles/issues/387)) is
-expected to confirm the pin, the instructions, and the skills bundle
-all track `v0.9.0` uniformly once #386 lands, mirroring #298's role in
-the prior round.
+bump did not open a fresh skew window there; `.claude/skills/` (the
+issue-authoring companion bundle) opened the same kind of transitional
+skew window the `v0.7.0` round saw between #293 and #298, until
+[`#386`](https://github.com/kurone-kito/dotfiles/issues/386) (PR #398)
+closed it by moving the whole bundle -- `SKILL.md`,
+`references/contract.md`, `references/draft-patterns.md`, and
+`references/workflow-boundary.md` -- to the same `v0.9.0` baseline.
+This repository's final-verification track
+([`#387`](https://github.com/kurone-kito/dotfiles/issues/387))
+confirmed the pin, the instructions, and the skills bundle now all
+track `v0.9.0` uniformly, mirroring #298's role in the prior round.
 The companion prerequisite #96 pins Node.js 24.15.0 via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -591,13 +592,13 @@ Current slugs:
 
 | Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233, #294, #295, #383       |
+| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233, #294, #295, #382, #383 |
 | `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233, #295, #383                         |
-| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297                               |
+| `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297, #386                         |
 | `local-docs-index`                   | The "Local pages" table `docs/index.md` appends below upstream's generated OKF table, covering this repository's own locally-authored, non-upstream `docs/` pages upstream's generator has no knowledge of. The row's original retirement trigger -- the synced pages gaining OKF frontmatter of their own -- held as of the `v0.7.0` baseline already; the `v0.9.0` round (#383) adopted the generated table itself, so this row now marks only the residual local-page extension, not a whole-file exclusion | #283, #383                                     |
-| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237, #294, #295, #296, #383 |
+| `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237, #294, #295, #296, #382, #383, #384 |
 | `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead. Through the `v0.7.0` round, upstream's generated `docs/index.md` was excluded wholesale for the same reason (its table links both trimmed pages); the `v0.9.0` round (#383) adopted that generated table instead, omitting only the two rows that would have linked the trimmed pages -- see `local-docs-index` above | #145, #196, #233, #295, #383                   |
-| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294                               |
+| `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294, #382                         |
 | `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233, #383                               |
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383                               |
 
@@ -615,10 +616,10 @@ caveat text were removed from
 part of #238's final verification sweep, since the local behavior no
 longer diverges from upstream.
 
-**Reaffirmed this round**: roadmap #292's re-import (#293-#297) touched
-files carrying seven of the eight registered markers; the table above
-now attributes each accordingly (PR #302/#303/#304/#305/#306 file lists
-cross-referenced against each slug's live marker instances). #298's
+**Reaffirmed at the v0.7.0 round**: roadmap #292's re-import (#293-#297)
+touched files carrying seven of the eight registered markers; the table
+above now attributes each accordingly (PR #302/#303/#304/#305/#306 file
+lists cross-referenced against each slug's live marker instances). #298's
 final verification sweep additionally confirmed every registered slug
 still has at least one live, findable marker instance in the repository
 (a repository-wide grep, not a visual spot-check) — none has silently
@@ -626,6 +627,43 @@ reverted to upstream's default. `vendored-file-header`
 (`scripts/minimize-superseded-markers.mjs`) was not touched by any of
 this round's five PRs, so it carries no new attribution; its marker is
 still present and correct.
+
+**Reaffirmed this round (v0.9.0, 2026-09-09)**: roadmap #380's six
+tracks (#381-#386) were cross-referenced against each of the 9
+registered slugs' live marker instances using the same method as the
+`v0.7.0` round above (each track's merged-PR file list diffed against
+the files carrying each marker). Track #382 (`.github/instructions/`
+re-import, PR #395) additionally touched `claim-timing`,
+`master-branch`, and `signing-ladder` markers that the table had not
+yet attributed to it; track #384 (CI workflow pin bump, PR #392)
+additionally touched the `master-branch` markers in
+`idd-advisory-convergence.yml`/`idd-advisory-convergence-comment.yml`;
+track #386 (issue-authoring companion re-import, PR #398) touched the
+`installed-bundle-reference-routing` markers in `SKILL.md` and
+`references/contract.md`. The table above now attributes all three.
+Tracks #381 (schema-audit, PR #391) and #385 (opt-in feature adoption,
+PR #394) touched only `.github/idd/config.json`, which carries no
+divergence marker, so neither gains a new attribution.
+`vendored-file-header` (`scripts/minimize-superseded-markers.mjs`) was
+not touched by a file diff in any of this round's six PRs either, but
+unlike the `v0.7.0` round, track #383 actively re-verified this file
+against the pinned `v0.9.0` source while auditing the deferred-upstream
+items below: upstream's own
+`idd-template/scripts/minimize-superseded-markers.mjs` is
+byte-identical between `v0.7.0` and `v0.9.0` (independently
+reconfirmed here), and the local file's body past its
+deliberately-diverged header (`scripts/minimize-superseded-markers.mjs:2-10`,
+the `vendored-file-header` divergence itself) matches that upstream
+body exactly, so no local code update was needed. The header
+correction itself is **not** byte-identical to upstream by design and
+must stay that way -- a future re-import overwriting it with
+upstream's own shorter auto-generated-file notice would be a
+regression, not a sync. Its existing `#383` attribution reflects that
+verification-only basis rather than a content diff. A
+repository-wide `dotfiles-divergence` grep confirms all 9 slugs still
+have at least one live, findable marker instance — none has silently
+reverted to upstream's default. Final verification performed by
+track #387.
 
 ## Open follow-ups
 
