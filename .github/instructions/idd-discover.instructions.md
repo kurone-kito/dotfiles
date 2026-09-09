@@ -18,12 +18,16 @@ see A0), A3 (default; see decision tree).
 
 ## Authoring label guard
 
-The configured authoring label is `issueAuthoring.authoringLabelName`
-(default: `status:authoring`); the stale threshold is
-`issueAuthoring.authoringStaleAge` (default: `PT4H`). The label doubles
-as the draft marker for a held issue (issue-authoring skill's Stage 1)
-and the claim-suppression lock this guard enforces — Discover treats
-either role the same way: skip the issue while the label is present.
+Use `issueAuthoring.authoringLabelName` (default: `status:authoring`) and
+`issueAuthoring.authoringStaleAge` (default: `PT4H`). The label marks held
+drafts and suppresses claims, so skip labeled issues. Unlabeled issues follow
+`anchor` logs; incomplete generations block. Only exact
+anchor/set/session `release-complete` gates release/guard; an absent label is
+not proof; release clears it.
+
+For `instructions-only`, use the
+[portable owner resolver](../../docs/idd-autonomy-contract.md#portable-authoring-owner-protocol);
+never infer membership from the label.
 
 A0-T, A0-O, and A3 must treat a matching label as not startable. A0-T
 reports `Issue #N is currently being authored` and stops before claim;
@@ -60,15 +64,12 @@ that issue only:
 2. If the target issue carries the configured authoring label, report
    `Issue #N is currently being authored`, run the stale-authoring
    warning check above, and stop without claiming.
-3. Apply A3's readiness bullets to the target — no configured
-   blocked-by-human/needs-decision label, no open blocking dependent
-   issue (visible `Blocked by #NNN` or hidden
-   `dotfiles-blocked-by` marker, both resolved the
-   same way A3 resolves them), no external human coordination required
-   — plus one target-only check: no active, non-stale claim from a
-   trusted marker actor exists on the target, other than a claim this
-   session already recorded and verified (A4 Step 1.5 rules); a hit
-   reports "already claimed", same as A5.
+3. Apply A3's readiness bullets to the target (the same blocked-by,
+   human-coordination, and runtime-observation checks, resolved the
+   same way) — plus one target-only check: no active, non-stale claim
+   from a trusted marker actor exists on the target, other than a
+   claim this session already recorded and verified (A4 Step 1.5
+   rules); a hit reports "already claimed", same as A5.
 4. Run the normal A4 viability gate against the target only.
 5. Apply the **A3.5** issue-author approval gate against the target.
    If A3.5 classifies it as not startable, report that the gate
@@ -96,9 +97,10 @@ Read the **issue-scope** value from the Project commands table in
   roadmap path yields **no viable, startable, unclaimed candidate** —
   **trigger (a)** (zero candidates reach A3.5: A2 found none, or A3
   filtered them all), **trigger (b)** (candidates reach A3.5 but A4
-  Step 1 or Step 1.5 discards every one), or **trigger (c)** (A1 finds
-  no roadmap issues). A0-O runs **at most once** per Discover pass as
-  this fallback; once spent, a later A4 exhaustion reports and stops
+  Step 1, Step 1.5, or Step 2's floor skip discards every one), or
+  **trigger (c)** (A1 finds no roadmap issues). A0-O runs **at most
+  once** per Discover pass as this fallback; once spent, a later A4
+  exhaustion reports and stops
   (not an abort) without re-entering A0-O. A non-empty A3.5
   approval-needed bucket is not a true zero and never triggers this
   fallback. See
@@ -144,6 +146,11 @@ Apply the configured policy before passing A0-O candidates to A3.5:
 - `public-disabled`: for private or internal repositories, behave the
   same as `none`.
 
+**Autopilot floor.** In autopilot runs, pass `--autopilot` to
+`discover-orphan-filter`; skip `routed_to_human` candidates (never
+reach A3.5). No helper: apply A4 Step 2's floor rule verbatim,
+including `enabled: false`, to each footer.
+
 At least one orphan issue remains after the policy is applied: pass the
 remaining set directly to **A3.5**, skipping A1–A3.
 
@@ -162,13 +169,10 @@ reached only when every active discovery path returns zero: both paths
 for `orphan-first` and `roadmap-first` (orphan + roadmap fallback,
 either order); just the roadmap path for `roadmap`.
 
-**Claim-state annotation (optional).** When helper support is enabled,
-`discover-orphan-filter` accepts an opt-in `--with-claim-state` flag
-(plus `--current-claim-id`) that annotates each candidate with
-active-claim eligibility, mirroring `discover-roadmap-graph`'s flag of
-the same name — see `docs/idd-helper-scripts.md`. This lets an A0-O
-caller fold live claim state into its output the same way the roadmap
-path already can.
+**Claim-state annotation (optional).** `discover-orphan-filter`
+accepts `--with-claim-state` (plus `--current-claim-id`), mirroring
+`discover-roadmap-graph`'s flag of the same name — see
+`docs/idd-helper-scripts.md`.
 
 ## A1 — Find the roadmap
 
@@ -345,8 +349,10 @@ From A2, keep only issues that satisfy **all** of the following:
   blocked if that issue is open, if no issue matches (fail-safe — a
   migration integrity problem such as a typo, deleted issue, or
   incomplete migration), or if any matching issue is open.
-- No external human coordination required to start; otherwise keep
-  scanning
+- No external human coordination or prose-only
+  runtime/production-observation precondition ("confirmed in
+  production", "observed live", "runtime-observation"; issue #2467)
+  required to start; otherwise keep scanning
 
 **When A2 finds zero candidates, or zero issues survive A3 filtering**,
 apply this decision tree — do not silently expand scope:
@@ -558,8 +564,7 @@ band entry at index `selectDesyncedIndex(session-token, band-size)`
 instead of index 0 — FNV-1a 32-bit over the token's UTF-16 code units
 (offset basis `0x811c9dc5`, prime `0x01000193`, wrap to 32 bits after
 every multiply, then unsigned right-shift and modulo `band-size`) over
-the band ordered by ascending issue number. Worked example: token
-`copilot-8122ca35`, band-size `3` → index `1`.
+the band ordered by ascending issue number.
 
 `session-token` **must be per-session-unique**: the bare, session-shared
 `{agent-id}` from `idd-overview-core.instructions.md` alone is **not** a
@@ -592,6 +597,11 @@ score tie band, never across bands, and never bypasses A4.5/A5. With
 deterministic **lowest issue number** pick. See
 [rationale](../../docs/idd-design-rationale.md#a4-step-2--rationale-concurrent-selection-desync).
 
+**Configured milestone-scope preference.** `discover.milestoneScope`
+(`#2340`) prefers a same-score-band candidate whose OPEN milestone
+matches, after desync and before effort — see
+[rationale](../../docs/idd-design-rationale.md#a4-step-2--rationale-milestone-scope-preference).
+
 **Author-recorded effort hint (soft tie-breaker).** When candidates
 remain tied after the score and optional desync rules, prefer the
 **lower-effort** candidate before the lowest-issue-number tie-break.
@@ -602,18 +612,16 @@ rule: reorders only within a single score tie band, never skips,
 gates, or crosses a band; the `discover-roadmap-graph` union already
 emits this order.
 
-**High-contention shared-file overlap (advisory).** Concurrent
-autopilot sessions tend to edit the same F-phase bundle instruction
-files (`bundle-review` / `bundle-merge`) and `audit/sync-manifest.json`.
-As a **soft** tie-breaker evaluated after score / desync / effort but
-before the final lowest-issue-number tie-break, prefer a candidate
-whose `## Candidate files` do **not** overlap an
-actively-claimed or open-PR issue on one of those files; the optional
-`discover-shared-file-overlap` helper (see
-[IDD helper scripts](../../docs/idd-helper-scripts.md)) reports each
-candidate's `overlapFlag` and `recommendedOrder`. **Never a hard gate**
-— overlap never overrides the score or crosses a band. See the
-[high-contention shared-file convention](../../docs/policy-constants.md#high-contention-shared-files).
+**High-contention shared-file overlap (advisory).** Concurrent sessions
+tend to edit the same F-phase bundle files (`bundle-review` /
+`bundle-merge`, `audit/sync-manifest.json`). **Soft** tie-breaker after
+score/desync/milestone/effort: prefer a candidate whose `## Candidate
+files` do **not** overlap an actively-claimed or open-PR issue on one of
+those; `discover-shared-file-overlap` (see
+[IDD helper scripts](../../docs/idd-helper-scripts.md)) reports
+`overlapFlag`/`recommendedOrder`, or `manifestMissing: true` with an
+empty set. See the
+[convention](../../docs/policy-constants.md#high-contention-shared-files).
 
 After picking, proceed to **A4.5** (`idd-suitability.instructions.md`).
 

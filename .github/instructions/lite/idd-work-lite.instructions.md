@@ -49,6 +49,11 @@ request, or other GitHub side effect, confirm all of the following:
 <!-- dotfiles-divergence: master-branch -->
 ## B1 — Create worktree
 
+Concurrent workers sharing one clone: serialize every `fetch`/`merge
+--ff-only`/worktree add/remove call below (and F4 cleanup's own
+worktree removal) behind the
+[clone-scoped lock](../../../docs/idd-helper-scripts.md#clone-scoped-lock).
+
 1. On the primary worktree, run `git fetch origin master`.
 2. On the primary worktree, run `git log origin/master..master --oneline`.
 3. If step 2 outputs any lines, stop and report: local `master` has unpushed
@@ -111,6 +116,10 @@ request, or other GitHub side effect, confirm all of the following:
 31. Repair a contract violation by removing the misplaced branch from the
     primary worktree, after confirming no work is lost, then recreate the
     sibling worktree from step 12.
+32. If WorkTrunk reported `Cannot change directory — shell integration
+    installed but not active`, treat every later command's working
+    directory as unverified until confirmed (e.g. `pwd`), not only at
+    steps 27-29.
 
 <!-- dotfiles-divergence: master-branch -->
 ## B2 — Create and refine plan
@@ -156,39 +165,137 @@ addendum resolves it.
 7. Run `fix-validate` before each commit.
 8. Keep commits atomic.
 9. If `fix-validate` changes files, stage and commit them before continuing.
-10. If validation fails in files this diff did not touch, suspect baseline
+10. Verify a commit actually landed before trusting a subsequent push: a
+    `commit-msg` hook (for example commitlint's body-max-line-length) can
+    silently reject a commit with a long single-line body, and the
+    following push then reports "Everything up-to-date" as if nothing
+    were wrong. Prefer `git commit -F <file>` with a pre-wrapped body
+    file, and compare `git rev-parse HEAD` before/after (or check the
+    reported commit hash) before treating a push as confirmation.
+11. If validation fails in files this diff did not touch, suspect baseline
     drift or a stale install before blaming the change; verify with a fresh
     `install-deps` run in a clean worktree or a fresh-vs-stale
     `node_modules` comparison before assuming the failure traces to this diff.
-11. If a test this diff did not touch fails once locally but passes in
+12. If a test this diff did not touch fails once locally but passes in
     isolation while hosted CI is green, trust the hosted result and stop
     chasing it as a regression. This does not waive the `fix-validate` /
     `pre-push-validate` requirements.
-12. When consolidating a wrapper function used at multiple call sites into one
+13. When consolidating a wrapper function used at multiple call sites into one
     shared function, check whether any call site's old delegate path added
     options or behavior the shared function does not replicate.
-13. If B3 or C must stop for a hold, post the hold reason, update the digest,
+14. If B3 or C must stop for a hold, post the hold reason, update the digest,
     and stop.
+
+**Unplanned follow-up work**: If B–C reveals a separate follow-up, do not call
+`gh issue create` or the REST issues API. This direct-creation anti-pattern is
+documented in the [B–C design rationale](../../../docs/idd-design-rationale.md#work-and-self-review).
+If the optional `issue-authoring`
+companion is installed, invoke its Stage 1 hold/contract. Its reuse-first
+check must reject targets under another hold. A target with the configured
+authoring label outside this session's set is unavailable unless this pass
+explicitly resumes that interrupted set; verify its set identity from the
+companion's durable owner markers and add its
+published issues to the working set first. Unrelated holds stay unavailable.
+If the companion builds an optional discarded validation probe
+(throwaway, unpublished), run it in a separate temporary worktree;
+otherwise skip it. Never run or discard that probe in the current issue
+worktree.
+Before every edit, require per-target atomic or append-only owner-marker
+acquisition and a fresh body/label re-read; on conflict, keep the label, stop,
+and use another target or a separate comment.
+
+After Stage 1 publishes and acquires a valid parent roadmap shell as the set
+anchor (or the designated lead when no parent roadmap exists), then
+publishes/acquires every ready child under that anchor and wires real numbers
+into the roadmap, leave the authoring label on every published or updated
+target (issues and roadmaps) and resume B–C. If interrupted, leave labels on every
+published or updated target (issues and roadmaps), stop B–C, and resume only
+after a later pass completes
+the set. After anchor acquisition, persist and verify exact `anchor`/`set`
+identities in the originating issue's durable Stage 1 hold; resume must recover
+it, not infer from the label or choose another lead. If Stage 1 publishes
+nothing (including after clarification or a non-ready bucket), comment that
+outcome before resuming and, once a PR exists,
+list it in the PR's recommended follow-ups. Do not release the Stage 1 B–C
+hold; never release a follow-up or start a second loop. If the companion is unavailable,
+record the proposal in a separate comment and PR follow-ups; do not create it
+ad hoc or improvise worker-side authoring.
 
 ## C — Self-review
 
 ### C1 — Critique pass
 
-1. Run a critique pass on the branch diff.
-2. Ask whether the implementation is correct, whether the issue's requirements
-   are satisfied, whether coverage is adequate, and whether any other problems
-   exist.
-3. The floor (referenced in C2, C4, and C5) is `fix-validate` passing against
+A critique pass asks whether the implementation is correct, whether the issue's
+requirements are satisfied, whether coverage is adequate, and whether any other
+problems exist. Every mechanism below answers those questions. They are what a
+pass asks, never a separate pass to run on top of the one that ran.
+
+1. Resolve the delegate verdict with the profile-selected
+   `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs`, or
+   the package-manager-profile `idd:critique-delegate` command — resolve
+   the exact command from `docs/idd-helper-scripts.md` if unsure). Read its
+   `usable` field as the step 2 verdict directly — never re-derive it — and,
+   when `usable` is `true`, its `source`/`command`/`mode` fields as the
+   delegate to run in step 4. This file is helper-enabled only — an
+   `instructions-only` repository never reaches this step, since it uses
+   `idd-work.instructions.md` instead (see Helper runtime contract above,
+   which is where that repository's own prose delegate contract lives): if
+   the helper is missing, fails, or disagrees with live state, stop and ask
+   per that contract instead of falling back to prose.
+2. `usable: false` means no delegate at this layer — go straight to step 3.
+   `usable: true` means the helper already applied every configuration
+   fail-safe (an unusable repository-local value never runs and blocks
+   user-global inheritance; an unusable user-global fragment counts as
+   absent; an unusable delegate never applies `mode`); use its `command`
+   and `mode` as-is in steps 4-5.
+3. If no usable delegate remains, run the per-agent critique pass on the branch
+   diff and go to step 7.
+4. Otherwise run the delegate's `command` against the branch diff. It **failed**
+   if the command is absent, exits non-zero, times out, or its output cannot be
+   read as a findings list. Otherwise it **succeeded** — including when it
+   returns a readable list with no issues in it. Failure only decides whether
+   the per-agent pass runs in step 5; it never discards a readable findings
+   list the delegate did emit, which stays part of this pass's output.
+5. Read `mode` (`fallback` when the key is absent; a present unrecognized value
+   was already routed out by step 2) to decide whether the per-agent pass also
+   runs: `combined`
+   always, without waiting on the delegate's outcome; `fallback` only when the
+   delegate failed; `on-success` only when it succeeded; `never` not at all.
+   Run the per-agent pass when `mode` says to. When `mode` withholds it, do not
+   answer the questions above yourself instead — the delegate's findings are
+   this pass's whole output, which is the duplicate cost `never` exists to
+   avoid.
+6. If both ran, union their reported issues.
+7. These lenses apply only within a per-agent pass (step 3 or step 5) —
+   when only the delegate ran instead (a successful delegate under
+   `fallback`, or any delegate under `never`), it never sees them, and
+   do not apply them yourself in its place. When a per-agent pass did
+   run, also apply, composing when both fit: **Mutation / write-side**
+   (the diff implements a helper that mutates GitHub state, mutates git
+   state, or performs a merge) — Fail-closed inputs; Validate/execute
+   scope parity; Unsafe-output suppression; Schema strictness parity.
+   **Gate-mirroring** (the diff implements a helper that predicts,
+   mirrors, or pre-checks another gate's decision) — Validation-path
+   parity; Input completeness; Whole-identity comparison; Snapshot
+   identity; Point-in-time parity.
+8. The floor (referenced in C2, C4, and C5) is `fix-validate` passing against
    the branch's current HEAD. Re-run it after every new commit; it does not
    substitute for D2's `pre-push-validate` gate.
 
 ### C2 — Check for issues
 
 1. If the critique pass reports one or more issues, continue to C3.
-2. Otherwise, if the critique pass reports zero issues, check the `fix-validate`
+2. Otherwise, if zero issues came back because no mechanism produced a readable
+   findings list — a `critiqueLoop.delegate` `mode` of `on-success` or `never`
+   whose delegate failed at C1 step 4 without emitting one — that verdict is
+   vacuous, not clean. Post a hold and stop; do not treat it as zero issues.
+   Neither a delegate that succeeded and returned a readable list with no issues
+   in it, nor one that failed but still emitted a readable list, is this case:
+   both are genuine results, so continue to step 3.
+3. Otherwise, if the critique pass reports zero issues, check the `fix-validate`
    floor.
-3. If the floor has not passed, continue to C5 to repair validation.
-4. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
+4. If the floor has not passed, continue to C5 to repair validation.
+5. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
    now.
 
 ### C3 — Score issues
