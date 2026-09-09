@@ -323,21 +323,79 @@ Before any mutating action in F3, apply the
    node scripts/audit-pr-cleanup.mjs --pr <pr-number> --dry-run --format table
    ```
 
-   **Duplicate-success-record skip rule**: before posting any evidence
-   comment below, skip it if the PR already carries a
-   `<!-- idd-cleanup-evidence:` comment recording a successful outcome
-   (`applied` or `clean`) **whose author is a trusted marker actor**
-   (`github-actions[bot]`, the identity `post-merge-cleanup.yml` posts
-   under, or a configured `trustedMarkerActors` login) — for example one
-   the `post-merge-cleanup` workflow posted within seconds of the merge —
-   to avoid a duplicate success record. An untrusted commenter's
-   marker-prefixed comment never counts as evidence and must not suppress
-   this post — the same trust-scoping every other IDD operational marker
-   already applies (see the shared
+   **Duplicate-success-record skip rule**: skip posting an evidence
+   comment below if the PR already carries a `<!-- idd-cleanup-evidence:`
+   comment recording a successful outcome (`applied` or `clean`) **whose
+   author is a trusted marker actor** (`github-actions[bot]`, the
+   identity `post-merge-cleanup.yml` posts under, or a configured
+   `trustedMarkerActors` login) — for example one the `post-merge-cleanup`
+   workflow posted within seconds of the merge — to avoid a duplicate
+   success record. An untrusted commenter's marker-prefixed comment never
+   counts as evidence and must not suppress this post — the same
+   trust-scoping every other IDD operational marker already applies (see
+   the shared
    [Trusted marker actors](idd-overview-core.instructions.md#trusted-marker-actors)
    rule). Otherwise post (a fresh success record, or a correction of an
    existing `failed` / `incomplete` / `permission-blocked` record, or a
    correction of an untrusted-author record).
+
+   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
+   The `post-merge-cleanup.yml` workflow and this agent F4 step are two
+   independent processes; each one's own read-then-post is not atomic
+   against the other one's. **Do not treat awareness of the rule above
+   as satisfying it.** Immediately before executing the actual post
+   command below — with no other GitHub-mutating call in between, and
+   never reusing a comment list gathered during dry-run or apply — run
+   this fresh re-check (mirrors `post-merge-cleanup.yml`'s own dedup
+   logic, including its `#2213` both-converged rule):
+
+   ```sh
+   TRUSTED_LOGINS=$(
+     {
+       jq -r '(.trustedMarkerActors // [])[]' .github/idd/config.json 2>/dev/null || true
+       echo 'github-actions[bot]'
+     } | tr '[:upper:]' '[:lower:]'
+   )
+   COMMENTS_TSV=$(gh api --paginate \
+     "repos/<owner>/<repo>/issues/<pr-number>/comments" \
+     --jq '.[] | select(.body | startswith("<!-- idd-cleanup-evidence:")) | [.id, .user.login, (.body | split("\n")[0])] | @tsv')
+   EXISTING_STATUS=""
+   while IFS=$'\t' read -r candidate_id candidate_login candidate_marker_line; do
+     [ -z "$candidate_id" ] && continue
+     lower_login=$(printf '%s' "$candidate_login" | tr '[:upper:]' '[:lower:]')
+     if printf '%s\n' "$TRUSTED_LOGINS" | grep -Fxq "$lower_login"; then
+       EXISTING_STATUS=$(printf '%s' "$candidate_marker_line" \
+         | sed -n 's/^<!-- idd-cleanup-evidence: \([^ ]*\) .*/\1/p')
+     fi
+   done <<< "$COMMENTS_TSV"
+   ```
+
+   The API returns comments in creation-ascending order and the loop
+   never `break`s, so `EXISTING_STATUS` ends up holding the **latest**
+   trusted record, not merely the first one found — the same "latest
+   wins" reading `post-merge-cleanup.yml` uses. Skip the post only when
+   **both** `EXISTING_STATUS` and this run's own outcome are in
+   `applied`/`clean` (the `#2213` both-converged rule: a prior success
+   alone must never suppress this run's own non-success evidence, and a
+   prior non-success alone must never suppress this run's own success
+   evidence). This narrows the race window from "an entire
+   workflow/agent run" to the gap between this re-check and the POST
+   call actually landing — it does not close the race: GitHub's REST
+   API for issue/PR comments has no atomic create-if-absent /
+   compare-and-swap primitive, so two independent processes can still
+   both observe "no success record" if their fresh reads interleave
+   inside that narrowed gap. This is the same accepted, bounded
+   limitation already documented for the claim protocol (`GitHub
+   comments lack compare-and-swap`,
+   [idd-claim.instructions.md](idd-claim.instructions.md#pre-checks-all-five-must-pass),
+   [idd-resume.instructions.md](idd-resume.instructions.md#step-1--identify-claim-state))
+   and for the external-check-waiver helper
+   ([idd-helper-scripts.md](../../docs/idd-helper-scripts.md#external-check-waiver-helper)).
+   See
+   [docs/idd-comment-minimization.md](../../docs/idd-comment-minimization.md#server-side-fallback-optional)
+   for the corrected mechanism description and the residual-risk record
+   in `docs/idd-policy.md`'s Divergence Register
+   (`cleanup-evidence-dedup-recheck`).
 
    Evaluate the dry-run `status` field (this is a dry-run status; apply
    mode emits different values and is never invoked unless dry-run
@@ -359,9 +417,10 @@ Before any mutating action in F3, apply the
      `docs/idd-comment-minimization.md` for the exact formats:
 
      If the apply `status` is `applied` (residual candidates minimized)
-     or `clean` (no-op, nothing left to minimize): apply the
-     duplicate-success-record skip rule above; otherwise post the
-     evidence comment (`status`, `applied`, `failed`, `skipped`,
+     or `clean` (no-op, nothing left to minimize): run the fresh
+     re-check above **now, immediately before posting** and skip only
+     under its both-converged condition; otherwise post the evidence
+     comment (`status`, `applied`, `failed`, `skipped`,
      `viewer-cannot-minimize` counts for `applied`, or a converged
      `clean` record) so this run's work is recorded. Proceed to step 3.
 
@@ -400,8 +459,9 @@ Before any mutating action in F3, apply the
    For the GraphQL fallback (helper unavailable): check
    `viewerCanMinimize` and `isMinimized` before minimizing; skip
    already-minimized comments and ones the viewer cannot minimize.
-   Re-validate the active claim before each mutation. Afterward, apply
-   the duplicate-success-record skip rule above; otherwise post an
+   Re-validate the active claim before each mutation. Afterward, run
+   the fresh re-check above **now, immediately before posting** and
+   skip only under its both-converged condition; otherwise post an
    evidence comment summarizing the outcome (status, applied/skipped
    counts with reasons). If the viewer cannot minimize any detected
    candidates, post a cleanup-permission-blocked comment instead of
