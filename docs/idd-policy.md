@@ -110,8 +110,19 @@ keeps the loop high-throughput.
 ## Critique-Loop Profile
 
 **Profile**: distributed defaults from
-[`docs/policy-constants.md`](./policy-constants.md). No repository
-override.
+[`docs/policy-constants.md`](./policy-constants.md) for the C-phase and
+E10 loop-guard constants (`cPhaseLowSeveritySkipAfter`,
+`e10NoProgressHoldAfter`). `critiqueLoop.delegate` itself is a
+repository override, not a distributed default: `command:
+"coderabbit-critique"`, `mode: "combined"` (#407, restoring the same
+shape #368 originally shipped and #381 removed — see the
+[`critiqueLoop.delegate`](#genuinely-new-in-070) row below for the full
+history). `command` is the PATH-resolved POSIX wrapper name; on a
+native-Windows agent host the bare name may not resolve the same way
+(the user-global template invokes the `.ps1` twin there via `pwsh`/
+`powershell.exe` instead), so a Windows C1 pass falls through to the
+per-agent mechanism under `combined` until a cross-platform launcher
+ships as a follow-up — see PR #408's review discussion.
 
 ## Claim Timing
 
@@ -509,7 +520,7 @@ result.
 | Key | Status | Notes |
 | --- | --- | --- |
 | `authoringLanguage` | `"en"` (explicit, #381, roadmap #380; was `default: unset` through the `v0.7.0` round) | Optional top-level BCP-47 tag (or the literal `match-source`) selecting the prose language for newly-authored issue/PR bodies; absent behaves as `en`. Not currently read by discover/claim; read by PR-submit and issue-authoring. #381 set it explicitly to `"en"` in `.github/idd/config.json`; this repository already authored issues and PRs in English under the prior unset default, so the explicit value is a no-op in practice and never changes the fixed-English autopilot-suitability/effort footer or any HTML-comment marker regardless of this setting. |
-| `critiqueLoop.delegate` | reverted to unset (#381, roadmap #380; was explicit: set from #368 through the `v0.7.0` round) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined` \| `on-success` \| `never`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. #368 adopted `command: "coderabbit-critique"`, `mode: "combined"` as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, since the `v0.7.0` pin could not yet read that file. `v0.9.0` gained user-global-config inheritance for this key, so #381 removed the repository-local `critiqueLoop` object from `.github/idd/config.json` entirely -- C1 now falls through to the already-deployed user-global source of truth (`home/dot_config/idd-skill/config.json.tmpl`, still pointing at the same PATH-resolved `coderabbit-critique` wrapper) instead of a second, repository-local copy, exactly as this row previously predicted. |
+| `critiqueLoop.delegate` | explicit again (#407; was reverted to unset by #381, roadmap #380; was explicit: set from #368 through the `v0.7.0` round) | Optional object (`command` required, `mode`: `fallback` (default) \| `combined` \| `on-success` \| `never`) letting a repository point the C1 self-review pass at an external command instead of (or alongside) the per-agent critique table. #368 adopted `command: "coderabbit-critique"`, `mode: "combined"` as a repository-local temporary substitute for the user-global `$XDG_CONFIG_HOME/idd-skill/config.json` delegate, since the `v0.7.0` pin could not yet read that file. `v0.9.0` gained user-global-config inheritance for this key, so #381 removed the repository-local `critiqueLoop` object from `.github/idd/config.json` entirely, predicting C1 would fall through to the already-deployed user-global source of truth (`home/dot_config/idd-skill/config.json.tmpl`, still pointing at the same `coderabbit-critique` wrapper by absolute, shell-quoted path -- not a bare PATH-resolved name, unlike the repo-local key below) instead of a second, repository-local copy. #407 found that prediction did not hold operationally: the pinned `v0.9.0` template's own C1 procedure text (`.github/instructions/idd-work.instructions.md`) never itself walks an executing agent through the user-global fallback resolution order -- that detail lives one hop away in `docs/idd-workflow.md`'s "User-global critique delegate default" subsection -- so every C1 pass since #381 merged silently ran without CodeRabbit-delegate coverage. #407 re-added the same `command: "coderabbit-critique"`, `mode: "combined"` object to `.github/idd/config.json` as an interim, repository-owned fix that restores coverage without depending on the upstream template gap being closed. |
 
 ### Advisory-convergence report schema (not a policy key)
 

@@ -62,6 +62,12 @@
   "autopilotSuitability": {
     "floor": 3
   },
+  "critiqueLoop": {
+    "delegate": {
+      "command": "coderabbit-critique",
+      "mode": "combined"
+    }
+  },
   "worktreeGuard": {
     "enabled": true
   }
