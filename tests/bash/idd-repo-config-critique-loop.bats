@@ -22,11 +22,12 @@ setup() {
 
   python3 -c "
 import json
-with open('$CONFIG_PATH', encoding='utf-8') as f:
+import sys
+with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 delegate = config.get('critiqueLoop', {}).get('delegate')
 assert delegate is not None, 'critiqueLoop.delegate is missing from .github/idd/config.json'
 assert delegate.get('command') == 'coderabbit-critique', delegate
 assert delegate.get('mode') == 'combined', delegate
-"
+" "$CONFIG_PATH"
 }
