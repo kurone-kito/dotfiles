@@ -110,8 +110,19 @@ keeps the loop high-throughput.
 ## Critique-Loop Profile
 
 **Profile**: distributed defaults from
-[`docs/policy-constants.md`](./policy-constants.md). No repository
-override.
+[`docs/policy-constants.md`](./policy-constants.md) for the C-phase and
+E10 loop-guard constants (`cPhaseLowSeveritySkipAfter`,
+`e10NoProgressHoldAfter`). `critiqueLoop.delegate` itself is a
+repository override, not a distributed default: `command:
+"coderabbit-critique"`, `mode: "combined"` (#407, restoring the same
+shape #368 originally shipped and #381 removed — see the
+[`critiqueLoop.delegate`](#genuinely-new-in-070) row below for the full
+history). `command` is the PATH-resolved POSIX wrapper name; on a
+native-Windows agent host the bare name may not resolve the same way
+(the user-global template invokes the `.ps1` twin there via `pwsh`/
+`powershell.exe` instead), so a Windows C1 pass falls through to the
+per-agent mechanism under `combined` until a cross-platform launcher
+ships as a follow-up — see PR #408's review discussion.
 
 ## Claim Timing
 
