@@ -157,11 +157,10 @@ Never a WinGet `portable` duplicate on the setup.windows side — these
 did not "move," they were only ever defined here:
 
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
-`aqua:google-antigravity/antigravity-cli`, `aqua:supabase/cli`, `grok`,
-`npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`,
-`npm:@executeautomation/playwright-mcp-server`,
-`npm:@google/gemini-cli`, `npm:@microsoft/inshellisense`,
-`npm:@openai/codex`, `npm:@playwright/cli`,
+`aqua:google-antigravity/antigravity-cli`, `aqua:nektos/act`,
+`aqua:supabase/cli`, `grok`, `npm:@anthropic-ai/claude-code`,
+`npm:@bitwarden/cli`, `npm:@executeautomation/playwright-mcp-server`,
+`npm:@microsoft/inshellisense`, `npm:@openai/codex`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
 
 ### Current overlap
