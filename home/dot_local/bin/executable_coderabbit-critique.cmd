@@ -9,14 +9,6 @@ REM argument, stdout, stderr, and the dispatched process's exit code
 REM unchanged -- see the executable_coderabbit-critique (POSIX) and
 REM executable_coderabbit-critique.ps1 twins in this same directory.
 REM
-REM Deliberately GOTO/label-based, never a parenthesized IF (...) ELSE (...)
-REM block: inside a "( ... )" block, cmd.exe expands %VAR% once at the
-REM block's own parse time, not fresh per statement -- so a check placed
-REM in the same block as the pwsh/powershell call would read a stale
-REM pre-block value instead of the dispatched process's real exit
-REM state, silently breaking exit-code forwarding. Flat, top-level
-REM statements keep every errorlevel check fresh instead.
-REM
 REM Uses "if errorlevel 1" and a bare "exit /b" (no explicit code)
 REM rather than "if %ERRORLEVEL% ..." / "exit /b %ERRORLEVEL%": %ERRORLEVEL%
 REM is a textual expansion that reads a literal environment variable
@@ -25,6 +17,15 @@ REM parent process, or a prior "set ERRORLEVEL=..."), shadowing the
 REM real dynamic error level -- "if errorlevel N" and a bare "exit /b"
 REM both read cmd.exe's actual internal error state directly and are
 REM immune to that shadowing.
+REM
+REM Also deliberately GOTO/label-based, never a parenthesized
+REM IF (...) ELSE (...) block: even with the shadow-proof checks above,
+REM a block still keeps every %VAR%-style expansion (e.g. %PS1_PATH%)
+REM fixed at the block's own parse time rather than fresh per
+REM statement, and mixing that timing model with cmd.exe's dispatch
+REM logic is easy to get subtly wrong. Flat, top-level statements avoid
+REM that whole class of pitfall and keep this launcher simple to
+REM reason about.
 REM
 REM -ExecutionPolicy Bypass matches this repo's own
 REM run_onchange_after_80-register-zellij-web.ps1.tmpl precedent: a
