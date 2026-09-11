@@ -1184,9 +1184,12 @@ exit $ExitCode
       }
       New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
         -ArgsOutPath $script:FakeArgsOut -ExitCode 0
-      $filteredPath = ($env:PATH -split [IO.Path]::PathSeparator | Where-Object {
-          $_ -and ($_ -ne $script:PwshDir)
-        }) -join [IO.Path]::PathSeparator
+      # Allowlist (not an exclusion filter over the inherited PATH): only
+      # powershell.exe's own resolved directory plus System32 (where
+      # where.exe/cmd.exe live) are on the child PATH, so pwsh is
+      # unresolvable regardless of what else the host's real PATH
+      # happens to contain.
+      $filteredPath = @($script:PowerShellDir, $script:SystemDir) -join [IO.Path]::PathSeparator
 
       Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
         -PathOverride $filteredPath | Out-Null
@@ -1195,12 +1198,10 @@ exit $ExitCode
     }
 
     It 'fails with no stdout and a clear stderr message when neither pwsh nor powershell is on PATH' {
-      $filteredPath = ($env:PATH -split [IO.Path]::PathSeparator | Where-Object {
-          $_ -and ($_ -ne $script:PwshDir) -and ($_ -ne $script:PowerShellDir)
-        }) -join [IO.Path]::PathSeparator
-      if (($filteredPath -split [IO.Path]::PathSeparator) -notcontains $script:SystemDir) {
-        $filteredPath = "$($script:SystemDir)$([IO.Path]::PathSeparator)$filteredPath"
-      }
+      # Allowlist: only System32 (the minimum needed for where.exe and
+      # cmd.exe's own built-ins) -- neither pwsh nor powershell.exe's
+      # directory is present.
+      $filteredPath = $script:SystemDir
 
       $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
         -PathOverride $filteredPath

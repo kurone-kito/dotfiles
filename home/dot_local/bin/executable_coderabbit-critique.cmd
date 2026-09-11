@@ -11,12 +11,20 @@ REM executable_coderabbit-critique.ps1 twins in this same directory.
 REM
 REM Deliberately GOTO/label-based, never a parenthesized IF (...) ELSE (...)
 REM block: inside a "( ... )" block, cmd.exe expands %VAR% once at the
-REM block's own parse time, not fresh per statement -- so a
-REM "exit /b %ERRORLEVEL%" placed in the same block as the pwsh/powershell
-REM call would read the pre-block errorlevel (from the preceding "where"
-REM check, always 0 on that branch) instead of the dispatched process's
-REM real exit code, silently breaking exit-code forwarding. Flat,
-REM top-level statements keep every %ERRORLEVEL% read fresh instead.
+REM block's own parse time, not fresh per statement -- so a check placed
+REM in the same block as the pwsh/powershell call would read a stale
+REM pre-block value instead of the dispatched process's real exit
+REM state, silently breaking exit-code forwarding. Flat, top-level
+REM statements keep every errorlevel check fresh instead.
+REM
+REM Uses "if errorlevel 1" and a bare "exit /b" (no explicit code)
+REM rather than "if %ERRORLEVEL% ..." / "exit /b %ERRORLEVEL%": %ERRORLEVEL%
+REM is a textual expansion that reads a literal environment variable
+REM named ERRORLEVEL when one happens to be set (inherited from a
+REM parent process, or a prior "set ERRORLEVEL=..."), shadowing the
+REM real dynamic error level -- "if errorlevel N" and a bare "exit /b"
+REM both read cmd.exe's actual internal error state directly and are
+REM immune to that shadowing.
 REM
 REM -ExecutionPolicy Bypass matches this repo's own
 REM run_onchange_after_80-register-zellij-web.ps1.tmpl precedent: a
@@ -30,15 +38,15 @@ set "SCRIPT_DIR=%~dp0"
 set "PS1_PATH=%SCRIPT_DIR%coderabbit-critique.ps1"
 
 where pwsh >nul 2>nul
-if %ERRORLEVEL% NEQ 0 goto :try_powershell
+if errorlevel 1 goto :try_powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File "%PS1_PATH%" %*
-exit /b %ERRORLEVEL%
+exit /b
 
 :try_powershell
 where powershell >nul 2>nul
-if %ERRORLEVEL% NEQ 0 goto :no_shell
+if errorlevel 1 goto :no_shell
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1_PATH%" %*
-exit /b %ERRORLEVEL%
+exit /b
 
 :no_shell
 echo coderabbit-critique: neither pwsh nor powershell found in PATH 1>&2
