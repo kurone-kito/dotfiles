@@ -130,7 +130,8 @@ NOT contain a `dotfiles-roadmap-id` marker (not itself
 a roadmap) or a `dotfiles-blocked-by` marker, AND
 otherwise passes A3's own readiness bullets (no configured
 blocked-by-human/needs-decision label, no configured authoring label,
-no open blocking dependent issue via either visible `Blocked by #NNN`
+no `status:needs-triage` label <!-- dotfiles-divergence: needs-triage-label
+-->, no open blocking dependent issue via either visible `Blocked by #NNN`
 or hidden marker form, same fail-safe treatment on an unresolvable
 reference).
 
@@ -338,6 +339,9 @@ From A2, keep only issues that satisfy **all** of the following:
 
 - No configured blocked-by-human or needs-decision label
 - No configured authoring label
+  <!-- dotfiles-divergence: needs-triage-label -->
+- No `status:needs-triage` label (a human-filed intake report not yet
+  rewritten into IDD-ready form)
 - No open dependent issues (parent epics / aggregate issues that are
   still open are acceptable)
 - All dependency issues are closed or otherwise completed. Two forms:
