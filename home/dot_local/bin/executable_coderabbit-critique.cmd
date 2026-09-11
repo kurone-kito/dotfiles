@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "ERRORLEVEL="
 REM Windows-resolvable launcher for the IDD C1 critiqueLoop.delegate
 REM command "coderabbit-critique": dispatches to the PS5.1/pwsh-compatible
 REM coderabbit-critique.ps1 twin in this same directory, preferring pwsh
@@ -9,24 +10,30 @@ REM argument, stdout, stderr, and the dispatched process's exit code
 REM unchanged -- see the executable_coderabbit-critique (POSIX) and
 REM executable_coderabbit-critique.ps1 twins in this same directory.
 REM
-REM Uses "if errorlevel 1" (not "if %ERRORLEVEL% ...") for the "where"
-REM probes below: %ERRORLEVEL% is a textual expansion that reads a
-REM literal environment variable named ERRORLEVEL when one happens to
-REM be set (inherited from a parent process, or a prior
-REM "set ERRORLEVEL=..."), shadowing the real dynamic error level --
-REM "if errorlevel N" reads cmd.exe's actual internal error state
-REM directly and is immune to that shadowing.
+REM "set "ERRORLEVEL="" right after setlocal removes any environment
+REM variable literally named ERRORLEVEL that this process happens to
+REM inherit (from a parent shell's earlier "set ERRORLEVEL=<n>", or any
+REM other source) -- empirically confirmed (real cmd.exe) that such an
+REM inherited variable otherwise shadows every later %ERRORLEVEL%
+REM expansion in this script with its own stale value instead of
+REM cmd.exe's real dynamic error state, corrupting exit-code forwarding
+REM below. Clearing it here, inside this script's own setlocal scope,
+REM restores %ERRORLEVEL%'s normal dynamic behavior for the rest of
+REM this script without touching the caller's actual environment.
 REM
-REM The dispatched pwsh/powershell exit code itself is still forwarded
-REM via the explicit "exit /b %ERRORLEVEL%" form, deliberately, not a
-REM bare "exit /b": empirically confirmed (real cmd.exe, not
-REM documentation alone) that a bare "exit /b" resets the exit code to
-REM 0 instead of preserving the immediately-preceding command's real
-REM exit code, which would silently break exit-code forwarding --
-REM outright worse than the (rare) ERRORLEVEL-shadowing risk the
-REM textual expansion carries. Every real Windows batch launcher
-REM (npm's own generated .cmd shims included) uses this exact
-REM %ERRORLEVEL%-capture idiom for the same reason.
+REM "if errorlevel 1" (not "if %ERRORLEVEL% ...") for the "where"
+REM probes below reads cmd.exe's actual internal error state directly
+REM and would be immune to that same shadowing even without the clear
+REM above; kept as belt-and-suspenders alongside it.
+REM
+REM The dispatched pwsh/powershell exit code itself is forwarded via
+REM the explicit "exit /b %ERRORLEVEL%" form, deliberately, not a bare
+REM "exit /b": empirically confirmed (real cmd.exe, not documentation
+REM alone) that a bare "exit /b" resets the exit code to 0 instead of
+REM preserving the immediately-preceding command's real exit code,
+REM which would silently break exit-code forwarding. Every real
+REM Windows batch launcher (npm's own generated .cmd shims included)
+REM uses this exact %ERRORLEVEL%-capture idiom for the same reason.
 REM
 REM Also deliberately GOTO/label-based, never a parenthesized
 REM IF (...) ELSE (...) block: inside a "( ... )" block, cmd.exe

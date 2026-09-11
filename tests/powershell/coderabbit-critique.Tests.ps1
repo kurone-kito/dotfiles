@@ -1101,7 +1101,14 @@ exit $ExitCode
         param(
           [Parameter(Mandatory)] [string] $LauncherPath,
           [string[]] $ArgumentList = @(),
-          [string] $PathOverride = $env:PATH
+          [string] $PathOverride = $env:PATH,
+          # Simulates an inherited environment variable literally named
+          # ERRORLEVEL (e.g. a parent shell's earlier "set ERRORLEVEL=<n>")
+          # by setting it in the *same* cmd.exe invocation immediately
+          # before running the launcher, so the launcher process itself
+          # inherits it -- reproduces the shadowing hazard its own
+          # "set ERRORLEVEL=" clear must defend against.
+          [string] $PresetErrorLevel
         )
 
         $quotedCmdPath = ConvertTo-DotfilesWindowsQuotedArgument -Argument $LauncherPath
@@ -1109,6 +1116,9 @@ exit $ExitCode
             ConvertTo-DotfilesWindowsQuotedArgument -Argument $_
           }) -join ' '
         $innerCommand = if ($quotedArgs) { "$quotedCmdPath $quotedArgs" } else { $quotedCmdPath }
+        if ($PresetErrorLevel) {
+          $innerCommand = "set ERRORLEVEL=$PresetErrorLevel && $innerCommand"
+        }
 
         $psi = [Diagnostics.ProcessStartInfo]::new($script:CmdExePath)
         $psi.Arguments = "/d /s /c `"$innerCommand`""
@@ -1162,6 +1172,24 @@ exit $ExitCode
       $recordedLines = Get-Content -LiteralPath $script:FakeArgsOut
       $recordedLines | Should -Contain '--base'
       $recordedLines | Should -Contain 'with space'
+    }
+
+    It 'forwards the real exit code even when an inherited ERRORLEVEL environment variable would otherwise shadow it' {
+      # Regression guard: %ERRORLEVEL% is a textual expansion that reads
+      # a literal environment variable named ERRORLEVEL when one exists,
+      # instead of cmd.exe's real dynamic error state. Confirmed
+      # empirically (real cmd.exe) that without the launcher's own
+      # "set "ERRORLEVEL="" clear immediately after setlocal, a
+      # pre-set/inherited ERRORLEVEL=99 leaks through as the launcher's
+      # own reported exit code instead of the dispatched process's real
+      # one.
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 7
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
+        -PresetErrorLevel '99'
+
+      $result.ExitCode | Should -Be 7
     }
 
     It 'prefers pwsh when it is on PATH' {
