@@ -69,13 +69,17 @@ toolchain-residue x2 is byte-identical to the same run against the
 `v0.6.0` tarball, and the third (branch-protection) reads differently
 only because `idd-doctor`'s own diagnostic wording/logic changed
 between the two tags, not because of any schema or configuration
-change -- a same-tree comparison, so this conclusion holds
-independent of live configuration state; #410 separately found the
-master ruleset's required-status-checks rule was itself temporarily
-absent during this exact verification window, an unrelated
-coincidence covered in the dedicated `idd-doctor` findings section
-below; #307's own review caught and fixed a fourth, transient
-command-mismatch pair unrelated to the pin -- see that same section).
+change -- a same-tree comparison isolates that wording difference from
+configuration state, so this specific conclusion holds regardless of
+what the live configuration was at the time. #410 separately
+established that the live configuration is exactly what determines
+whether this check reports a `WARN` at all: the master ruleset's
+required-status-checks rule was itself temporarily absent during this
+exact verification window (unrelated to which `idd-doctor` version
+ran) -- see the dedicated `idd-doctor` findings section below for that
+separate, config-side finding; #307's own review caught and fixed a
+fourth, transient command-mismatch pair unrelated to the pin -- see
+that same section).
 
 ## Merge Policy
 
