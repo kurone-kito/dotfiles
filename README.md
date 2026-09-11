@@ -78,6 +78,8 @@ input line editing
 
 ### CLI tools (via mise)
 
+- [nektos/act](https://github.com/nektos/act) — GitHub Actions runner for
+  local execution
 - [fastfetch](https://github.com/fastfetch-cli/fastfetch) — system
   information display (the first `mise install` may time out fetching
   the upstream release list; re-run it if that happens)
