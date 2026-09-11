@@ -130,9 +130,10 @@ NOT contain a `dotfiles-roadmap-id` marker (not itself
 a roadmap) or a `dotfiles-blocked-by` marker, AND
 otherwise passes A3's own readiness bullets (no configured
 blocked-by-human/needs-decision label, no configured authoring label,
-no `status:needs-triage` label, no open blocking dependent issue via
-either visible `Blocked by #NNN` or hidden marker form, same fail-safe
-treatment on an unresolvable reference).
+no `status:needs-triage` label
+<!-- dotfiles-divergence: needs-triage-label -->, no open blocking
+dependent issue via either visible `Blocked by #NNN` or hidden marker
+form, same fail-safe treatment on an unresolvable reference).
 
 Apply the configured policy before passing A0-O candidates to A3.5:
 

@@ -621,7 +621,7 @@ Current slugs:
 | `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297, #386                         |
 | `local-docs-index`                   | The "Local pages" table `docs/index.md` appends below upstream's generated OKF table, covering this repository's own locally-authored, non-upstream `docs/` pages upstream's generator has no knowledge of. The row's original retirement trigger -- the synced pages gaining OKF frontmatter of their own -- held as of the `v0.7.0` baseline already; the `v0.9.0` round (#383) adopted the generated table itself, so this row now marks only the residual local-page extension, not a whole-file exclusion | #283, #383                                     |
 | `master-branch`                      | `master` in place of upstream's `main` as the integration branch name                                                                                                                                                                                                                                                                                                                                                   | #145, #196, #232, #233, #237, #294, #295, #296, #382, #383, #384 |
-| `needs-triage-label`                 | The `status:needs-triage` A3 readiness-exclusion bullet in `idd-discover.instructions.md`, skipping a human-filed intake report until it is rewritten into IDD-ready form -- a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                 | #415                                           |
+| `needs-triage-label`                 | The `status:needs-triage` A3 readiness-exclusion bullet in `idd-discover.instructions.md`, skipping a human-filed intake report until it is rewritten into IDD-ready form -- a dotfiles-specific addition with no upstream equivalent. Two marker instances: the A3 bullet itself and its mirror in A0-O's readiness parenthetical (the orphan-first fallback path re-states A3's bullets inline rather than referencing them, so both copies need the marker)                                     | #415                                           |
 | `onboarding-doc-trim`                | The deliberate exclusion of `docs/onboarding/placeholders.md` and `docs/onboarding/policy-decisions.md` (self-corrupt after placeholder substitution), linking to the pinned upstream copies instead. Through the `v0.7.0` round, upstream's generated `docs/index.md` was excluded wholesale for the same reason (its table links both trimmed pages); the `v0.9.0` round (#383) adopted that generated table instead, omitting only the two rows that would have linked the trimmed pages -- see `local-docs-index` above | #145, #196, #233, #295, #383                   |
 | `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294, #382                         |
 | `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233, #383                               |
@@ -688,12 +688,15 @@ regression, not a sync. Its existing `#383` attribution reflects that
 verification-only basis rather than a content diff. A
 repository-wide `dotfiles-divergence` grep confirms every registered
 slug still has at least one live, findable marker instance — none has
-silently reverted to upstream's default. Final verification performed
-by track #387. (Worded as an evergreen check rather than a fixed
-count: this paragraph described 9 registered slugs at the time of that
-verification, before #397 added a tenth and #415 an eleventh -- see
-the Divergence Register table above for the current, authoritative
-count and list.)
+silently reverted to upstream's default. Track #387 performed the
+initial full verification, which covered the then-9-slug register.
+Tracks #397 and #415 each later added a new slug, and #415 re-ran the
+same repository-wide grep against its own updated, now-11-slug
+register (including its own `needs-triage-label` slug's two marker
+instances) while editing this paragraph, and the check still holds.
+(Worded as an evergreen check rather than a fixed count -- see the
+Divergence Register table above for the current, authoritative count
+and list.)
 
 ## Open follow-ups
 
