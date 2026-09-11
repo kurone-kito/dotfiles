@@ -938,13 +938,17 @@ rediscover them:
   read of an actually-unprotected branch at that moment, not a wording
   artifact.
   **`ciGate.trustEmptyProtectionReads`** stays `true` (see
-  [Required status checks on `master`](#required-status-checks-on-master))
-  and governs an untrusted-empty result on any of `idd-doctor`'s
-  governance reads -- both `rules/branches/{branch}` and the classic
-  `branches/{branch}/protection` payload, not only the latter. It
-  played no role in this particular shift because the
-  `rules/branches/{branch}` read itself now returns a genuine,
-  populated `200` (confirmed live:
+  [Required status checks on `master`](#required-status-checks-on-master)).
+  `idd-doctor`'s own branch-protection check (confirmed via its
+  `src/scripts/idd-doctor.mts` source) reads `rules/branches/{branch}`
+  and the classic `branches/{branch}/protection` payload, and passes
+  this same flag to both -- a separate consumer of the flag from
+  `idd-ci.instructions.md`'s own required-check-discovery contract,
+  which instead reads the `/rulesets` summary/detail pair plus classic
+  protection for the unrelated D4/F2 CI-gate purpose, and never reads
+  `rules/branches/{branch}` at all. The flag played no role in this
+  particular shift because `idd-doctor`'s `rules/branches/{branch}`
+  read itself now returns a genuine, populated `200` (confirmed live:
   `gh api repos/kurone-kito/dotfiles/rules/branches/master` lists
   `required_status_checks` among its rules) rather than an empty
   result needing the trust flag at all; the flag still applies to the
