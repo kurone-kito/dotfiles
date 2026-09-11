@@ -102,6 +102,8 @@ yt-dlp = "latest"
 "github:cli/cli" = "latest"
 "github:anatawa12/git-vrc" = "latest"
 
+"gitlab:gitlab-org/cli" = "latest"
+
 # mise's ubi backend is deprecated (scheduled for removal in mise
 # 2027.1.0), so this uses the github backend instead. Upstream was
 # transferred from marlocarlo/pstop to psmux/pstop (GitHub redirects the
