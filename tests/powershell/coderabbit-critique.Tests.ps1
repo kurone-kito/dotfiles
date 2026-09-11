@@ -1025,4 +1025,244 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       }
     }
   }
+
+  Context 'Windows .cmd launcher dispatch (Windows only)' -Skip:($IsWindows -eq $false) {
+    # executable_coderabbit-critique.cmd is chezmoi's Windows-resolvable
+    # launcher for the bare `coderabbit-critique` PATH-resolved delegate
+    # command: native cmd.exe/PowerShell PATHEXT lookup cannot execute an
+    # extensionless shebang-only file (the POSIX script) at all, so this
+    # .cmd (a PATHEXT-recognized extension) is what actually resolves on
+    # Windows and dispatches to the coderabbit-critique.ps1 twin (#411).
+    #
+    # Unlike every other context in this file, a .cmd cannot be launched
+    # directly via [Diagnostics.Process]::Start() with
+    # UseShellExecute = $false -- see the "Full script as a real
+    # subprocess" context's own comment above for why (CreateProcess
+    # never runs a .bat/.cmd directly; only cmd.exe itself can). This
+    # context invokes the launcher through `cmd.exe /d /s /c "..."`
+    # instead. `/s` strips only the first and last quote of the whole
+    # payload, so the already per-argument-quoted inner command must be
+    # wrapped in one more outer quote layer (see
+    # Invoke-DotfilesCmdLauncher below).
+    #
+    # The launcher and a fake sibling coderabbit-critique.ps1 fixture
+    # are copied into an isolated per-test directory under $TestDrive,
+    # so the launcher's own %~dp0 resolution naturally targets the fake
+    # fixture instead of the real production .ps1 twin.
+    BeforeAll {
+      $script:CmdLauncherSource = Join-Path $PSScriptRoot `
+        '../../home/dot_local/bin/executable_coderabbit-critique.cmd'
+      $script:CmdExePath = (Get-Command cmd.exe).Source
+      $script:SystemDir = [Environment]::SystemDirectory
+      $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
+      $script:PwshDir = if ($pwshCommand) { Split-Path -Parent $pwshCommand.Source } else { $null }
+      $powershellCommand = Get-Command powershell.exe -ErrorAction SilentlyContinue
+      $script:PowerShellDir = if ($powershellCommand) {
+        Split-Path -Parent $powershellCommand.Source
+      } else {
+        $null
+      }
+
+      # Writes a fake coderabbit-critique.ps1 that records
+      # $PSVersionTable.PSEdition (Core = pwsh, Desktop = Windows
+      # PowerShell) plus the received $args to a file, so the launcher
+      # tests below can assert which shell actually ran and what it
+      # received -- without depending on the real coderabbit CLI or the
+      # production .ps1 twin's own logic. `$StdOutText`/`$StdErrText`
+      # are interpolated into the generated script's literal text at
+      # authoring time (single-quoted in the generated source); `$args`/
+      # `$_`/`$PSVersionTable` are backtick-escaped so they stay literal
+      # in the generated file and are evaluated by the fake script
+      # itself at its own run time instead.
+      function script:New-DotfilesFakeCoderabbitCritiquePs1 {
+        param(
+          [Parameter(Mandatory)] [string] $Path,
+          [Parameter(Mandatory)] [string] $ArgsOutPath,
+          [int] $ExitCode = 0,
+          [string] $StdOutText = '',
+          [string] $StdErrText = ''
+        )
+
+        $content = @"
+`$PSVersionTable.PSEdition | Out-File -FilePath '$ArgsOutPath' -Encoding utf8
+`$args | ForEach-Object { `$_ } | Out-File -FilePath '$ArgsOutPath' -Encoding utf8 -Append
+if ('$StdOutText') { Write-Output '$StdOutText' }
+if ('$StdErrText') { [Console]::Error.WriteLine('$StdErrText') }
+exit $ExitCode
+"@
+        Set-Content -Path $Path -Value $content -Encoding utf8
+      }
+
+      # Invokes a copied .cmd launcher as a real subprocess via
+      # `cmd.exe /d /s /c "<quoted-path> <quoted-args>"`, optionally
+      # under an overridden child PATH (used by the fallback/failure
+      # tests below to hide pwsh and/or powershell.exe from resolution).
+      function script:Invoke-DotfilesCmdLauncher {
+        param(
+          [Parameter(Mandatory)] [string] $LauncherPath,
+          [string[]] $ArgumentList = @(),
+          [string] $PathOverride = $env:PATH,
+          # Simulates an inherited environment variable literally named
+          # ERRORLEVEL (e.g. a parent shell's earlier "set ERRORLEVEL=<n>")
+          # by setting it in the *same* cmd.exe invocation immediately
+          # before running the launcher, so the launcher process itself
+          # inherits it -- reproduces the shadowing hazard its own
+          # "set ERRORLEVEL=" clear must defend against.
+          [string] $PresetErrorLevel
+        )
+
+        $quotedCmdPath = ConvertTo-DotfilesWindowsQuotedArgument -Argument $LauncherPath
+        $quotedArgs = ($ArgumentList | ForEach-Object {
+            ConvertTo-DotfilesWindowsQuotedArgument -Argument $_
+          }) -join ' '
+        $innerCommand = if ($quotedArgs) { "$quotedCmdPath $quotedArgs" } else { $quotedCmdPath }
+        if ($PresetErrorLevel) {
+          $innerCommand = "set ERRORLEVEL=$PresetErrorLevel && $innerCommand"
+        }
+
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:CmdExePath)
+        $psi.Arguments = "/d /s /c `"$innerCommand`""
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables['PATH'] = $PathOverride
+
+        $proc = [Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        if (-not $proc.WaitForExit(30000)) {
+          try { $proc.Kill() } catch [System.Exception] {}
+          throw 'Invoke-DotfilesCmdLauncher: launcher did not exit within 30s -- killed'
+        }
+        return [pscustomobject]@{
+          ExitCode = $proc.ExitCode
+          Stdout   = $stdoutTask.GetAwaiter().GetResult()
+          Stderr   = $stderrTask.GetAwaiter().GetResult()
+        }
+      }
+    }
+
+    AfterAll {
+      foreach ($name in @(
+        'New-DotfilesFakeCoderabbitCritiquePs1'
+        'Invoke-DotfilesCmdLauncher'
+      )) {
+        Remove-Item "Function:\$name" -ErrorAction SilentlyContinue
+      }
+    }
+
+    BeforeEach {
+      $script:FixtureDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:FixtureDir -Force | Out-Null
+      $script:CmdLauncherCopy = Join-Path $script:FixtureDir 'coderabbit-critique.cmd'
+      Copy-Item -Path $script:CmdLauncherSource -Destination $script:CmdLauncherCopy
+      $script:FakePs1Path = Join-Path $script:FixtureDir 'coderabbit-critique.ps1'
+      $script:FakeArgsOut = Join-Path $script:FixtureDir 'fake-args-out.txt'
+    }
+
+    It 'dispatches to the sibling coderabbit-critique.ps1, forwarding arguments and exit code unchanged' {
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 7
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
+        -ArgumentList @('--base', 'with space')
+
+      $result.ExitCode | Should -Be 7
+      $recordedLines = Get-Content -LiteralPath $script:FakeArgsOut
+      $recordedLines | Should -Contain '--base'
+      $recordedLines | Should -Contain 'with space'
+    }
+
+    It 'forwards the real exit code even when an inherited ERRORLEVEL environment variable would otherwise shadow it' {
+      # Regression guard: %ERRORLEVEL% is a textual expansion that reads
+      # a literal environment variable named ERRORLEVEL when one exists,
+      # instead of cmd.exe's real dynamic error state. Confirmed
+      # empirically (real cmd.exe) that without the launcher's own
+      # "set "ERRORLEVEL="" clear immediately after setlocal, a
+      # pre-set/inherited ERRORLEVEL=99 leaks through as the launcher's
+      # own reported exit code instead of the dispatched process's real
+      # one.
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 7
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
+        -PresetErrorLevel '99'
+
+      $result.ExitCode | Should -Be 7
+    }
+
+    It 'prefers pwsh when it is on PATH' {
+      if (-not $script:PwshDir) {
+        Set-ItResult -Skipped -Because 'pwsh is not installed on this host'
+        return
+      }
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 0
+
+      Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy | Out-Null
+
+      (Get-Content -LiteralPath $script:FakeArgsOut -TotalCount 1) | Should -Be 'Core'
+    }
+
+    It 'falls back to powershell.exe when pwsh is not on PATH' {
+      if (-not $script:PowerShellDir) {
+        Set-ItResult -Skipped -Because 'powershell.exe is not available on this host'
+        return
+      }
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 0
+      # Allowlist (not an exclusion filter over the inherited PATH): only
+      # powershell.exe's own resolved directory plus System32 (where
+      # where.exe/cmd.exe live) are on the child PATH, so pwsh is
+      # unresolvable regardless of what else the host's real PATH
+      # happens to contain.
+      $filteredPath = @($script:PowerShellDir, $script:SystemDir) -join [IO.Path]::PathSeparator
+
+      Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
+        -PathOverride $filteredPath | Out-Null
+
+      (Get-Content -LiteralPath $script:FakeArgsOut -TotalCount 1) | Should -Be 'Desktop'
+    }
+
+    It 'fails with no stdout and a clear stderr message when neither pwsh nor powershell is on PATH' {
+      # Allowlist: only System32 (the minimum needed for where.exe and
+      # cmd.exe's own built-ins) -- neither pwsh nor powershell.exe's
+      # directory is present.
+      $filteredPath = $script:SystemDir
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy `
+        -PathOverride $filteredPath
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'neither pwsh nor powershell found in PATH'
+    }
+
+    It 'keeps stdout limited to the dispatched process output (no echoed commands or where.exe noise)' {
+      # Regression guard for a missing `@echo off`: without it, cmd.exe
+      # echoes every executed command line (and `where`'s own matched
+      # path) onto real stdout, which this exact-content assertion would
+      # catch even though the redirected `where ... >nul` hides that
+      # command's own output specifically.
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 0 -StdOutText 'clean-finding-text'
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy
+
+      $result.Stdout.Trim() | Should -Be 'clean-finding-text'
+    }
+
+    It 'keeps the dispatched process stderr out of stdout' {
+      New-DotfilesFakeCoderabbitCritiquePs1 -Path $script:FakePs1Path `
+        -ArgsOutPath $script:FakeArgsOut -ExitCode 0 `
+        -StdOutText 'stdout-marker' -StdErrText 'stderr-marker'
+
+      $result = Invoke-DotfilesCmdLauncher -LauncherPath $script:CmdLauncherCopy
+
+      $result.Stdout | Should -Match 'stdout-marker'
+      $result.Stdout | Should -Not -Match 'stderr-marker'
+      $result.Stderr | Should -Match 'stderr-marker'
+    }
+  }
 }

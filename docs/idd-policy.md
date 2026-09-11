@@ -126,12 +126,14 @@ repository override, not a distributed default: `command:
 "coderabbit-critique"`, `mode: "combined"` (#407, restoring the same
 shape #368 originally shipped and #381 removed — see the
 [`critiqueLoop.delegate`](#genuinely-new-in-070) row below for the full
-history). `command` is the PATH-resolved POSIX wrapper name; on a
-native-Windows agent host the bare name may not resolve the same way
-(the user-global template invokes the `.ps1` twin there via `pwsh`/
-`powershell.exe` instead), so a Windows C1 pass falls through to the
-per-agent mechanism under `combined` until a cross-platform launcher
-ships as a follow-up — see PR #408's review discussion.
+history). `command` is a bare, `PATH`-resolved name. A Windows-resolvable
+launcher, `home/dot_local/bin/executable_coderabbit-critique.cmd`
+(#411, following up on PR #408's review discussion), lets a
+native-Windows agent host resolve that same bare name via `PATHEXT`
+lookup: it dispatches to the `.ps1` twin (preferring `pwsh`, falling
+back to `powershell.exe`), so a Windows C1 pass now runs the delegate
+the same as a POSIX host instead of falling through to the per-agent
+mechanism under `combined`.
 
 ## Claim Timing
 
