@@ -939,8 +939,11 @@ rediscover them:
   #293's own open-to-close window (2026-08-19T04:07Z to
   2026-08-20T01:36Z) fell entirely inside that already-recorded
   2026-08-17 absence window, so its `WARN` was a true, contemporaneous
-  read of an actually-unprotected branch at that moment, not a wording
-  artifact.
+  read of a branch that genuinely lacked required status checks at
+  that moment (the other four rules -- `deletion`, `non_fast_forward`,
+  `pull_request`, `copilot_code_review` -- stayed active throughout;
+  only `required_status_checks` was missing, so the branch was not
+  entirely unprotected), not a wording artifact.
   **`ciGate.trustEmptyProtectionReads`** stays `true` (see
   [Required status checks on `master`](#required-status-checks-on-master)).
   `idd-doctor`'s own branch-protection check (confirmed via its
