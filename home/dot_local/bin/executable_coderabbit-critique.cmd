@@ -9,23 +9,32 @@ REM argument, stdout, stderr, and the dispatched process's exit code
 REM unchanged -- see the executable_coderabbit-critique (POSIX) and
 REM executable_coderabbit-critique.ps1 twins in this same directory.
 REM
-REM Uses "if errorlevel 1" and a bare "exit /b" (no explicit code)
-REM rather than "if %ERRORLEVEL% ..." / "exit /b %ERRORLEVEL%": %ERRORLEVEL%
-REM is a textual expansion that reads a literal environment variable
-REM named ERRORLEVEL when one happens to be set (inherited from a
-REM parent process, or a prior "set ERRORLEVEL=..."), shadowing the
-REM real dynamic error level -- "if errorlevel N" and a bare "exit /b"
-REM both read cmd.exe's actual internal error state directly and are
-REM immune to that shadowing.
+REM Uses "if errorlevel 1" (not "if %ERRORLEVEL% ...") for the "where"
+REM probes below: %ERRORLEVEL% is a textual expansion that reads a
+REM literal environment variable named ERRORLEVEL when one happens to
+REM be set (inherited from a parent process, or a prior
+REM "set ERRORLEVEL=..."), shadowing the real dynamic error level --
+REM "if errorlevel N" reads cmd.exe's actual internal error state
+REM directly and is immune to that shadowing.
+REM
+REM The dispatched pwsh/powershell exit code itself is still forwarded
+REM via the explicit "exit /b %ERRORLEVEL%" form, deliberately, not a
+REM bare "exit /b": empirically confirmed (real cmd.exe, not
+REM documentation alone) that a bare "exit /b" resets the exit code to
+REM 0 instead of preserving the immediately-preceding command's real
+REM exit code, which would silently break exit-code forwarding --
+REM outright worse than the (rare) ERRORLEVEL-shadowing risk the
+REM textual expansion carries. Every real Windows batch launcher
+REM (npm's own generated .cmd shims included) uses this exact
+REM %ERRORLEVEL%-capture idiom for the same reason.
 REM
 REM Also deliberately GOTO/label-based, never a parenthesized
-REM IF (...) ELSE (...) block: even with the shadow-proof checks above,
-REM a block still keeps every %VAR%-style expansion (e.g. %PS1_PATH%)
-REM fixed at the block's own parse time rather than fresh per
-REM statement, and mixing that timing model with cmd.exe's dispatch
-REM logic is easy to get subtly wrong. Flat, top-level statements avoid
-REM that whole class of pitfall and keep this launcher simple to
-REM reason about.
+REM IF (...) ELSE (...) block: inside a "( ... )" block, cmd.exe
+REM expands every %VAR% once at the block's own parse time, not fresh
+REM per statement -- so an "exit /b %ERRORLEVEL%" placed in the same
+REM block as the pwsh/powershell call would read a stale value from
+REM before the call ran, not its real exit code. Flat, top-level
+REM statements keep every %VAR% expansion fresh instead.
 REM
 REM -ExecutionPolicy Bypass matches this repo's own
 REM run_onchange_after_80-register-zellij-web.ps1.tmpl precedent: a
@@ -41,13 +50,13 @@ set "PS1_PATH=%SCRIPT_DIR%coderabbit-critique.ps1"
 where pwsh >nul 2>nul
 if errorlevel 1 goto :try_powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File "%PS1_PATH%" %*
-exit /b
+exit /b %ERRORLEVEL%
 
 :try_powershell
 where powershell >nul 2>nul
 if errorlevel 1 goto :no_shell
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1_PATH%" %*
-exit /b
+exit /b %ERRORLEVEL%
 
 :no_shell
 echo coderabbit-critique: neither pwsh nor powershell found in PATH 1>&2
