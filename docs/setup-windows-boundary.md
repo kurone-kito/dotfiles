@@ -160,8 +160,7 @@ did not "move," they were only ever defined here:
 `aqua:google-antigravity/antigravity-cli`, `aqua:supabase/cli`, `grok`,
 `npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`,
 `npm:@executeautomation/playwright-mcp-server`,
-`npm:@google/gemini-cli`, `npm:@microsoft/inshellisense`,
-`npm:@openai/codex`, `npm:@playwright/cli`,
+`npm:@microsoft/inshellisense`, `npm:@openai/codex`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
 
 ### Current overlap
