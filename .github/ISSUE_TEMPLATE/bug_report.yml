@@ -1,6 +1,6 @@
 name: 🐛 Bug report
 description: Create a report to help us improve
-labels: bug
+labels: ["bug", "status:needs-triage"]
 body:
   - type: markdown
     attributes:
@@ -9,12 +9,38 @@ body:
 
         Before you continue filling out this report, please take a moment to check that your bug has not been [already reported on GitHub](https://github.com/kurone-kito/dotfiles/search?q=is%3Aissue&type=issues) 🙌
 
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      description: Which operating system did you see this on?
+      options:
+        - Linux (native)
+        - macOS
+        - Windows (native, PowerShell)
+        - WSL2 (Windows Subsystem for Linux)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Shell
+      description: Which shell did you see this in?
+      options:
+        - bash
+        - zsh
+        - PowerShell (pwsh, 7+)
+        - PowerShell 5.1 (Windows built-in)
+    validations:
+      required: true
+
   - type: textarea
     id: overview
     attributes:
       label: Bug Overview
       description: A clear and concise overview of the bug.
-      placeholder: When I do "X", "Y" happens instead of "Z".
+      placeholder: When zsh starts, the starship prompt renders "Y" instead of "X".
     validations:
       required: true
 
@@ -23,7 +49,7 @@ body:
     attributes:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
-      placeholder: When I do "X", I expect "Z" to happen.
+      placeholder: I expect the starship prompt to render "Z" instead.
     validations:
       required: true
 
@@ -32,7 +58,7 @@ body:
     attributes:
       label: Steps to Reproduce the Bug
       description: Detail the series of steps required to reproduce the bug.
-      placeholder: When I run "X" using [...], "X" fails with "Y" error message. If I check the terminal outputs and/or logs, I see the following info.
+      placeholder: After a fresh `chezmoi apply`, opening a new zsh session shows "Y" in the terminal outputs and/or logs.
     validations:
       required: true
 
@@ -42,12 +68,22 @@ body:
       label: Environment Details
       description: Please provide details about your environment.
       value: |
-        - Target deployment platform: [e.g. AWS/GCP/local cluster/etc...]
-        - Target OS: [e.g. RHEL 9/Ubuntu 24.04/etc...]
-        - Version of this project or specific commit: [e.g. 1.4.3/commit hash]
-        - Version of any relevant project languages: [e.g. Kubernetes 1.30/Python 3.9.7/etc...]
+        - `chezmoi --version` output:
+        - Reproduces on a fresh `chezmoi apply`, or only on an already-customized machine?
+        - Relevant mise-managed tool and version (if applicable), e.g. `mise ls <tool>`:
     validations:
       required: true
+
+  - type: textarea
+    id: affected_area
+    attributes:
+      label: Affected file(s) or area
+      description: 'Optional. Which config file, shell, or mise-managed tool does this concern? A rough hint is enough — exact file paths are not required.'
+      placeholder: |
+        e.g. one of: Shell environments, Shell plugins & prompt,
+        Development tools, Git, Editors & terminal, Network tools,
+        Security, Containers, Productivity, Task management, CLI tools,
+        AI coding assistants, or IDD workflow / .github/instructions
 
   - type: textarea
     id: context

@@ -1,7 +1,7 @@
 ---
 name: ✨ Feature request
 description: Suggest an idea for this project
-labels: enhancement
+labels: ["enhancement", "status:needs-triage"]
 body:
   - type: markdown
     attributes:
@@ -10,12 +10,34 @@ body:
 
         Before you continue filling out this report, please take a moment to check that your feature request has not been [already reported on GitHub](https://github.com/kurone-kito/dotfiles/search?q=is%3Aissue&type=issues) 🙌
 
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the dotfiles does this feature concern?
+      options:
+        - Shell environments
+        - Shell plugins & prompt
+        - Development tools
+        - Git
+        - Editors & terminal
+        - Network tools
+        - Security
+        - Containers
+        - Productivity (via mise)
+        - Task management
+        - CLI tools (via mise)
+        - AI coding assistants (via mise)
+        - Other / cross-cutting
+    validations:
+      required: true
+
   - type: textarea
     id: overview
     attributes:
       label: Feature Overview
       description: A clear and concise description of what the feature request is.
-      placeholder: I would like this project to be able to do "X".
+      placeholder: I would like a new mise-managed tool "X" wired into the shell PATH.
     validations:
       required: true
 
@@ -24,7 +46,7 @@ body:
     attributes:
       label: Alternatives Considered
       description: Detail any potential alternative solutions/workarounds you've used or considered.
-      placeholder: I have done/might be able to do "X" in this project by doing "Y".
+      placeholder: I have worked around this by adding a manual shell alias, but a chezmoi template would keep it consistent across machines.
 
   - type: textarea
     id: context
