@@ -69,9 +69,13 @@ toolchain-residue x2 is byte-identical to the same run against the
 `v0.6.0` tarball, and the third (branch-protection) reads differently
 only because `idd-doctor`'s own diagnostic wording/logic changed
 between the two tags, not because of any schema or configuration
-change; #307's own review caught and fixed a fourth, transient
-command-mismatch pair unrelated to the pin -- see the dedicated
-`idd-doctor` findings section below).
+change -- a same-tree comparison, so this conclusion holds
+independent of live configuration state; #410 separately found the
+master ruleset's required-status-checks rule was itself temporarily
+absent during this exact verification window, an unrelated
+coincidence covered in the dedicated `idd-doctor` findings section
+below; #307's own review caught and fixed a fourth, transient
+command-mismatch pair unrelated to the pin -- see that same section).
 
 ## Merge Policy
 
@@ -888,8 +892,11 @@ rediscover them:
   wording/logic-only change, not a schema or configuration one. #410
   re-ran the same check under the now-pinned `v0.9.0` tarball
   (`d005098`) and found it now reports `PASS  required status checks
-  configured on master (5, strict=false)` instead, with no `WARN` at
-  all (the `v0.7.0` tarball's own schema-validation `ERROR` against
+  configured on master (5, strict=false)` instead, with no `WARN` for
+  this check at all (the same run still emits the two toolchain-residue
+  `WARN`s quoted above; only the branch-protection check itself dropped
+  its `WARN`. Separately, the `v0.7.0` tarball's own schema-validation
+  `ERROR` against
   today's `.github/idd/config.json` is unrelated noise -- the config
   has grown keys the `v0.7.0` schema predates -- and does not affect
   this specific check). Unlike the `v0.6.0`-to-`v0.7.0` reword, #410
@@ -932,10 +939,16 @@ rediscover them:
   artifact.
   **`ciGate.trustEmptyProtectionReads`** stays `true` (see
   [Required status checks on `master`](#required-status-checks-on-master))
-  and still governs the still-empty classic-protection read; it played
-  no role in this particular shift, since the check that changed reads
-  the ruleset (`rules/branches/{branch}`), not the classic-protection
-  payload alone.
+  and governs an untrusted-empty result on any of `idd-doctor`'s
+  governance reads -- both `rules/branches/{branch}` and the classic
+  `branches/{branch}/protection` payload, not only the latter. It
+  played no role in this particular shift because the
+  `rules/branches/{branch}` read itself now returns a genuine,
+  populated `200` (confirmed live:
+  `gh api repos/kurone-kito/dotfiles/rules/branches/master` lists
+  `required_status_checks` among its rules) rather than an empty
+  result needing the trust flag at all; the flag still applies to the
+  classic read, which remains empty/`404` as always.
 - **Post-merge cleanup backlog** (new since the roadmap's original
   pin, resolved by #220): the check flags merged PRs missing a
   `<!-- idd-cleanup-evidence: ... -->` comment, which requires running
