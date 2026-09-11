@@ -83,6 +83,8 @@ input line editing
 - [fastfetch](https://github.com/fastfetch-cli/fastfetch) — system
   information display (the first `mise install` may time out fetching
   the upstream release list; re-run it if that happens)
+- [GitLab CLI](https://gitlab.com/gitlab-org/cli) — GitLab from the
+  terminal
 - [jq](https://jqlang.org/) — JSON processor
 - [mkcert](https://github.com/FiloSottile/mkcert) — local TLS
   certificates (opt-in local CA setup on Windows; see
