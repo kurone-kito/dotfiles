@@ -686,10 +686,14 @@ must stay that way -- a future re-import overwriting it with
 upstream's own shorter auto-generated-file notice would be a
 regression, not a sync. Its existing `#383` attribution reflects that
 verification-only basis rather than a content diff. A
-repository-wide `dotfiles-divergence` grep confirms all 9 slugs still
-have at least one live, findable marker instance — none has silently
-reverted to upstream's default. Final verification performed by
-track #387.
+repository-wide `dotfiles-divergence` grep confirms every registered
+slug still has at least one live, findable marker instance — none has
+silently reverted to upstream's default. Final verification performed
+by track #387. (Worded as an evergreen check rather than a fixed
+count: this paragraph described 9 registered slugs at the time of that
+verification, before #397 added a tenth and #415 an eleventh -- see
+the Divergence Register table above for the current, authoritative
+count and list.)
 
 ## Open follow-ups
 
