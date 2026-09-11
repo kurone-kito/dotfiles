@@ -69,9 +69,18 @@ toolchain-residue x2 is byte-identical to the same run against the
 `v0.6.0` tarball, and the third (branch-protection) reads differently
 only because `idd-doctor`'s own diagnostic wording/logic changed
 between the two tags, not because of any schema or configuration
-change; #307's own review caught and fixed a fourth, transient
-command-mismatch pair unrelated to the pin -- see the dedicated
-`idd-doctor` findings section below).
+change -- a same-tree comparison isolates that wording difference from
+configuration state, so this specific conclusion holds regardless of
+what the live configuration was at the time. #410 separately
+established that, for the unchanged `v0.7.0`/`v0.9.0` check logic
+specifically, live configuration is what determines whether it reports
+a `WARN` during this historical #293 window: the master ruleset's
+required-status-checks rule was itself temporarily absent then
+(unrelated to which of those two versions ran) -- see the dedicated
+`idd-doctor` findings section below for that
+separate, config-side finding; #307's own review caught and fixed a
+fourth, transient command-mismatch pair unrelated to the pin -- see
+that same section).
 
 ## Merge Policy
 
@@ -815,12 +824,27 @@ can create, comment on, and close that tracking issue.
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
-`result: passed` with three `WARN`s in a worktree that has already
-wired `core.hooksPath` (four on a fresh clone that has not — see that
-bullet below) and no `ERROR`. Each bullet below currently reflects
-either a live warning, an environment-dependent one that only shows on
-a fresh clone, or (struck through) one this round found and already
-fixed -- none is a defect needing further action. #218 resolved the
+`result: passed` with two `WARN`s in a worktree that has already
+wired `core.hooksPath` (three on a fresh clone that has not — see that
+bullet below) and no `ERROR`. The two `WARN`s in the hooksPath-wired
+case read, verbatim:
+
+```text
+WARN  toolchain residue detected for marker prefix "dotfiles": .github/idd/config.json "fix-validate" contains "markdownlint-cli2"
+WARN  toolchain residue detected for marker prefix "dotfiles": overview project commands table "fix-validate" contains "markdownlint-cli2"
+```
+
+A fresh clone (`core.hooksPath` unset) additionally emits this third
+line:
+
+```text
+WARN  worktreeGuard.enabled is true but the commit/push guard is not active in this environment (core.hooksPath = (unset)); B1 primary-worktree commits will NOT be blocked here. Wire it with: git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push — or, if an existing hook manager already owns core.hooksPath here, chain each hook to the corresponding .githooks/* script instead of repointing directly; see ONBOARDING.md's "Coexisting with an existing hook manager" section
+```
+
+Each bullet below currently reflects either a live warning, an
+environment-dependent one that only shows on a fresh clone, or (struck
+through) one this round found and already fixed -- none is a defect
+needing further action. #218 resolved the
 one finding that was a genuine `ERROR` (the `idd-task.yml` placeholder
 syntax) by reformatting it; the remaining findings are accepted noise,
 recorded
@@ -864,21 +888,83 @@ rediscover them:
   because that run's worktree had already inherited `core.hooksPath`
   from the primary clone -- environment state, not evidence the
   condition no longer exists.)
-- **Branch protection reads differently at `v0.7.0`** (same underlying
-  condition, reworded upstream): the `v0.6.0`-era wording was "Branch
-  protection not readable for `kurone-kito/dotfiles:master`"; the
-  `v0.7.0` tarball instead reports "branch protection is enabled but no
-  required status checks are configured on master." Confirmed by #293
-  (see the "Pinned upstream commit" note above) to be a change in
-  `idd-doctor`'s own diagnostic wording/logic between the two tags, not
-  a schema or configuration change. Both wordings describe the same
-  expected condition: this repository's merge gate comes from a
-  ruleset, not classic branch protection, so the classic-protection
-  read returns empty/`404`. **`ciGate.trustEmptyProtectionReads`** is
-  `true` (changed from the `false` default confirmed in #146 — see
-  [Required status checks on `master`](#required-status-checks-on-master)
-  for why), so this read is trusted as genuinely empty rather than
-  failing closed.
+- ~~**Branch protection reads differently at `v0.7.0`**~~ (superseded
+  by #410): this bullet used to record a live `WARN` ("branch
+  protection is enabled but no required status checks are configured
+  on master"), reworded at `v0.7.0` from the `v0.6.0`-era "Branch
+  protection not readable for `kurone-kito/dotfiles:master`" -- #293
+  confirmed that particular reword was an `idd-doctor`
+  wording/logic-only change, not a schema or configuration one. #410
+  re-ran the same check under the now-pinned `v0.9.0` tarball
+  (`d005098`) and found it now reports `PASS  required status checks
+  configured on master (5, strict=false)` instead, with no `WARN` for
+  this check at all (the same run still emits the two toolchain-residue
+  `WARN`s quoted above; only the branch-protection check itself dropped
+  its `WARN`. Separately, the `v0.7.0` tarball's own schema-validation
+  `ERROR` against
+  today's `.github/idd/config.json` is unrelated noise -- the config
+  has grown keys the `v0.7.0` schema predates -- and does not affect
+  this specific check). Unlike the `v0.6.0`-to-`v0.7.0` reword, #410
+  traced this second shift to an **actual repository configuration
+  change**, not a further `idd-doctor` wording/logic change, confirmed
+  four ways: a direct diff of the branch-protection check's own source
+  in `src/scripts/idd-doctor.mts` shows its `WARN`-vs-`PASS` message
+  logic is unchanged between the `f51a8bb` (`v0.7.0`) and `d005098`
+  (`v0.9.0`) tarballs (`v0.9.0` only adds an unrelated, additive
+  Rulesets-only-trust-gap diagnostic that this repository's own
+  `ciGate.trustEmptyProtectionReads: true` setting keeps from firing);
+  an A/B run of both pinned tarballs against the identical current
+  tree reports the exact same `PASS` line from both -- corroborating,
+  though not by itself proving, that this shift is not a
+  version-dependent artifact of the current checks-present state (only
+  the source diff above rules out a wording-only change specifically
+  on the `WARN` branch, since an unchanged `PASS`-path message would
+  read identically either way); the classic branch-protection read
+  (`GET
+  .../branches/master/protection`) still returns `404 "Branch not
+  protected"`, unchanged; and the `master`-covering ruleset (`id:
+  18861545`, `name: main`) currently carries a
+  `required_status_checks` rule with the same five contexts already
+  documented under
+  [Required status checks on `master`](#required-status-checks-on-master).
+  That section's own Scheduled drift guard paragraph already records
+  the underlying cause: a 2026-08-17 incident silently dropped the
+  rule again and went unfixed through four daily guard failures before
+  a maintainer restored it after being told directly. The ruleset's own
+  version history pins the exact window: the rule was present at
+  version 46376052 (2026-08-13T08:24:49+09:00, the earlier
+  2026-08-02-to-2026-08-12/13 incident's own restoration), absent again
+  as of version 46702184 (2026-08-17T08:35:02+09:00), briefly restored
+  with a malformed context list at version 47133893
+  (2026-08-21T06:33:16+09:00, contexts read `do_not_enforce_on_create`
+  and `strict_required_status_checks_policy` -- parameter names, not
+  check names, evidently pasted into the wrong field), and correctly
+  restored with the same five contexts a minute later at version
+  47133963 (2026-08-21T06:34:42+09:00), where it has remained since.
+  #293's own open-to-close window (2026-08-19T04:07Z to
+  2026-08-20T01:36Z) fell entirely inside that already-recorded
+  2026-08-17 absence window, so its `WARN` was a true, contemporaneous
+  read of a branch that genuinely lacked required status checks at
+  that moment (the other four rules -- `deletion`, `non_fast_forward`,
+  `pull_request`, `copilot_code_review` -- stayed active throughout;
+  only `required_status_checks` was missing, so the branch was not
+  entirely unprotected), not a wording artifact.
+  **`ciGate.trustEmptyProtectionReads`** stays `true` (see
+  [Required status checks on `master`](#required-status-checks-on-master)).
+  `idd-doctor`'s own branch-protection check (confirmed via its
+  `src/scripts/idd-doctor.mts` source) reads `rules/branches/{branch}`
+  and the classic `branches/{branch}/protection` payload, and passes
+  this same flag to both -- a separate consumer of the flag from
+  `idd-ci.instructions.md`'s own required-check-discovery contract,
+  which instead reads the `/rulesets` summary/detail pair plus classic
+  protection for the unrelated D4/F2 CI-gate purpose, and never reads
+  `rules/branches/{branch}` at all. The flag played no role in this
+  particular shift because `idd-doctor`'s `rules/branches/{branch}`
+  read itself now returns a genuine, populated `200` (confirmed live:
+  `gh api repos/kurone-kito/dotfiles/rules/branches/master` lists
+  `required_status_checks` among its rules) rather than an empty
+  result needing the trust flag at all; the flag still applies to the
+  classic read, which remains empty/`404` as always.
 - **Post-merge cleanup backlog** (new since the roadmap's original
   pin, resolved by #220): the check flags merged PRs missing a
   `<!-- idd-cleanup-evidence: ... -->` comment, which requires running
