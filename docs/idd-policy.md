@@ -72,11 +72,12 @@ between the two tags, not because of any schema or configuration
 change -- a same-tree comparison isolates that wording difference from
 configuration state, so this specific conclusion holds regardless of
 what the live configuration was at the time. #410 separately
-established that the live configuration is exactly what determines
-whether this check reports a `WARN` at all: the master ruleset's
-required-status-checks rule was itself temporarily absent during this
-exact verification window (unrelated to which `idd-doctor` version
-ran) -- see the dedicated `idd-doctor` findings section below for that
+established that, for the unchanged `v0.7.0`/`v0.9.0` check logic
+specifically, live configuration is what determines whether it reports
+a `WARN` during this historical #293 window: the master ruleset's
+required-status-checks rule was itself temporarily absent then
+(unrelated to which of those two versions ran) -- see the dedicated
+`idd-doctor` findings section below for that
 separate, config-side finding; #307's own review caught and fixed a
 fourth, transient command-mismatch pair unrelated to the pin -- see
 that same section).
@@ -913,9 +914,13 @@ rediscover them:
   Rulesets-only-trust-gap diagnostic that this repository's own
   `ciGate.trustEmptyProtectionReads: true` setting keeps from firing);
   an A/B run of both pinned tarballs against the identical current
-  tree reports the exact same `PASS` line from both, which a
-  wording-only change (like the `v0.6.0`-to-`v0.7.0` reword) could not
-  produce; the classic branch-protection read (`GET
+  tree reports the exact same `PASS` line from both -- corroborating,
+  though not by itself proving, that this shift is not a
+  version-dependent artifact of the current checks-present state (only
+  the source diff above rules out a wording-only change specifically
+  on the `WARN` branch, since an unchanged `PASS`-path message would
+  read identically either way); the classic branch-protection read
+  (`GET
   .../branches/master/protection`) still returns `404 "Branch not
   protected"`, unchanged; and the `master`-covering ruleset (`id:
   18861545`, `name: main`) currently carries a
