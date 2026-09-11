@@ -338,6 +338,9 @@ From A2, keep only issues that satisfy **all** of the following:
 
 - No configured blocked-by-human or needs-decision label
 - No configured authoring label
+  <!-- dotfiles-divergence: needs-triage-label -->
+- No `status:needs-triage` label (a human-filed intake report not yet
+  rewritten into IDD-ready form)
 - No open dependent issues (parent epics / aggregate issues that are
   still open are acceptable)
 - All dependency issues are closed or otherwise completed. Two forms:
