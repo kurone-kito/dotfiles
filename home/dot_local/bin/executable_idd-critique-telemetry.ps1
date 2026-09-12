@@ -127,8 +127,20 @@ function global:Invoke-DotfilesIddCritiqueTelemetry {
     }
 
     $logFile = Join-Path $stateDir 'log.jsonl'
+    # New-Item has no -LiteralPath parameter at all (verified: it isn't
+    # in its parameter set), but that's fine here -- New-Item resolves
+    # -Path against *existing* items for wildcard matching, and a
+    # not-yet-created directory has nothing to match, so it creates the
+    # literal path either way (verified empirically). Add-Content is
+    # the real risk: it resolves -Path as a wildcard pattern against
+    # the log file's *existing* parent directory, so a state/log path
+    # containing PowerShell wildcard characters (e.g. `[` or `]`,
+    # plausible in an unusual username or directory name) could
+    # silently fail to append or target another matching path, with
+    # the surrounding catch swallowing it either way -- use
+    # -LiteralPath there, as the report script's own reads already do.
     New-Item -ItemType Directory -Force -Path $stateDir -ErrorAction Stop | Out-Null
-    Add-Content -Path $logFile -Value $line -Encoding utf8 -ErrorAction Stop
+    Add-Content -LiteralPath $logFile -Value $line -Encoding utf8 -ErrorAction Stop
   } catch {
     # Fire-and-forget: never let any failure surface as a thrown error.
   }

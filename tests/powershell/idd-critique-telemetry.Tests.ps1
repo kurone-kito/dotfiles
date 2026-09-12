@@ -171,6 +171,25 @@ Describe 'Invoke-DotfilesIddCritiqueTelemetry' {
     Test-Path -LiteralPath (Split-Path $script:LogFile -Parent) | Should -BeTrue
   }
 
+  It 'appends correctly when the state directory contains PowerShell wildcard characters (regression)' {
+    # Add-Content resolves a plain -Path as a wildcard pattern against
+    # the log file's *existing* parent directory, so a state/log path
+    # containing `[`/`]` (plausible in an unusual username or
+    # directory name) could silently fail to append, or target another
+    # matching path, with the surrounding try/catch swallowing it
+    # either way -- -LiteralPath must be used instead (empirically
+    # confirmed both the failure and the fix).
+    $wildcardStateHome = Join-Path $TestDrive "wild[card]$([Guid]::NewGuid().ToString())"
+    New-Item -ItemType Directory -Force -Path $wildcardStateHome | Out-Null
+    $wildcardLogFile = Join-Path $wildcardStateHome 'idd-critique/log.jsonl'
+    $env:XDG_STATE_HOME = $wildcardStateHome
+
+    Invoke-DotfilesIddCritiqueTelemetry -InputText '{"round":1,"findingsCount":5}'
+
+    Test-Path -LiteralPath $wildcardLogFile | Should -BeTrue
+    (@(Get-Content -LiteralPath $wildcardLogFile))[0] | Should -Be '{"round":1,"findingsCount":5}'
+  }
+
   It 'writes nothing for an empty payload' {
     Invoke-DotfilesIddCritiqueTelemetry -InputText ''
 
