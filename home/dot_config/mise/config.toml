@@ -121,6 +121,24 @@ yt-dlp = "latest"
 # bin_path explicitly.
 "github:psmux/pstop" = { version = "latest", os = ["windows"] }
 
+# psmux is the Windows-native tmux-compatible multiplexer this repo
+# already ships a dedicated config for (home/dot_psmux.conf); it was
+# still WinGet-only (marlocarlo.psmux) until now. Upstream was
+# transferred from marlocarlo/psmux to psmux/psmux (GitHub redirects
+# the old name), so this uses the same github backend and rename
+# pattern as the psmux/pstop entry above. The release archive ships
+# psmux.exe, pmux.exe, and tmux.exe directly at the zip root (no bin/
+# subdirectory), mirroring pstop's htop.exe/pstop.exe pair; the github
+# backend's default bin lookup falls back to the extraction root and
+# shims every executable found there, so all three are expected to
+# shim without bin_path/filter_bins. Confirmed on real Windows hardware
+# (mise 2026.9.5, windows-x64): `mise install "github:psmux/psmux@latest"`
+# selects psmux-v3.3.8-windows-x64.zip over the release's *-setup.exe
+# installer assets, and the existing WinGet install already links all
+# three binaries into WinGet\Links today, so this reproduces existing
+# PATH surface rather than adding tmux/pmux as new commands.
+"github:psmux/psmux" = { version = "latest", os = ["windows"] }
+
 [settings]
 idiomatic_version_file_enable_tools = ["node", "python"]
 not_found_auto_install = false
