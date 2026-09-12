@@ -214,6 +214,14 @@ MOCK
   assert_output --partial 'os = ["windows"]'
 }
 
+@test "restricts the psmux github tool to Windows" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"github:psmux/psmux"' "$config"
+  assert_success
+  assert_output --partial 'os = ["windows"]'
+}
+
 @test "declares the quoted llama.cpp registry tool with prerelease" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 

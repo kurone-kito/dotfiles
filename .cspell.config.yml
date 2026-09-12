@@ -109,6 +109,7 @@ words:
   - onlogon
   - ONNX
   - osascript
+  - pmux
   - psfzf
   - psmux
   - pstoprc

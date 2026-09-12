@@ -121,8 +121,8 @@ WinGet/DSC definitions no longer include them.
 ### Added here (this repository also owns install, not only config)
 
 The aqua wave (see [#257](https://github.com/kurone-kito/dotfiles/issues/257)),
-yt-dlp, vhs, plus two platform-restricted additions (ttyd: no macOS
-build; pstop: Windows-only):
+yt-dlp, vhs, plus three platform-restricted additions (ttyd: no macOS
+build; pstop: Windows-only; psmux: Windows-only):
 
 | Tool | mise key |
 | ---------- | -------------------- |
@@ -138,10 +138,19 @@ build; pstop: Windows-only):
 | vhs | `vhs` |
 | ttyd (Linux/Windows-only) | `ttyd` |
 | pstop (Windows-only) | `github:psmux/pstop` |
+| psmux (Windows-only) | `github:psmux/psmux` |
 
 `pstop` (a `htop`-style Windows CLI, no WinGet equivalent) uses the
 `github` backend under a project rename (from `marlocarlo/pstop` to
 `psmux/pstop`) since mise's `ubi` backend is scheduled for removal.
+
+`psmux` (the Windows-native tmux-compatible multiplexer this
+repository already ships a dedicated `~/.psmux.conf` for) moves off its
+former WinGet-only `marlocarlo.psmux` package the same way: same
+`github` backend, same upstream rename lineage (`marlocarlo/psmux` to
+`psmux/psmux`), and the same extraction-root shim fallback, now
+covering all three of its `psmux.exe`, `pmux.exe`, and `tmux.exe`
+binaries.
 
 WinGet's own `charmbracelet.vhs` package exists too, but
 [microsoft/winget-pkgs#393367](https://github.com/microsoft/winget-pkgs/issues/393367)
