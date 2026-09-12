@@ -66,17 +66,42 @@ function global:ConvertTo-DotfilesIddCritiqueJsonLine {
   # array like `[{"round":1}]` therefore collapses $parsed to the bare
   # inner object, and an empty array `[]` collapses it to $null --
   # both indistinguishable from a genuine bare object/absence unless
-  # the ORIGINAL text's top-level shape is also consulted. Without this
-  # re-wrap, an array-wrapped payload silently became a bare object on
-  # the way into the log, defeating any downstream shape validation
-  # that (correctly) expects an array-wrapped payload to still look
-  # like one (empirically confirmed regression).
+  # the ORIGINAL text's top-level shape is also consulted.
+  #
+  # A second, PS5.1-specific divergence compounds this: for a JSON
+  # array that does NOT collapse (2+ elements), Windows PowerShell
+  # 5.1's ConvertFrom-Json returns a `System.Collections.ArrayList`,
+  # not a `System.Object[]` -- so it never satisfies `-is [array]`
+  # (confirmed via Windows CI: `PowerShell 5.1 tests (Pester)` failed
+  # on exactly this while the PS7 job stayed green). The old check
+  # here (`-isnot [array]`) treated that ArrayList exactly like the
+  # bare-scalar collapse case above and wrapped the WHOLE ArrayList as
+  # a single array element (`, $parsed`) instead of enumerating its
+  # actual items -- and PS5.1's ConvertTo-Json separately mishandles a
+  # bare ArrayList (and a 1-element array, which it unwraps, dropping
+  # the outer brackets) by serializing it as a generic object with
+  # `value`/`Count` properties instead of a JSON array
+  # (PowerShell/PowerShell#3153; fixed for pwsh 6+ but never
+  # backported to 5.1/Desktop edition) -- together producing exactly
+  # the observed `{"value":[...],"Count":N}` output instead of `[...]`.
+  #
+  # `@()` (the array subexpression operator) sidesteps both PS5.1
+  # quirks in one step: it enumerates ANY IEnumerable input --
+  # `System.Object[]` (PS7's shape), `ArrayList` (PS5.1's shape), or a
+  # bare scalar/PSCustomObject (the collapsed-1-element case, wrapped
+  # as a genuine 1-element array) -- into a fresh, plain
+  # `System.Object[]` with no residual collection-type baggage, so
+  # ConvertTo-Json always receives an unambiguous array regardless of
+  # which shape ConvertFrom-Json handed back on this PowerShell
+  # version. `$null` needs its own branch first: `@($null)` produces a
+  # 1-element array containing `$null`, not an empty array, since `@()`
+  # counts "one output value that is $null" as one item.
   $isArrayShaped = $trimmed[0] -eq '['
-  if ($isArrayShaped -and $parsed -isnot [array]) {
+  if ($isArrayShaped) {
     if ($null -eq $parsed) {
       $parsed = @()
     } else {
-      $parsed = , $parsed
+      $parsed = @($parsed)
     }
   }
 

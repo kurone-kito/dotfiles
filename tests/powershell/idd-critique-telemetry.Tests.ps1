@@ -110,6 +110,61 @@ Describe 'ConvertTo-DotfilesIddCritiqueJsonLine' {
     ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[]' | Should -Be '[]'
   }
 
+  It 'normalizes a PS5.1-shaped ArrayList array result to a genuine JSON array (regression)' {
+    # Windows PowerShell 5.1's ConvertFrom-Json returns a
+    # System.Collections.ArrayList for JSON array input, not a
+    # System.Object[] like PS7 -- confirmed via Windows CI: this
+    # repo's own "PowerShell 5.1 tests (Pester)" job failed on exactly
+    # this while the PS7 job (this test's own normal host) stayed
+    # green. An ArrayList never satisfies `-is [array]`, so treating
+    # that check as "already array-shaped, skip the rewrap" (the old
+    # logic) let a real, multi-element ArrayList fall into the
+    # collapsed-scalar rewrap branch, wrapping the WHOLE ArrayList as
+    # a single array element instead of enumerating its actual items
+    # -- and PS5.1's ConvertTo-Json separately mis-serializes a bare
+    # ArrayList (and unwraps a 1-element array, dropping its outer
+    # brackets) as `{"value":[...],"Count":N}` instead of a JSON array
+    # (PowerShell/PowerShell#3153; fixed for pwsh 6+, never backported
+    # to 5.1). This test forces that exact shape via a mock, since the
+    # divergence cannot be reproduced by simply running on this
+    # (PS7-only) host. The mock scriptblock must use
+    # `Write-Output -NoEnumerate`, not a plain `return`/implicit
+    # output: a bare `return $arrayList` re-enumerates the ArrayList's
+    # elements onto the output pipeline just like any other collection
+    # (collapsing an empty list to $null, and losing the ArrayList
+    # type entirely for a non-empty one) -- the real ConvertFrom-Json
+    # avoids exactly this by writing its array result as one
+    # non-enumerated object internally, which is the behavior under
+    # test here and must be reproduced deliberately.
+    Mock ConvertFrom-Json {
+      $list = [System.Collections.ArrayList]::new()
+      [void] $list.Add([pscustomobject] @{ round = 1 })
+      [void] $list.Add([pscustomobject] @{ round = 2 })
+      Write-Output -NoEnumerate $list
+    }
+    ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[{"round":1},{"round":2}]' |
+      Should -Be '[{"round":1},{"round":2}]'
+  }
+
+  It 'normalizes a PS5.1-shaped one-element ArrayList to a one-element JSON array (regression)' {
+    Mock ConvertFrom-Json {
+      $list = [System.Collections.ArrayList]::new()
+      [void] $list.Add([pscustomobject] @{ round = 1 })
+      Write-Output -NoEnumerate $list
+    }
+    ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[{"round":1}]' | Should -Be '[{"round":1}]'
+  }
+
+  It 'normalizes a PS5.1-shaped empty ArrayList to an empty JSON array (regression)' {
+    # A non-null, zero-element ArrayList must not be mistaken for the
+    # separate collapsed-to-$null empty-array case above -- both must
+    # still end up as `[]`.
+    Mock ConvertFrom-Json {
+      Write-Output -NoEnumerate ([System.Collections.ArrayList]::new())
+    }
+    ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[]' | Should -Be '[]'
+  }
+
   It 'returns $null for two concatenated top-level JSON values (not exactly one value)' {
     # Regression case: a strict single-value guard must not let a
     # multi-record payload silently split into multiple telemetry
