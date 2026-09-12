@@ -123,6 +123,14 @@ Describe 'Get-DotfilesIddCritiqueValidRound' {
     $obj = ConvertFrom-Json -InputObject '{"round":Infinity}'
     Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
   }
+
+  It 'returns $null when round is fractional (regression)' {
+    # round is a whole-number domain by the v0.11 payload contract --
+    # a finite-but-fractional value (e.g. 1.5) previously passed the
+    # plain finite-number check.
+    $obj = ConvertFrom-Json -InputObject '{"round":1.5}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
 }
 
 Describe 'Get-DotfilesIddCritiqueValidCounterValue' {
@@ -158,6 +166,18 @@ Describe 'Get-DotfilesIddCritiqueValidCounterValue' {
 
   It 'defaults to 0 for an Infinity counter (regression)' {
     $obj = ConvertFrom-Json -InputObject '{"findingsCount":Infinity}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for a negative counter (regression)' {
+    # Counters are a nonnegative-integer domain -- a finite-but-negative
+    # value previously passed the plain finite-number check.
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":-4}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for a fractional counter (regression)' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":0.25}'
     Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
   }
 }

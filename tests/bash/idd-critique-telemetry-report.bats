@@ -194,6 +194,25 @@ append() {
   assert_output --partial "exists but is not a regular file"
 }
 
+@test "rejects a fractional round and negative/fractional counters (regression)" {
+  # A finite-but-fractional round, or a finite-but-negative/fractional
+  # counter, previously passed the plain finite-number check --
+  # producing impossible negative/fractional totals, and a fractional
+  # round silently treated as a real round with no clean loop boundary.
+  mkdir -p "$XDG_STATE_HOME/idd-critique"
+  {
+    printf '%s\n' '{"round":1.5,"findingsCount":-4,"acceptedCount":0.25}'
+    printf '%s\n' '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+  } > "$LOG_FILE"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+  assert_line "Total findings: 1"
+  assert_line "Total accepted: 1"
+}
+
 @test "rejects a NaN counter value instead of poisoning the whole sum (regression)" {
   # jq accepts the bare `NaN` token in fromjson (not valid JSON, but
   # reachable via the appender's own no-jq raw fallback, which

@@ -66,10 +66,20 @@ function global:Test-DotfilesIddCritiqueFiniteNumber {
   return $true
 }
 
+function global:Test-DotfilesIddCritiqueWholeNumber {
+  # Assumes -Value already passed Test-DotfilesIddCritiqueFiniteNumber.
+  # A fractional-but-finite value (e.g. 1.5) must not pass as a round
+  # or counter -- both are whole-number domains by the v0.11 payload
+  # contract (kept in parity with the POSIX jq twin's identical
+  # `floor == .` check).
+  param($Value)
+  return ([Math]::Floor([double] $Value) -eq [double] $Value)
+}
+
 function global:Get-DotfilesIddCritiqueValidRound {
   # Returns the record's `round` value only when there is exactly one
   # case-sensitive (`-ceq`) `round` property whose value is a genuine
-  # finite positive numeric scalar; otherwise $null.
+  # finite positive whole-number scalar; otherwise $null.
   param($InputObject)
 
   $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq 'round' })
@@ -77,22 +87,25 @@ function global:Get-DotfilesIddCritiqueValidRound {
   $value = $matchingProperties[0].Value
   if (-not (Test-DotfilesIddCritiqueFiniteNumber -Value $value)) { return $null }
   if ($value -lt 1) { return $null }
+  if (-not (Test-DotfilesIddCritiqueWholeNumber -Value $value)) { return $null }
   return $value
 }
 
 function global:Get-DotfilesIddCritiqueValidCounterValue {
   # Returns the named counter field's value when there is exactly one
   # case-sensitive (`-ceq`) property by that name whose value is a
-  # genuine finite numeric scalar; otherwise 0 -- the same
-  # fire-and-forget-friendly default the POSIX twin's
-  # `(.findingsCount | is_finite_number)` guard applies for a missing,
-  # wrong-shape, nonnumeric, or non-finite counter.
+  # genuine finite nonnegative whole-number scalar; otherwise 0 -- the
+  # same fire-and-forget-friendly default the POSIX twin's
+  # `is_nonneg_integer` guard applies for a missing, wrong-shape,
+  # nonnumeric, non-finite, fractional, or negative counter.
   param($InputObject, [Parameter(Mandatory)] [string] $Name)
 
   $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq $Name })
   if ($matchingProperties.Count -ne 1) { return 0 }
   $value = $matchingProperties[0].Value
   if (-not (Test-DotfilesIddCritiqueFiniteNumber -Value $value)) { return 0 }
+  if ($value -lt 0) { return 0 }
+  if (-not (Test-DotfilesIddCritiqueWholeNumber -Value $value)) { return 0 }
   return $value
 }
 

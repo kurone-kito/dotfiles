@@ -73,16 +73,25 @@ fi
 # which preserves malformed input verbatim -- reporting `type` as
 # "number" for them despite `NaN` itself serializing back out as
 # `null`, which would otherwise poison the whole `add` result to
-# `null` over one bad record (empirically confirmed).
+# `null` over one bad record (empirically confirmed). `round` and the
+# counters are also required to be whole numbers in their expected
+# domain (round >= 1, counters >= 0): without this, a fractional or
+# negative-but-finite value (e.g. `{"round":1.5,"findingsCount":-4}`)
+# passed the plain finite-number check and produced impossible
+# negative/fractional totals, with a fractional round also silently
+# treated as a real round with no clean loop boundary (empirically
+# confirmed; kept in parity with the `.ps1` twin's identical check).
 jq -R -n -r '
   def is_finite_number: type == "number" and (isnan | not) and (isinfinite | not);
+  def is_nonneg_integer: is_finite_number and . >= 0 and (floor == .);
+  def is_positive_integer: is_finite_number and . >= 1 and (floor == .);
   [inputs | select(length > 0) | fromjson? | select(type == "object")
-    | select(.round? != null and (.round | is_finite_number) and .round >= 1)]
+    | select(.round? != null and (.round | is_positive_integer))]
   | {
       total_rounds: length,
-      total_findings: (map(if (.findingsCount | is_finite_number) then .findingsCount else 0 end) | add // 0),
-      total_accepted: (map(if (.acceptedCount | is_finite_number) then .acceptedCount else 0 end) | add // 0),
-      total_rejected: (map(if (.rejectedCount | is_finite_number) then .rejectedCount else 0 end) | add // 0),
+      total_findings: (map(if (.findingsCount | is_nonneg_integer) then .findingsCount else 0 end) | add // 0),
+      total_accepted: (map(if (.acceptedCount | is_nonneg_integer) then .acceptedCount else 0 end) | add // 0),
+      total_rejected: (map(if (.rejectedCount | is_nonneg_integer) then .rejectedCount else 0 end) | add // 0),
       loop_count: (map(select(.round == 1)) | length)
     }
   | .loop_count = (if .loop_count == 0 then 1 else .loop_count end)
