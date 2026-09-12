@@ -91,7 +91,19 @@ function global:Invoke-DotfilesIddCritiqueTelemetry {
   # own try/catch so this function is fire-and-forget on its own terms
   # -- self-contained regardless of caller -- not only via the top-level
   # guard below.
-  param([string] $InputText = $null)
+  #
+  # No `= $null` default, and $PSBoundParameters (not `$null -ne
+  # $InputText`) decides whether -InputText was supplied: PowerShell
+  # coerces a $null default assigned to a [string]-typed parameter into
+  # an empty string as soon as the parameter is bound, even when the
+  # caller never passed -InputText at all -- so $InputText is never
+  # actually $null when omitted, and comparing against $null always
+  # took this branch, meaning the real top-level invocation (no
+  # -InputText, real piped stdin) silently read as an empty payload and
+  # never reached [Console]::In.ReadToEnd() at all (empirically
+  # confirmed: a critical regression -- this dropped every real
+  # telemetry event on Windows since -InputText was added).
+  param([string] $InputText)
 
   try {
     $stateDir = Resolve-DotfilesIddCritiqueStateDir
@@ -99,7 +111,7 @@ function global:Invoke-DotfilesIddCritiqueTelemetry {
       return
     }
 
-    $payload = if ($null -ne $InputText) { $InputText } else { [Console]::In.ReadToEnd() }
+    $payload = if ($PSBoundParameters.ContainsKey('InputText')) { $InputText } else { [Console]::In.ReadToEnd() }
     if ([string]::IsNullOrWhiteSpace($payload)) {
       return
     }

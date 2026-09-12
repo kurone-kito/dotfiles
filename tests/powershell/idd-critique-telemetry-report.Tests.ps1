@@ -355,14 +355,22 @@ Describe 'Invoke-DotfilesIddCritiqueTelemetryReport' {
     # Distinguish "exists but wrong type" (this script cannot do its
     # job) from "genuinely absent" (a valid all-zero state) -- both
     # used to report all-zero stats via the same -PathType Leaf check.
+    # Capture [Console]::Error and assert its text too, not just the
+    # return code: a bare return-code assertion would still pass if the
+    # diagnostic itself were removed or changed.
     $stateHome = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Force -Path (Join-Path $stateHome 'idd-critique/log.jsonl') | Out-Null
     $originalXdg = $env:XDG_STATE_HOME
     $env:XDG_STATE_HOME = $stateHome
+    $originalError = [Console]::Error
+    $capturedError = [System.IO.StringWriter]::new()
     try {
+      [Console]::SetError($capturedError)
       $result = Invoke-DotfilesIddCritiqueTelemetryReport
       $result | Should -Be 1
+      $capturedError.ToString() | Should -Match 'exists but is not a regular file'
     } finally {
+      [Console]::SetError($originalError)
       if ($null -eq $originalXdg) {
         Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue
       } else {

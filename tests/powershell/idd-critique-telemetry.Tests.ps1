@@ -235,4 +235,27 @@ Describe 'Invoke-DotfilesIddCritiqueTelemetry' {
 
     (@(Get-Content -LiteralPath $script:LogFile))[0] | Should -Be '[{"round":1}]'
   }
+
+  It 'reads real stdin (Console.In) when -InputText is not supplied at all (regression: critical)' {
+    # PowerShell coerces a $null default assigned to a [string]-typed
+    # parameter into an empty string as soon as the parameter binds --
+    # even when the caller never passed -InputText -- so comparing
+    # against $null (`if ($null -ne $InputText) ...`) always took the
+    # "use $InputText" branch and never reached Console.In.ReadToEnd()
+    # at all, silently dropping every real telemetry event on Windows
+    # (empirically confirmed). This is the real top-level invocation
+    # shape: no -InputText bound, exactly like `.cmd`/`pwsh -File` with
+    # piped stdin. Substituting Console.In directly (rather than
+    # spawning a real subprocess) keeps this test fast and avoids a
+    # nested-pwsh stdin hang observed elsewhere in this suite's history.
+    $originalIn = [Console]::In
+    try {
+      [Console]::SetIn([System.IO.TextReader] (New-Object System.IO.StringReader('{"round":1,"findingsCount":5}')))
+      Invoke-DotfilesIddCritiqueTelemetry
+    } finally {
+      [Console]::SetIn($originalIn)
+    }
+
+    (@(Get-Content -LiteralPath $script:LogFile))[0] | Should -Be '{"round":1,"findingsCount":5}'
+  }
 }
