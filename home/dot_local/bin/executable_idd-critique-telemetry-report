@@ -30,6 +30,18 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ -e "$LOG_FILE" ] && [ ! -f "$LOG_FILE" ]; then
+  # Distinguish "the log path exists but is not a regular file" (e.g. a
+  # directory) from "no telemetry recorded yet" (genuinely absent,
+  # handled below): the former means this script cannot do its job and
+  # must fail loudly per its own stated contract, not silently report
+  # all-zero stats -- especially since the appender's own
+  # fire-and-forget contract silently drops events for the exact same
+  # condition.
+  echo "idd-critique-telemetry-report: $LOG_FILE exists but is not a regular file" >&2
+  exit 1
+fi
+
 if [ ! -f "$LOG_FILE" ]; then
   # No telemetry recorded yet: report all-zero stats rather than
   # erroring, since "no rounds observed" is a valid, expected state

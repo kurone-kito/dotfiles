@@ -69,17 +69,69 @@ Describe 'Resolve-DotfilesIddCritiqueReportStateDir' {
   }
 }
 
-Describe 'Get-DotfilesIddCritiqueNumericValue' {
-  It 'passes through an int unchanged' {
-    Get-DotfilesIddCritiqueNumericValue 3 | Should -Be 3
+Describe 'Get-DotfilesIddCritiqueValidRound' {
+  It 'returns the value for a genuine positive numeric round' {
+    $obj = ConvertFrom-Json -InputObject '{"round":3}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -Be 3
   }
 
-  It 'defaults $null to 0' {
-    Get-DotfilesIddCritiqueNumericValue $null | Should -Be 0
+  It 'returns $null when round is absent' {
+    $obj = ConvertFrom-Json -InputObject '{}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
   }
 
-  It 'defaults a nonnumeric (string) value to 0' {
-    Get-DotfilesIddCritiqueNumericValue 'oops' | Should -Be 0
+  It 'returns $null when round is nonpositive' {
+    $obj = ConvertFrom-Json -InputObject '{"round":0}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when round is nonnumeric' {
+    $obj = ConvertFrom-Json -InputObject '{"round":"x"}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when round is spelled with different case' {
+    $obj = ConvertFrom-Json -InputObject '{"Round":1}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when round is an array-valued (regression)' {
+    # An earlier version returned the raw property value across a
+    # function boundary: PowerShell's single-element-array enumeration
+    # silently unwrapped `"round":[1]`'s value to the bare number `1`
+    # on `return`, so a later numeric-type check could no longer tell
+    # it apart from a genuine scalar `"round":1` (empirically
+    # confirmed). This function's own shape check must reject it
+    # before any such boundary is crossed.
+    $obj = ConvertFrom-Json -InputObject '{"round":[1]}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
+}
+
+Describe 'Get-DotfilesIddCritiqueValidCounterValue' {
+  It 'returns the value for a genuine numeric counter' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":3}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 3
+  }
+
+  It 'defaults to 0 when the field is absent' {
+    $obj = ConvertFrom-Json -InputObject '{}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for a nonnumeric (string) value' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":"oops"}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 when spelled with different case' {
+    $obj = ConvertFrom-Json -InputObject '{"FindingsCount":3}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for an array-valued counter (regression)' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":[7]}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
   }
 }
 
@@ -290,6 +342,26 @@ Describe 'Invoke-DotfilesIddCritiqueTelemetryReport' {
     try {
       $result = Invoke-DotfilesIddCritiqueTelemetryReport
       $result | Should -Be 0
+    } finally {
+      if ($null -eq $originalXdg) {
+        Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue
+      } else {
+        $env:XDG_STATE_HOME = $originalXdg
+      }
+    }
+  }
+
+  It 'returns 1 and writes to stderr when the log path exists but is not a regular file (regression)' {
+    # Distinguish "exists but wrong type" (this script cannot do its
+    # job) from "genuinely absent" (a valid all-zero state) -- both
+    # used to report all-zero stats via the same -PathType Leaf check.
+    $stateHome = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+    New-Item -ItemType Directory -Force -Path (Join-Path $stateHome 'idd-critique/log.jsonl') | Out-Null
+    $originalXdg = $env:XDG_STATE_HOME
+    $env:XDG_STATE_HOME = $stateHome
+    try {
+      $result = Invoke-DotfilesIddCritiqueTelemetryReport
+      $result | Should -Be 1
     } finally {
       if ($null -eq $originalXdg) {
         Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue

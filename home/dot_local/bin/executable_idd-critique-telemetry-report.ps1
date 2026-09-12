@@ -31,34 +31,53 @@ function global:Resolve-DotfilesIddCritiqueReportStateDir {
   return $null
 }
 
-function global:Get-DotfilesIddCritiqueCaseSensitiveValue {
-  # PowerShell's dot-notation property access and its
-  # -contains/-notcontains operators are case-INSENSITIVE by default,
-  # so a foreign/malformed record spelled e.g. `Round` or
-  # `FindingsCount` would otherwise be picked up here even though the
-  # POSIX jq twin's case-sensitive field lookups correctly ignore it,
-  # producing platform-dependent totals for the same log (empirically
-  # confirmed for both `round` and the three counter fields). Every
-  # field this script reads from a parsed record goes through this
-  # exact case-sensitive (`-ceq`) name match instead.
-  param($InputObject, [Parameter(Mandatory)] [string] $Name)
+# Both helpers below do their own property lookup, shape check, and
+# type check entirely within one function scope, and only ever return
+# a value already confirmed to be a genuine (non-array) scalar or a
+# fixed sentinel ($null / 0). This is deliberate: an earlier version
+# split "find the property" and "validate the value" into separate
+# functions connected by a `return`/pipe boundary, which is exactly
+# where PowerShell's single-element-array enumeration silently
+# discards shape information (confirmed for ConvertFrom-Json, `return`,
+# and pipe alike -- e.g. a `"round":[1]` value's `.Value` unwraps to
+# the bare number `1` on `return`, so a later `-is [int]` check could
+# no longer tell it apart from a genuine scalar `"round":1`). Folding
+# lookup and validation into one scope means no partially-validated
+# raw value ever crosses such a boundary.
+function global:Get-DotfilesIddCritiqueValidRound {
+  # Returns the record's `round` value only when there is exactly one
+  # case-sensitive (`-ceq`) `round` property whose value is a genuine
+  # (non-array) positive numeric scalar; otherwise $null.
+  param($InputObject)
 
-  $property = $InputObject.PSObject.Properties | Where-Object { $_.Name -ceq $Name } | Select-Object -First 1
-  if ($null -eq $property) { return $null }
-  return $property.Value
+  $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq 'round' })
+  if ($matchingProperties.Count -ne 1) { return $null }
+  $value = $matchingProperties[0].Value
+  if ($value -is [array]) { return $null }
+  if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) {
+    return $null
+  }
+  if ($value -lt 1) { return $null }
+  return $value
 }
 
-function global:Get-DotfilesIddCritiqueNumericValue {
-  param($Value)
+function global:Get-DotfilesIddCritiqueValidCounterValue {
+  # Returns the named counter field's value when there is exactly one
+  # case-sensitive (`-ceq`) property by that name whose value is a
+  # genuine (non-array) numeric scalar; otherwise 0 -- the same
+  # fire-and-forget-friendly default the POSIX twin's
+  # `(.findingsCount | type) == "number"` guard applies for a missing,
+  # wrong-shape, or nonnumeric counter.
+  param($InputObject, [Parameter(Mandatory)] [string] $Name)
 
-  if ($null -eq $Value) { return 0 }
-  if ($Value -is [int] -or $Value -is [long] -or $Value -is [double] -or $Value -is [decimal]) {
-    return $Value
+  $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq $Name })
+  if ($matchingProperties.Count -ne 1) { return 0 }
+  $value = $matchingProperties[0].Value
+  if ($value -is [array]) { return 0 }
+  if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) {
+    return 0
   }
-  # A present-but-wrong-type field (e.g. a string) defaults to 0, the
-  # same guard the POSIX twin's `(.findingsCount | type) == "number"`
-  # check applies -- a nonnumeric counter must not abort the summary.
-  return 0
+  return $value
 }
 
 function global:Get-DotfilesIddCritiqueTelemetrySummary {
@@ -97,11 +116,8 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
       # (the v0.11 payload contract always includes one): an object
       # like `{}` must not silently inflate TotalRounds /
       # AverageRoundsPerLoop.
-      $roundValue = Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $parsed -Name 'round'
+      $roundValue = Get-DotfilesIddCritiqueValidRound -InputObject $parsed
       if ($null -eq $roundValue) { continue }
-      $roundIsNumeric = $roundValue -is [int] -or $roundValue -is [long] -or
-        $roundValue -is [double] -or $roundValue -is [decimal]
-      if (-not $roundIsNumeric -or $roundValue -lt 1) { continue }
       $records += $parsed
     }
   }
@@ -112,13 +128,13 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
   $totalRejected = 0
   $loopCount = 0
   foreach ($record in $records) {
-    $totalFindings += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'findingsCount'))
-    $totalAccepted += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'acceptedCount'))
-    $totalRejected += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'rejectedCount'))
+    $totalFindings += (Get-DotfilesIddCritiqueValidCounterValue -InputObject $record -Name 'findingsCount')
+    $totalAccepted += (Get-DotfilesIddCritiqueValidCounterValue -InputObject $record -Name 'acceptedCount')
+    $totalRejected += (Get-DotfilesIddCritiqueValidCounterValue -InputObject $record -Name 'rejectedCount')
     # $records already only contains entries with a validated round
     # (above), so this re-derives the same value via the same
-    # case-sensitive lookup rather than trusting a weaker recheck.
-    if ((Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'round') -eq 1) {
+    # validator rather than trusting a weaker recheck.
+    if ((Get-DotfilesIddCritiqueValidRound -InputObject $record) -eq 1) {
       $loopCount++
     }
   }
@@ -144,6 +160,18 @@ function global:Invoke-DotfilesIddCritiqueTelemetryReport {
   }
 
   $logFile = Join-Path $stateDir 'log.jsonl'
+  # Distinguish "the log path exists but is not a regular file" (e.g. a
+  # directory) from "no telemetry recorded yet" (genuinely absent):
+  # Get-DotfilesIddCritiqueTelemetrySummary's own `-PathType Leaf` check
+  # treats both the same way (all-zero stats), which is misleading
+  # here -- especially since the appender's own fire-and-forget
+  # contract silently drops events for the exact same condition. This
+  # script's own contract is to fail loudly when it cannot do its job,
+  # so only a genuinely absent path gets the zero report.
+  if ((Test-Path -LiteralPath $logFile) -and -not (Test-Path -LiteralPath $logFile -PathType Leaf)) {
+    [Console]::Error.WriteLine("idd-critique-telemetry-report: $logFile exists but is not a regular file")
+    return 1
+  }
   $summary = Get-DotfilesIddCritiqueTelemetrySummary -LogFile $logFile
 
   # Write directly to the real console output stream rather than

@@ -181,3 +181,29 @@ append() {
   assert_failure
   assert_output --partial "cannot locate the telemetry log"
 }
+
+@test "fails clearly when the log path exists but is not a regular file (regression)" {
+  # Distinguish "exists but wrong type" (this script cannot do its job)
+  # from "genuinely absent" (a valid all-zero state) -- both used to
+  # report all-zero stats via the same `[ ! -f ]` check.
+  mkdir -p "$XDG_STATE_HOME/idd-critique/log.jsonl"
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "exists but is not a regular file"
+}
+
+@test "rejects an array-valued round via jq's own type check (regression)" {
+  # jq's `.round | type` for an array value is "array", not "number",
+  # so this is already correctly rejected -- covered here for parity
+  # with the PowerShell twin's equivalent regression test.
+  append '{"round":[1],"findingsCount":[7]}'
+  append '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+  assert_line "Total findings: 1"
+}
