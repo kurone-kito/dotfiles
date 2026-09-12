@@ -1,19 +1,31 @@
 #!/bin/sh
 # Fire-and-forget IDD critique-loop telemetry sink for
-# `critiqueLoop.telemetryHook.command` (see docs/idd-workflow.md's
-# "Repository-configurable critique telemetry hook" section). Reads one
-# JSON payload from stdin per invocation and appends it as one JSONL
-# line to a local state log, for later summarizing with the companion
-# `idd-critique-telemetry-report` script.
+# `critiqueLoop.telemetryHook.command` -- the fire-and-forget, per-round
+# JSONL payload contract this repository adopts from upstream
+# kurone-kito/idd-skill (see dotfiles issue #389 and roadmap #419).
+# Reads one JSON payload from stdin per invocation and appends it as
+# one JSONL line to a local state log, for later summarizing with the
+# companion `idd-critique-telemetry-report` script.
 #
 # This is a pure observability side channel, never a control-flow gate:
 # it must never let its own failure surface as a nonzero exit that the
 # C-phase loop could notice. Every fallible step below is explicitly
 # guarded so the script always exits 0 -- an empty payload, a missing
-# `jq`, an unwritable log path, or anything else all degrade silently.
+# `jq`, an unresolvable or unwritable log path, or anything else all
+# degrade silently.
 set -u
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/idd-critique"
+# Resolve the state directory without tripping `set -u` on a fully
+# unset $HOME (rare, but a fire-and-forget sink must not let this
+# surface as a nonzero exit): fall through to a silent no-op exit when
+# neither variable is available to build a path from.
+if [ -n "${XDG_STATE_HOME:-}" ]; then
+  STATE_DIR="$XDG_STATE_HOME/idd-critique"
+elif [ -n "${HOME:-}" ]; then
+  STATE_DIR="$HOME/.local/state/idd-critique"
+else
+  exit 0
+fi
 LOG_FILE="$STATE_DIR/log.jsonl"
 
 payload=$(cat 2>/dev/null) || exit 0

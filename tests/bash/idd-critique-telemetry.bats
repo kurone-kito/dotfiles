@@ -92,12 +92,19 @@ teardown() {
   assert [ -f "$default_log" ]
 }
 
-@test "always exits 0 even when the log path cannot be created or written" {
+@test "always exits 0 even when the state directory cannot be created" {
   # A plain file occupying the directory segment makes mkdir -p fail.
   mkdir -p "$XDG_STATE_HOME"
   : > "$XDG_STATE_HOME/idd-critique"
 
   run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+
+  assert_success
+  assert_output ""
+}
+
+@test "always exits 0 even when neither XDG_STATE_HOME nor HOME is set" {
+  run env -u XDG_STATE_HOME -u HOME PATH="$PATH" bash -c "printf '{\"round\":1}' | '$SCRIPT'"
 
   assert_success
   assert_output ""

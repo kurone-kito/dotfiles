@@ -68,7 +68,7 @@
       "mode": "combined"
     },
     "telemetryHook": {
-      "command": "/home/kurone-kito/.local/bin/idd-critique-telemetry"
+      "command": "idd-critique-telemetry"
     }
   },
   "worktreeGuard": {

@@ -2,18 +2,27 @@
 # Summarize the JSONL log written by `idd-critique-telemetry`
 # (`${XDG_STATE_HOME:-$HOME/.local/state}/idd-critique/log.jsonl`) for
 # the effect-measurement use case `critiqueLoop.telemetryHook` exists
-# for: total rounds, total findings, total accepted/rejected, and
-# average rounds per loop (loop boundaries are inferred from `round ==
-# 1` entries, each marking the start of a new C-phase self-review
-# loop; a log with no such entry is treated as one loop, to avoid a
-# divide-by-zero).
+# for -- the fire-and-forget, per-round JSONL payload contract this
+# repository adopts from upstream kurone-kito/idd-skill (see dotfiles
+# issue #389 and roadmap #419): total rounds, total findings, total
+# accepted/rejected, and average rounds per loop (loop boundaries are
+# inferred from `round == 1` entries, each marking the start of a new
+# C-phase self-review loop; a log with no such entry is treated as one
+# loop, to avoid a divide-by-zero).
 #
 # Unlike the fire-and-forget appender, this script is an explicit,
 # interactively-run report -- it fails loudly (nonzero exit, message on
 # stderr) when it cannot do its job, rather than degrading silently.
 set -u
 
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/idd-critique"
+if [ -n "${XDG_STATE_HOME:-}" ]; then
+  STATE_DIR="$XDG_STATE_HOME/idd-critique"
+elif [ -n "${HOME:-}" ]; then
+  STATE_DIR="$HOME/.local/state/idd-critique"
+else
+  echo "idd-critique-telemetry-report: neither XDG_STATE_HOME nor HOME is set; cannot locate the telemetry log" >&2
+  exit 1
+fi
 LOG_FILE="$STATE_DIR/log.jsonl"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -32,8 +41,13 @@ fi
 # inside the `inputs` generator (not inside `map`), so one malformed or
 # corrupt line -- which the appender's own no-jq raw fallback can
 # produce -- is silently skipped instead of failing the whole summary.
+# `select(type == "object")` additionally drops a line that is valid
+# JSON but not an object (e.g. a bare scalar) -- `fromjson?` alone only
+# guards against a syntax error, not against this shape mismatch, and
+# without this filter a later `.findingsCount` lookup on a non-object
+# value aborts the whole report instead of skipping just that line.
 jq -R -n -r '
-  [inputs | select(length > 0) | fromjson?]
+  [inputs | select(length > 0) | fromjson? | select(type == "object")]
   | {
       total_rounds: length,
       total_findings: (map(.findingsCount // 0) | add // 0),
