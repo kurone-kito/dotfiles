@@ -51,7 +51,29 @@ trimmed=$(printf '%s' "$payload" | tr -d '[:space:]')
 # well-formed payload's meaning, and it keeps a malformed one on a
 # single JSONL line too.
 if command -v jq >/dev/null 2>&1; then
-  line=$(printf '%s' "$payload" | jq -c -s 'if length == 1 then .[0] else empty end' 2>/dev/null) || line=""
+  # Also reject a non-finite `round`/findingsCount/acceptedCount/
+  # rejectedCount value (NaN or +/-Infinity) here, before jq's own `-c`
+  # serialization launders it: jq accepts the bare `NaN`/`Infinity`
+  # tokens, but serializing Infinity back out produces the *finite*
+  # value 1.7976931348623157e+308 (JSON has no Infinity literal) --
+  # once that finite text is written to the log, the report's own
+  # isnan/isinfinite guard can no longer recognize it as ever having
+  # been non-finite (empirically confirmed end to end). Falling
+  # through to the raw-payload fallback below instead preserves the
+  # literal `NaN`/`Infinity` token as text, which the report's guard
+  # -- parsing fresh, not re-parsing an already-laundered value --
+  # correctly rejects.
+  line=$(printf '%s' "$payload" | jq -c -s '
+    if length == 1 then .[0] else empty end
+    | . as $v
+    | if ($v | type) == "object" and
+         ([$v.round?, $v.findingsCount?, $v.acceptedCount?, $v.rejectedCount?]
+           | map(select(. != null and (type == "number") and (isnan or isinfinite)))
+           | length > 0)
+      then empty
+      else $v
+      end
+  ' 2>/dev/null) || line=""
 fi
 if [ -z "${line:-}" ]; then
   line=$(printf '%s' "$payload" | tr '\n' ' ')

@@ -140,6 +140,22 @@ teardown() {
   assert_line --index 0 '{"round":1} {"round":2}'
 }
 
+@test "preserves a literal Infinity/NaN token verbatim instead of letting jq launder it to a finite number (regression)" {
+  # jq accepts the bare `NaN`/`Infinity` tokens, but its own `-c`
+  # serialization turns Infinity into the *finite* value
+  # 1.7976931348623157e+308 (JSON has no Infinity literal) -- once
+  # that finite text is written to the log, the report's own
+  # isnan/isinfinite guard can no longer recognize it as ever having
+  # been non-finite. Falling back to the raw-payload path instead
+  # preserves the literal token as text, which the report correctly
+  # rejects on a fresh parse (empirically confirmed end to end).
+  run bash -c "printf '{\"round\":1,\"findingsCount\":Infinity}' | '$SCRIPT'"
+
+  assert_success
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{"round":1,"findingsCount":Infinity}'
+}
+
 @test "falls back to the raw payload, newlines flattened, when jq is unavailable" {
   # Scope PATH to only coreutils-equivalent tools plus sh itself, with
   # no jq -- mirroring coderabbit-critique.bats's "fails closed when jq
