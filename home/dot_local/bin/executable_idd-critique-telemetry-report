@@ -50,8 +50,14 @@ fi
 # only substitutes for `null`/`false`, so a present-but-nonnumeric value
 # (e.g. a string) would otherwise reach `add`, which errors on a mixed
 # string/number list and aborts the whole report over one bad record.
+# A record with no positive numeric `round` (e.g. `{}`) is rejected too
+# -- the v0.11 payload contract always includes one, so an entry
+# missing it is not a genuine telemetry round and must not inflate
+# total_rounds/average_rounds_per_loop (kept in parity with the
+# `.ps1` twin's identical check).
 jq -R -n -r '
-  [inputs | select(length > 0) | fromjson? | select(type == "object")]
+  [inputs | select(length > 0) | fromjson? | select(type == "object")
+    | select(.round? != null and (.round | type) == "number" and .round >= 1)]
   | {
       total_rounds: length,
       total_findings: (map(if (.findingsCount | type) == "number" then .findingsCount else 0 end) | add // 0),

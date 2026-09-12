@@ -50,7 +50,18 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
   $records = @()
   if (Test-Path -LiteralPath $LogFile -PathType Leaf) {
     foreach ($rawLine in Get-Content -LiteralPath $LogFile) {
-      if ([string]::IsNullOrWhiteSpace($rawLine)) { continue }
+      $trimmedLine = $rawLine.Trim()
+      if ($trimmedLine.Length -eq 0) { continue }
+      # Require the first non-whitespace character to be `{` before
+      # parsing: `ConvertFrom-Json` enumerates a JSON array's elements
+      # onto the pipeline, so a one-element array (e.g. `[{"round":1}]`)
+      # assigns to $parsed as a bare PSCustomObject -- the later
+      # PSCustomObject type check alone cannot tell that apart from a
+      # genuine bare object, and would wrongly accept an array-wrapped
+      # payload (empirically confirmed). Checking the raw text first
+      # catches this before ConvertFrom-Json's own pipeline behavior
+      # destroys the shape information.
+      if ($trimmedLine[0] -ne '{') { continue }
       try {
         $parsed = $rawLine | ConvertFrom-Json -ErrorAction Stop
       } catch {
@@ -65,6 +76,15 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
       if ($parsed -isnot [System.Management.Automation.PSCustomObject]) {
         continue
       }
+      # Reject a telemetry object with no positive numeric `round`
+      # (the v0.11 payload contract always includes one): an object
+      # like `{}` must not silently inflate TotalRounds /
+      # AverageRoundsPerLoop.
+      if ($parsed.PSObject.Properties.Name -notcontains 'round') { continue }
+      $roundValue = $parsed.round
+      $roundIsNumeric = $roundValue -is [int] -or $roundValue -is [long] -or
+        $roundValue -is [double] -or $roundValue -is [decimal]
+      if (-not $roundIsNumeric -or $roundValue -lt 1) { continue }
       $records += $parsed
     }
   }

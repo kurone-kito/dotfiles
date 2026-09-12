@@ -115,6 +115,37 @@ append() {
   assert_line "Total rejected: 0"
 }
 
+@test "rejects a telemetry object with no round field (regression: must not inflate totals)" {
+  append '{}'
+  append '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+}
+
+@test "rejects a telemetry object with a nonpositive or nonnumeric round" {
+  append '{"round":0,"findingsCount":1}'
+  append '{"round":"x","findingsCount":1}'
+  append '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+}
+
+@test "an array-wrapped single object is not accepted as a bare object (jq type check is array-safe)" {
+  append '[{"round":1}]'
+  append '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+}
+
 @test "defaults a nonnumeric counter value to 0 instead of aborting (regression)" {
   # `// 0` alone only substitutes for null/false, so a present-but-
   # nonnumeric field (e.g. a string) would otherwise reach `add`, which
