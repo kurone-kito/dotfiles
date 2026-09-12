@@ -85,7 +85,12 @@ Describe 'Get-DotfilesIddCritiqueNumericValue' {
 
 Describe 'Get-DotfilesIddCritiqueTelemetrySummary' {
   BeforeEach {
-    $script:LogFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString()) 'log.jsonl'
+    # Nested calls, not a single 3-positional-argument Join-Path: this
+    # suite also runs under Windows PowerShell 5.1 CI, whose Join-Path
+    # only accepts two positional arguments (PowerShell 6+'s
+    # -AdditionalChildPath is what adds support for more).
+    $testDirectory = Join-Path -Path $TestDrive -ChildPath ([Guid]::NewGuid().ToString())
+    $script:LogFile = Join-Path -Path $testDirectory -ChildPath 'log.jsonl'
   }
 
   It 'reports all-zero stats when the log file does not exist' {
@@ -187,6 +192,23 @@ Describe 'Get-DotfilesIddCritiqueTelemetrySummary' {
     @(
       '{"round":0,"findingsCount":1}'
       '{"round":"x","findingsCount":1}'
+      '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+    ) | Set-Content -Path $script:LogFile
+
+    $summary = Get-DotfilesIddCritiqueTelemetrySummary -LogFile $script:LogFile
+
+    $summary.TotalRounds | Should -Be 1
+  }
+
+  It 'rejects a differently-cased round property via exact case-sensitive match (regression)' {
+    # PowerShell's -contains/-notcontains operators and dot-notation
+    # property access are both case-INSENSITIVE by default, so a
+    # foreign/malformed entry spelled `Round` would otherwise be
+    # accepted here even though the POSIX jq twin's case-sensitive
+    # `.round` correctly rejects the same entry (empirically confirmed).
+    New-Item -ItemType Directory -Force -Path (Split-Path $script:LogFile -Parent) | Out-Null
+    @(
+      '{"Round":1,"findingsCount":1}'
       '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
     ) | Set-Content -Path $script:LogFile
 

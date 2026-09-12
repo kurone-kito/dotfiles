@@ -94,6 +94,22 @@ Describe 'ConvertTo-DotfilesIddCritiqueJsonLine' {
     ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[1,2,3]' | Should -Be '[1,2,3]'
   }
 
+  It 'preserves a one-element array''s shape instead of collapsing it to a bare object (regression)' {
+    # ConvertFrom-Json enumerates a JSON array's elements onto its own
+    # output rather than emitting the array as one object, so a
+    # one-element array collapses to a bare object on simple
+    # assignment unless the original text's top-level shape is
+    # separately consulted (empirically confirmed) -- an array-wrapped
+    # payload must not silently become a bare object in the log, which
+    # would defeat downstream shape validation expecting it to still
+    # look like an array.
+    ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[{"round":1}]' | Should -Be '[{"round":1}]'
+  }
+
+  It 'preserves an empty array''s shape' {
+    ConvertTo-DotfilesIddCritiqueJsonLine -Payload '[]' | Should -Be '[]'
+  }
+
   It 'returns $null for two concatenated top-level JSON values (not exactly one value)' {
     # Regression case: a strict single-value guard must not let a
     # multi-record payload silently split into multiple telemetry
@@ -212,5 +228,11 @@ Describe 'Invoke-DotfilesIddCritiqueTelemetry' {
     Invoke-DotfilesIddCritiqueTelemetry -InputText "{`"round`":1}`n{`"round`":2}"
 
     (@(Get-Content -LiteralPath $script:LogFile))[0] | Should -Be '{"round":1} {"round":2}'
+  }
+
+  It 'writes an array-wrapped payload to the log with its array shape preserved (regression)' {
+    Invoke-DotfilesIddCritiqueTelemetry -InputText '[{"round":1}]'
+
+    (@(Get-Content -LiteralPath $script:LogFile))[0] | Should -Be '[{"round":1}]'
   }
 }

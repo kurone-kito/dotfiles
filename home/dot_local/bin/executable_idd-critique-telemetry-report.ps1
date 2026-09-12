@@ -79,9 +79,16 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
       # Reject a telemetry object with no positive numeric `round`
       # (the v0.11 payload contract always includes one): an object
       # like `{}` must not silently inflate TotalRounds /
-      # AverageRoundsPerLoop.
-      if ($parsed.PSObject.Properties.Name -notcontains 'round') { continue }
-      $roundValue = $parsed.round
+      # AverageRoundsPerLoop. Both PowerShell's `-notcontains`/`-contains`
+      # operators and its dot-notation property access are
+      # case-INSENSITIVE by default, so a foreign/malformed entry
+      # spelled `Round` would otherwise be accepted here even though
+      # the POSIX jq twin's case-sensitive `.round` correctly rejects
+      # the same entry (empirically confirmed) -- find the property by
+      # an exact case-sensitive (`-ceq`) name match instead.
+      $roundProperty = $parsed.PSObject.Properties | Where-Object { $_.Name -ceq 'round' } | Select-Object -First 1
+      if ($null -eq $roundProperty) { continue }
+      $roundValue = $roundProperty.Value
       $roundIsNumeric = $roundValue -is [int] -or $roundValue -is [long] -or
         $roundValue -is [double] -or $roundValue -is [decimal]
       if (-not $roundIsNumeric -or $roundValue -lt 1) { continue }

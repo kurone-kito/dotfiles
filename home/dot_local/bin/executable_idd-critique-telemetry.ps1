@@ -40,6 +40,11 @@ function global:Resolve-DotfilesIddCritiqueStateDir {
 function global:ConvertTo-DotfilesIddCritiqueJsonLine {
   param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Payload)
 
+  $trimmed = $Payload.Trim()
+  if ($trimmed.Length -eq 0) {
+    return $null
+  }
+
   # Require the payload to parse as exactly one JSON value.
   # ConvertFrom-Json throws on trailing content after a complete value
   # (empirically confirmed: "Additional text encountered after finished
@@ -47,15 +52,35 @@ function global:ConvertTo-DotfilesIddCritiqueJsonLine {
   # `{"a":1}` immediately followed by `{"b":2}`) already fails here and
   # falls through to the raw fallback below -- the same "exactly one
   # JSON value per invocation" invariant the POSIX twin's slurp-mode jq
-  # guard enforces. A single well-formed value of any JSON type (object,
-  # array, or bare scalar) parses fine and is re-serialized compactly,
-  # matching `jq -c .`'s behavior for a single value.
+  # guard enforces. -InputObject (not a pipe) is used throughout so
+  # ConvertFrom-Json's own output-enumeration behavior (below) is the
+  # only source of array unwrapping to account for.
   try {
-    $parsed = $Payload | ConvertFrom-Json -ErrorAction Stop
+    $parsed = ConvertFrom-Json -InputObject $trimmed -ErrorAction Stop
   } catch {
     return $null
   }
-  return ($parsed | ConvertTo-Json -Compress -Depth 20)
+
+  # ConvertFrom-Json enumerates a JSON array's elements onto its own
+  # output rather than emitting the array as one object: a one-element
+  # array like `[{"round":1}]` therefore collapses $parsed to the bare
+  # inner object, and an empty array `[]` collapses it to $null --
+  # both indistinguishable from a genuine bare object/absence unless
+  # the ORIGINAL text's top-level shape is also consulted. Without this
+  # re-wrap, an array-wrapped payload silently became a bare object on
+  # the way into the log, defeating any downstream shape validation
+  # that (correctly) expects an array-wrapped payload to still look
+  # like one (empirically confirmed regression).
+  $isArrayShaped = $trimmed[0] -eq '['
+  if ($isArrayShaped -and $parsed -isnot [array]) {
+    if ($null -eq $parsed) {
+      $parsed = @()
+    } else {
+      $parsed = , $parsed
+    }
+  }
+
+  return (ConvertTo-Json -InputObject $parsed -Compress -Depth 20)
 }
 
 function global:Invoke-DotfilesIddCritiqueTelemetry {
