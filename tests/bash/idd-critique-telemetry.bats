@@ -110,6 +110,20 @@ teardown() {
   assert_output ""
 }
 
+@test "falls back to the raw payload, newlines flattened, when the payload is not exactly one JSON value (jq present)" {
+  # Regression: plain `jq -c .` emits one output line per top-level
+  # value it sees, so two concatenated top-level JSON values in one
+  # invocation would otherwise silently split into two telemetry
+  # records instead of being treated as one malformed payload.
+  run bash -c "printf '{\"round\":1}\n{\"round\":2}' | '$SCRIPT'"
+
+  assert_success
+  run wc -l "$LOG_FILE"
+  assert_output --partial "1 "
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{"round":1} {"round":2}'
+}
+
 @test "falls back to the raw payload, newlines flattened, when jq is unavailable" {
   # Scope PATH to only coreutils-equivalent tools plus sh itself, with
   # no jq -- mirroring coderabbit-critique.bats's "fails closed when jq

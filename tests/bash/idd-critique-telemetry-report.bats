@@ -115,6 +115,21 @@ append() {
   assert_line "Total rejected: 0"
 }
 
+@test "defaults a nonnumeric counter value to 0 instead of aborting (regression)" {
+  # `// 0` alone only substitutes for null/false, so a present-but-
+  # nonnumeric field (e.g. a string) would otherwise reach `add`, which
+  # errors on a mixed string/number list and aborts the whole report.
+  append '{"round":1,"findingsCount":1,"acceptedCount":"oops","rejectedCount":0}'
+  append '{"round":2,"findingsCount":2,"acceptedCount":2,"rejectedCount":0}'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 2"
+  assert_line "Total findings: 3"
+  assert_line "Total accepted: 2"
+}
+
 @test "fails clearly when jq is not found in PATH" {
   no_jq_bin="$BATS_TEST_TMPDIR/no-jq-bin"
   mkdir -p "$no_jq_bin"

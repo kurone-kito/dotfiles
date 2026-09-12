@@ -38,13 +38,20 @@ trimmed=$(printf '%s' "$payload" | tr -d '[:space:]')
 
 # Canonicalize to a single compact line with jq when available, so a
 # pretty-printed multi-line payload cannot corrupt the one-object-per-
-# line JSONL invariant. When jq is unavailable, or the payload fails to
-# parse as JSON, fall back to the raw payload with any embedded
-# newlines flattened -- a JSON string value can never legally contain a
-# raw newline, so this flattening cannot change a well-formed payload's
-# meaning, and it keeps a malformed one on a single JSONL line too.
+# line JSONL invariant. Slurp mode (`-s`) plus a length check requires
+# the payload to contain EXACTLY ONE top-level JSON value: plain `jq -c
+# .` emits one output line per top-level value it sees, so two
+# concatenated values in one invocation (e.g. `{"a":1}` immediately
+# followed by `{"b":2}`) would otherwise silently split into two
+# telemetry records instead of being treated as one malformed payload.
+# When jq is unavailable, or the payload fails to parse as JSON, or it
+# does not contain exactly one value, fall back to the raw payload with
+# any embedded newlines flattened -- a JSON string value can never
+# legally contain a raw newline, so this flattening cannot change a
+# well-formed payload's meaning, and it keeps a malformed one on a
+# single JSONL line too.
 if command -v jq >/dev/null 2>&1; then
-  line=$(printf '%s' "$payload" | jq -c . 2>/dev/null) || line=""
+  line=$(printf '%s' "$payload" | jq -c -s 'if length == 1 then .[0] else empty end' 2>/dev/null) || line=""
 fi
 if [ -z "${line:-}" ]; then
   line=$(printf '%s' "$payload" | tr '\n' ' ')

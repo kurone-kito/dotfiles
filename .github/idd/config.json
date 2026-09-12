@@ -66,9 +66,6 @@
     "delegate": {
       "command": "coderabbit-critique",
       "mode": "combined"
-    },
-    "telemetryHook": {
-      "command": "idd-critique-telemetry"
     }
   },
   "worktreeGuard": {

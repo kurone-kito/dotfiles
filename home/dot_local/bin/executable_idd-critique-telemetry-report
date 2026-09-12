@@ -46,13 +46,17 @@ fi
 # guards against a syntax error, not against this shape mismatch, and
 # without this filter a later `.findingsCount` lookup on a non-object
 # value aborts the whole report instead of skipping just that line.
+# Each counter field is also type-checked before summing: `// 0` alone
+# only substitutes for `null`/`false`, so a present-but-nonnumeric value
+# (e.g. a string) would otherwise reach `add`, which errors on a mixed
+# string/number list and aborts the whole report over one bad record.
 jq -R -n -r '
   [inputs | select(length > 0) | fromjson? | select(type == "object")]
   | {
       total_rounds: length,
-      total_findings: (map(.findingsCount // 0) | add // 0),
-      total_accepted: (map(.acceptedCount // 0) | add // 0),
-      total_rejected: (map(.rejectedCount // 0) | add // 0),
+      total_findings: (map(if (.findingsCount | type) == "number" then .findingsCount else 0 end) | add // 0),
+      total_accepted: (map(if (.acceptedCount | type) == "number" then .acceptedCount else 0 end) | add // 0),
+      total_rejected: (map(if (.rejectedCount | type) == "number" then .rejectedCount else 0 end) | add // 0),
       loop_count: (map(select(.round == 1)) | length)
     }
   | .loop_count = (if .loop_count == 0 then 1 else .loop_count end)
