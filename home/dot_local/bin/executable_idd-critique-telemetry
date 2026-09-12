@@ -1,0 +1,44 @@
+#!/bin/sh
+# Fire-and-forget IDD critique-loop telemetry sink for
+# `critiqueLoop.telemetryHook.command` (see docs/idd-workflow.md's
+# "Repository-configurable critique telemetry hook" section). Reads one
+# JSON payload from stdin per invocation and appends it as one JSONL
+# line to a local state log, for later summarizing with the companion
+# `idd-critique-telemetry-report` script.
+#
+# This is a pure observability side channel, never a control-flow gate:
+# it must never let its own failure surface as a nonzero exit that the
+# C-phase loop could notice. Every fallible step below is explicitly
+# guarded so the script always exits 0 -- an empty payload, a missing
+# `jq`, an unwritable log path, or anything else all degrade silently.
+set -u
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/idd-critique"
+LOG_FILE="$STATE_DIR/log.jsonl"
+
+payload=$(cat 2>/dev/null) || exit 0
+
+# Trim to check for "empty or whitespace-only" without acting on the
+# trimmed value itself (a real payload's own leading/trailing
+# whitespace, if any, is preserved when writing below).
+trimmed=$(printf '%s' "$payload" | tr -d '[:space:]')
+[ -n "$trimmed" ] || exit 0
+
+# Canonicalize to a single compact line with jq when available, so a
+# pretty-printed multi-line payload cannot corrupt the one-object-per-
+# line JSONL invariant. When jq is unavailable, or the payload fails to
+# parse as JSON, fall back to the raw payload with any embedded
+# newlines flattened -- a JSON string value can never legally contain a
+# raw newline, so this flattening cannot change a well-formed payload's
+# meaning, and it keeps a malformed one on a single JSONL line too.
+if command -v jq >/dev/null 2>&1; then
+  line=$(printf '%s' "$payload" | jq -c . 2>/dev/null) || line=""
+fi
+if [ -z "${line:-}" ]; then
+  line=$(printf '%s' "$payload" | tr '\n' ' ')
+fi
+
+mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
+printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || exit 0
+
+exit 0

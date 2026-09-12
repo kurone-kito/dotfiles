@@ -66,6 +66,9 @@
     "delegate": {
       "command": "coderabbit-critique",
       "mode": "combined"
+    },
+    "telemetryHook": {
+      "command": "/home/kurone-kito/.local/bin/idd-critique-telemetry"
     }
   },
   "worktreeGuard": {

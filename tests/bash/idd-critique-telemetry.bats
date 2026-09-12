@@ -1,0 +1,123 @@
+#!/usr/bin/env bats
+#
+# Tests for idd-critique-telemetry: a fire-and-forget JSONL log sink for
+# critiqueLoop.telemetryHook.command.
+
+bats_require_minimum_version 1.5.0
+
+setup() {
+  load 'helpers/bats-support/load'
+  load 'helpers/bats-assert/load'
+  load 'helpers/bats-file/load'
+
+  export HOME="$BATS_TEST_TMPDIR"
+  SCRIPT="$BATS_TEST_DIRNAME/../../home/dot_local/bin/executable_idd-critique-telemetry"
+
+  # Pin XDG_STATE_HOME explicitly for most tests, rather than letting it
+  # leak in from the real environment (00-xdg.sh exports it in an
+  # interactive shell, but bats does not source it) -- a test that
+  # forgot this could otherwise append into the real
+  # ~/.local/state/idd-critique/log.jsonl.
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
+  LOG_FILE="$XDG_STATE_HOME/idd-critique/log.jsonl"
+}
+
+teardown() {
+  unset XDG_STATE_HOME
+}
+
+@test "appends a well-formed JSON payload as one JSONL line" {
+  run bash -c "printf '%s' '{\"phase\":\"C\",\"round\":1,\"findingsCount\":3}' | '$SCRIPT'"
+
+  assert_success
+  assert [ -f "$LOG_FILE" ]
+  run wc -l "$LOG_FILE"
+  assert_output --partial "1 "
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{"phase":"C","round":1,"findingsCount":3}'
+}
+
+@test "compacts a pretty-printed multi-line payload to one JSONL line" {
+  run bash -c "printf '{\n  \"round\": 2,\n  \"findingsCount\": 1\n}' | '$SCRIPT'"
+
+  assert_success
+  run wc -l "$LOG_FILE"
+  assert_output --partial "1 "
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{"round":2,"findingsCount":1}'
+}
+
+@test "appends one line per invocation, in order" {
+  run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+  assert_success
+  run bash -c "printf '{\"round\":2}' | '$SCRIPT'"
+  assert_success
+
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{"round":1}'
+  assert_line --index 1 '{"round":2}'
+}
+
+@test "creates the parent state directory when it does not already exist" {
+  assert [ ! -d "$XDG_STATE_HOME/idd-critique" ]
+
+  run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+
+  assert_success
+  assert [ -d "$XDG_STATE_HOME/idd-critique" ]
+  assert [ -f "$LOG_FILE" ]
+}
+
+@test "writes nothing for empty stdin, but still exits 0" {
+  run bash -c "printf '' | '$SCRIPT'"
+
+  assert_success
+  assert [ ! -e "$LOG_FILE" ]
+}
+
+@test "writes nothing for whitespace-only stdin, but still exits 0" {
+  run bash -c "printf '   \n  \t \n' | '$SCRIPT'"
+
+  assert_success
+  assert [ ! -e "$LOG_FILE" ]
+}
+
+@test "falls back to \$HOME/.local/state when XDG_STATE_HOME is unset" {
+  unset XDG_STATE_HOME
+  default_log="$HOME/.local/state/idd-critique/log.jsonl"
+
+  run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+
+  assert_success
+  assert [ -f "$default_log" ]
+}
+
+@test "always exits 0 even when the log path cannot be created or written" {
+  # A plain file occupying the directory segment makes mkdir -p fail.
+  mkdir -p "$XDG_STATE_HOME"
+  : > "$XDG_STATE_HOME/idd-critique"
+
+  run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+
+  assert_success
+  assert_output ""
+}
+
+@test "falls back to the raw payload, newlines flattened, when jq is unavailable" {
+  # Scope PATH to only coreutils-equivalent tools plus sh itself, with
+  # no jq -- mirroring coderabbit-critique.bats's "fails closed when jq
+  # is not found" technique of scoping PATH for the invocation only.
+  no_jq_bin="$BATS_TEST_TMPDIR/no-jq-bin"
+  mkdir -p "$no_jq_bin"
+  for tool in cat mkdir tr printf sh dirname basename rm mv cp wc bash; do
+    tool_path=$(command -v "$tool" 2>/dev/null) || continue
+    ln -sf "$tool_path" "$no_jq_bin/$tool"
+  done
+
+  run env PATH="$no_jq_bin" XDG_STATE_HOME="$XDG_STATE_HOME" HOME="$HOME" \
+    bash -c "printf '{\n  \"round\": 1,\n  \"findingsCount\": 2\n}' | '$SCRIPT'"
+
+  assert_success
+  run cat "$LOG_FILE"
+  assert_line --index 0 '{   "round": 1,   "findingsCount": 2 }'
+}
