@@ -44,19 +44,38 @@ function global:Resolve-DotfilesIddCritiqueReportStateDir {
 # no longer tell it apart from a genuine scalar `"round":1`). Folding
 # lookup and validation into one scope means no partially-validated
 # raw value ever crosses such a boundary.
+function global:Test-DotfilesIddCritiqueFiniteNumber {
+  # A genuine (non-array) int/long/double/decimal that is also not
+  # NaN or +/-Infinity: ConvertFrom-Json accepts the bare `NaN` /
+  # `Infinity` tokens (not valid JSON, but reachable via the
+  # appender's own raw-fallback path, which preserves malformed input
+  # verbatim) as a real System.Double, which then passes an
+  # `-is [double]` check -- and .NET arithmetic propagates NaN through
+  # any later `+=`, silently poisoning the whole running total (kept
+  # in parity with the POSIX jq twin's identical `isnan`/`isinfinite`
+  # guard; empirically confirmed for both platforms).
+  param($Value)
+
+  if ($Value -is [array]) { return $false }
+  if ($Value -isnot [int] -and $Value -isnot [long] -and $Value -isnot [double] -and $Value -isnot [decimal]) {
+    return $false
+  }
+  if ($Value -is [double] -and ([double]::IsNaN($Value) -or [double]::IsInfinity($Value))) {
+    return $false
+  }
+  return $true
+}
+
 function global:Get-DotfilesIddCritiqueValidRound {
   # Returns the record's `round` value only when there is exactly one
   # case-sensitive (`-ceq`) `round` property whose value is a genuine
-  # (non-array) positive numeric scalar; otherwise $null.
+  # finite positive numeric scalar; otherwise $null.
   param($InputObject)
 
   $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq 'round' })
   if ($matchingProperties.Count -ne 1) { return $null }
   $value = $matchingProperties[0].Value
-  if ($value -is [array]) { return $null }
-  if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) {
-    return $null
-  }
+  if (-not (Test-DotfilesIddCritiqueFiniteNumber -Value $value)) { return $null }
   if ($value -lt 1) { return $null }
   return $value
 }
@@ -64,19 +83,16 @@ function global:Get-DotfilesIddCritiqueValidRound {
 function global:Get-DotfilesIddCritiqueValidCounterValue {
   # Returns the named counter field's value when there is exactly one
   # case-sensitive (`-ceq`) property by that name whose value is a
-  # genuine (non-array) numeric scalar; otherwise 0 -- the same
+  # genuine finite numeric scalar; otherwise 0 -- the same
   # fire-and-forget-friendly default the POSIX twin's
-  # `(.findingsCount | type) == "number"` guard applies for a missing,
-  # wrong-shape, or nonnumeric counter.
+  # `(.findingsCount | is_finite_number)` guard applies for a missing,
+  # wrong-shape, nonnumeric, or non-finite counter.
   param($InputObject, [Parameter(Mandatory)] [string] $Name)
 
   $matchingProperties = @($InputObject.PSObject.Properties | Where-Object { $_.Name -ceq $Name })
   if ($matchingProperties.Count -ne 1) { return 0 }
   $value = $matchingProperties[0].Value
-  if ($value -is [array]) { return 0 }
-  if ($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) {
-    return 0
-  }
+  if (-not (Test-DotfilesIddCritiqueFiniteNumber -Value $value)) { return 0 }
   return $value
 }
 

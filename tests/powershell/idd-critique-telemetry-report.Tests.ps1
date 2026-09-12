@@ -106,6 +106,23 @@ Describe 'Get-DotfilesIddCritiqueValidRound' {
     $obj = ConvertFrom-Json -InputObject '{"round":[1]}'
     Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
   }
+
+  It 'returns $null when round is NaN (regression)' {
+    # ConvertFrom-Json accepts the bare `NaN` token (not valid JSON,
+    # but reachable via the appender's own raw fallback) as a genuine
+    # System.Double, which would otherwise pass an `-is [double]`
+    # check -- and .NET arithmetic propagates NaN through any later
+    # `+=`, silently poisoning the whole running total (empirically
+    # confirmed; kept in parity with the POSIX jq twin's identical
+    # isnan/isinfinite guard).
+    $obj = ConvertFrom-Json -InputObject '{"round":NaN}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
+
+  It 'returns $null when round is Infinity (regression)' {
+    $obj = ConvertFrom-Json -InputObject '{"round":Infinity}'
+    Get-DotfilesIddCritiqueValidRound -InputObject $obj | Should -BeNullOrEmpty
+  }
 }
 
 Describe 'Get-DotfilesIddCritiqueValidCounterValue' {
@@ -131,6 +148,16 @@ Describe 'Get-DotfilesIddCritiqueValidCounterValue' {
 
   It 'defaults to 0 for an array-valued counter (regression)' {
     $obj = ConvertFrom-Json -InputObject '{"findingsCount":[7]}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for a NaN counter (regression)' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":NaN}'
+    Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
+  }
+
+  It 'defaults to 0 for an Infinity counter (regression)' {
+    $obj = ConvertFrom-Json -InputObject '{"findingsCount":Infinity}'
     Get-DotfilesIddCritiqueValidCounterValue -InputObject $obj -Name 'findingsCount' | Should -Be 0
   }
 }

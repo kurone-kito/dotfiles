@@ -66,15 +66,23 @@ fi
 # -- the v0.11 payload contract always includes one, so an entry
 # missing it is not a genuine telemetry round and must not inflate
 # total_rounds/average_rounds_per_loop (kept in parity with the
-# `.ps1` twin's identical check).
+# `.ps1` twin's identical check). `is_finite_number` additionally
+# requires the value to be neither NaN nor +/-Infinity: jq (at least
+# 1.7+) accepts the bare `NaN`/`Infinity` tokens in `fromjson` -- not
+# valid JSON, but reachable via the appender's own raw-fallback path,
+# which preserves malformed input verbatim -- reporting `type` as
+# "number" for them despite `NaN` itself serializing back out as
+# `null`, which would otherwise poison the whole `add` result to
+# `null` over one bad record (empirically confirmed).
 jq -R -n -r '
+  def is_finite_number: type == "number" and (isnan | not) and (isinfinite | not);
   [inputs | select(length > 0) | fromjson? | select(type == "object")
-    | select(.round? != null and (.round | type) == "number" and .round >= 1)]
+    | select(.round? != null and (.round | is_finite_number) and .round >= 1)]
   | {
       total_rounds: length,
-      total_findings: (map(if (.findingsCount | type) == "number" then .findingsCount else 0 end) | add // 0),
-      total_accepted: (map(if (.acceptedCount | type) == "number" then .acceptedCount else 0 end) | add // 0),
-      total_rejected: (map(if (.rejectedCount | type) == "number" then .rejectedCount else 0 end) | add // 0),
+      total_findings: (map(if (.findingsCount | is_finite_number) then .findingsCount else 0 end) | add // 0),
+      total_accepted: (map(if (.acceptedCount | is_finite_number) then .acceptedCount else 0 end) | add // 0),
+      total_rejected: (map(if (.rejectedCount | is_finite_number) then .rejectedCount else 0 end) | add // 0),
       loop_count: (map(select(.round == 1)) | length)
     }
   | .loop_count = (if .loop_count == 0 then 1 else .loop_count end)

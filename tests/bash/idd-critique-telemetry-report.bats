@@ -194,6 +194,46 @@ append() {
   assert_output --partial "exists but is not a regular file"
 }
 
+@test "rejects a NaN counter value instead of poisoning the whole sum (regression)" {
+  # jq accepts the bare `NaN` token in fromjson (not valid JSON, but
+  # reachable via the appender's own no-jq raw fallback, which
+  # preserves malformed input verbatim) and reports its `type` as
+  # "number" -- without an explicit isnan/isinfinite check, this
+  # entry would pass the numeric-type guard, and jq's arithmetic then
+  # propagates NaN through the whole `add`, printing "Total findings:
+  # null" instead of just skipping this one bad record (empirically
+  # confirmed). Written directly to the log (not via the appender,
+  # whose own jq normalization step already converts NaN to null on
+  # the way in when jq is available -- this test exercises the report
+  # script's own defense for when it is not, or the log was written by
+  # something else).
+  mkdir -p "$XDG_STATE_HOME/idd-critique"
+  {
+    printf '%s\n' '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+    printf '%s\n' '{"round":1,"findingsCount":NaN}'
+  } > "$LOG_FILE"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 2"
+  assert_line "Total findings: 1"
+}
+
+@test "rejects an Infinity round/counter value (regression)" {
+  mkdir -p "$XDG_STATE_HOME/idd-critique"
+  {
+    printf '%s\n' '{"round":1,"findingsCount":1,"acceptedCount":1,"rejectedCount":0}'
+    printf '%s\n' '{"round":Infinity,"findingsCount":Infinity}'
+  } > "$LOG_FILE"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_line "Total rounds: 1"
+  assert_line "Total findings: 1"
+}
+
 @test "rejects an array-valued round via jq's own type check (regression)" {
   # jq's `.round | type` for an array value is "array", not "number",
   # so this is already correctly rejected -- covered here for parity
