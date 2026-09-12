@@ -200,6 +200,26 @@ Describe 'Get-DotfilesIddCritiqueTelemetrySummary' {
     $summary.TotalRounds | Should -Be 1
   }
 
+  It 'ignores differently-cased counter fields via exact case-sensitive match (regression)' {
+    # Same class of gap as the round-field regression above, for the
+    # findingsCount/acceptedCount/rejectedCount fields: a foreign or
+    # malformed record spelled e.g. `FindingsCount` must not be picked
+    # up by PowerShell's default case-insensitive property access,
+    # since the POSIX jq twin's case-sensitive lookups ignore it too.
+    New-Item -ItemType Directory -Force -Path (Split-Path $script:LogFile -Parent) | Out-Null
+    @(
+      '{"round":1,"FindingsCount":99,"AcceptedCount":99,"RejectedCount":99}'
+      '{"round":2,"findingsCount":1,"acceptedCount":1,"rejectedCount":1}'
+    ) | Set-Content -Path $script:LogFile
+
+    $summary = Get-DotfilesIddCritiqueTelemetrySummary -LogFile $script:LogFile
+
+    $summary.TotalRounds | Should -Be 2
+    $summary.TotalFindings | Should -Be 1
+    $summary.TotalAccepted | Should -Be 1
+    $summary.TotalRejected | Should -Be 1
+  }
+
   It 'rejects a differently-cased round property via exact case-sensitive match (regression)' {
     # PowerShell's -contains/-notcontains operators and dot-notation
     # property access are both case-INSENSITIVE by default, so a

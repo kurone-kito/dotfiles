@@ -31,6 +31,23 @@ function global:Resolve-DotfilesIddCritiqueReportStateDir {
   return $null
 }
 
+function global:Get-DotfilesIddCritiqueCaseSensitiveValue {
+  # PowerShell's dot-notation property access and its
+  # -contains/-notcontains operators are case-INSENSITIVE by default,
+  # so a foreign/malformed record spelled e.g. `Round` or
+  # `FindingsCount` would otherwise be picked up here even though the
+  # POSIX jq twin's case-sensitive field lookups correctly ignore it,
+  # producing platform-dependent totals for the same log (empirically
+  # confirmed for both `round` and the three counter fields). Every
+  # field this script reads from a parsed record goes through this
+  # exact case-sensitive (`-ceq`) name match instead.
+  param($InputObject, [Parameter(Mandatory)] [string] $Name)
+
+  $property = $InputObject.PSObject.Properties | Where-Object { $_.Name -ceq $Name } | Select-Object -First 1
+  if ($null -eq $property) { return $null }
+  return $property.Value
+}
+
 function global:Get-DotfilesIddCritiqueNumericValue {
   param($Value)
 
@@ -79,16 +96,9 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
       # Reject a telemetry object with no positive numeric `round`
       # (the v0.11 payload contract always includes one): an object
       # like `{}` must not silently inflate TotalRounds /
-      # AverageRoundsPerLoop. Both PowerShell's `-notcontains`/`-contains`
-      # operators and its dot-notation property access are
-      # case-INSENSITIVE by default, so a foreign/malformed entry
-      # spelled `Round` would otherwise be accepted here even though
-      # the POSIX jq twin's case-sensitive `.round` correctly rejects
-      # the same entry (empirically confirmed) -- find the property by
-      # an exact case-sensitive (`-ceq`) name match instead.
-      $roundProperty = $parsed.PSObject.Properties | Where-Object { $_.Name -ceq 'round' } | Select-Object -First 1
-      if ($null -eq $roundProperty) { continue }
-      $roundValue = $roundProperty.Value
+      # AverageRoundsPerLoop.
+      $roundValue = Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $parsed -Name 'round'
+      if ($null -eq $roundValue) { continue }
       $roundIsNumeric = $roundValue -is [int] -or $roundValue -is [long] -or
         $roundValue -is [double] -or $roundValue -is [decimal]
       if (-not $roundIsNumeric -or $roundValue -lt 1) { continue }
@@ -102,10 +112,13 @@ function global:Get-DotfilesIddCritiqueTelemetrySummary {
   $totalRejected = 0
   $loopCount = 0
   foreach ($record in $records) {
-    $totalFindings += (Get-DotfilesIddCritiqueNumericValue $record.findingsCount)
-    $totalAccepted += (Get-DotfilesIddCritiqueNumericValue $record.acceptedCount)
-    $totalRejected += (Get-DotfilesIddCritiqueNumericValue $record.rejectedCount)
-    if (($record.PSObject.Properties.Name -contains 'round') -and ($record.round -eq 1)) {
+    $totalFindings += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'findingsCount'))
+    $totalAccepted += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'acceptedCount'))
+    $totalRejected += (Get-DotfilesIddCritiqueNumericValue (Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'rejectedCount'))
+    # $records already only contains entries with a validated round
+    # (above), so this re-derives the same value via the same
+    # case-sensitive lookup rather than trusting a weaker recheck.
+    if ((Get-DotfilesIddCritiqueCaseSensitiveValue -InputObject $record -Name 'round') -eq 1) {
       $loopCount++
     }
   }
