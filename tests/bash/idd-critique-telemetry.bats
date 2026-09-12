@@ -103,6 +103,22 @@ teardown() {
   assert_output ""
 }
 
+@test "always exits 0 and leaks no diagnostic when log.jsonl itself is unexpectedly a directory (regression)" {
+  # Redirections apply left to right, so a bare `cmd >> file
+  # 2>/dev/null` still leaks a shell "cannot create" diagnostic to real
+  # stderr when `>> file` itself fails to open (e.g. log.jsonl exists
+  # as a directory) -- that failure happens before `2>/dev/null` takes
+  # effect (empirically confirmed). The append must be grouped so
+  # `2>/dev/null` also covers the redirection-setup failure itself, not
+  # just an ordinary write failure.
+  mkdir -p "$XDG_STATE_HOME/idd-critique/log.jsonl"
+
+  run bash -c "printf '{\"round\":1}' | '$SCRIPT'"
+
+  assert_success
+  assert_output ""
+}
+
 @test "always exits 0 even when neither XDG_STATE_HOME nor HOME is set" {
   run env -u XDG_STATE_HOME -u HOME PATH="$PATH" bash -c "printf '{\"round\":1}' | '$SCRIPT'"
 

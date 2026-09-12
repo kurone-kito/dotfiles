@@ -58,6 +58,14 @@ if [ -z "${line:-}" ]; then
 fi
 
 mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
-printf '%s\n' "$line" >> "$LOG_FILE" 2>/dev/null || exit 0
+# Group the append so `2>/dev/null` also suppresses the shell's own
+# redirection-setup error, not just a normal write failure: redirections
+# are applied left to right, so a bare `cmd >> file 2>/dev/null` still
+# leaks a "cannot create" diagnostic to real stderr when `>> file`
+# itself fails to open (e.g. log.jsonl unexpectedly exists as a
+# directory) -- that failure happens before `2>/dev/null` takes effect
+# (empirically confirmed). Applying `2>/dev/null` to the whole group
+# suppresses it too.
+{ printf '%s\n' "$line" >> "$LOG_FILE"; } 2>/dev/null || exit 0
 
 exit 0
