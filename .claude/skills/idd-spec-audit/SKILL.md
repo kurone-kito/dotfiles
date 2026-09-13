@@ -51,9 +51,11 @@ model.
   `docs/idd-autonomy-contract.md` (R4's reversible/irreversible source
   of truth), both at `docs/` in an installed repository. Both are read
   in full every pass.
+<!-- dotfiles-divergence: installed-bundle-reference-routing -->
 - **Out of scope as an audit target / finding source**: this skill's
-  own bundle wherever it is installed (`skills/idd-spec-audit/**` — the
-  skill necessarily reads its own bundle, this `SKILL.md` and
+  own bundle at its actual installed location
+  (`.claude/skills/idd-spec-audit/**` in this repository — the skill
+  necessarily reads its own bundle, this `SKILL.md` and
   `references/report-template.md`, to run at all, but no finding ever
   cites a file there); any generated mirror tree in this installation,
   if one exists
