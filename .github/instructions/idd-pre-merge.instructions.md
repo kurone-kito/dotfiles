@@ -426,7 +426,12 @@ turns an operator-visible failure into a silent stall.
   break the claim revalidation gate's `git branch --show-current`
   check — followed by `git reset --hard` to the current PR HEAD SHA so
   the worktree lands exactly there while staying attached to the
-  claimed branch) — D3.5 step 7's `git log` and D3.7's
+  claimed branch). First confirm the worktree is clean
+  (`git status --porcelain`); a resumed or externally-touched worktree
+  can hold uncommitted local changes unrelated to the stale HEAD, and
+  `git reset --hard` discards them irrecoverably. If dirty, stop and
+  post a hold note rather than discarding local work; only an
+  operator-confirmed discard may proceed. D3.5 step 7's `git log` and D3.7's
   inherited `git diff` both read local git state, not the remote PR
   directly. Then re-run `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the

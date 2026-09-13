@@ -171,7 +171,13 @@ Before any mutating action in F3, apply the
      `git checkout <SHA>`, which would break the claim revalidation
      gate's `git branch --show-current` check — followed by
      `git reset --hard "${PR_HEAD_SHA_F3}"` so the worktree lands
-     exactly there while staying attached to the claimed branch) —
+     exactly there while staying attached to the claimed branch). First
+     confirm the worktree is clean (`git status --porcelain`); a
+     resumed or externally-touched worktree can hold uncommitted local
+     changes unrelated to the stale HEAD, and `git reset --hard`
+     discards them irrecoverably. If dirty, stop and post a hold note
+     rather than discarding local work; only an operator-confirmed
+     discard may proceed.
      D3.5 step 7's
      `git log` and D3.7's inherited `git diff` both read local git
      state, not the remote PR directly. Skip D3.5 steps 6-7 under the
