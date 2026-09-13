@@ -785,7 +785,7 @@ Current slugs:
 | `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294, #382, #421                   |
 | `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233, #383, #422                         |
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383, #424                         |
-| `lite-telemetry-parity`              | `docs/idd-workflow.md`'s note that `lite/idd-work-lite.instructions.md` actually invokes `critiqueLoop.telemetryHook` from its own C1/C2/C4 steps, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; this note documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422                                     |
+| `lite-telemetry-parity`              | `lite/idd-work-lite.instructions.md`'s own C2/C4 `critiqueLoop.telemetryHook` call sites (its actual point of use), plus `docs/idd-workflow.md`'s note that the lite profile actually invokes the hook there, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; the marker documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422                                     |
 | `ci-companion-topology`              | `.github/instructions/idd-ci.instructions.md`'s corrected rerun-mechanics passage describing the `idd-advisory-convergence-comment.yml` companion-refresh topology, in place of upstream's own still-stale `v0.11.0` template text (filed upstream as [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966); see the deferred-upstream-issues ledger below)                                       | #421, #425                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
@@ -883,20 +883,26 @@ its marker -- and every other then-registered slug's marker -- still
 has at least one live, findable instance; none has silently reverted
 to upstream's default.
 
-**Register completeness gap found and closed (Copilot review of this
+**Register completeness gap found and closed (Codex review of this
 PR, dotfiles#432)**: the grep pass above was scoped to the **11
 already-registered** slugs, not to every distinct `dotfiles-divergence:
 <slug>` string actually present in the repository -- an unbiased
-repo-wide search (`grep -rho 'dotfiles-divergence: [a-z-]*'` over the
-same file set, deduplicated) is the check that actually proves
-completeness, and running it found a **twelfth live slug**,
-`lite-telemetry-parity` (`docs/idd-workflow.md`), that predates this
-round (added alongside Track #421's own review-fix round, marked
-during Track #422's own PR #431 review-fix round) but had never
-gained its own Register row. Added above, attributed to #421/#422 per
-the marker's own history. Separately, this same review round surfaced
-a **thirteenth**, brand-new slug this track itself adds:
-`ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
+repo-wide search (`grep -rhoE 'dotfiles-divergence: [a-z-]+'` over the
+same file set excluding `.git`, deduplicated -- note the `+` quantifier,
+not `*`: a zero-width match would otherwise let this very sentence's
+own `dotfiles-divergence: <slug>` prose example count as a spurious
+empty-slug hit) is the check that actually proves completeness, and
+running it found a **twelfth live slug**, `lite-telemetry-parity`
+(`docs/idd-workflow.md`, with the actual behavioral divergence it
+documents at `lite/idd-work-lite.instructions.md`'s own
+`critiqueLoop.telemetryHook` call sites -- now marked there too, at
+its point of use, not only in the cross-referencing prose), that
+predates this round (added alongside Track #421's own review-fix
+round, marked during Track #422's own PR #431 review-fix round) but
+had never gained its own Register row. Added above, attributed to #421
+and #422 per the marker's own history. Separately, this same review
+round surfaced a **thirteenth**, brand-new slug this track itself
+adds: `ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
 marking the local rerun-mechanics correction the deferred-upstream-issues
 ledger below (`kurone-kito/idd-skill#2966`) explains is still absent
 from upstream's own template -- also added above. The Register now
