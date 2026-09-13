@@ -22,6 +22,7 @@ bats_require_minimum_version 1.5.0
 setup() {
   load 'helpers/bats-support/load'
   load 'helpers/bats-assert/load'
+  load 'helpers/bats-file/load'
 
   command -v yq > /dev/null 2>&1 || skip "yq not available"
 

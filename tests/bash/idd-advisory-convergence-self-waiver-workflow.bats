@@ -28,6 +28,7 @@ bats_require_minimum_version 1.5.0
 setup() {
   load 'helpers/bats-support/load'
   load 'helpers/bats-assert/load'
+  load 'helpers/bats-file/load'
 
   command -v yq > /dev/null 2>&1 || skip "yq not available"
 
@@ -142,10 +143,24 @@ checkout_step() {
   # pull_request_target) -- the whole point of the transitional
   # trust-boundary tradeoff this workflow's header documents -- must be
   # a deliberate edit to this test, not an unnoticed side effect of an
-  # unrelated change. mikefarah/yq's `keys` preserves the mapping's own
-  # source order here (verified empirically against this file), not
-  # lexicographic order, so this expected array intentionally matches
-  # the `on:` block's own declared order rather than alphabetical order.
+  # unrelated change.
+  #
+  # Repeatedly flagged in automated review as "yq sorts keys
+  # alphabetically" (PR #429) -- false for mikefarah/yq (this repo's
+  # `yq`), verified multiple ways: (1) this exact assertion passes both
+  # locally and on the actual GitHub-hosted `ubuntu-latest` runner (see
+  # this PR's own "Bash tests (bats)" CI run); (2) `keys_unsorted` --
+  # cited as yq's order-preserving counterpart to a sorting `keys` --
+  # is not even a valid operator in the installed yq (v4.53.6): it
+  # errors as unrecognized syntax, not merely "sorts differently". The
+  # sort/keys_unsorted split being cited is real, but it describes
+  # POSIX `jq` operating on JSON (where object key order is not part of
+  # the data model), not `yq` operating on YAML (where yq's internal
+  # node tree preserves the mapping's own declared order and `keys`
+  # just walks it) -- an understandable conflation given yq deliberately
+  # mirrors jq's query syntax, but not the same tool or behavior. Do not
+  # "fix" this by resorting the expected array without re-running both
+  # checks above first.
   run yq -o=json -I=0 '.on | keys' "$WORKFLOW"
   assert_success
   assert_output '["pull_request","pull_request_target","workflow_dispatch","workflow_call"]'
