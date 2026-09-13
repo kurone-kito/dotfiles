@@ -161,7 +161,8 @@ Before any mutating action in F3, apply the
      ([Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570));
    - all required CI checks pass for the current head;
    - claim ownership still uses your `{claim-id}`;
-   - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
+   - <!-- dotfiles-divergence: pre-merge-reset-guard -->
+     D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
      been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
      that landed between F2 and this final gate, for example a
      required `{development-branch}` sync. Before running them,

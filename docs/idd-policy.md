@@ -795,7 +795,7 @@ Current slugs:
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383, #424                         |
 | `lite-telemetry-parity`              | `lite/idd-work-lite.instructions.md`'s own C2/C4 `critiqueLoop.telemetryHook` call sites (its actual point of use), plus `docs/idd-workflow.md`'s note that the lite profile actually invokes the hook there, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; the marker documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422, #425                               |
 | `ci-companion-topology`              | `.github/instructions/idd-ci.instructions.md`'s corrected rerun-mechanics passage describing the `idd-advisory-convergence-comment.yml` companion-refresh topology, in place of upstream's own still-stale `v0.11.0` template text (filed upstream as [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966); see the deferred-upstream-issues ledger below)                                       | #421, #425                                     |
-| `pre-merge-reset-guard`              | `idd-pre-merge.instructions.md`'s D3.5/D3.7 re-verification bullet, rewritten to avoid a detached-`HEAD` `git checkout <SHA>` (using `git switch {branch-name}` instead, so the claim-revalidation gate's `git branch --show-current` check still works) and to refuse `git reset --hard` when the worktree is dirty or local `HEAD` is not an ancestor of the PR's current HEAD -- both real data-loss guards upstream's own `v0.11.0` text does not have (upstream: a bare "`git fetch` plus `git checkout`/`git reset --hard`" with no dirty/divergence check) | #421, #425                                     |
+| `pre-merge-reset-guard`              | The same dirty-worktree/non-ancestor `git reset --hard` guard and detached-`HEAD`-avoiding `git switch {branch-name}` (instead of `git checkout <SHA>`, so the claim-revalidation gate's `git branch --show-current` check still works), rewritten into **both** of its two independent copies: `idd-pre-merge.instructions.md`'s F2 D3.5/D3.7 re-verification bullet and `idd-merge.instructions.md`'s F3 counterpart bullet -- both real data-loss guards upstream's own `v0.11.0` text does not have (upstream: a bare "`git fetch` plus `git checkout`/`git reset --hard`" with no dirty/divergence check in either file) | #421, #425                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -925,15 +925,20 @@ from upstream's own template -- also added above.
 Round three found a **fourteenth slug that the grep-based check could
 never have found**, because it had no marker at all yet:
 `pre-merge-reset-guard` (`.github/instructions/idd-pre-merge.instructions.md`'s
-D3.5/D3.7 re-verification bullet, rewritten during #421's own PR #430
-review-fix round to guard `git reset --hard` against a dirty or
-diverged worktree -- a real data-loss fix, confirmed absent from the
+F2 D3.5/D3.7 re-verification bullet, rewritten during #421's own
+PR #430 review-fix round to guard `git reset --hard` against a dirty
+or diverged worktree -- a real data-loss fix, confirmed absent from the
 pinned `v0.11.0` template by a direct `diff` against it, not by grep).
-This gap could only be found by diffing the resynced files against the
-pinned upstream template directly; no repo-wide grep, however unbiased,
-can discover a divergence that was never marked in the first place.
-Added above, attributed to #421 (the original unmarked rewrite) and to
-this round's own marker plus Register row (#425).
+The same PR #430 round made the identical rewrite a second time, to
+`.github/instructions/idd-merge.instructions.md`'s own F3 counterpart
+bullet -- also confirmed absent from the pinned template by direct
+diff, and also unmarked until now; both copies carry the marker and
+this one Register row covers both. This gap could only be found by
+diffing the resynced files against the pinned upstream template
+directly; no repo-wide grep, however unbiased, can discover a
+divergence that was never marked in the first place. Added above,
+attributed to #421 (the original unmarked rewrite, both copies) and to
+this round's own markers plus Register row (#425).
 
 The Register now carries **14** slugs. Correcting the prior "the
 unbiased repo-wide search is the authoritative completeness check"
@@ -1392,9 +1397,12 @@ occurrences are no longer flagged (an improvement in the tool itself,
 not a regression: their raw `{{...}}` occurrences are still present and
 unchanged by manual grep). `docs/idd-policy.md` still reports its own
 known documentation-as-example occurrences of `{{REPO_NAME}}`,
-`{{TRUSTED_MARKER_ACTOR}}`, and one `{{TOKEN}}` unknown-token hit, all
-inside this very explanatory section -- unchanged in kind from prior
-rounds. **Deliberately not restating an exact occurrence count here**,
+`{{TRUSTED_MARKER_ACTOR}}`, and `{{TOKEN}}` unknown-token hits (plural
+-- deliberately not "one": this very section quotes the literal token
+more than once, so any singular count written here would already be
+wrong by the time it is read), all inside this very explanatory
+section -- unchanged in kind from prior rounds. **Deliberately not
+restating an exact occurrence count here**,
 per this section's own established practice above: naming a literal
 count in this paragraph would itself add a fresh raw `{{...}}`
 occurrence of that same token every time this text is edited, making
@@ -1403,14 +1411,20 @@ count goes stale the moment this section's own prose changes; read it
 directly with an occurrence-counting form, e.g. `grep -o
 '{{TOKEN}}' <file> | wc -l`, rather than trusting any number recorded
 here). **One genuinely new instance this round**:
-`docs/idd-design-rationale.md` now also carries one raw
+`docs/idd-design-rationale.md` now also carries a raw
 `{{PROJECT_MARKER_PREFIX}}` occurrence, added during roadmap #419's
 Track B re-import cycle (dotfiles#430) as a worked-example marker
 literal (`` `<!-- {{PROJECT_MARKER_PREFIX}}-authoring-defer-source:
 review-fix-loop-cutoff -->` ``) illustrating the review-fix-loop-cutoff
 auto-release exception -- the same documentation-as-example
 non-issue shape as every instance above, confirmed by direct
-inspection of the cited passage. `idd-doctor`'s own, separately-scoped
+inspection of the cited passage. Quoting that same literal here (this
+paragraph, twice) also makes `docs/idd-policy.md` itself carry raw
+`{{PROJECT_MARKER_PREFIX}}` occurrences, for the same
+documentation-as-example reason as its `{{REPO_NAME}}`/
+`{{TRUSTED_MARKER_ACTOR}}`/`{{TOKEN}}` occurrences above -- not a
+second new target file, just this section quoting the token it is
+describing. `idd-doctor`'s own, separately-scoped
 placeholder check still passes clean at `v0.11.0` (see above), so this
 is not a regression, only a new instance of the same known
 false-positive class -- recorded here so a future sweep does not have
