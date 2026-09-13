@@ -86,6 +86,17 @@ checkout_step() {
   assert_output --regexp '^actions/setup-node@[0-9a-f]{40}$'
 }
 
+@test "the self-waiver job also pins its setup-node action to a commit SHA" {
+  # The verdict job's setup-node pin is covered above, but this job runs
+  # its own separate setup-node step while holding issues: write -- a
+  # future floating or retargeted reference here could run third-party
+  # code with that write token even while the checkout/upload-artifact
+  # pin tests still pass (Copilot review, PR #429).
+  run yq '(.jobs["idd-advisory-convergence-self-waiver"].steps[] | select(.uses != null and (.uses | test("setup-node")))) as $s | $s.uses' "$WORKFLOW"
+  assert_success
+  assert_output --regexp '^actions/setup-node@[0-9a-f]{40}$'
+}
+
 @test "the self-waiver job pins its upload-artifact step to a commit SHA" {
   # This job carries issues: write; a future floating or retargeted
   # upload-artifact reference could execute third-party code under that
