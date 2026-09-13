@@ -106,8 +106,12 @@ checkout_step() {
   assert_output --partial '".github/idd/config.json"'
   assert_output --partial '".github/workflows/idd-advisory-convergence.yml"'
   assert_output --partial '".github/workflows/idd-advisory-convergence-comment.yml"'
+  # POSIX [[:space:]], not GNU grep's `\s` extension: this suite is
+  # documented to run on macOS too, where BSD grep does not interpret
+  # `\s` as whitespace and would silently count zero matches instead of
+  # failing loudly (Copilot review, PR #429).
   local count
-  count=$(grep -c '^\s*"\.[^"]*"\s*$' <<< "$output")
+  count=$(grep -c '^[[:space:]]*"\.[^"]*"[[:space:]]*$' <<< "$output")
   [ "$count" -eq 3 ]
 }
 
