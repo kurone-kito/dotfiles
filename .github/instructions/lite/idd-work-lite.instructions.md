@@ -325,8 +325,11 @@ pass asks, never a separate pass to run on top of the one that ran.
    both are genuine results, so continue to step 3.
 3. Otherwise, if the critique pass reports zero issues, check the `fix-validate`
    floor.
-4. If the floor has not passed, continue to C5 to repair validation.
-5. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
+4. Zero-issue round confirmed (either branch below is still a zero-finding
+   round and must not lose its record): invoke `critiqueLoop.telemetryHook`
+   (C1) with zero findings/accepted/rejected counts — fire-and-forget.
+5. If the floor has not passed, continue to C5 to repair validation.
+6. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
    now.
 
 ### C3 — Score issues

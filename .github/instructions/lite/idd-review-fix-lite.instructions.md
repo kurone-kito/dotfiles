@@ -112,37 +112,62 @@ other GitHub side effect, confirm all of the following:
 
 ## E10 — Validate fixes with critique pass
 
-1. Run a critique pass to verify the E9 fixes address the root causes
-   and are correct. Also apply these lenses when they fit, composing
-   when both do: **Mutation / write-side** (the diff implements a
-   helper that mutates GitHub state, mutates git state, or performs a
-   merge) — Fail-closed inputs; Validate/execute scope parity;
-   Unsafe-output suppression; Schema strictness parity.
-   **Gate-mirroring** (the diff implements a helper that predicts,
-   mirrors, or pre-checks another gate's decision) — Validation-path
-   parity; Input completeness; Whole-identity comparison; Snapshot
-   identity; Point-in-time parity.
-2. If the critique pass reports zero issues, continue to E11.
-3. If it reports additional issues, fix them, commit atomically, and
+1. Resolve the delegate verdict with the profile-selected
+   `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs`, or
+   the package-manager-profile `idd:critique-delegate` command — resolve
+   the exact command from `docs/idd-helper-scripts.md` if unsure). Read its
+   `usable` field as the next step's verdict directly — never re-derive
+   it — and, when `usable` is `true`, its `source`/`command`/`mode` fields
+   as the delegate to run below. This file is helper-enabled only: if the
+   helper is missing, fails, or disagrees with live state, stop and ask
+   instead of falling back to prose.
+2. `usable: false` means no delegate at this layer — run the per-agent
+   critique pass on the E9 fixes and go to step 6. `usable: true` means
+   the helper already applied every configuration fail-safe; use its
+   `command` and `mode` as-is below.
+3. Otherwise run the delegate's `command` against the E9 fixes. It
+   **failed** if the command is absent, exits non-zero, times out, or its
+   output cannot be read as a findings list. Otherwise it **succeeded** —
+   including when it returns a readable list with no issues in it.
+4. Read `mode` (`fallback` when the key is absent) to decide whether the
+   per-agent pass also runs: `combined` always, without waiting on the
+   delegate's outcome; `fallback` only when the delegate failed;
+   `on-success` only when it succeeded; `never` not at all. If both ran,
+   union their reported issues. Treat a delegate that, under `on-success`
+   or `never`, leaves no readable findings list as a hold, not a clean
+   zero-issue round.
+5. These lenses apply only within a per-agent pass (step 2 or step 4) —
+   when only the delegate ran instead, never apply them yourself in its
+   place. When a per-agent pass did run, also apply, composing when both
+   fit: **Mutation / write-side** (the diff implements a helper that
+   mutates GitHub state, mutates git state, or performs a merge) —
+   Fail-closed inputs; Validate/execute scope parity; Unsafe-output
+   suppression; Schema strictness parity. **Gate-mirroring** (the diff
+   implements a helper that predicts, mirrors, or pre-checks another
+   gate's decision) — Validation-path parity; Input completeness;
+   Whole-identity comparison; Snapshot identity; Point-in-time parity.
+6. If the critique pass (delegate, per-agent, or both) reports zero
+   issues, continue to E11.
+7. If it reports additional issues, fix them, commit atomically, and
    run E10 again.
-4. Count "meaningful progress" as removing at least one Accepted
+8. Count "meaningful progress" as removing at least one Accepted
    finding, narrowing a remaining finding's root cause or scope, or
    producing a materially new fix direction. A reworded duplicate
    finding does not count.
-5. If the same Accepted findings recur for more than
+9. If the same Accepted findings recur for more than
    `critiqueLoop.e10NoProgressHoldAfter` (default 3) consecutive E10
    passes without meaningful progress, stop the loop, post a hold
    comment summarizing the repeated findings and attempted fixes, and
    wait for a maintainer decision.
-6. Do not use step 5 to bypass a serious issue: unresolved High or
-   Medium findings stay blockers until fixed or explicitly redirected
-   by a maintainer.
-7. Heuristic: several new, non-repeated same-area findings across
-   rounds (3-4) may mean one structural fix converges faster than
-   another patch. If that fix keeps drawing new findings, prefer
-   simplifying/removing the mechanism over a second redesign -- only
-   once confirmed non-required by the issue's acceptance criteria or
-   contract; if required, stop for a maintainer decision.
+10. Do not use step 9 to bypass a serious issue: unresolved High or
+    Medium findings stay blockers until fixed or explicitly redirected
+    by a maintainer.
+11. Heuristic: several new, non-repeated same-area findings across
+    rounds (3-4) may mean one structural fix converges faster than
+    another patch. If that fix keeps drawing new findings, prefer
+    simplifying/removing the mechanism over a second redesign -- only
+    once confirmed non-required by the issue's acceptance criteria or
+    contract; if required, stop for a maintainer decision.
 
 <!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
