@@ -37,7 +37,7 @@ an operator who simply prefers not to grant an agent a direct-commit
 path even for the first action. Treat this as an explicit operator
 choice made alongside the other Step 1B policy decisions (see
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/policy-decisions.md)),
+Decisions](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/policy-decisions.md)),
 not an automatic upgrade applied whenever a review bot happens to be
 available.
 If the operator does not state a preference, propose theirs-flow (the
@@ -64,12 +64,12 @@ there is no `.github/idd/config.json` yet in the target repository for
 an executing session to read those values from — the target repository
 is still pre-import. Embed the confirmed values for the placeholders
 listed in [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/placeholders.md)
+Values](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/placeholders.md)
 directly in the issue body (the resolved
 values themselves, not a reference to where they live), together with
 the confirmed Step 1B decisions (merge policy, PR review profile,
 review-thread resolution policy, and the rest of the list in
-[Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/policy-decisions.md)).
+[Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/policy-decisions.md)).
 
 **Pin the process reference.** The issue's process section must point
 at idd-skill's own canonical `idd-template/ONBOARDING.md` Steps 2
@@ -369,14 +369,18 @@ Replace `<marker-prefix>` in the marker with the confirmed marker-prefix
 value from the hearing before publishing — see the `PROJECT_MARKER_PREFIX`
 placeholder in
 [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/placeholders.md)
+Values](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/placeholders.md)
 for how that value is derived. The suitability score of `1` reflects that
 Discover structurally cannot route this issue pre-import, not a quality
 judgment about the change itself; per the issue-authoring skill's
-contract, a score of `1` also carries the `status:blocked-by-human`
-label, which correctly signals that this issue needs a human or a
-narrowly-scoped, pre-authorized agent rather than the ordinary
-autonomous loop. Use the operator-confirmed `labels.blockedByHumanLabelName`
+contract, a score of `1` carries the configured `blocked-by-human` label
+(default `status:blocked-by-human`), unless an
+`authoring-bucket: needs-decision` marker substitutes the
+configured needs-decision label instead (see
+[Authoring-bucket marker](https://github.com/kurone-kito/idd-skill/blob/main/skills/issue-authoring/references/contract.md#authoring-bucket-marker))
+— here the label applies, correctly signaling that this issue needs a
+human or a narrowly-scoped, pre-authorized agent rather than the
+ordinary autonomous loop. Use the operator-confirmed `labels.blockedByHumanLabelName`
 value from Step 1B for both issue publication and label creation below —
 default to `status:blocked-by-human` only when that default was actually
 selected, never unconditionally. A pre-import repository may not have

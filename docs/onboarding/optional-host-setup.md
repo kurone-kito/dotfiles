@@ -323,7 +323,7 @@ jobs:
 resolve the helper command one-shot instead. Replace
 `<reviewed-helper-spec>` with the same reviewed spec the repository's
 other helper invocations use (see
-[Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/docs/onboarding/policy-decisions.md#helper-runtime-profile)):
+[Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/policy-decisions.md#helper-runtime-profile)):
 
 ```yaml
 name: IDD doctor health gate
@@ -577,7 +577,7 @@ pushed** (or its equivalent) so approval applies to the workflow
 revision that will merge. Without those settings, CODEOWNERS only
 requests or routes a review and does not make approval a merge gate.
 The [dry-run — Readiness
-assessment](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/idd-template/ONBOARDING.md#dry-run--readiness-assessment)
+assessment](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/ONBOARDING.md#dry-run--readiness-assessment)
 report's `CODEOWNERS present` item checks only that a CODEOWNERS file
 exists; it does not verify workflow-path coverage, producer binding, or
 these required-review settings (preventive; no observed incident yet).
@@ -595,14 +595,22 @@ comments), independent of what is checked out locally, so pinning the
 checkout to the trusted branch costs nothing functionally.
 
 Two automatic trigger types keep the required verdict current:
-`pull_request` for the normal push case, and `pull_request_review` for
-Copilot's review submission. Review-thread comments are **not** on
-that required job. IDD-originated comments (a disposition prefix, the
-reply-identity stamp, or an operational marker the check already
-honors) refresh the existing HEAD-associated required run from the
-companion `idd-advisory-convergence-comment.yml` workflow, which
-calls `rerun-advisory-convergence --apply` and never reports
-`ready` itself. Ordinary human prose (`LGTM`) does not create or
+`pull_request` for the normal push case, and `pull_request_target` as
+its tamper-resistant counterpart (see Trusted-code checkout above --
+a same-repository PR cannot edit `pull_request_target`'s own copy of
+this workflow file, unlike `pull_request`). Review-thread comments are
+**not** on that required job, and neither is Copilot's review
+submission (`pull_request_review`) — both instead refresh the
+existing HEAD-associated required run from the non-required companion
+`idd-advisory-convergence-comment.yml` workflow: an IDD-originated
+comment (a disposition prefix, the reply-identity stamp, or an
+operational marker the check already honors) calls
+`rerun-advisory-convergence --apply`, while a review submission calls
+`rerun-advisory-convergence --refresh-latest --apply` instead — a
+review needs a fresh evaluation even if the gate is already green or
+its rerun-once budget is already spent, which the plain `--apply`
+path does not provide. Neither call reports `ready` itself. Ordinary
+human prose (`LGTM`) does not create or
 cancel the required check.
 
 A thread being resolved or unresolved via the "Resolve conversation"
@@ -758,6 +766,25 @@ file: the fuller investigation prose lives only in that dogfooded
 original, and the portable stub this template mirrors at
 `.github/workflows/idd-advisory-convergence.yml` in your own
 repository does not carry it.
+
+**The self-waiver provenance artifact is unavailable on GHES.** The
+`idd-advisory-convergence-self-waiver` job's "Upload the posted
+marker's provenance artifact" step pins `actions/upload-artifact` v4+
+(currently `v7.0.1`), which needs the newer Artifacts service backend
+that GitHub Enterprise Server does not support; GHES instead needs the
+`v3.2.2` (or `v3.2.2-node20`) release, itself deprecated on
+github.com. Because the
+self-waiver mechanism fails closed, this never lets a forged waiver
+through on GHES — the upload step simply fails, or produces no
+artifact — but it does mean the self-referential-bootstrap-auto
+mechanism can never actually complete on a GHES-hosted adopter,
+degrading every genuine attempt to "no auto-waiver" and leaving only
+the maintainer-authorized waiver path for every such PR (found by a
+Codex review of kurone-kito/idd-skill#2914 during the
+kurone-kito/idd-skill#2912 fix cycle, 2026-09-11). See
+kurone-kito/idd-skill#2918 for the full tradeoff discussion and the
+rationale for keeping the pinned version rather than adding a
+runner-detection branch.
 
 ## Optional — mark the vendored helper bundle `linguist-vendored`
 

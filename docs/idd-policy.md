@@ -688,7 +688,7 @@ same convention.
 | --- | --- | --- |
 | `issueAuthoring.journalIssue` | **explicit: `"kurone-kito/dotfiles#380"`** | Owner-confirmed before #419 was authored (see #419's "Decisions confirmed before authoring"): formalizes the already-in-use ad hoc authoring-journal practice for a standalone authoring set with no existing issue or anchor. |
 | `labels.untrustedLabelerLogins` | **explicit: `["coderabbitai[bot]"]`** | `coderabbitai[bot]` is confirmed active (`.coderabbit.yaml`'s `issue_enrichment.labeling.auto_apply_labels: true`; its most recent repo-wide `labeled` event is 2026-09-12). `reviewpad[bot]` -- present in this repository's historical label-event actor list -- was checked and excluded: its latest `labeled` event is 2023-10-21 (issue #77), roughly three years stale, and no `.reviewpad*` configuration file exists anywhere in the repository. Schema-supported metadata only; no distributed enforcement (CI guard generation) reads this list yet, per the key's own schema description. |
-| `worktreeGuard.refuseBaseBranchCommits` | **explicit: `true`** | Owner-confirmed (#419): catches a session that skips B1 entirely and commits directly on `master`, a gap the existing `branchPatterns` check does not cover. **Not yet behaviorally wired**: `.githooks/pre-commit`/`.githooks/pre-push` do not yet read this key (confirmed by grep) -- Track C (#422) owns the githooks resync that will teach the hook scripts about it. Schema-adopted but inert until then -- the same transitional-skew-window pattern the 0.7.0/0.9.0 rounds above already recorded for `.claude/skills/` gaps. |
+| `worktreeGuard.refuseBaseBranchCommits` | **explicit: `true`** | Owner-confirmed (#419): catches a session that skips B1 entirely and commits directly on `master`, a gap the existing `branchPatterns` check does not cover. **Wired as of Track C (#422)**: `.githooks/_idd-worktree-guard.sh` now parses this key and refuses a commit/push made from the primary worktree while `HEAD` matches the configured `developmentBranch`; `.githooks/pre-commit`/`.githooks/pre-push` already sourced the guard script and call `idd_worktree_guard_check` unchanged, so no separate wrapper edit was needed. Behaviorally confirmed in a disposable scratch clone with `core.hooksPath` wired: a direct commit on `master` is refused, `--no-verify` still bypasses it. This closes the transitional-skew-window this row previously recorded (the same pattern the 0.7.0/0.9.0 rounds above recorded for `.claude/skills/` gaps). |
 | `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Partially wired as of Track E (#423)**: `.claude/skills/issue-authoring/references/contract.md`'s `upstream-candidate` marker/label binding rules now gate on this key (confirmed by grep). `.github/instructions/` still has no consumer -- Track B (#421, instructions resync) is expected to add that half. Same transitional-skew-window caveat as the row above, now narrower. |
 | `critiqueLoop.telemetryHook` | **explicit: `{"command": "idd-critique-telemetry"}`** | Introduced among the upstream `v0.10.0` opt-in toggles (not `v0.11.0`-only, per #419's own background section). Cross-referenced from #389/PR #426's own review: wiring this key into `.github/idd/config.json` there would have paired it with this repository's then-still-`0.9.0` `iddVersion` (the `v0.9.0` schema has no `telemetryHook` property, `additionalProperties: false`), so adoption was deferred to this issue instead. Bare command name (`idd-critique-telemetry`), matching the sibling `critiqueLoop.delegate.command` entry's own PATH-relative convention; PR #426 already shipped the resolving launcher (`home/dot_local/bin/executable_idd-critique-telemetry` plus `.ps1`/`.cmd` Windows launchers). **Not yet behaviorally wired** in the instruction files for the same Track B reason as the two rows above -- the C-phase procedure text itself does not yet walk an executing agent through invoking this hook (mirroring the `critiqueLoop.delegate` gap #407 already found and fixed for a different key). |
 | `critiqueLoop.deferAfterRounds` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`15`) this round -- no repository-specific override adopted. |
@@ -1438,6 +1438,82 @@ is re-imported:
   ownership row's omission is inconsistent with the rest of the same
   document. Not fixed ad hoc here for the same reason as the two items
   above.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by the
+  `coderabbit-critique` C1 delegate on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/policy-constants.md`'s "Near-ceiling
+  exception" paragraph describes the **always-resident review/merge
+  instruction floor** as `bundle-core`, `bundle-review-triage-phase`,
+  `bundle-review-fix-phase`, and `bundle-merge-phase` members that
+  "load on every F-phase session". Per the bundle-budget table earlier
+  in the same file, `bundle-core` loads alongside every phase bundle
+  (not only F-phase), `bundle-review-triage-phase` and
+  `bundle-review-fix-phase` are the E-phase review bundles (E1-E8 and
+  E9-E15 respectively), and only `bundle-merge-phase` is F-phase-only
+  (F1-F5) — apparently a stale carry-over from the pre-split
+  `bundle-review`/`bundle-merge` wording this same paragraph used at
+  `v0.9.0`. Not fixed ad hoc here for the same reason as the items
+  above.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `scripts/minimize-superseded-markers.mjs`'s
+  `printTable` counts line omits the `deadlineSkipped` counter that
+  `runMinimize` increments, so a `--format table` run under
+  `--deadline-ms` can display fewer accounted-for items than the item
+  list without disclosing that the pass hit its wall-clock budget.
+  Not fixed ad hoc here for the same reason as the items above.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/idd-autonomy-contract.md`'s
+  Stage 1/2 owner-marker section computes the canonical set snapshot
+  digest by sorting `<owner>/<repo>#<number>:<body-sha256>` lines in
+  "ascending issue-number order" — for a hypothetical set spanning more
+  than one repository, two repositories can both contain the same
+  issue number, so an issue-number-only sort key is not deterministic
+  across repository boundaries. CodeRabbit's own suggested fix (sort by
+  canonical repository identity first, then issue number) belongs in
+  the upstream template, not this vendored copy.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/idd-helper-scripts.md`'s signed-commit
+  merge-wrapper recovery procedure sends `SIGTERM` to bare recorded PIDs
+  with no separate liveness/identity check beyond the sub-second
+  snapshot-then-signal gap the same paragraph already reasons about; a
+  child reparented before the snapshot, or an exited PID reused by an
+  unrelated process outside that gap, is out of scope for this
+  vendored copy to redesign.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) the same recovery procedure in
+  `docs/idd-helper-scripts.md` waits up to 30 seconds for **each**
+  recorded PID individually to exit, rather than tracking one shared
+  30-second deadline across the whole recorded set — a process tree
+  with several recorded PIDs (the git parent plus descendants) can
+  therefore exceed the documented overall 30-second termination-wait
+  bound. Not fixed ad hoc here for the same reason as the item above.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/onboarding/issue-mediated-bootstrap.md`'s
+  "Authoring-bucket marker" cross-reference links
+  `idd-skill/blob/main/skills/issue-authoring/references/contract.md`
+  — an unpinned `/main/` URL, contradicting this same file's own
+  "keep imports pinned to a released tag or commit" guidance elsewhere
+  (the direct-commit bootstrap exception a few lines above does not
+  cover this particular link).
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
+  CodeRabbit PR review comment on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) the same file's `authoring-bucket:
+  needs-decision` marker-handling instruction uses
+  `labels.blockedByHumanLabelName` for both issue publication and label
+  creation, even though the surrounding prose is specifically about the
+  `needs-decision` marker case and should use
+  `labels.needsDecisionLabelName` for those two steps instead.
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
