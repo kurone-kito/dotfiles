@@ -216,6 +216,7 @@ header comment — not present in the portable stub this template
 ships). For a stuck or stale rollup entry, rerun the _existing_
 PR-linked run (`gh run rerun <run-id>`) instead of `workflow_dispatch`.
 
+<!-- dotfiles-divergence: ci-companion-topology -->
 **Topology (as of `v0.11.0`, `#424`)**: the required check itself now
 registers only `pull_request`/`pull_request_target` — `pull_request_review`
 and `pull_request_review_comment` moved entirely to the non-required

@@ -278,7 +278,9 @@ any outcome, not only the four carrying their own
 `dotfiles-triage-verdict` marker. Apply the same
 edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
-for this rule, since Groom applies it as inline body prose). For a
+for this rule, since Groom applies it as inline body prose).
+<!-- dotfiles-divergence: blocked-by-human-staleness -->
+For a
 `blocked-by-human` rejection specifically, A4.5 never applies
 `labels.blockedByHumanLabelName` itself (Mutation Policy above), and
 label state is otherwise too unreliable a staleness signal to use at
@@ -292,8 +294,17 @@ verified against `maintainerApprovalActorPolicy` via the collaborator
 permission API; never the trusted marker actor set, which can include
 configured automation and is a distinct concept from this label's own
 "human maintainer only" ownership contract in
-`docs/idd-concept-ownership.md`), explicitly confirming the external
-coordination is resolved, as also making the rejection stale.
+`docs/idd-concept-ownership.md`) that **explicitly affirms the
+blocker is resolved** — an unrelated remark or a "still waiting"
+status update from the same actor does not qualify — as the **only**
+signal that makes a `blocked-by-human` rejection stale. This replaces, rather than
+supplements, the general edit-postdates-rejection rule above for this
+one outcome specifically: `blocked-by-human` means the issue is
+waiting on external human coordination, not on a better issue draft,
+so an ordinary title/body edit by the issue's own author — who need
+not be a maintainer approval actor at all — must never by itself
+reset the staleness clock and let a worker proceed while that
+coordination remains genuinely unresolved.
 A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a

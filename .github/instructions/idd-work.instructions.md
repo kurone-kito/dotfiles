@@ -203,7 +203,8 @@ namespace and F4 removal behavior as above.
 **Step 3 — Install deps**: after worktree creation, ensure dependencies
 are installed:
 
-- **WorkTrunk with a pre-start install hook** (e.g.,
+- <!-- dotfiles-divergence: worktrunk-noop-hook-cd -->
+  **WorkTrunk with a pre-start install hook** (e.g.,
   `[pre-start].install` in `.config/wt.toml`): The hook must acquire the
   lock before installing, as described above; after the hook succeeds,
   skip this step. `-x <noop>` never changes the caller's directory (see

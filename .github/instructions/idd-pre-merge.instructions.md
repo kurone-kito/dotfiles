@@ -418,7 +418,8 @@ turns an operator-visible failure into a silent stall.
   rollup. The signal never changes `route` itself; any other blocking
   cause makes it `false`, and the gate still routes to E1/E4. Fails
   closed: an unusable check makes this condition unmet.
-- **Closing-set and impact-checklist re-verification** (D3.5/D3.7
+- <!-- dotfiles-divergence: pre-merge-reset-guard -->
+  **Closing-set and impact-checklist re-verification** (D3.5/D3.7
   re-run against current HEAD, #2749): confirm the local worktree is
   checked out at the PR's current HEAD exactly (`git fetch`, then, if a
   resumed or external-push session left it stale, `git switch

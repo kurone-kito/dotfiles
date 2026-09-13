@@ -325,7 +325,8 @@ pass asks, never a separate pass to run on top of the one that ran.
    both are genuine results, so continue to step 3.
 3. Otherwise, if the critique pass reports zero issues, check the `fix-validate`
    floor.
-4. Zero-issue round confirmed (either branch below is still a zero-finding
+4. <!-- dotfiles-divergence: lite-telemetry-parity -->
+   Zero-issue round confirmed (either branch below is still a zero-finding
    round and must not lose its record): invoke `critiqueLoop.telemetryHook`
    (C1) with zero findings/accepted/rejected counts — fire-and-forget.
    Invoke it (here and at C4) by piping the round's JSON payload as
@@ -349,7 +350,8 @@ pass asks, never a separate pass to run on top of the one that ran.
 ### C4 — Accept / Reject and loop check
 
 1. Accept high issues.
-2. Invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
+2. <!-- dotfiles-divergence: lite-telemetry-parity -->
+   Invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
    severity, accepted/rejected counts, and delegate usage — fire-and-forget.
    This fires once this round's Accept/Reject decision is final, regardless
    of which step below is taken next. A delegate's own fail-closed hold

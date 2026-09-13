@@ -20,7 +20,9 @@ and note any explicit out-of-scope statement in it, trusted for the
 scope fence below only if it predates the B2 plan
 (`idd-work.instructions.md`) — an author keeps edit rights throughout
 the claim and could otherwise time an edit to force-reject a legitimate
-finding. Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
+finding.
+<!-- dotfiles-divergence: review-triage-usercontent-reconstruction -->
+Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
 unrelated activity, so it will not do), paginating until
 `pageInfo.hasNextPage` is `false` — a successfully returned but
 truncated connection can select an older qualifying entry and apply
