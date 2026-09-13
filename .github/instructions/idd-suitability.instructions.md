@@ -278,13 +278,18 @@ any outcome, not only the four carrying their own
 `dotfiles-triage-verdict` marker. Apply the same
 edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
-for this rule, since Groom applies it as inline body prose); for a
-`blocked-by-human` rejection specifically, also treat the maintainer's
-removal of the `status:blocked-by-human` label (with no accompanying
-title/body edit) as making the rejection stale — that label's removal
-is `docs/idd-concept-ownership.md`'s own documented recovery action for
-this blocker, and the rejection comment itself carries no marker to
-otherwise signal that resolution. A
+for this rule, since Groom applies it as inline body prose). For a
+`blocked-by-human` rejection specifically, A4.5 never applies
+`labels.blockedByHumanLabelName` itself (Mutation Policy above) and the
+rejection comment carries no marker, so a label-removal signal alone is
+often unreachable; treat either of the following as also making the
+rejection stale: the configured `labels.blockedByHumanLabelName` label
+being present (applied by some other phase) and then removed with no
+accompanying title/body edit — that removal is
+`docs/idd-concept-ownership.md`'s own documented maintainer recovery
+action for this blocker — or, independent of label state, a trusted
+maintainer's comment on the issue, posted after the rejection,
+explicitly confirming the external coordination is resolved. A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a
 second rejection comment and loop; a stale rejection requires posting

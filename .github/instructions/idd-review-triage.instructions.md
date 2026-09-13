@@ -21,7 +21,13 @@ scope fence below only if it predates the B2 plan
 (`idd-work.instructions.md`) — an author keeps edit rights throughout
 the claim and could otherwise time an edit to force-reject a legitimate
 finding. Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
-unrelated activity, so it will not do). Each entry's `diff` is the full
+unrelated activity, so it will not do), paginating until
+`pageInfo.hasNextPage` is `false` — a successfully returned but
+truncated connection can select an older qualifying entry and apply
+scope decisions to the wrong plan-time body, and is not itself an
+"unavailable or failed" read, so the fail-closed rule below must be
+applied explicitly when pagination cannot be confirmed complete. Each
+entry's `diff` is the full
 body text as it stood immediately after that specific edit — verified
 directly against live GraphQL data; despite GitHub's schema describing
 it generically as "a summary of the changes for this edit," it is not a
@@ -33,8 +39,9 @@ qualifies: zero edits exist at all, so the current body already is
 that state; or at least one edit exists but every one postdates the
 plan, so the pre-first-edit (creation) content is not obtainable from
 this API at all — no entry captures state before the earliest edit.
-Treat that second case, an unavailable or failed `userContentEdits`
-read, or any reconstruction that cannot be completed with confidence,
+Treat that second case, an unavailable, failed, or incompletely-paginated
+`userContentEdits` read, or any reconstruction that cannot be completed
+with confidence,
 the same way: fail closed, never assume no post-plan edit occurred. A
 statement absent from the reconstructed (or, in the zero-edit case,
 current) state — added later, or present now but not there — needs
