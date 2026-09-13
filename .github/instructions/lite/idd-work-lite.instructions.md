@@ -341,12 +341,17 @@ pass asks, never a separate pass to run on top of the one that ran.
 ### C4 — Accept / Reject and loop check
 
 1. Accept high issues.
-2. If accepted issues remain and the floor has not passed, continue to C5.
-3. Otherwise, if no accepted issues remain and the floor has passed, open and
+2. Invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
+   severity, accepted/rejected counts, and delegate usage — fire-and-forget.
+   This fires once this round's Accept/Reject decision is final, regardless
+   of which step below is taken next. A delegate's own fail-closed hold
+   (`docs/idd-workflow.md`) stops before C2 and has no telemetry record.
+3. If accepted issues remain and the floor has not passed, continue to C5.
+4. Otherwise, if no accepted issues remain and the floor has passed, open and
    follow `idd-pr-submit-lite.instructions.md` now.
-4. Otherwise, if only low accepted issues remain after more than 3 loops and
+5. Otherwise, if only low accepted issues remain after more than 3 loops and
    the floor has passed, open and follow `idd-pr-submit-lite.instructions.md` now.
-5. Otherwise continue to C5.
+6. Otherwise continue to C5.
 
 ### C5 — Fix accepted issues
 
