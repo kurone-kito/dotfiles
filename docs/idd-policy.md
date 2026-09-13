@@ -604,6 +604,68 @@ shape change in either case:
   re-verify against the actual schema rather than trust the drafted
   inventory.
 
+## New 0.10.0/0.11.0 Schema Keys
+
+Audited by roadmap #419's schema/config-audit track
+([`#420`](https://github.com/kurone-kito/dotfiles/issues/420)): a
+direct diff of `schemas/policy.schema.json` between the `v0.9.0` pin
+(`d005098bf3a54a27ac79b22fb5eeb88186d235c6`) and `v0.11.0`
+(`1f90787ebf4021673ce6e5eb69741df331fd2037`), re-verified against the
+fetched schema text. Upstream shipped two releases in this window --
+`v0.10.0` and `v0.11.0` -- and `policy.schema.json` gained 7 genuinely
+new top-level/nested keys across both. `.github/idd/config.json` was
+updated by this track: `iddVersion` now reads `"0.11.0"`, and the file
+was re-validated with `ajv-cli validate --spec=draft2020` against the
+fetched `v0.11.0` schema (passed) and with a pinned `idd-doctor` run
+from the `v0.11.0` tarball itself (`result: passed`, the same two
+`WARN`s already documented in [`idd-doctor`
+findings](#idd-doctor-findings) -- no new finding). See the
+[0.4.0](#new-040-schema-keys-left-at-default),
+[0.5.0/0.6.0](#new-050060-schema-keys-left-at-default), and
+[0.7.0](#new-070-schema-keys-left-at-default) sections above for the
+same convention.
+
+### Genuinely new in 0.10.0/0.11.0
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `issueAuthoring.journalIssue` | **explicit: `"kurone-kito/dotfiles#380"`** | Owner-confirmed before #419 was authored (see #419's "Decisions confirmed before authoring"): formalizes the already-in-use ad hoc authoring-journal practice for a standalone authoring set with no existing issue or anchor. |
+| `labels.untrustedLabelerLogins` | **explicit: `["coderabbitai[bot]"]`** | `coderabbitai[bot]` is confirmed active (`.coderabbit.yaml`'s `issue_enrichment.labeling.auto_apply_labels: true`; its most recent repo-wide `labeled` event is 2026-09-12). `reviewpad[bot]` -- present in this repository's historical label-event actor list -- was checked and excluded: its latest `labeled` event is 2023-10-21 (issue #77), roughly three years stale, and no `.reviewpad*` configuration file exists anywhere in the repository. Schema-supported metadata only; no distributed enforcement (CI guard generation) reads this list yet, per the key's own schema description. |
+| `worktreeGuard.refuseBaseBranchCommits` | **explicit: `true`** | Owner-confirmed (#419): catches a session that skips B1 entirely and commits directly on `master`, a gap the existing `branchPatterns` check does not cover. **Not yet behaviorally wired**: `.githooks/pre-commit`/`.githooks/pre-push` do not yet read this key (confirmed by grep) -- Track C (#422) owns the githooks resync that will teach the hook scripts about it. Schema-adopted but inert until then -- the same transitional-skew-window pattern the 0.7.0/0.9.0 rounds above already recorded for `.claude/skills/` gaps. |
+| `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Not yet behaviorally wired**: no file under `.github/instructions/` or `.claude/skills/` references `upstreamEscalation` yet (confirmed by grep) -- Track B (#421, instructions resync) is expected to add the consuming logic. Same transitional-skew-window caveat as the row above. |
+| `critiqueLoop.telemetryHook` | **explicit: `{"command": "idd-critique-telemetry"}`** | Cross-referenced from #389/PR #426's own review: wiring this v0.11.0-only key into `.github/idd/config.json` there would have paired it with this repository's then-still-`0.9.0` `iddVersion` (the `v0.9.0` schema has no `telemetryHook` property, `additionalProperties: false`), so adoption was deferred to this issue instead. Bare command name (`idd-critique-telemetry`), matching the sibling `critiqueLoop.delegate.command` entry's own PATH-relative convention; PR #426 already shipped the resolving launcher (`home/dot_local/bin/executable_idd-critique-telemetry` plus `.ps1`/`.cmd` Windows launchers). **Not yet behaviorally wired** in the instruction files for the same Track B reason as the two rows above -- the C-phase procedure text itself does not yet walk an executing agent through invoking this hook (mirroring the `critiqueLoop.delegate` gap #407 already found and fixed for a different key). |
+| `critiqueLoop.deferAfterRounds` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`15`) this round -- no repository-specific override adopted. |
+| `issueAuthoring.heartbeatCoalesceWindow` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`PT2M`) this round -- no repository-specific override adopted. |
+
+This round intentionally does **not** update the **Pinned upstream
+commit** paragraph near the top of this page, the tarball-URL citations
+throughout this file, or any `.github/workflows/` pin -- those belong to
+Track C (#422) and Track D (#424) of the same roadmap (#419), which
+resync docs/githooks/scripts and the CI/helper-runtime pin
+respectively. This track's edit surface is `.github/idd/config.json`
+and this section alone.
+
+### Report-shape schemas audited (not policy keys)
+
+Six report-output schemas changed shape between `v0.9.0` and `v0.11.0`.
+None is a `.github/idd/config.json` policy key -- these describe helper
+JSON _output_, not configuration _input_ -- so nothing below is adopted
+or left at a default; recorded here per this issue's own audit
+instruction. For each, every new/changed field name was grepped across
+`.github/`, `docs/`, and `scripts/`: **no local consumer found** in any
+case, since this repository only invokes these helpers as opaque `npx`
+CLI commands and never parses their JSON output against a hardcoded
+field name in checked-in code.
+
+| Schema | New/changed fields | Consumer conclusion |
+| --- | --- | --- |
+| `disposition-non-review-notices.schema.json` | `staleSkipped` (array; `noticeId`, `botLogin`, `reason`) | No local consumer |
+| `post-idd-marker.schema.json` | Description-only change; no new field | N/A |
+| `pre-merge-readiness.schema.json` | `checkSelector`, `claimIdentityInstalledAt`, `createdAt`, `expiresAt`, `identityUnresolvedRequiredCheckNames`, `preDowngradeStatus`, `runId`, `stale`, `staleSelfWaiver`, `waiverClaimId` (CI-check-identity-spoofing closures) | No local consumer |
+| `token-cost-sample.schema.json` | `toolCallCount`, `turnCount` | No local consumer |
+| `token-cost-snapshot.schema.json` | `toolCallCount`, `turnCount` (aggregated) | No local consumer |
+| `advisory-convergence.schema.json` | `waiver.autoWaiverValid` (kurone-kito/idd-skill#2657; unconditional bootstrap-auto-waiver disjunct) | No local consumer |
+
 ## Divergence Register
 
 Every intentional deviation from the pinned upstream template carries
