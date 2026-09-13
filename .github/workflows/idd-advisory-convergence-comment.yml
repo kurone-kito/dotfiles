@@ -128,7 +128,7 @@ name: IDD advisory-convergence comment refresh
 # override at all, at v0.9.0): #424 changed this job's own fallback to
 # `ubuntu-latest` specifically, since `ubuntu-slim` is a single-CPU
 # runner with a hard 15-minute job timeout that this job's own
-# `timeout-minutes: 55` cannot be honored under -- see the job's own
+# `timeout-minutes: 55` cannot be honored under there -- see the job's own
 # comment below for the full rationale (Copilot review, PR #429).
 # Likewise, the `PR_NUMBER` empty-guard in the "Rerun required HEAD check" step below
 # matches `idd-template/`'s v0.9.0 content; this copy additionally

@@ -714,7 +714,7 @@ cited throughout [Helper Runtime Profile](#helper-runtime-profile) and
 every helper invocation in `.github/workflows/`). Consequence, verified
 directly at the time: running this repository's own documented
 `idd-doctor` invocation at the still-`v0.9.0` pin against the config
-this track produced reported a genuine `ERROR`
+this track produced a genuine `ERROR`
 (`$: additional property "upstreamEscalation" not allowed`, and
 similarly for the other four new top-level/nested keys) rather than
 only the two pre-existing `WARN`s -- the `v0.9.0` schema's

@@ -66,7 +66,7 @@ name: IDD advisory-convergence gate
 # that move: `pull_request_review` itself now triggers only the
 # companion, not this required gate directly -- NOT for tamper-resistance
 # (the companion is just as PR-editable as this trigger previously was;
-# there is no `pull_request_review_target` variant), but so this
+# there is no `pull_request_review_target` variant), but so that this
 # workflow's own triggers are exclusively push-shaped
 # (`pull_request`/`pull_request_target`, plus `workflow_dispatch`/
 # `workflow_call`). Only the first two are pull-request-family events
@@ -329,8 +329,8 @@ jobs:
   # consumer's run-provenance trust condition (the marker's `run-id:`
   # must resolve to a `pull_request_target`-triggered run) would reject a
   # marker from that instance anyway, but gating the job itself here
-  # avoids granting `issues: write` under an untrusted-YAML trigger in
-  # the first place.
+  # avoids granting `issues: write`/`pull-requests: write` under an
+  # untrusted-YAML trigger in the first place.
   #
   # This repository runs the ephemeral-npx helper profile only (no
   # vendored-node/package-manager adopters to branch for), so this job
@@ -344,23 +344,31 @@ jobs:
     runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
     timeout-minutes: 10
     # Narrower than the verdict job's read-only posture above: this job
-    # additionally needs `pull-requests: read` (to diff and fetch the PR)
-    # and `issues: write` (to post the marker, and to read the linked
-    # issue's own comment stream to resolve its active claim -- the
-    # PR-conversation-comment endpoint and the linked-issue-comment
-    # endpoint are both gated under the Issues permission category, same
-    # as the verdict job's own header comment already notes for reads).
+    # needs `pull-requests: write` (to diff/fetch the PR, and -- this is
+    # the load-bearing grant -- to actually post the marker below) and
+    # `issues: write` (to post the marker, and to read the linked
+    # issue's own comment stream to resolve its active claim).
+    # kurone-kito/idd-skill#2951 (fixed by #2954, landed AFTER this
+    # file's own `1f90787` pin -- #424 backports the fix here rather
+    # than re-pinning the whole tarball for one job's permission grant):
+    # with only `pull-requests: read` (this file's original value,
+    # matching the pinned commit exactly), the marker POST failed with
+    # HTTP 403 "Resource not accessible by integration" on 11/11 real
+    # invocations upstream. Do not narrow `pull-requests` back to `read`
+    # without re-running an equivalent live test (Copilot review,
+    # PR #429).
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: write
     steps:
       # Pinned commit SHA, matching the verdict job above (both pinned
       # since #424 -- see its own comment for why a required check's
       # output-determining job needs this regardless of permission
-      # level). This job's own `issues: write` -- a genuinely more
-      # privileged, supply-chain-sensitive permission the verdict job
-      # above does not carry -- is a second, independent reason it gets
+      # level). This job's own `issues: write`/`pull-requests: write` --
+      # genuinely more privileged, supply-chain-sensitive permissions the
+      # verdict job above does not carry -- are a second, independent
+      # reason it gets
       # the same pinned-SHA hardening `post-merge-cleanup.yml` /
       # `idd-advisory-convergence-comment.yml` already apply for their
       # own elevated permissions (see docs/idd-policy.md "Post-Merge

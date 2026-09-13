@@ -46,15 +46,17 @@ checkout_step() {
   assert_output "github.event_name == 'pull_request_target'"
 }
 
-@test "the self-waiver job carries issues: write, not a broader permission set" {
-  # Assert the complete permission map, not just one key -- checking
-  # `.permissions.issues` alone would still pass if a future edit added
-  # e.g. `actions: write` or `contents: write` alongside it, silently
+@test "the self-waiver job carries pull-requests: write and issues: write, not a broader permission set" {
+  # Assert the complete permission map, not just one key -- checking a
+  # single field alone would still pass if a future edit added e.g.
+  # `actions: write` or `contents: write` alongside it, silently
   # widening this job's already-elevated trust boundary (Copilot
-  # review, PR #429).
+  # review, PR #429). `pull-requests: write` (not `read`) is
+  # load-bearing, not an overgrant: kurone-kito/idd-skill#2951 found the
+  # marker POST 403s with only `read` -- see the job's own comment.
   run yq -o=json -I=0 '.jobs["idd-advisory-convergence-self-waiver"].permissions' "$WORKFLOW"
   assert_success
-  assert_output '{"contents":"read","pull-requests":"read","issues":"write"}'
+  assert_output '{"contents":"read","pull-requests":"write","issues":"write"}'
 }
 
 @test "the self-waiver job checks out master, not the PR head" {
