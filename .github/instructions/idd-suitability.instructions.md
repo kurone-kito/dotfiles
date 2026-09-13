@@ -294,8 +294,10 @@ verified against `maintainerApprovalActorPolicy` via the collaborator
 permission API; never the trusted marker actor set, which can include
 configured automation and is a distinct concept from this label's own
 "human maintainer only" ownership contract in
-`docs/idd-concept-ownership.md`), as the **only** signal that makes a
-`blocked-by-human` rejection stale. This replaces, rather than
+`docs/idd-concept-ownership.md`) that **explicitly affirms the
+blocker is resolved** — an unrelated remark or a "still waiting"
+status update from the same actor does not qualify — as the **only**
+signal that makes a `blocked-by-human` rejection stale. This replaces, rather than
 supplements, the general edit-postdates-rejection rule above for this
 one outcome specifically: `blocked-by-human` means the issue is
 waiting on external human coordination, not on a better issue draft,
