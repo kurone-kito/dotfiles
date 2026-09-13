@@ -177,8 +177,8 @@ Search all open issues in the repository. Collect every issue that does
 NOT contain a `dotfiles-roadmap-id` marker (not itself
 a roadmap) or a `dotfiles-blocked-by` marker, AND
 otherwise passes A3's own readiness bullets (the same criteria A3
-lists, including the local `status:needs-triage` guard
-<!-- dotfiles-divergence: needs-triage-label -->; do not re-derive them
+lists, including the local `status:needs-triage` guard <!--
+dotfiles-divergence: needs-triage-label -->; do not re-derive them
 here).
 
 Apply the configured policy before passing A0-O candidates to A3.5:
