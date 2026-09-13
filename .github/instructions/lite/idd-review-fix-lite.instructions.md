@@ -129,13 +129,17 @@ other GitHub side effect, confirm all of the following:
    **failed** if the command is absent, exits non-zero, times out, or its
    output cannot be read as a findings list. Otherwise it **succeeded** —
    including when it returns a readable list with no issues in it.
+   Failure only decides whether the per-agent pass runs in step 4; it
+   never discards a readable findings list the delegate did emit, which
+   stays part of this pass's output.
 4. Read `mode` (`fallback` when the key is absent) to decide whether the
    per-agent pass also runs: `combined` always, without waiting on the
    delegate's outcome; `fallback` only when the delegate failed;
    `on-success` only when it succeeded; `never` not at all. If both ran,
-   union their reported issues. Treat a delegate that, under `on-success`
-   or `never`, leaves no readable findings list as a hold, not a clean
-   zero-issue round.
+   union their reported issues — including a failed delegate's own
+   readable list alongside the per-agent pass's findings. Treat a
+   delegate that, under `on-success` or `never`, leaves no readable
+   findings list as a hold, not a clean zero-issue round.
 5. These lenses apply only within a per-agent pass (step 2 or step 4) —
    when only the delegate ran instead, never apply them yourself in its
    place. When a per-agent pass did run, also apply, composing when both
