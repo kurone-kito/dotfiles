@@ -112,7 +112,8 @@ other GitHub side effect, confirm all of the following:
 
 ## E10 — Validate fixes with critique pass
 
-1. Resolve the delegate verdict with the profile-selected
+1. <!-- dotfiles-divergence: lite-critique-delegate-parity -->
+   Resolve the delegate verdict with the profile-selected
    `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs` for
    vendored-node/source-repo; `idd:critique-delegate` is a `package.json`
    script identifier, run via the package manager, not a directly

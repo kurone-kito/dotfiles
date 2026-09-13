@@ -3,6 +3,7 @@
 Lite profile for weak / local models. Same semantics as
 `idd-resume.instructions.md`. Prefer helpers over prose.
 
+<!-- dotfiles-divergence: lite-operator-present-release -->
 **Load this file alone** for resume routing. Do not open the standard
 resume file in the same turn — the sole exception is Step 0's
 Operator-present release row below, which explicitly hands off to the

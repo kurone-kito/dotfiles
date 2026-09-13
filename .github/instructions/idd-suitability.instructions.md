@@ -278,7 +278,9 @@ any outcome, not only the four carrying their own
 `dotfiles-triage-verdict` marker. Apply the same
 edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
-for this rule, since Groom applies it as inline body prose). For a
+for this rule, since Groom applies it as inline body prose).
+<!-- dotfiles-divergence: blocked-by-human-staleness -->
+For a
 `blocked-by-human` rejection specifically, A4.5 never applies
 `labels.blockedByHumanLabelName` itself (Mutation Policy above), and
 label state is otherwise too unreliable a staleness signal to use at

@@ -796,6 +796,11 @@ Current slugs:
 | `lite-telemetry-parity`              | `lite/idd-work-lite.instructions.md`'s own C2/C4 `critiqueLoop.telemetryHook` call sites (its actual point of use), plus `docs/idd-workflow.md`'s note that the lite profile actually invokes the hook there, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; the marker documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422, #425                               |
 | `ci-companion-topology`              | `.github/instructions/idd-ci.instructions.md`'s corrected rerun-mechanics passage describing the `idd-advisory-convergence-comment.yml` companion-refresh topology, in place of upstream's own still-stale `v0.11.0` template text (filed upstream as [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966); see the deferred-upstream-issues ledger below)                                       | #421, #425                                     |
 | `pre-merge-reset-guard`              | The same dirty-worktree/non-ancestor `git reset --hard` guard and detached-`HEAD`-avoiding `git switch {branch-name}` (instead of `git checkout <SHA>`, so the claim-revalidation gate's `git branch --show-current` check still works), rewritten into **both** of its two independent copies: `idd-pre-merge.instructions.md`'s F2 D3.5/D3.7 re-verification bullet and `idd-merge.instructions.md`'s F3 counterpart bullet -- both real data-loss guards upstream's own `v0.11.0` text does not have (upstream: a bare "`git fetch` plus `git checkout`/`git reset --hard`" with no dirty/divergence check in either file) | #421, #425                                     |
+| `review-triage-usercontent-reconstruction` | `idd-review-triage.instructions.md`'s E4 issue-body reconstruction: paginating `userContentEdits` to `pageInfo.hasNextPage: false` (a truncated read can silently select the wrong pre-plan body state) and reading each entry's `diff` as full post-edit body text directly (not a line patch), failing closed on an unavailable, failed, or incompletely-paginated read -- upstream's own `v0.11.0` text has no pagination handling and describes `diff` ambiguously, neither of which this repository's own scope-fence integrity can tolerate | #421, #425                                     |
+| `blocked-by-human-staleness`         | `idd-suitability.instructions.md`'s A4.5 standing-rejection staleness check for a `blocked-by-human` rejection specifically: since `.github/workflows/strip-untrusted-labels.yml` auto-strips that label from any untrusted-bot apply, label state alone cannot distinguish a genuine maintainer resolution from a strip cycle, so this repository instead requires a post-rejection comment from a maintainer approval actor -- a repository-specific workaround for this repository's own label-stripping automation, with no upstream counterpart | #421, #425                                     |
+| `worktrunk-noop-hook-cd`             | `idd-work.instructions.md`'s B1 Step 3 WorkTrunk-with-pre-start-hook branch: an explicit note that `-x <noop>` never changes the caller's working directory, so the agent must `cd` into the new sibling worktree itself rather than assuming WorkTrunk already did -- a real correctness trap (B1's own self-check otherwise fails against the primary worktree) that upstream's `v0.11.0` text does not warn about | #421, #425                                     |
+| `lite-critique-delegate-parity`      | `lite/idd-review-fix-lite.instructions.md`'s E10 delegate-verdict resolution steps (mode/command/fallback handling, union of delegate + per-agent findings), mirroring `idd-review-fix.instructions.md`'s own stock `v0.11.0` logic that upstream's own `lite/` template still lacks entirely -- this repository mirrored it locally rather than leaving lite sessions without delegate-critique coverage (same pattern as `lite-telemetry-parity`, a different phase) | #421, #425                                     |
+| `lite-operator-present-release`      | `lite/idd-resume-lite.instructions.md`'s Step 0 exception permitting a hand-off to `idd-resume.instructions.md`'s **Operator-present release** section for that one route -- upstream's own `lite/` template has no Operator-present release concept at all and no such exception to its "load this file alone" rule, so a lite session would otherwise have no route through this case | #421, #425                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -876,8 +881,12 @@ track's PR number cited below) diffed against the files carrying each
 marker. Track #421 (`.github/instructions/`/`lite/`
 re-import, PR #430) touched `claim-timing`, `cleanup-evidence-dedup-recheck`,
 `master-branch`, `needs-triage-label`, `signing-ladder`, and (as this
-round's own diff-against-pinned-template check later found, see
-"Round three" above) the then-unmarked `pre-merge-reset-guard` markers;
+round's own diff-against-the-pinned-template check later found, see
+"Register completeness gaps found and closed" above) the then-unmarked
+`pre-merge-reset-guard`, `review-triage-usercontent-reconstruction`,
+`blocked-by-human-staleness`, `worktrunk-noop-hook-cd`,
+`lite-critique-delegate-parity`, and `lite-operator-present-release`
+markers;
 Track #422 (docs/githooks/scripts/lint-config resync, PR #431) touched
 `claim-timing`, `cleanup-evidence-dedup-recheck`, `master-branch`,
 `onboarding-doc-trim`, and `vendored-file-header`; Track #423
@@ -894,60 +903,45 @@ its marker -- and every other then-registered slug's marker -- still
 has at least one live, findable instance; none has silently reverted
 to upstream's default.
 
-**Register completeness gaps found across this PR's own review rounds
-(Codex, dotfiles#432)**: three rounds of review each found a gap the
-previous round's check could not have caught, which is itself the
-finding worth recording -- see "Known limitation" below.
+**Register completeness gaps found and closed this round (bot review of
+dotfiles#432, primarily Codex)**: two independent methods were needed,
+not one. Method one, an unbiased repo-wide search for every distinct
+`dotfiles-divergence: <slug>` string (`grep -rhoE 'dotfiles-divergence:
+[a-z-]+'` over the repository excluding `.git`, deduplicated -- the `+`
+quantifier, not `*`, so a zero-width match can't let this very
+sentence's own `dotfiles-divergence: <slug>` prose example count as a
+spurious empty-slug hit), found already-marked slugs this round's
+initial sweep had missed because it was scoped only to the 11
+previously-registered names: `lite-telemetry-parity`
+(`docs/idd-workflow.md`, predating this round; the actual behavioral
+divergence it documents, at `lite/idd-work-lite.instructions.md`'s
+`critiqueLoop.telemetryHook` call sites, is now marked there too, at
+its point of use) and `ci-companion-topology`
+(`.github/instructions/idd-ci.instructions.md`, new this round).
+Method two, a direct `diff` of every file `git diff 45249b0 HEAD`
+(Track B/#421's own PR #430 review-fix range) touched against the
+pinned `v0.11.0` template, found genuine local rewrites that method one
+could never have found, because they had no marker at all yet:
+`pre-merge-reset-guard` (both its `idd-pre-merge.instructions.md` F2
+and `idd-merge.instructions.md` F3 copies), `review-triage-usercontent-reconstruction`,
+`blocked-by-human-staleness`, `worktrunk-noop-hook-cd`, and two
+lite/standard mirroring fixes this repository made locally ahead of
+upstream shipping them, `lite-critique-delegate-parity` and
+`lite-operator-present-release` -- all added above, all attributed to
+the original unmarked rewrite (#421) and this round's marker and
+Register row (#425). The Register now carries **19** slugs.
 
-Round one: the grep pass above was scoped to the **11
-already-registered** slugs, not to every distinct `dotfiles-divergence:
-<slug>` string actually present in the repository -- an unbiased
-repo-wide search (`grep -rhoE 'dotfiles-divergence: [a-z-]+'` over the
-same file set excluding `.git`, deduplicated -- note the `+` quantifier,
-not `*`: a zero-width match would otherwise let this very sentence's
-own `dotfiles-divergence: <slug>` prose example count as a spurious
-empty-slug hit) found a **twelfth live slug**, `lite-telemetry-parity`
-(`docs/idd-workflow.md`, with the actual behavioral divergence it
-documents at `lite/idd-work-lite.instructions.md`'s own
-`critiqueLoop.telemetryHook` call sites -- now marked there too, at
-its point of use, not only in the cross-referencing prose), that
-predates this round (added alongside Track #421's own review-fix
-round, marked during Track #422's own PR #431 review-fix round) but
-had never gained its own Register row. Added above, attributed to #421
-and #422 per the marker's own prior history, plus this round's own
-point-of-use marker placement (#425). Round two surfaced a
-**thirteenth**, brand-new slug this track itself adds:
-`ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
-marking the local rerun-mechanics correction the deferred-upstream-issues
-ledger below (`kurone-kito/idd-skill#2966`) explains is still absent
-from upstream's own template -- also added above.
-
-Round three found a **fourteenth slug that the grep-based check could
-never have found**, because it had no marker at all yet:
-`pre-merge-reset-guard` (`.github/instructions/idd-pre-merge.instructions.md`'s
-F2 D3.5/D3.7 re-verification bullet, rewritten during #421's own
-PR #430 review-fix round to guard `git reset --hard` against a dirty
-or diverged worktree -- a real data-loss fix, confirmed absent from the
-pinned `v0.11.0` template by a direct `diff` against it, not by grep).
-The same PR #430 round made the identical rewrite a second time, to
-`.github/instructions/idd-merge.instructions.md`'s own F3 counterpart
-bullet -- also confirmed absent from the pinned template by direct
-diff, and also unmarked until now; both copies carry the marker and
-this one Register row covers both. This gap could only be found by
-diffing the resynced files against the pinned upstream template
-directly; no repo-wide grep, however unbiased, can discover a
-divergence that was never marked in the first place. Added above,
-attributed to #421 (the original unmarked rewrite, both copies) and to
-this round's own markers plus Register row (#425).
-
-The Register now carries **14** slugs. Correcting the prior "the
-unbiased repo-wide search is the authoritative completeness check"
-claim: that grep is authoritative only for confirming every
-**already-marked** slug is still alive (round one's failure mode); it
-is no substitute for a direct diff against the pinned template, which
-is the only check that can surface a genuine local rewrite still
-missing its marker entirely (round three's failure mode). Both checks
-are needed; neither alone is sufficient.
+**Lesson, corrected from an earlier draft of this section**: the
+unbiased grep is authoritative only for confirming an
+**already-marked** slug is still alive; it cannot discover a genuine
+local rewrite that was never marked in the first place, which only a
+direct diff against the pinned template can find. Both checks are
+required on every future round; neither alone is sufficient. This
+round's diff-based sweep covered Track B's (#421) own post-import
+review-fix range, where every instance above originated; Tracks C
+(#422) and E (#423) have their own, larger review-fix ranges not
+re-audited by this same method in this pass -- a disclosed scope
+boundary, not a claim of exhaustive coverage.
 
 **Known limitation of this check**: the grep matches the marker's
 literal text wherever it appears, including a documentation bullet
