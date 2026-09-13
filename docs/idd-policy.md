@@ -1438,6 +1438,22 @@ is re-imported:
   ownership row's omission is inconsistent with the rest of the same
   document. Not fixed ad hoc here for the same reason as the two items
   above.
+- (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by the
+  `coderabbit-critique` C1 delegate on #422's re-import cycle, confirmed
+  byte-identical to the pinned source, not introduced by this
+  repository's re-import) `docs/policy-constants.md`'s "Near-ceiling
+  exception" paragraph describes the **always-resident review/merge
+  instruction floor** as `bundle-core`, `bundle-review-triage-phase`,
+  `bundle-review-fix-phase`, and `bundle-merge-phase` members that
+  "load on every F-phase session". Per the bundle-budget table earlier
+  in the same file, `bundle-core` loads alongside every phase bundle
+  (not only F-phase), `bundle-review-triage-phase` and
+  `bundle-review-fix-phase` are the E-phase review bundles (E1-E8 and
+  E9-E15 respectively), and only `bundle-merge-phase` is F-phase-only
+  (F1-F5) — apparently a stale carry-over from the pre-split
+  `bundle-review`/`bundle-merge` wording this same paragraph used at
+  `v0.9.0`. Not fixed ad hoc here for the same reason as the items
+  above.
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
