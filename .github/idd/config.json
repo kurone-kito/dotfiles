@@ -1,6 +1,6 @@
 {
   "$schema": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
-  "iddVersion": "0.9.0",
+  "iddVersion": "0.11.0",
   "markerPrefix": "dotfiles",
   "developmentBranch": "master",
   "mergePolicy": "fully_autonomous_merge",
@@ -66,9 +66,24 @@
     "delegate": {
       "command": "coderabbit-critique",
       "mode": "combined"
+    },
+    "telemetryHook": {
+      "command": "idd-critique-telemetry"
     }
   },
   "worktreeGuard": {
+    "enabled": true,
+    "refuseBaseBranchCommits": true
+  },
+  "issueAuthoring": {
+    "journalIssue": "kurone-kito/dotfiles#380"
+  },
+  "labels": {
+    "untrustedLabelerLogins": [
+      "coderabbitai[bot]"
+    ]
+  },
+  "upstreamEscalation": {
     "enabled": true
   }
 }
