@@ -701,8 +701,8 @@ same convention.
 | `issueAuthoring.journalIssue` | **explicit: `"kurone-kito/dotfiles#380"`** | Owner-confirmed before #419 was authored (see #419's "Decisions confirmed before authoring"): formalizes the already-in-use ad hoc authoring-journal practice for a standalone authoring set with no existing issue or anchor. |
 | `labels.untrustedLabelerLogins` | **explicit: `["coderabbitai[bot]"]`** | `coderabbitai[bot]` is confirmed active (`.coderabbit.yaml`'s `issue_enrichment.labeling.auto_apply_labels: true`; its most recent repo-wide `labeled` event is 2026-09-12). `reviewpad[bot]` -- present in this repository's historical label-event actor list -- was checked and excluded: its latest `labeled` event is 2023-10-21 (issue #77), roughly three years stale, and no `.reviewpad*` configuration file exists anywhere in the repository. Schema-supported metadata only; no distributed enforcement (CI guard generation) reads this list yet, per the key's own schema description. |
 | `worktreeGuard.refuseBaseBranchCommits` | **explicit: `true`** | Owner-confirmed (#419): catches a session that skips B1 entirely and commits directly on `master`, a gap the existing `branchPatterns` check does not cover. **Wired as of Track C (#422)**: `.githooks/_idd-worktree-guard.sh` now parses this key and refuses a commit/push made from the primary worktree while `HEAD` matches the configured `developmentBranch`; `.githooks/pre-commit`/`.githooks/pre-push` already sourced the guard script and call `idd_worktree_guard_check` unchanged, so no separate wrapper edit was needed. Behaviorally confirmed in a disposable scratch clone with `core.hooksPath` wired: a direct commit on `master` is refused, `--no-verify` still bypasses it. This closes the transitional-skew-window this row previously recorded (the same pattern the 0.7.0/0.9.0 rounds above recorded for `.claude/skills/` gaps). |
-| `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Partially wired as of Track E (#423)**: `.claude/skills/issue-authoring/references/contract.md`'s `upstream-candidate` marker/label binding rules now gate on this key (confirmed by grep). `.github/instructions/` still has no consumer -- Track B (#421, instructions resync) is expected to add that half. Same transitional-skew-window caveat as the row above, now narrower. |
-| `critiqueLoop.telemetryHook` | **explicit: `{"command": "idd-critique-telemetry"}`** | Introduced among the upstream `v0.10.0` opt-in toggles (not `v0.11.0`-only, per #419's own background section). Cross-referenced from #389/PR #426's own review: wiring this key into `.github/idd/config.json` there would have paired it with this repository's then-still-`0.9.0` `iddVersion` (the `v0.9.0` schema has no `telemetryHook` property, `additionalProperties: false`), so adoption was deferred to this issue instead. Bare command name (`idd-critique-telemetry`), matching the sibling `critiqueLoop.delegate.command` entry's own PATH-relative convention; PR #426 already shipped the resolving launcher (`home/dot_local/bin/executable_idd-critique-telemetry` plus `.ps1`/`.cmd` Windows launchers). **Not yet behaviorally wired** in the instruction files for the same Track B reason as the two rows above -- the C-phase procedure text itself does not yet walk an executing agent through invoking this hook (mirroring the `critiqueLoop.delegate` gap #407 already found and fixed for a different key). |
+| `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Fully wired as of this round (#425)**: `.claude/skills/issue-authoring/references/contract.md`'s `upstream-candidate` marker/label binding rules gate on this key (Track E, #423), and `.github/instructions/idd-overview-appendix.instructions.md`'s own "Upstream-candidate escalation" section gates on it too (confirmed by grep) -- that consumer landed with Track B's re-import itself (#421, PR #430) rather than needing a separate follow-up as this row previously expected. This closes the transitional-skew-window the row above still records. |
+| `critiqueLoop.telemetryHook` | **explicit: `{"command": "idd-critique-telemetry"}`** | Introduced among the upstream `v0.10.0` opt-in toggles (not `v0.11.0`-only, per #419's own background section). Cross-referenced from #389/PR #426's own review: wiring this key into `.github/idd/config.json` there would have paired it with this repository's then-still-`0.9.0` `iddVersion` (the `v0.9.0` schema has no `telemetryHook` property, `additionalProperties: false`), so adoption was deferred to this issue instead. Bare command name (`idd-critique-telemetry`), matching the sibling `critiqueLoop.delegate.command` entry's own PATH-relative convention; PR #426 already shipped the resolving launcher (`home/dot_local/bin/executable_idd-critique-telemetry` plus `.ps1`/`.cmd` Windows launchers). **Now confirmed wired** in the instruction files, unlike the two rows above: `.github/instructions/idd-work.instructions.md`'s own C2/C4 steps already invoke this hook as shipped by the stock `v0.11.0` template itself (carried in by this round's Track #420-#424 resync), so no Track B action was ever needed for this particular row -- the original "not yet wired" note here predated that resync landing. `lite/idd-work-lite.instructions.md`'s own C2/C4 steps invoke it too, but that half is this repository's own local addition from #421's review-fix round, not stock upstream lite-profile behavior (see the `lite-telemetry-parity` Divergence Register row above, #425). |
 | `critiqueLoop.deferAfterRounds` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`15`) this round -- no repository-specific override adopted. |
 | `issueAuthoring.heartbeatCoalesceWindow` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`PT2M`) this round -- no repository-specific override adopted. |
 
@@ -900,7 +900,8 @@ its point of use, not only in the cross-referencing prose), that
 predates this round (added alongside Track #421's own review-fix
 round, marked during Track #422's own PR #431 review-fix round) but
 had never gained its own Register row. Added above, attributed to #421
-and #422 per the marker's own history. Separately, this same review
+and #422 per the marker's own prior history, plus this round's own
+point-of-use marker placement (#425). Separately, this same review
 round surfaced a **thirteenth**, brand-new slug this track itself
 adds: `ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
 marking the local rerun-mechanics correction the deferred-upstream-issues
@@ -909,6 +910,17 @@ from upstream's own template -- also added above. The Register now
 carries **13** slugs; the unbiased repo-wide search is the
 authoritative completeness check for any future round, not a grep
 scoped to a remembered list.
+
+**Known limitation of this check**: the grep matches the marker's
+literal text wherever it appears, including a documentation bullet
+that quotes a marker verbatim inside backticks (as the
+`ci-companion-topology` deferred-issue bullet below does, for
+example) -- so a future silent reversion of the real marker at its
+point of use would not necessarily drop that slug's count to zero if
+a quoted copy elsewhere still matches. Treat a positive grep hit as
+necessary but not sufficient; confirm at least one match is an actual
+uncommented `<!--` HTML comment at the divergence's point of use, not
+only a quoted documentation example, before trusting the count.
 
 ## Open follow-ups
 
