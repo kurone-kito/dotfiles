@@ -183,7 +183,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -225,6 +225,38 @@ This repository's final-verification track
 ([`#387`](https://github.com/kurone-kito/dotfiles/issues/387))
 confirmed the pin, the instructions, and the skills bundle now all
 track `v0.9.0` uniformly, mirroring #298's role in the prior round.
+
+Roadmap #419's CI-workflow/helper-runtime-pin-bump track
+([`#424`](https://github.com/kurone-kito/dotfiles/issues/424)) bumped
+this same pin to `v0.11.0`
+(`1f90787ebf4021673ce6e5eb69741df331fd2037`), closing the known,
+accepted transitional gap PR #427's review flagged for roadmap #419's
+schema/config-audit track (#420): that track intentionally bumped
+`iddVersion` to `0.11.0` in `.github/idd/config.json` before this pin
+followed, so a manual `idd-doctor`/`idd-helper-bundle-manifest`
+invocation at the still-`v0.9.0` pin briefly reported a genuine
+`additionalProperties` schema `ERROR` against the bumped config (no
+`.github/workflows/` check runs that command as a required status
+check, so the gap was never live-blocking). This track's own edit
+surface is this section, `.github/workflows/idd-advisory-convergence.yml`,
+`.github/workflows/idd-advisory-convergence-comment.yml`,
+`.github/workflows/post-merge-cleanup.yml`, and `docs/customization.md`
+— it deliberately does **not** touch the **Pinned upstream commit**
+paragraph near the top of this page, which historically tracked the
+overall `.github/instructions/`/`.claude/skills/` template-import
+baseline as one unit, rather than the helper-runtime invocation pin
+specifically. That framing is itself now provisional: Track E (#423,
+already merged) resynced `.claude/skills/` to `v0.11.0` independently,
+so as of this track the paragraph's `v0.9.0` value accurately describes
+only `.github/instructions/`'s own baseline (pending Track B/#421)
+until Track G's (#425) final-verification sweep reconciles the
+wording -- per #420's own note above, updating that paragraph
+(mirroring how it already records the `v0.7.0` → `v0.9.0` round) is
+that track's job, run once every other track under roadmap #419 has
+merged. `idd-doctor` re-run from the
+`v0.11.0` tarball against this repository's current state reports the same two
+pre-existing `WARN`s already documented in [`idd-doctor`
+findings](#idd-doctor-findings) and no new finding.
 The companion prerequisite #96 pins Node.js ~~24.15.0~~ via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
@@ -673,28 +705,30 @@ alone. (Separately, `.github/workflows/` pins and the
 `ephemeral-npx`-profile helper-runtime invocation pin are Track D's
 (#424) scope, not this page's.)
 
-**Known, accepted transitional gap (Copilot review, PR #427).** This
-track intentionally bumps `iddVersion` to `0.11.0` before Track D
-(#424) bumps this repository's `ephemeral-npx` helper-runtime
-invocation pin off `v0.9.0` (`d005098bf3a54a27ac79b22fb5eeb88186d235c6`,
-still cited throughout [Helper Runtime
-Profile](#helper-runtime-profile) and every helper invocation in
-`.github/workflows/`). Consequence, verified directly: running this
-repository's own documented `idd-doctor` invocation at the still-`v0.9.0`
-pin against the config this track produces now reports a genuine
-`ERROR` (`$: additional property "upstreamEscalation" not allowed`, and
+**Known, accepted transitional gap, now closed (Copilot review, PR #427;
+closure confirmed by Track D/#424).** This track intentionally
+bumped `iddVersion` to `0.11.0` before Track D (#424) bumped this
+repository's `ephemeral-npx` helper-runtime invocation pin off
+`v0.9.0` (`d005098bf3a54a27ac79b22fb5eeb88186d235c6`, at the time still
+cited throughout [Helper Runtime Profile](#helper-runtime-profile) and
+every helper invocation in `.github/workflows/`). Consequence, verified
+directly at the time: running this repository's own documented
+`idd-doctor` invocation at the still-`v0.9.0` pin against the config
+this track produced a genuine `ERROR`
+(`$: additional property "upstreamEscalation" not allowed`, and
 similarly for the other four new top-level/nested keys) rather than
 only the two pre-existing `WARN`s -- the `v0.9.0` schema's
-`additionalProperties: false` rejects all five new keys outright. This
-is expected and does **not** block merging this PR or any sibling
-track: no `.github/workflows/` check runs `ajv`/`idd-doctor` as a
+`additionalProperties: false` rejected all five new keys outright. This
+was expected and did **not** block merging this PR or any sibling
+track: no `.github/workflows/` check ran `ajv`/`idd-doctor` as a
 required status check (confirmed by repository-wide grep before this
-track was selected), so the gap is visible only to a human or agent
-manually running the `v0.9.0`-pinned command by hand. It closes the
-moment Track D (#424) lands. Until then, validate this repository's
-`.github/idd/config.json` only against the fetched `v0.11.0` schema (as
-this section's own opening paragraph does), not the still-`v0.9.0`-pinned
-`idd-helper-bundle-manifest`/`idd-doctor` invocation.
+track was selected), so the gap was visible only to a human or agent
+manually running the `v0.9.0`-pinned command by hand. **Track D (#424)
+has since landed**, bumping the Helper Runtime Profile pin and every
+`.github/workflows/` helper invocation to `v0.11.0` and closing this
+gap -- see that section for the current pin. This passage is kept as a
+historical record of the transitional-gap pattern, not as current
+validation guidance.
 
 ### Report-shape schemas audited (not policy keys)
 

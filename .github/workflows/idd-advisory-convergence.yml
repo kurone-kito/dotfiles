@@ -4,13 +4,40 @@ name: IDD advisory-convergence gate
 # workflow is proven green -- see #149). Adapted from
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# d005098bf3a54a27ac79b22fb5eeb88186d235c6 (v0.9.0; reconciled from the
-# prior v0.7.0 pin by #384, which also keeps this file's helper pin in
+# 1f90787ebf4021673ce6e5eb69741df331fd2037 (v0.11.0; reconciled from the
+# prior v0.9.0 pin by #424, which also keeps this file's helper pin in
 # sync with the rest of the repository's ephemeral-npx invocations --
 # see docs/idd-policy.md "Helper Runtime Profile"). The
 # maintainer-authorized waiver escape is already configured in
 # `.github/idd/config.json` `ciGate.*`; see docs/idd-policy.md "CI Gate
 # External Check Waivers" for the waiver path.
+#
+# CI-check-identity-spoofing closure (#424, kurone-kito/idd-skill#2657):
+# `pull_request_target` resolves this workflow's own YAML from the base
+# branch (`master`), not the PR branch, so a same-repository PR can no
+# longer weaken this file's own triggers/permissions/concurrency by
+# editing it -- `pull_request` alone left that gap open even though the
+# checkout step below already pinned `ref: master` for the *checked-out
+# logic*; the exposure was the workflow definition itself, evaluated
+# from the PR branch, not the script it runs. `pull_request` stays
+# registered alongside `pull_request_target` for now (transition state:
+# `pull_request_target` cannot fire on the PR that first adds this
+# trigger, only on PRs opened afterward, so dropping `pull_request`
+# immediately would leave that implementing PR unable to satisfy its
+# own required check) -- until that trigger is dropped, a same-
+# repository PR can still spoof this required check by relying solely
+# on its own PR-branch-controlled `pull_request` copy (Copilot review,
+# PR #429); accepted as a single-maintainer transitional risk, not a
+# closed gap. Drop `pull_request` in the immediately following IDD
+# cycle after this merges, once one post-merge PR has produced a
+# `pull_request_target`-triggered `idd-advisory-convergence` run
+# (verify with `gh run list --workflow=idd-advisory-convergence.yml
+# --event pull_request_target`) -- a concrete, checkable condition
+# rather than "a period". `pull_request_review` moved entirely
+# to the non-required `idd-advisory-convergence-comment.yml` companion
+# (see its own header) for the identical reason: there is no
+# `pull_request_review_target` variant, so keeping it here would leave
+# one trigger still PR-editable.
 #
 # Runner override: `runs-on` below reads the `runner` workflow_dispatch
 # / workflow_call input first, then the `CI_RUNNER_LABEL` repository
@@ -29,32 +56,42 @@ name: IDD advisory-convergence gate
 # own header.
 #
 # CI topology: convergence can change WITHOUT a new push -- when
-# Copilot submits its review (pull_request_review) -- so that trigger is
-# added alongside pull_request. Upstream moved review-thread-comment-
-# triggered refresh (pull_request_review_comment) exclusively to the
-# non-required `idd-advisory-convergence-comment.yml` companion
-# workflow at v0.7.0; this repository deferred adopting that companion
-# at the time because the ephemeral-npx helper pin then lacked a
-# packaged `idd-review-comment-origin` bin (see PR #303's "Decisions
-# recorded" for the confirmed gap). #384 confirmed that gap closed at
-# the v0.9.0 pin (`idd-review-comment-origin`,
-# `idd-advisory-comment-debounce`, and `idd-rerun-advisory-convergence`
-# all resolve to packaged bins) and adds
-# `idd-advisory-convergence-comment.yml` alongside this file, so a
-# disposition reply on a review thread now auto-refreshes this required
-# check again via that companion. The manual `gh run rerun`/
-# `workflow_dispatch` recovery path below (or the
+# Copilot submits its review (pull_request_review), or when a
+# disposition reply lands on a review thread or regular PR comment.
+# #384 wired all of that through the `idd-advisory-convergence-comment.yml`
+# companion (`idd-review-comment-origin`, `idd-advisory-comment-debounce`,
+# and `idd-rerun-advisory-convergence` all resolve to packaged bins at
+# this repository's ephemeral-npx pin -- see PR #303's "Decisions
+# recorded" for the earlier confirmed gap this closed). #424 finished
+# that move: `pull_request_review` itself now triggers only the
+# companion, not this required gate directly -- NOT for tamper-resistance
+# (the companion is just as PR-editable as this trigger previously was;
+# there is no `pull_request_review_target` variant), but so that this
+# workflow's own triggers are exclusively push-shaped
+# (`pull_request`/`pull_request_target`, plus `workflow_dispatch`/
+# `workflow_call`). Only the first two are pull-request-family events
+# the `pull_request_target` spoofing closure above actually applies to;
+# `workflow_dispatch`/`workflow_call` are a separate, already-trusted
+# invocation path (manual dispatch requires write access; a call
+# requires an explicit caller reference), not additional beneficiaries
+# of that closure (Copilot review, PR #429). What actually stays
+# trusted, across all four trigger types, is this
+# push-triggered gate; the companion's review/comment-triggered refresh
+# is deliberately best-effort on top of it -- a tampered companion copy
+# can only delay a fresh green, never force one, since this gate's own
+# verdict is still computed independently on every push. The manual
+# `gh run rerun`/`workflow_dispatch` recovery path below (or the
 # `idd-rerun-advisory-convergence` helper bin) remains available for any
 # case the companion's own debounce/classification does not cover.
-# Several pull_request/pull_request_review events can still fire in
+# Several pull_request/pull_request_target events can still fire in
 # quick succession during review triage, so `concurrency:` below
-# debounces them to at most one active run per pull request instead of
-# several stacked ones -- this exact multi-run pattern is a documented,
-# previously-investigated upstream incident: kurone-kito/idd-skill#1381
-# (empirically reproduced on that repository's own PR #1383; see that
-# repository's identically-pinned idd-advisory-convergence.yml header
-# for the full writeup) -- ported here after #226 hit the same friction
-# without it.
+# debounces them to at most one active run per pull request per event
+# family instead of several stacked ones -- this exact multi-run pattern
+# is a documented, previously-investigated upstream incident:
+# kurone-kito/idd-skill#1381 (empirically reproduced on that
+# repository's own PR #1383; see that repository's identically-pinned
+# idd-advisory-convergence.yml header for the full writeup) -- ported
+# here after #226 hit the same friction without it.
 #
 # `cancel-in-progress: true` does not fully close the gap: a stale
 # CANCELLED run can still race a later SUCCESS run for the identical
@@ -76,10 +113,40 @@ name: IDD advisory-convergence gate
 # pull_request-family-triggered run over dispatching a fresh one
 # whenever one already exists for the current head SHA.
 on:
+  # Trigger-migration transition state: pull_request is evaluated against
+  # the pull request's own merge ref, so a same-repository PR could edit
+  # this file's copy to force its own required check green.
+  # pull_request_target closes that gap -- it is evaluated against the
+  # base branch's own workflow YAML instead -- but cannot fire against
+  # the PR that first adds or edits this trigger, only against PRs
+  # opened afterward, so both stay active together rather than a single-
+  # PR replacement that would leave the implementing PR unable to
+  # satisfy its own required check. Until pull_request is dropped, a
+  # same-repository PR can still satisfy this required check via its
+  # own PR-branch-controlled pull_request copy alone -- an accepted
+  # single-maintainer transitional risk, not a closed gap (see the
+  # top-of-file header for the concrete drop condition, tightened from
+  # upstream's "for a period" phrasing). pull_request_review moved to
+  # the companion idd-advisory-convergence-comment.yml workflow instead
+  # of staying here, for the identical reason.
+  #
+  # Check-run binding note (recurring false-positive in automated
+  # review): GitHub associates the check run this job produces with
+  # `github.event.pull_request.head.sha` automatically for any
+  # pull-request-family trigger -- independent of `github.sha` (which
+  # for pull_request_target resolves to the base branch tip, not the PR
+  # head) and independent of the checkout `ref:` below. This is the
+  # same mechanism the pre-existing `pull_request` trigger already
+  # relies on (its own `github.sha` is a synthetic merge commit, not
+  # the PR's real head, yet its checks have always shown up correctly
+  # on the PR). No explicit head-SHA parameterization is needed or
+  # possible here; the CI-check-identity-spoofing closure this trigger
+  # provides is about which copy of THIS WORKFLOW FILE gets evaluated,
+  # not which commit the resulting check attaches to.
   pull_request:
     types: [opened, reopened, synchronize]
-  pull_request_review:
-    types: [submitted]
+  pull_request_target:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -116,15 +183,25 @@ defaults:
     shell: bash
 concurrency:
   cancel-in-progress: true
-  # Grouped by PR number, not github.ref: pull_request_review is not a
-  # pull_request-family event, so github.ref does not resolve the same
-  # way for it as it does for a pull_request-only workflow. Review-thread
-  # comments live in the idd-advisory-convergence-comment.yml companion
-  # workflow (see header) and do not share this group. Keep pull_request
-  # and pull_request_review in their existing group, but isolate
-  # workflow_dispatch so a manual re-check cannot cancel an in-flight
-  # PR-linked run.
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}', inputs.pr_number) || github.event.pull_request.number || inputs.pr_number }}
+  # Grouped by PR number, not github.ref: pull_request_target resolves
+  # github.ref to the base branch (the same value for every PR targeting
+  # it), so grouping by ref would collapse unrelated PRs into one slot.
+  # Review-thread comments and review submissions live in the companion
+  # idd-advisory-convergence-comment.yml workflow and must not share
+  # this group. Isolate workflow_dispatch so a manual re-check cannot
+  # cancel an in-flight PR-linked run.
+  #
+  # kurone-kito/idd-skill#2657: also isolate pull_request from
+  # pull_request_target (previously grouped together) -- both fire on
+  # the same opened/synchronize PR event, so whichever instance started
+  # later could cancel the other mid-run, including the
+  # pull_request_target instance's own idd-advisory-convergence-self-waiver
+  # job, which would then never finish posting the bootstrap marker for
+  # that push (a cancelled run is not itself a new trigger, so recovery
+  # would need a manual rerun -- defeating the whole no-human-click point
+  # of that job). A new push still correctly cancels a STALE run of the
+  # SAME event type for the same PR.
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}', inputs.pr_number) || format('{0}-{1}', github.event_name, github.event.pull_request.number || inputs.pr_number) }}
 jobs:
   # The job id `idd-advisory-convergence` is the exact check-run context
   # consumed by the rerun helper, advisory-wait policy, required status
@@ -135,8 +212,53 @@ jobs:
   idd-advisory-convergence:
     runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
     timeout-minutes: 10
+    # kurone-kito/idd-skill#2657: sequenced after the self-waiver job
+    # below so an allowlisted PR's own bootstrap marker is guaranteed to
+    # exist (posted or definitively not posted) before this job ever
+    # fetches PR comments -- without this ordering, the two jobs share
+    # no dependency and start in parallel, so this (typically much
+    # faster) job can read comments and fail BEFORE the self-waiver job
+    # finishes its diff check, claim resolution, and posting call. Since
+    # posting a PR comment is not one of this workflow's own trigger
+    # events, that race would leave the required check red until an
+    # unrelated push or manual rerun -- defeating the whole "no human
+    # click required" point of the bootstrap path. `if: ${{ !cancelled() }}`
+    # overrides `needs:`'s own default (a skipped dependency job skips
+    # its dependents too) -- this job must still run on every trigger,
+    # including workflow_dispatch/workflow_call or a pull_request run
+    # where the self-waiver job's own `if:` skips it outright, and a
+    # non-allowlisted PR where it runs but posts nothing.
+    needs: idd-advisory-convergence-self-waiver
+    if: ${{ !cancelled() }}
+    # Job-level override of the workflow-level `permissions:` block
+    # above, adding `actions: read`: the self-referential-bootstrap-auto
+    # trust verification calls `GET
+    # /repos/{owner}/{repo}/actions/runs/{id}`, which needs this scope
+    # explicitly (an unspecified GITHUB_TOKEN permission defaults to
+    # none, not inherited from the repository's own default). A
+    # job-level block replaces the workflow-level one entirely rather
+    # than adding to it, so every previously-granted scope is repeated
+    # here too. The self-waiver job below never calls this endpoint, so
+    # its own job-level permissions (unaffected by this one) do not need
+    # this scope.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
     steps:
-      - uses: actions/checkout@v7
+      # Pinned commit SHA (#424), not this repository's otherwise-usual
+      # floating `@v7` tag: the read-only-permissions rationale that
+      # justifies a floating tag elsewhere (docs/idd-policy.md
+      # "Post-Merge Cleanup Automation") assumes a compromised tag can
+      # only corrupt read-only *output*. That assumption does not hold
+      # for THIS job -- its output *is* the required status check this
+      # whole PR hardens against spoofing, so a retargeted checkout/
+      # setup-node could otherwise make `--assert` report a false
+      # success regardless of every trigger-level closure above. Pinned
+      # to the same reviewed SHAs the self-waiver job below already uses
+      # (Copilot review, PR #429).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Trusted default-branch checkout, not the PR head, for any
           # trigger type including workflow_dispatch: the assertion
@@ -149,7 +271,7 @@ jobs:
           # <!-- dotfiles-divergence: master-branch -->
           ref: master
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: '.nvmrc'
       # This repository runs the ephemeral-npx helper profile (no
@@ -175,5 +297,214 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
             idd-advisory-convergence --pr "$PR_NUMBER" --assert
+
+  # kurone-kito/idd-skill#2657: optional companion job -- a PR that fixes
+  # this gate's own checking logic (or a handful of directly-related
+  # files) can never benefit from its own fix while unmerged, because the
+  # verdict job above always runs the version checked out from `master`.
+  # This job auto-posts a narrowly-scoped, run-bound
+  # `idd-external-check-waiver` marker for exactly that case. See
+  # kurone-kito/idd-skill's `idd-template/docs/idd-helper-scripts.md`
+  # "Automated self-referential-bootstrap-auto waiver" section (at this
+  # file's own pin, 1f90787ebf4021673ce6e5eb69741df331fd2037) for the
+  # full trust model and the seven acceptance conditions -- this
+  # repository's own docs/idd-helper-scripts.md does not carry that
+  # section yet under the `ephemeral-npx` profile (no vendored `docs/`
+  # re-import for v0.11.0 content outside this pin-bump's own scope; see
+  # #422). `idd-advisory-convergence` verifies those conditions before
+  # ever honoring the marker --
+  # this job's only role is to detect the trigger and post it; trust is
+  # established entirely at consume time, not here. The co-requisite
+  # (`ciGate.externalCheckWaivers.mode: "maintainer-authorized"` plus
+  # `idd-advisory-convergence` under `ciGate.externalChecks.waivable`) is
+  # already configured in `.github/idd/config.json` (see
+  # docs/idd-policy.md "CI Gate External Check Waivers"), so this job
+  # can actually post a live waiver here, not merely a `::notice::`.
+  #
+  # `if: pull_request_target` only, never `pull_request`: a
+  # same-repository PR editing this YAML could otherwise also run this
+  # job under a `pull_request`-triggered instance it fully controls. The
+  # consumer's run-provenance trust condition (the marker's `run-id:`
+  # must resolve to a `pull_request_target`-triggered run) would reject a
+  # marker from that instance anyway, but gating the job itself here
+  # avoids granting `issues: write`/`pull-requests: write` under an
+  # untrusted-YAML trigger in the first place.
+  #
+  # This repository runs the ephemeral-npx helper profile only (no
+  # vendored-node/package-manager adopters to branch for), so this job
+  # skips upstream's generic helperRuntime.profile resolution and
+  # package-manager detection scaffolding entirely and invokes the
+  # packaged CLI directly at the pinned tarball, matching the verdict
+  # job's own simplification above. See docs/idd-policy.md "Helper
+  # Runtime Profile".
+  idd-advisory-convergence-self-waiver:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
+    timeout-minutes: 10
+    # Narrower than the verdict job's read-only posture above: this job
+    # needs `pull-requests: write` (to diff/fetch the PR, and -- this is
+    # the load-bearing grant -- to actually post the marker below) and
+    # `issues: write` (to post the marker, and to read the linked
+    # issue's own comment stream to resolve its active claim).
+    # kurone-kito/idd-skill#2951 (fixed by #2954, landed AFTER this
+    # file's own `1f90787` pin -- #424 backports the fix here rather
+    # than re-pinning the whole tarball for one job's permission grant):
+    # with only `pull-requests: read` (this file's original value,
+    # matching the pinned commit exactly), the marker POST failed with
+    # HTTP 403 "Resource not accessible by integration" on 11/11 real
+    # invocations upstream. Do not narrow `pull-requests` back to `read`
+    # without re-running an equivalent live test (Copilot review,
+    # PR #429).
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      # Pinned commit SHA, matching the verdict job above (both pinned
+      # since #424 -- see its own comment for why a required check's
+      # output-determining job needs this regardless of permission
+      # level). This job's own `issues: write`/`pull-requests: write` --
+      # genuinely more privileged, supply-chain-sensitive permissions the
+      # verdict job above does not carry -- are a second, independent
+      # reason it gets
+      # the same pinned-SHA hardening `post-merge-cleanup.yml` /
+      # `idd-advisory-convergence-comment.yml` already apply for their
+      # own elevated permissions (see docs/idd-policy.md "Post-Merge
+      # Cleanup Automation").
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Trusted default-branch checkout, not the PR head -- see the
+          # verdict job's own comment above for the full rationale. This
+          # job's posting logic (external-check-waiver) must be the
+          # trusted copy too, or a PR could edit it to post a
+          # differently-shaped marker or waive an unrelated check.
+          # <!-- dotfiles-divergence: master-branch -->
+          ref: master
+          persist-credentials: false
+      - name: Detect self-referential trigger-file allowlist touch
+        id: allowlist
+        # Runs before checkout of any Node.js setup below: needs only
+        # gh/jq/bash, so a PR untouched by this allowlist never pays for
+        # a Node.js provisioning step it has no use for.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # gh api's files endpoint reports both `filename` and (when
+          # present) `previous_filename` for a renamed entry -- `gh pr
+          # diff --name-only` reports only the new name, which would miss
+          # a rename away from an allowlisted path.
+          ALLOWLIST=(
+            ".github/idd/config.json"
+            ".github/workflows/idd-advisory-convergence.yml"
+            ".github/workflows/idd-advisory-convergence-comment.yml"
+          )
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" \
+            --paginate --jq '.[] | .filename, (.previous_filename // empty)')
+          TOUCHED=false
+          for FILE in "${ALLOWLIST[@]}"; do
+            if grep -qxF "$FILE" <<<"$CHANGED"; then
+              TOUCHED=true
+              break
+            fi
+          done
+          echo "touched=$TOUCHED" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.allowlist.outputs.touched == 'true'
+        with:
+          node-version-file: '.nvmrc'
+      - name: Post the self-referential-bootstrap-auto waiver
+        # Skip a fork PR entirely: the consumer's run-bound trust check
+        # would reject it anyway (a fork's own workflow run never
+        # matches this repository), so this avoids a doomed post and the
+        # API calls it would cost.
+        if: steps.allowlist.outputs.touched == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        id: post-waiver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_ENTERPRISE_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+            idd-external-check-waiver --pr "$PR_NUMBER" --check idd-advisory-convergence \
+            --reason self-referential-bootstrap-auto --run-id "$GITHUB_RUN_ID" \
+            --auto-bootstrap --apply --yes | tee /tmp/idd-waiver-report.json
+          APPLIED=$(node -e '
+            try {
+              const report = JSON.parse(require("fs").readFileSync("/tmp/idd-waiver-report.json", "utf8"));
+              process.stdout.write(String(report.applied ?? false));
+            } catch {
+              process.stdout.write("false");
+            }
+          ')
+          COMMENT_ID=$(node -e '
+            try {
+              const report = JSON.parse(require("fs").readFileSync("/tmp/idd-waiver-report.json", "utf8"));
+              process.stdout.write(String(report.commentId ?? ""));
+            } catch {
+              process.stdout.write("");
+            }
+          ')
+          BODY_DIGEST=$(node -e '
+            try {
+              const report = JSON.parse(require("fs").readFileSync("/tmp/idd-waiver-report.json", "utf8"));
+              process.stdout.write(String(report.bodyDigest ?? ""));
+            } catch {
+              process.stdout.write("");
+            }
+          ')
+          echo "applied=$APPLIED" >> "$GITHUB_OUTPUT"
+          echo "comment-id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "body-digest=$BODY_DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Record the posted marker's provenance
+        # A run-scoped Actions artifact naming the EXACT comment id AND
+        # body digest this run's own trusted job just posted -- the
+        # binding primitive the consumer reads to prove a candidate
+        # marker IS the one this run's own execution posted, not merely
+        # that no OTHER candidate is currently visible or that some
+        # candidate with a matching id exists regardless of whether its
+        # body was since edited in place. Only when a NEW comment was
+        # actually posted this run -- the reuse path (an existing valid
+        # waiver found, nothing newly posted) has no comment of THIS
+        # run's own to record. Needs no `permissions:` entry:
+        # actions/upload-artifact uses the Actions runtime's own
+        # dedicated upload token, entirely separate from GITHUB_TOKEN.
+        if: steps.post-waiver.outputs.applied == 'true' && steps.post-waiver.outputs.comment-id != '' && steps.post-waiver.outputs.body-digest != ''
+        env:
+          COMMENT_ID: ${{ steps.post-waiver.outputs.comment-id }}
+          BODY_DIGEST: ${{ steps.post-waiver.outputs.body-digest }}
+        run: |
+          mkdir -p /tmp/idd-self-waiver-marker
+          printf 'commentId=%s\nbodyDigest=%s\n' "$COMMENT_ID" "$BODY_DIGEST" \
+            > "/tmp/idd-self-waiver-marker/idd-self-waiver-marker-${COMMENT_ID}-${BODY_DIGEST}"
+      - name: Upload the posted marker's provenance artifact
+        # v4+ has no GHES Artifacts backend (GHES needs v3.2.2:
+        # kurone-kito/idd-skill#2918) -- on an affected GHES instance this
+        # step, and therefore the self-referential-bootstrap-auto waiver
+        # path, fails closed (no provenance artifact, so the marker is
+        # never honored). docs/onboarding/optional-host-setup.md's
+        # advisory-convergence hosting section does not carry this
+        # GHES-specific caveat yet under this repository's own v0.9.0
+        # instructions baseline (Track C, #422); linked directly here in
+        # the meantime (Copilot review, PR #429) rather than added there,
+        # which would be out of this PR's own stated scope boundary.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.post-waiver.outputs.applied == 'true' && steps.post-waiver.outputs.comment-id != '' && steps.post-waiver.outputs.body-digest != ''
+        with:
+          name: idd-self-waiver-marker-${{ steps.post-waiver.outputs.comment-id }}-${{ steps.post-waiver.outputs.body-digest }}
+          path: /tmp/idd-self-waiver-marker/
+          # Loud failure, not a silent empty artifact, if the previous
+          # step somehow produced no file -- the consumer's own binding
+          # check already fails closed on a missing artifact either way,
+          # but this surfaces the CI-side bug immediately instead of only
+          # as a downstream "no auto-waiver" symptom.
+          if-no-files-found: error
+          # Deliberately NOT retention-days: 1 -- a later re-evaluation
+          # (issue_comment-triggered, or rerun-advisory-convergence) can
+          # run well after this run finishes, and the marker's own
+          # validity window outlives a short artifact retention -- keep
+          # the repository default so the artifact stays listable for
+          # the marker's full validity window.

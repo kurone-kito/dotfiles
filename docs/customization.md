@@ -135,14 +135,26 @@ the chosen profile:
 
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
-The tarball URL is pinned to the same upstream commit used as the
-import baseline for this repository's IDD instructions and companion
-bundle, so the helper code never drifts ahead of the checked-in
-phase docs. This repository also runs the manifest under
+The tarball URL is normally pinned to the same upstream commit used as
+the import baseline for this repository's IDD instructions and
+companion bundle, so the helper code never drifts ahead of the
+checked-in phase docs — bump it deliberately whenever the IDD
+instructions are re-imported. As of roadmap #419's Track D (#424),
+this repository is mid-transition: the pin above already reads
+`v0.11.0` (`1f90787`), while `.github/instructions/` remains on the
+prior `v0.9.0` (`d005098`) baseline until Track B (#421) lands —
+Track E's (#423) companion-skills resync has already moved
+`.claude/skills/` to `v0.11.0`, so it is not part of this remaining
+skew. This is a **transitional skew window**, the same pattern
+`docs/idd-policy.md`'s Helper Runtime Profile section already
+documents for the analogous `v0.6.0`→`v0.7.0` round. Track G's (#425)
+final-verification sweep confirms the pin and every resynced surface
+(`.github/instructions/` included) all track `v0.11.0` uniformly again
+once that window closes. This repository also runs the manifest under
 `--profile ephemeral-npx` rather than upstream's own
 `--profile package-manager` default (see #115 for the rationale).
 Replace `--profile ephemeral-npx` with the profile your repository
@@ -502,8 +514,10 @@ once `ciGate.externalCheckWaivers.mode` is `maintainer-authorized`
 external check never silently makes this one waivable too. **Posting a
 waiver comment does not by itself turn the check green**: a waiver is
 a regular PR conversation comment, which is not one of the required
-workflow's triggers (`pull_request` push or `pull_request_review`
-submission), so after posting a waiver a maintainer must also
+workflow's triggers (`pull_request`/`pull_request_target` push --
+`pull_request_review` submission is not one either, since #424 moved
+it to the non-required companion), so after posting a waiver a
+maintainer must also
 **re-run the existing** PR-linked check run **for the current HEAD
 SHA** — the Actions UI "Re-run jobs" button, or
 `gh run rerun <run-id>` — for the required check to actually
@@ -1882,10 +1896,21 @@ endpoints, filtered by the pull request's head branch, to attribute cost the
 same way for your own workflows. A branch-name filter alone can include an
 unrelated run -- a reused branch name, or a same-repository `push` /
 `workflow_dispatch` run against that branch outside this pull request --
-so also restrict to `pull_request`/`pull_request_review`/
+so also restrict to
+`pull_request`/`pull_request_target`/`pull_request_review`/
 `pull_request_review_comment`-triggered runs and check each run's own
 `pull_requests[].number` against the target pull request (empty for a
 fork-originated pull request, where GitHub never populates that field).
+An `issue_comment`-triggered rerun (a companion workflow like
+`idd-advisory-convergence-comment.yml` can have this trigger too, for
+regular PR comments) needs separate handling: GitHub never populates
+`pull_requests[]` for this event type at all, on any pull request, fork
+or not -- confirmed against a real run in this repository
+(`pull_requests: []` even though the triggering comment was on an open
+PR) -- so attributing these runs by branch name alone, or by checking
+the run's own `github.event.issue.number` if your logging captures the
+triggering payload, is the only option; `pull_requests[].number`
+cannot discriminate them.
 
 **Only your configured required status checks cost every pull request
 unconditionally.** A `pull_request`-triggered workflow that is _not_ one of
