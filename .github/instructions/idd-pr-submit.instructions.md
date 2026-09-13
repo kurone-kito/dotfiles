@@ -125,6 +125,56 @@ that is merely `BEHIND` does not force a branch update by itself unless
 branch protection or explicit repository policy requires an up-to-date
 head before merge.
 
+### Adding a new CI job
+
+When this branch's diff introduces a **new** CI job, land it configured
+for `workflow_dispatch` only, not yet wired to `push`/`pull_request`,
+and validate it with manually dispatched runs against the pushed
+branch (for example `gh workflow run <file> --ref <branch>`) before
+making the one remaining edit that flips the trigger to its final
+form. **Commit, re-run pre-push-validate, and push that edit before
+creating the PR (D3)** -- merging with the branch still dispatch-only
+would never enable the job.
+
+GitHub only allows a `workflow_dispatch` run once registered on the
+default branch: `gh workflow run` cannot target a file or trigger that
+exists only on the pushed branch. A first-time job needs a minimal
+bootstrap merge first -- trigger wiring only, job inert -- via its own
+preliminary PR (this repository merges only through PRs); this flow
+then applies to the follow-up PR adding the real job, once that
+scaffolding exists.
+
+`on:` is workflow-file-scoped, not job-scoped: a new job in its own
+file needs no cross-job isolation, but adding `workflow_dispatch` to
+an existing multi-job file makes every job in it dispatchable.
+Isolating the unproven job then is ordinary GitHub Actions authoring
+(for example a job-level `if:`), scoped to that file's own jobs and
+dependencies -- keep it minimal, removing it with the trigger-flip
+edit once validated. This step does **not** by itself reduce
+advisory-bot review invocation count -- that is driven by push count,
+not trigger wiring. Its real benefit is avoiding wasted CI
+Actions-minutes and false-failure noise from an unproven job
+auto-running on every unrelated push. See
+[rationale](../../docs/idd-design-rationale.md#d2--adding-a-new-ci-job-dispatch-first-rollout).
+
+For a Linux-runner job, also validate it locally with `nektos/act`
+before pushing when `act` (and Docker) is available -- per the
+tool-availability convention in `idd-overview-core.instructions.md`'s
+Project commands table, skip this otherwise and rely on the dispatch
+validation above plus CI. `act`'s Docker-based execution cannot
+validate `windows-latest`/`macos-latest` runner-specific behavior from
+a WSL/Linux environment -- never treat "validated via `act`" as
+covering a Windows or macOS job.
+
+Optionally, for a job `act` cannot validate where shakeout is long or
+costly, a contributor may iterate it on a branch with no open PR yet,
+landing only the validated final version on the actual PR branch.
+Review automation that only fires on PR-associated pushes never runs
+during that shakeout, avoiding review cost entirely -- the one path
+here that actually reduces it. This deviates from the normal
+early-PR-then-iterate practice, so scope it to CI-infrastructure work,
+as the implementer's choice, not a mandate.
+
 ## D3 — Create PR
 
 Before drafting the PR body, check whether the repository defines
@@ -170,6 +220,53 @@ Recommended follow-ups stay in the PR body's own prose above. If a
 follow-up is important enough to file in-repo now, invoke the
 `issue-authoring` skill (its Stage 1 hold) instead of improvising a
 body. Do not add a parallel "worker-lite authoring" contract.
+
+### Live-operator-directed immediate-fix carve-out
+
+The "never call `gh issue create`" rule immediately above assumes
+unattended execution with no live operator present. When a live
+operator is present during a claimed issue's own execution and directs
+an immediate fix for a blocking bug unrelated to the claimed work, the
+session may proceed with that fix under the operator's live authority
+instead of routing it through the `issue-authoring` skill first.
+Minimum provenance: the side-fix PR body must cross-reference the
+originating claimed issue using a **non-closing cross-reference** (for
+example, `Refs #<claimed-issue-number>` — never a closing keyword such
+as `Closes`/`Fixes`/`Resolves`, which would auto-close the originating
+issue on the side-fix's own merge). Formal `issue-authoring` tracking
+is still preferred when time allows, but it is not a start blocker for
+this carve-out.
+
+How the executing session obtains a branch, worktree, and claim for
+the side-fix while the originating claim stays active — and how the
+side-fix's own merge and cleanup avoid releasing that originating
+claim — is not yet defined. The shared claim revalidation gate
+(`idd-overview-core.instructions.md`) scopes its cwd-vs-claim check off
+the active claim's recorded `branch:` field, not the mutation's target
+branch, so no branch-naming convention alone exempts a same-session
+side-fix from it. Treat this as an open gap: this carve-out authorizes
+the _decision_ to proceed under live authority; the operator directing
+it owns the mechanics until a follow-up defines them.
+
+D3's closing-keyword requirement and D3.5's presence-detection and
+auto-injection (steps 1-5, including step 4) apply only to the
+side-fix PR's own deliberate closing set — its own linked issue, if
+any, or none otherwise — never to the originating claimed issue named
+above; do not let them treat the non-closing cross-reference above as
+missing, or rewrite it into a closing keyword. The originating claimed
+issue must not appear in the side-fix PR's `closingIssuesReferences`,
+and the side-fix branch's commit messages must not contain a closing
+keyword referencing it — still run D3.5 step 6's exact-set comparison
+and step 7's commit-message scan to confirm both, treating the
+originating issue as outside the side-fix PR's deliberate closing set.
+On a non-default `{development-branch}`, D3.5's own skip rule applies
+unchanged instead: skip all seven steps, since `closingIssuesReferences`
+never populates there regardless of this carve-out.
+
+While a side-fix PR that the claimed issue's PR depends on is in
+flight, periodically re-check the claimed issue's own PR review and CI
+state — unresolved review threads and failing checks — rather than
+discovering that backlog only after the side-fix merges.
 
 ### D3.6 — Derive the IDD impact checklist
 
@@ -440,8 +537,12 @@ completion.
    **Re-run before merge**: this scan only covers commits present at
    D3.5 time. Later branch commits — accepted review fixes
    (`idd-review-fix.instructions.md` E9-E12) or a `{development-branch}`
-   merge — are not automatically covered; re-run this step against the final HEAD
-   before F3 merges.
+   merge — are not automatically covered; `idd-pre-merge.instructions.md`
+   F2's "Closing-set and impact-checklist re-verification" condition
+   names this step explicitly and re-runs it against the then-current
+   HEAD, and `idd-merge.instructions.md` F3's Gate checklist re-runs it
+   again immediately before merging — F2 can run before further HEAD
+   changes land, which is exactly why the F3 re-run also exists.
 
 ### D3.7 — Re-verify the IDD impact checklist before merge
 
@@ -469,11 +570,13 @@ condition D3.5 itself skips under, where `closingIssuesReferences`
 never populates and the check would be meaningless) — edited prose can
 otherwise introduce a stray keyword-adjacent reference.
 
-**Known gap**: no phase file currently re-invokes D3.5 or this step by
-name from F1-F3, so this re-check depends on the same implicit trigger
-D3.5 step 7 already relies on rather than an explicit F-phase call —
-out of this step's own scope to close; recommend a follow-up issue to
-wire an explicit F2/F3 trigger if this gap is not already tracked.
+**Wired to F2/F3**: `idd-pre-merge.instructions.md` F2's "Closing-set
+and impact-checklist re-verification" condition names this step
+explicitly and re-runs it against the then-current HEAD, and
+`idd-merge.instructions.md` F3's Gate checklist re-runs it again
+immediately before merging (#2749) — F2 can run before further HEAD
+changes land, which is exactly why the F3 re-run also exists; no
+longer an implicit, name-only cross-reference.
 
 ## D4 — Wait for CI
 
@@ -505,8 +608,8 @@ confirmed condition above. Delegate polling mechanics to
   `ciWait.rerunPolicy` rerun only reproduces the same red **unless a
   maintainer has since posted a valid external-check waiver for this
   HEAD** — that case still needs the rerun, to make the check reflect
-  the waiver (a pre-existing F2/F3 concern this branch leaves unchanged;
-  see `idd-pre-merge.instructions.md`'s External-check waivers). A
+  the waiver (see `idd-pre-merge.instructions.md`'s External-check
+  waivers for the F2/F3 handling). A
   waiver is effective only once `deadline.passed` is true or
   `terminal.state` reaches `COPILOT_UNAVAILABLE` (check both fields in
   the same run's output); posted earlier, it is valid but inert —
@@ -527,16 +630,50 @@ confirmed condition above. Delegate polling mechanics to
   can all read as "not outstanding" too (`idd-skill#2622`). Run the
   [canonical `advisory-wait-state`
   invocation](idd-advisory-wait.instructions.md#1-canonical-path-helper-first)
-  for this PR first and read `outcome`: only `REQUEST_NEEDED` means
-  request a review now. `SATISFIED` (`lastCopilotCommit` already
-  matches this HEAD SHA — Copilot's review already covers it) or `WAIT`
-  (a same-head request already exists, still inside its settle window)
-  both mean request nothing — wait for Copilot's review to land for the
-  current HEAD SHA (already true in the `SATISFIED` case), then rerun
-  via `rerun-advisory-convergence.mjs` (see `idd-ci.instructions.md`
-  §Rerun mechanics) and resume D4. `CAP_EXHAUSTED` (the request cap is
+  for this PR first and read `outcome`: only `REQUEST_NEEDED` triggers
+  new action here, and it splits on `copilotPending`. When `false`,
+  request a review now and post the same-head `advisory-wait:` marker
+  in the same step (helper-first: the profile-selected
+  `post-idd-marker` command per **AW3-R**, which documents
+  `--type advisory` as this same request-marker form), matching E14's
+  `REQUEST_NEEDED`
+  marker step — without it, `requestMarkerCount` never advances and
+  every resumed D4 pass reads `REQUEST_NEEDED` again instead of
+  progressing toward the cap. When `copilotPending` is `true` instead
+  (a pending reviewer with unproven HEAD coverage and no same-head
+  marker), this is **AW3-S**'s own pending entry — the fuller
+  remove/re-request cycle this bullet does not reimplement — exit
+  CI-wait and proceed directly to `idd-review-snapshot.instructions.md`
+  (E1) instead, same as `CAP_EXHAUSTED`/`RECOVERY_NEEDED` below.
+  `WAIT` (a same-head request already exists,
+  still inside its settle window) means request nothing — wait for
+  Copilot's review to land for the current HEAD SHA, then rerun via
+  `rerun-advisory-convergence.mjs` (see `idd-ci.instructions.md` §Rerun
+  mechanics) and resume D4. `SATISFIED` splits on `lastCopilotCommit`:
+  when it already matches this HEAD SHA, Copilot's review already
+  covers it — request nothing and take the same rerun-and-resume-D4
+  action as `WAIT` above (this proven-coverage sub-case is unchanged;
+  it never consults **AW3-S**). When it does **not** match this HEAD SHA,
+  `SATISFIED` may reflect either `COPILOT_PENDING` state (see
+  `idd-advisory-wait.instructions.md`'s AW3 elapsed-window rows):
+  `"true"`, settled by `PENDING_WINDOW_MINUTES` alone; or `"false"` — a
+  same-head request's elapsed window ran out with no review ever
+  landing for this HEAD, the settled-window (non-pending) sub-case E14
+  step 4 already consults **AW3-S** for. Consult **AW3-S**'s
+  `staleRequestRecovery` before exiting either way — its non-pending
+  entry requires `COPILOT_PENDING` `"false"`, so the `"true"` sub-case
+  reports `"not-applicable"` and falls through as a safe no-op:
+  `"attempt"` runs the bounded cycle (skip **Remove**, start at
+  **Request**; a proven failure-to-register completes the cycle per
+  the entry's inverted step 4/5 disposition); `"cap-exhausted"` handles
+  like **CAP_EXHAUSTED** below. Either way, `idd-advisory-convergence`
+  stays `pending: true` for this HEAD regardless, so rerunning and
+  resuming D4 would only reproduce the same wait indefinitely — treat
+  it like `CAP_EXHAUSTED`/
+  `RECOVERY_NEEDED` below instead. `CAP_EXHAUSTED` (the request cap is
   already spent) or `RECOVERY_NEEDED` (a proven same-head request
   exists but needs its marker, not a new request) both need the fuller
   AW3 handling this bullet does not reimplement — exit CI-wait and
   proceed directly to `idd-review-snapshot.instructions.md` (E1)
-  instead, the same carve-out the pending-disposition case above takes.
+  instead, the same carve-out the pending-disposition case above and
+  the elapsed-window `SATISFIED` case take.

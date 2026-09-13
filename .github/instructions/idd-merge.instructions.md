@@ -160,7 +160,29 @@ Before any mutating action in F3, apply the
      sub-condition on it
      ([Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570));
    - all required CI checks pass for the current head;
-   - claim ownership still uses your `{claim-id}`.
+   - claim ownership still uses your `{claim-id}`;
+   - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
+     been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
+     that landed between F2 and this final gate, for example a
+     required `{development-branch}` sync. Before running them,
+     confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
+     exactly (`git fetch` plus `git checkout`/`git reset --hard` if a
+     resumed or external-push session left it stale) — D3.5 step 7's
+     `git log` and D3.7's inherited `git diff` both read local git
+     state, not the remote PR directly. Skip D3.5 steps 6-7 under the
+     same non-default-`{development-branch}` exemption D3.5 itself
+     carries. On a mismatch, fix it per D3.5/D3.7's own documented
+     handling. Any fix here — whether or not it changes HEAD, since a
+     PR-body edit alone (D3.7's remediation, or D3.5 step 6's) still
+     counts — invalidates step 3's own **Re-validate claim** ("confirm
+     the active claim still uses your current `{claim-id}`") and
+     **Advisory state revalidation** (re-run AW1, escalating through
+     AW2/AW3 as needed) checks above; re-run both of those before
+     merging. If the fix additionally amended or rebased a commit
+     (changing HEAD),
+     return to E1 instead of just re-validating in place — F2's own
+     snapshot is invalidated by a new HEAD. Otherwise repeat this field
+     once; if it still fails, stop and do not merge.
 
    For the head-SHA field, use this **copy-paste-safe, fail-closed**
    check — both operands fully quoted, no glob, abort on mismatch —
@@ -218,16 +240,16 @@ Before any mutating action in F3, apply the
        state of `mergeable: "MERGEABLE"` and `mergeStateStatus` settled
        to `"CLEAN"` or `"BEHIND"` also required.
        `isSafeSoloCodeownerAdminMergeState` still refuses
-       `mergeStateStatus: "BLOCKED"`. On kurone-kito/idd-skill's
-       current `main` ruleset (`require_code_owner_review: false`), the
-       `status: "clear"` trigger never matches, observed `"BLOCKED"`
-       states have not been a confirmed CODEOWNER deadlock, and the
-       remaining escalation on **this topology** is a human `--admin`
-       (or `hold-and-report`). Distributed `auto-admin-retry` is
-       unchanged when `status: "clear"` with a bypass-available
-       `reason`, `prAuthorIsSoleEligibleCodeowner: true`, and
-       `codeownerEligibilityUnreadable: false` hold. See
-       `docs/permissions.md` (kurone-kito/idd-skill#1663).
+       `mergeStateStatus: "BLOCKED"`. When the base ruleset does not
+       require CODEOWNER review, the `status: "clear"` trigger does not
+       match and a `BLOCKED` state is not by itself a CODEOWNER
+       deadlock; the remaining escalation on **this topology** is a
+       human `--admin` (or `hold-and-report`). Distributed
+       `auto-admin-retry` is unchanged when `status: "clear"` with a
+       bypass-available `reason`, `prAuthorIsSoleEligibleCodeowner:
+       true`, and `codeownerEligibilityUnreadable: false` hold. See
+       `docs/permissions.md` (kurone-kito/idd-skill#1663) for this
+       repository's own dated observation.
        `idd-merge-execute.mjs --apply` applies this automatically and
        records the outcome in the verdict's `adminFallbackUsed` field.
 
@@ -323,17 +345,26 @@ Before any mutating action in F3, apply the
    node scripts/audit-pr-cleanup.mjs --pr <pr-number> --dry-run --format table
    ```
 
-   **Duplicate-success-record skip rule**: skip posting an evidence
-   comment below if the PR already carries a `<!-- idd-cleanup-evidence:`
-   comment recording a successful outcome (`applied` or `clean`) **whose
-   author is a trusted marker actor** (`github-actions[bot]`, the
-   identity `post-merge-cleanup.yml` posts under, or a configured
-   `trustedMarkerActors` login) — for example one the `post-merge-cleanup`
-   workflow posted within seconds of the merge — to avoid a duplicate
-   success record. An untrusted commenter's marker-prefixed comment never
-   counts as evidence and must not suppress this post — the same
-   trust-scoping every other IDD operational marker already applies (see
-   the shared
+   **In-flight cleanup-run wait (#2846)**: immediately before actually
+   posting below (fresh each time, not cached from here — a run's
+   status can change during dry-run/apply), check whether this PR's
+   `post-merge-cleanup.yml` run is still in flight, waiting (bounded)
+   for it to finish if so — see `docs/idd-comment-minimization.md`'s
+   In-flight cleanup-run wait. Either way, continue to the rule below
+   unchanged: it reads whatever that run may have posted and decides
+   ownership from the marker's own recorded status.
+
+   **Duplicate-success-record skip rule**: before posting any evidence
+   comment below, skip it if the PR already carries a
+   `<!-- idd-cleanup-evidence:` comment recording a successful outcome
+   (`applied` or `clean`) **whose author is a trusted marker actor**
+   (`github-actions[bot]`, the identity `post-merge-cleanup.yml` posts
+   under, or a configured `trustedMarkerActors` login) — for example one
+   the `post-merge-cleanup` workflow posted within seconds of the merge —
+   to avoid a duplicate success record. An untrusted commenter's
+   marker-prefixed comment never counts as evidence and must not suppress
+   this post — the same trust-scoping every other IDD operational marker
+   already applies (see the shared
    [Trusted marker actors](idd-overview-core.instructions.md#trusted-marker-actors)
    rule). Otherwise post (a fresh success record, or a correction of an
    existing `failed` / `incomplete` / `permission-blocked` record, or a
@@ -471,7 +502,7 @@ Before any mutating action in F3, apply the
    shows `needs-apply`):
 
    - **`clean`**: no candidates and no permission-blocked items.
-     Proceed to step 3.
+     Proceed to step 4.
 
    - **`needs-apply`**: eligible candidates exist and the viewer can
      minimize them. Apply is mandatory. Re-validate the active claim,
@@ -494,7 +525,7 @@ Before any mutating action in F3, apply the
      on `POST`, send the evidence comment (`status`, `applied`,
      `failed`, `skipped`, `viewer-cannot-minimize` counts for
      `applied`, or a converged `clean` record) so this run's work is
-     recorded. Proceed to step 3.
+     recorded. Proceed to step 4.
 
      The helper internally retries a whole scan-and-minimize pass, bounded,
      when a fresh rescan still reports candidates after applying (a
@@ -521,12 +552,12 @@ Before any mutating action in F3, apply the
      convergence was never confirmed) — note that distinction in the
      comment and re-run `--apply` to confirm convergence. Explicit
      evidence, not a merge gate — the merge already succeeded. Proceed
-     to step 3.
+     to step 4.
 
    - **`permission-blocked`**: skipped items exist with
      `viewerCanMinimize: false` and no apply-eligible candidates found.
      Post a cleanup-permission-blocked comment listing the blocked
-     candidates and the count, then proceed to step 3.
+     candidates and the count, then proceed to step 4.
 
    For the GraphQL fallback (helper unavailable): check
    `viewerCanMinimize` and `isMinimized` before minimizing; skip
@@ -620,8 +651,8 @@ Before any mutating action in F3, apply the
      `{development-branch}` is the cause.
 
 6. If GitHub auto-delete is disabled: delete the remote branch too.
-   (WorkTrunk may be used for steps 4–5, the deletion steps —
-   step 3's local `{development-branch}` update is a plain git
+   (WorkTrunk may be used for steps 5–6, the deletion steps —
+   step 4's local `{development-branch}` update is a plain git
    operation, not a WorkTrunk one.)
 7. Re-validate the active claim one final time. If it still uses your
    `{claim-id}`, post `unclaimed-by` for your own `{agent-id}` /

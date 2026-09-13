@@ -1,6 +1,7 @@
 # IDD — Copilot Advisory-Wait Protocol
 
-Shared advisory-wait protocol used by **E14**
+Shared advisory-wait protocol used by **D4**
+(`idd-pr-submit.instructions.md`), **E14**
 (`idd-review-fix.instructions.md`), **F2** (`idd-pre-merge.instructions.md`),
 and **F3** (`idd-merge.instructions.md`). Policy constants (cap/windows)
 are named in
@@ -21,12 +22,23 @@ delta** (`idd-review-snapshot.instructions.md`), re-checked by the
 F2/F3 merge-readiness gate (`idd-pre-merge.instructions.md`), which
 forbids a bare CI-green merge without a fresh covering snapshot.
 
+**Do not build a substitute wait for a non-primary bot.** A polling
+loop, scheduled wakeup, or background monitor that blocks on a
+specific non-primary bot's review reaching current HEAD (any bot
+other than the configured `advisoryWait.primaryBotLogin` — for
+example, Codex, on a repository where it is not that configured bot)
+is not this protocol — it has none of this protocol's caps, timeouts,
+or hold routes, and the bot may never review the PR at all, so the
+wait has no bounded exit. Rely on the E1/review-watermark/F2/F3
+safety net above instead.
+
 ## Fast path — common case
 
 The advisory bot usually reviews current HEAD within minutes, reducing
 the gate to one check: poll `LAST_COPILOT_COMMIT`; once it equals
 `PR_HEAD_SHA`, the gate is **SATISFIED** — skip the AW2-AW5 machinery
-and take the caller's `SATISFIED` action (E14 → E15, F2 → CI check, F3
+and take the caller's `SATISFIED` action (D4 → rerun
+`idd-advisory-convergence` and resume D4, E14 → E15, F2 → CI check, F3
 → merge; common to both the canonical path and shell-fallback AW3 row
 one). Enter the full protocol below **only** when
 `LAST_COPILOT_COMMIT != PR_HEAD_SHA`.
@@ -95,14 +107,14 @@ outage (e.g. via status page or an org admin surface) before retrying.
 ### Caller mapping
 
 <!-- dprint-ignore-start -->
-| Outcome | E14 | F2 | F3 |
-| --- | --- | --- | --- |
-| `SATISFIED` | proceed to E15 | continue to CI check | proceed with merge |
-| `REQUEST_NEEDED` | request Copilot + marker + poll | return to E14 | return to E14 |
-| `RECOVERY_NEEDED` | post recovery marker + poll | post recovery marker + poll | post recovery marker; return to F2 |
-| `CAP_EXHAUSTED` | use `CAP_EXHAUSTED_ROUTE` | post cap-exhausted hold and stop | post cap-exhausted hold and stop |
-| `WAIT` | continue polling | poll then restart F2 from top | do not merge; return to F2 |
-| `HOLD` | post hold and stop | post hold and stop | post hold and stop |
+| Outcome | D4 | E14 | F2 | F3 |
+| --- | --- | --- | --- | --- |
+| `SATISFIED` | `lastCopilotCommit` matches HEAD: rerun `idd-advisory-convergence`; resume D4. Elapsed-window `SATISFIED`: exit CI-wait; proceed to E1 | proceed to E15 | continue to CI check | proceed with merge |
+| `REQUEST_NEEDED` | `copilotPending` false: request review + marker; resume D4. `copilotPending` true: exit CI-wait; proceed to E1 | request Copilot + marker + poll | return to E14 | return to E14 |
+| `RECOVERY_NEEDED` | exit CI-wait; proceed to E1 | post recovery marker + poll | post recovery marker + poll | post recovery marker; return to F2 |
+| `CAP_EXHAUSTED` | exit CI-wait; proceed to E1 | use `CAP_EXHAUSTED_ROUTE` | post cap-exhausted hold and stop | post cap-exhausted hold and stop |
+| `WAIT` | wait for Copilot's review; rerun `idd-advisory-convergence`; resume D4 | continue polling | poll then restart F2 from top | do not merge; return to F2 |
+| `HOLD` | post hold and stop | post hold and stop | post hold and stop | post hold and stop |
 <!-- dprint-ignore-end -->
 
 ### Secondary advisory bot supplement (non-gating)
@@ -312,12 +324,13 @@ verified HEAD within one pass).
 
 After a new `advisory-wait`/`advisory-wait-recovery` marker is verified
 for the current `PR_HEAD_SHA`, minimize every trusted prior marker of
-the `advisory-wait:`/`advisory-wait-recovery:`/`advisory-reroll:`
-family whose embedded HEAD SHA does **not** match, as `OUTDATED` (cuts
-F4 backlog and review-page noise — a stale-HEAD `advisory-reroll:`
-marker is exactly as much operational noise as a stale advisory-wait
-one). Find candidate IDs (trusted markers of that family with a
-differing embedded SHA), then call the minimize-markers command:
+the `advisory-wait:`/`advisory-wait-recovery:`/`<!-- advisory-wait:`/
+`advisory-reroll:` family whose embedded HEAD SHA does **not** match,
+as `OUTDATED` (cuts F4 backlog and review-page noise — a stale-HEAD
+`advisory-reroll:` marker is exactly as much operational noise as a
+stale advisory-wait one). Find candidate IDs (trusted markers of that
+family with a differing embedded SHA), then call the minimize-markers
+command:
 [shell fallback AW3-H](../../docs/idd-advisory-wait-shell-fallback.md#aw3-h).
 
 Skip entirely if the new marker was not verified, the candidate set is
@@ -376,7 +389,8 @@ hold.
 
 **`suppressedCount` unvalidated**: `#1511` is `itemCount`-only; reroll
 never zeroed it in `kurone-kito/lints-config` PRs `#243`/`#245`
-(2026-08-10/11). PR #2054 fixes it.
+(2026-08-10/11). The review-ack escape hatch below (PR `#2054`, issue
+`#2050`) covers it; the reroll itself still does not zero the count.
 
 **Already-handled escape hatch**: when the blocking suppressed
 finding(s) have already been read and handled, a reroll is
@@ -442,8 +456,10 @@ still needs a valid waiver), and F2/F3's `advisoryWait.copilotUnavailable`/
 > merging.
 
 **Waived**: rerun the existing `idd-advisory-convergence` run (never
-`workflow_dispatch` — see Rerun mechanics below); both fields recompute
-every call, so an expired/invalid marker reverts automatically.
+`workflow_dispatch` — see
+[rerun mechanics](idd-ci.instructions.md#rerun-mechanics)); both fields
+recompute every call, so an expired/invalid marker reverts
+automatically.
 
 **Sustained outage (`#2320`)**: when `providerOutage.declarationTarget`
 is configured and holds an active declaration for `idd-advisory-convergence`,

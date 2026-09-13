@@ -92,6 +92,29 @@ kurone-kito/idd-skill#1529). Omitting `--nonce` silently skips the
 merge-time comparison rather than failing closed, so pass it whenever a
 nonce was recorded for the active claim.
 
+**No claimed issue**: the readiness collector requires either
+`--claim-issue <issue-number>` (with `--claim-id`) or `--claimless`
+(#2017) — pass `--claimless` instead when this PR has no linked issue to
+claim (`closingIssuesReferences` empty); it cannot combine with
+`--claim-issue`/`--claim-id` and fails closed if `closingIssuesReferences`
+is non-empty. See
+[docs/idd-helper-scripts.md's Readiness command](../../docs/idd-helper-scripts.md)
+for the full flag reference.
+
+**Polling loop failure mode**: a caller that repeats this invocation
+(directly, or via a delegated worker) until F2 is ready must branch on
+two distinct outcomes: a zero exit with the full readiness report JSON
+(`ready: false` with `blockers`) is an ordinary **not-ready-yet** result
+to keep polling on; a non-zero exit with a JSON `{ "error": ... }` object
+on stdout instead is a **call failure** — this covers both a call-time
+argument/usage error (e.g. the missing `--claim-issue`/`--claimless`
+case above, which also carries a `hint`) and a live `gh`-backed lookup
+failing (no `hint`); fix the invocation before retrying an argument
+error, and use judgment before abandoning the poll on a `hint`-less one
+(a live call can fail transiently). Conflating either kind of `{error}`
+response with an ordinary not-ready-yet result (kurone-kito/idd-skill#2707)
+turns an operator-visible failure into a silent stall.
+
 - **Review currency** (live re-fetch required, freshness gate): read the
   most recent `<!-- review-watermark: {agent-id} {claim-id} … -->`
   comment whose embedded `{claim-id}` matches the current active claim
@@ -112,12 +135,35 @@ nonce was recorded for the active claim.
   helper reference in
   [`docs/idd-helper-scripts.md`](../../docs/idd-helper-scripts.md#stable-helper-evidence-outputs)
   to collect this evidence (the fields listed at that anchor). Helpers
-  remain read-only evidence collectors: if execution fails, output is
-  invalid JSON, required sections are missing, or live GitHub state
-  disagrees with it, discard helper output and fetch the activity
-  universe snapshot (same scope as E1 Step 1) plus current CI state for
-  the HEAD SHA directly — the instruction rules remain canonical. Return
-  to E1 if **any** of the following is true:
+  remain read-only evidence collectors. Distinguish two failure shapes
+  before deciding whether to retry. On an
+  **infrastructure/transport failure** — the invocation itself fails
+  with no well-formed gate result at all (a bare network/transport
+  error such as a connection failure, timeout, or DNS failure, or a
+  retryable `5xx`/`429` HTTP status with no substantive JSON body —
+  never a non-retryable `4xx` such as `401`/`403`/`404`, which is
+  code-/auth-caused, not transient), **or returns well-formed JSON
+  whose sole content is a collection/transport-failure placeholder
+  rather than a real gate criterion** (for example a non-empty
+  `blockers` array whose only entry describes the collection failure
+  itself, not any actual merge-readiness criterion) — retry the
+  identical invocation once, mirroring the CI-wait algorithm's own
+  infra-vs-code retry distinction (`ciWait.rerunPolicy`,
+  `idd-ci.instructions.md`) rather than inventing a new pattern; if the
+  retry fails the same way, fall back to the discard-and-fetch-directly
+  path below unchanged — a single bounded attempt, not a loop. A
+  **substantive non-passing gate result** — the helper ran to
+  completion and returned well-formed JSON with real gate fields backed
+  by an actual merge-readiness criterion (for example
+  `claim.matchesExpectedClaim: false`), not a collection-failure
+  placeholder — is never retried; continue trusting it at face value,
+  unchanged from today. For every other case —
+  output is invalid JSON, required sections are missing, or live GitHub
+  state disagrees with it — discard helper output and fetch the
+  activity universe snapshot (same scope as E1 Step 1) plus current CI
+  state for the HEAD SHA directly, unchanged and without retry — the
+  instruction rules remain canonical. Return to E1 if **any** of the
+  following is true:
   - The current PR HEAD SHA differs from the stored `{head-SHA}` (a new
     push after E1's snapshot, even if the watermark posted later).
   - The stored value is `none` and the live snapshot is non-empty
@@ -177,11 +223,30 @@ nonce was recorded for the active claim.
   (`idd-advisory-wait.instructions.md`):
 
   1. Run **AW1**. If **SATISFIED** → this check is **satisfied**;
-     continue to the **CI** check.
+     continue to the **CI** check. (This short circuit is always the
+     proven-coverage case — `LAST_COPILOT_COMMIT == PR_HEAD_SHA` —
+     since AW1 alone has no marker data to evaluate the settled-window
+     sub-case below; it never consults **AW3-S**.)
   2. Run **AW2** to fetch markers.
   3. Apply the **AW3** decision table:
-     - **SATISFIED** → this check is **satisfied**; continue to the CI
-       check.
+     - **SATISFIED**, `COPILOT_PENDING` `"false"`, `COPILOT_PENDING_COVERS_HEAD`
+       `"false"` (settled by elapsed time alone, never proven the
+       request reached Copilot — `#2327`): consult **AW3-S**'s
+       `staleRequestRecovery.action` first, the same way E14 step 4
+       does. `"attempt"` runs its bounded cycle (non-pending entry:
+       skip **Remove**, start at **Request**; a proven
+       failure-to-register completes the cycle per the entry's
+       inverted step 4/5 disposition), **then** continue to the CI
+       check (this accumulates recovery-cycle evidence toward
+       `COPILOT_UNAVAILABLE`; the check's own satisfied status is
+       unaffected). `"cap-exhausted"` handles like **CAP_EXHAUSTED**
+       below instead — post the hold and **stop**; do not continue to
+       the CI check for this action (the mandatory stop from
+       **CAP_EXHAUSTED** below still applies; this recovery-cap
+       exhaustion does not waive it). `"not-applicable"` falls through
+       unchanged and continues to the CI check.
+     - **SATISFIED** (otherwise) → this check is **satisfied**;
+       continue to the CI check.
      - **HOLD** → post the hold comment from **AW4** and stop.
      - **RECOVERY_NEEDED** → post the recovery marker from **AW3-R**
        without requesting another Copilot review, then enter the normal
@@ -353,6 +418,27 @@ nonce was recorded for the active claim.
   rollup. The signal never changes `route` itself; any other blocking
   cause makes it `false`, and the gate still routes to E1/E4. Fails
   closed: an unusable check makes this condition unmet.
+- **Closing-set and impact-checklist re-verification** (D3.5/D3.7
+  re-run against current HEAD, #2749): confirm the local worktree is
+  checked out at the PR's current HEAD exactly (`git fetch` plus
+  `git checkout`/`git reset --hard` if a resumed or external-push
+  session left it stale) — D3.5 step 7's `git log` and D3.7's
+  inherited `git diff` both read local git state, not the remote PR
+  directly. Then re-run `idd-pr-submit.instructions.md`'s D3.5 steps
+  6-7 (the `closingIssuesReferences` set comparison and the
+  commit-message closing-keyword scan) and D3.7 (the
+  IDD-impact-checklist re-derivation) against that HEAD. Skip D3.5
+  steps 6-7 under the same non-default-`{development-branch}`
+  exemption D3.5 itself carries. On a mismatch: for a closing-set
+  drift, apply D3.5 step 6's own remediation (reusing step 4's
+  edit-and-recheck mechanism for a missing entry); for a stray
+  commit-message match, apply D3.5 step 7's own remediation (amend or
+  rebase); for a checklist drift, apply D3.7's own mismatch handling.
+  If the fix amended or rebased a commit (changing HEAD), return to
+  this list's first condition instead of only repeating this one — the
+  new HEAD invalidates the conditions already checked above. Otherwise,
+  repeat this condition once. If it still fails, post a hold note and
+  stop — do not proceed to F3.
 
 When any F2 condition routes to a hold/stop or back to E1/E14, update
 the digest after recording the blocking evidence and before

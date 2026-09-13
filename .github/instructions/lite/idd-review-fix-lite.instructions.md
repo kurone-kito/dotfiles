@@ -81,24 +81,34 @@ other GitHub side effect, confirm all of the following:
    the package-manager-profile `idd:claim-lock` command with the same
    arguments — resolve the exact command from
    `docs/idd-helper-scripts.md` if unsure). A `collision` result is
-   fail-closed: stop rather than proceed.
+   fail-closed: stop rather than proceed. Then, separately, run
+   `--read-tokens --worktree <this-worktree-path> --claim-id <id>`
+   and require `present: true` with no `malformed`; otherwise recover
+   per `docs/idd-helper-scripts.md` (gated: each step succeeds,
+   `reacquired: true` both ends), else stop.
 6. If any check fails, stop.
 
 ## E9 — Fix accepted issues
 
-1. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
-2. Run `fix-validate`.
-3. Commit fixes atomically — one logical change per commit.
-4. When an accepted finding is one instance of a systemic class, sweep
+1. PATH A/PATH B (from `idd-review-triage.instructions.md` E4): PATH A
+   is actionable feedback needing a code change or maintainer decision
+   (human reviewer threads, regular comments, `CHANGES_REQUESTED`
+   bodies, critique-pass findings); PATH B is Copilot and CI advisory
+   bot comments included for traceability, even when they do not
+   require a code change.
+2. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
+3. Run `fix-validate`.
+4. Commit fixes atomically — one logical change per commit.
+5. When an accepted finding is one instance of a systemic class, sweep
    the current diff and adjacent touched sections and fix every
    instance in the same commit.
-5. When a fix introduces a precision (a name, value, path, or described
+6. When a fix introduces a precision (a name, value, path, or described
    behavior) to satisfy a reviewer, verify it against the actual
    implementation before committing.
-6. If an Accepted item is already fixed by a prior commit in this same
+7. If an Accepted item is already fixed by a prior commit in this same
    round, do not duplicate the fix. Confirm the existing commit
    addresses it and let E13 cite that SHA.
-7. Do not push yet. All of this round's fixes push together at E12.
+8. Do not push yet. All of this round's fixes push together at E12.
 
 ## E10 — Validate fixes with critique pass
 
@@ -137,29 +147,29 @@ other GitHub side effect, confirm all of the following:
 <!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
 
-1. Check for conflicts between the feature branch and `master`.
-2. If none exist, continue to E12.
-3. If conflicts exist, and the PR has unresolved review threads,
-   unreplied comments, or a reviewer's latest state is
-   `CHANGES_REQUESTED`, get explicit operator confirmation before
-   merging — the merge commit will appear in the PR history.
+1. Check state with the profile-selected branch-conflict-state helper:
+   `node scripts/branch-conflict-state.mjs --pr {pr-number}`, or the
+   package-manager-profile `idd:branch-conflict-state` command
+   (resolve the exact command from `docs/idd-helper-scripts.md` if
+   unsure) — reflects the last pushed head, not local unpushed fixes.
+   Missing, failing, or disagreeing? Stop and ask (Helper runtime
+   contract above) — no non-helper fallback here.
+2. Not a confirmed conflict (clean, behind-no-conflict, computing,
+   dirty, force-push-exception, unknown)? Skip the merge, continue to
+   E12 — F1 (`idd-pre-merge-lite.instructions.md`) handles those
+   downstream.
+3. Conflict (`mergeable` `CONFLICTING`)? Unresolved review threads,
+   unreplied comments, or reviewer state `CHANGES_REQUESTED`: get
+   explicit operator confirmation first — the merge commit will appear
+   in the PR history.
 4. <!-- dotfiles-divergence: master-branch -->
-   Run `git fetch origin master && git merge origin/master`.
-5. On a signed-commit repo whose primary signing is non-interactive
-   hostile (GPG pinentry or hardware-touch) but that provides a
-   fallback signing wrapper for arbitrary git subcommands (pass
-   `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
-   commit.gpgsign=true` to `git` before the subcommand, plus
-   `-m "chore: merge origin/master into the claimed branch"` on the
-   first `merge` so a commitlint hook accepts the subject — `git -c …
-   merge`, not `git merge -c …`; a commit-only alias like
-   `git commit-ssh` will not run `merge`), run this merge through that
-   wrapper, not the plain command.
-6. Resolve any conflicts and complete the merge.
-7. If the merge needed `--continue`, run it through the same wrapper
-   used in step 5 (`git -c … merge --continue`), never the plain
-   `git merge --continue` — the wrapper must own the whole operation, or
-   the merge commit reverts to the stalling primary signing.
+   Run `git fetch origin master && git merge origin/master`. On
+   non-interactive-hostile primary signing (GPG pinentry or
+   hardware-touch) with a fallback wrapper, run the whole merge
+   (including `--continue`) through that wrapper instead — see
+   `docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure`
+   for the command form and the commitlint `-m` requirement.
+5. Resolve conflicts, complete the merge.
 
 ## E12 — Lint, test, push
 
@@ -239,11 +249,12 @@ other GitHub side effect, confirm all of the following:
    bot re-posted the same summary. Only disposition it again if the bot
    replaced the notice with an actual completed review of the current
    HEAD.
-6. After all replies and resolutions in this step are complete, update
-   the PR live status digest: `Phase` to `E13 feedback replied`, `Open
-   blockers` to any remaining reviewer, advisory, or CI wait, `Next
-   action` to E14 or E15, and `Authoritative by` to the replies,
-   resolved threads, current HEAD, and verified claim.
+6. After all replies and resolutions complete, update the PR live
+   status digest if the next route is still review-fix or CI wait:
+   `Phase` to `E13 feedback replied`, `Open blockers` to any
+   remaining reviewer, advisory, or CI wait, `Next action` to E14 or
+   E15, and `Authoritative by` to the replies, resolved threads,
+   current HEAD, and verified claim.
 
 ## E14 — Re-review request
 
