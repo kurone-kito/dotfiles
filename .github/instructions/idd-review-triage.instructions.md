@@ -21,14 +21,20 @@ scope fence below only if it predates the B2 plan
 (`idd-work.instructions.md`) — an author keeps edit rights throughout
 the claim and could otherwise time an edit to force-reject a legitimate
 finding. Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
-unrelated activity, so it will not do) and find the entry with the
-latest `editedAt` at or before the plan's post time; that entry's
-`diff` (or the original creation content, if none predates the plan)
-is the trusted snapshot. A statement absent from it — added later, or
-present now but not there — needs independent corroboration (a
-maintainer comment, not another edit). Treat an unavailable or failed
-`userContentEdits` read the same way: fail closed, never assume no
-post-plan edit occurred.
+unrelated activity, so it will not do). Each entry's `diff` is a
+per-edit delta, not a full-body snapshot (GitHub's own schema
+describes it as "a summary of the changes for this edit") — reconstruct
+the body as it stood at or before the plan's post time by walking every
+entry in chronological order up to and including the latest one at or
+before that time (starting from the original creation content when none
+predates the plan), rather than reading one entry's `diff` in isolation,
+which can miss a statement an earlier edit introduced and a later,
+unrelated edit's own diff never touches. A statement absent from that
+reconstructed state — added later, or present now but not there — needs
+independent corroboration (a maintainer comment, not another edit).
+Treat an unavailable or failed `userContentEdits` read, or a
+reconstruction that cannot be completed with confidence, the same way:
+fail closed, never assume no post-plan edit occurred.
 
 For each item in ReviewItems_snapshot, first classify it:
 

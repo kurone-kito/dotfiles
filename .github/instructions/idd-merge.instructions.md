@@ -166,8 +166,13 @@ Before any mutating action in F3, apply the
      that landed between F2 and this final gate, for example a
      required `{development-branch}` sync. Before running them,
      confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
-     exactly (`git fetch` plus `git checkout`/`git reset --hard` if a
-     resumed or external-push session left it stale) — D3.5 step 7's
+     exactly (`git fetch`, then, if a resumed or external-push session
+     left it stale, `git switch {branch-name}` — never a detaching
+     `git checkout <SHA>`, which would break the claim revalidation
+     gate's `git branch --show-current` check — followed by
+     `git reset --hard "${PR_HEAD_SHA_F3}"` so the worktree lands
+     exactly there while staying attached to the claimed branch) —
+     D3.5 step 7's
      `git log` and D3.7's inherited `git diff` both read local git
      state, not the remote PR directly. Skip D3.5 steps 6-7 under the
      same non-default-`{development-branch}` exemption D3.5 itself
