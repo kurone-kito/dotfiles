@@ -54,8 +54,13 @@ telemetry_hook = config.get('critiqueLoop', {}).get('telemetryHook')
 assert telemetry_hook is not None, 'critiqueLoop.telemetryHook is missing'
 assert telemetry_hook.get('command') == 'idd-critique-telemetry', telemetry_hook
 
-assert config.get('worktreeGuard', {}).get('refuseBaseBranchCommits') is True, \
-    config.get('worktreeGuard')
+worktree_guard = config.get('worktreeGuard', {})
+# refuseBaseBranchCommits is inert unless worktreeGuard.enabled is also
+# true -- the guard's runtime gates all enforcement on that flag first
+# (Copilot review, PR #427) -- so assert both, not refuseBaseBranchCommits
+# alone, or a future re-import could silently drop 'enabled' unnoticed.
+assert worktree_guard.get('enabled') is True, worktree_guard
+assert worktree_guard.get('refuseBaseBranchCommits') is True, worktree_guard
 
 assert config.get('issueAuthoring', {}).get('journalIssue') == 'kurone-kito/dotfiles#380', \
     config.get('issueAuthoring')
