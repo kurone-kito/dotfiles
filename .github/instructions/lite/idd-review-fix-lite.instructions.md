@@ -180,10 +180,14 @@ other GitHub side effect, confirm all of the following:
 ## E11 — Resolve conflicts with master
 
 1. Check state with the profile-selected branch-conflict-state helper:
-   `node scripts/branch-conflict-state.mjs --pr {pr-number}`, or the
-   package-manager-profile `idd:branch-conflict-state` command
-   (resolve the exact command from `docs/idd-helper-scripts.md` if
-   unsure) — reflects the last pushed head, not local unpushed fixes.
+   `node scripts/branch-conflict-state.mjs --pr {pr-number}` for
+   vendored-node/source-repo; the package-manager-profile
+   `idd:branch-conflict-state` command, or the
+   `idd-branch-conflict-state` ephemeral-npx bin invocation, for this
+   repository's configured `ephemeral-npx` profile (resolve the exact
+   command from `docs/idd-helper-scripts.md`'s "Authoritative
+   invocation surface per profile" section if unsure) — reflects the
+   last pushed head, not local unpushed fixes.
    Missing, failing, or disagreeing? Stop and ask (Helper runtime
    contract above) — no non-helper fallback here.
 2. Not a confirmed conflict (clean, behind-no-conflict, computing,
