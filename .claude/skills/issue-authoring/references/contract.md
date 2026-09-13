@@ -4,7 +4,7 @@
 This file keeps the `issue-authoring` bundle usable when it is installed
 or copied outside its source repository. It mirrors the canonical
 contract maintained upstream at
-[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/d005098bf3a54a27ac79b22fb5eeb88186d235c6/docs/issue-authoring-skill.md).
+[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/docs/issue-authoring-skill.md).
 
 ## Target marker prefix
 
@@ -514,6 +514,27 @@ Ask these checks:
    default (observed 2026-08-12/13 on an adopter repository,
    `setup.ubuntu`, kurone-kito/idd-skill#2012).
 
+## Live-observed claim citation
+
+When a drafted issue's Background section (or its `## Goal` / `## Why
+this matters` equivalent, per the schema in use) asserts a "live
+observed" runtime behavior claim (as opposed to a claim verifiable by
+reading static source), cite a concrete, checkable artifact for it — a
+permalink, a PR/comment/run ID, or an inline reproduction snippet —
+rather than only a prose description of the observed event. A drafting
+session that already has the artifact in hand (a PR review thread, a
+workflow run, an adopter's own report) should cite it directly instead
+of paraphrasing from memory; a worked example already exists elsewhere
+in this file: "(observed 2026-08-12/13 on an adopter repository,
+`setup.ubuntu`, kurone-kito/idd-skill#2012)".
+
+This is not a mechanical `audit-authored-issue` gate check: a
+live-observed claim is prose-level and not reliably machine-detectable
+without a high false-positive risk. Apply this discipline at drafting
+time instead, before an unsupported claim ships in one of these
+sections that another session or reviewer cannot independently
+re-verify.
+
 ## Dependency minimization
 
 Encode a dependency edge only when it reflects a true correctness,
@@ -677,7 +698,11 @@ Validation expectations:
 - the issue stays discoverable under the target repository's
   `issue-scope` setting
 - exactly one autopilot-suitability footer with an integer 1-5
-  marker; a score of `1` also carries `status:blocked-by-human`
+  marker; a score of `1` carries the configured `blocked-by-human` label
+  (default `status:blocked-by-human`), unless an
+  `authoring-bucket: needs-decision` marker substitutes the configured
+  needs-decision label instead (see
+  [Authoring-bucket marker](#authoring-bucket-marker))
 - passes the `audit-authored-issue` mechanical pre-publish gate for the
   `orphan` shape (see [Mechanical pre-publish gate](#mechanical-pre-publish-gate))
 
@@ -706,7 +731,11 @@ Validation expectations:
 - nested roadmap entries stay identifiable as coordination/audit nodes
   instead of normal execution leaves
 - exactly one autopilot-suitability footer with an integer 1-5
-  marker; a score of `1` also carries `status:blocked-by-human`
+  marker; a score of `1` carries the configured `blocked-by-human` label
+  (default `status:blocked-by-human`), unless an
+  `authoring-bucket: needs-decision` marker substitutes the configured
+  needs-decision label instead (see
+  [Authoring-bucket marker](#authoring-bucket-marker))
 - passes the `audit-authored-issue` mechanical pre-publish gate for the
   `roadmap` shape (see [Mechanical pre-publish gate](#mechanical-pre-publish-gate))
 
@@ -738,7 +767,11 @@ Validation expectations:
   justified
 - the issue can be claimed independently without absorbing sibling work
 - exactly one autopilot-suitability footer with an integer 1-5
-  marker; a score of `1` also carries `status:blocked-by-human`
+  marker; a score of `1` carries the configured `blocked-by-human` label
+  (default `status:blocked-by-human`), unless an
+  `authoring-bucket: needs-decision` marker substitutes the configured
+  needs-decision label instead (see
+  [Authoring-bucket marker](#authoring-bucket-marker))
 - passes the `audit-authored-issue` mechanical pre-publish gate for the
   `child` shape (see [Mechanical pre-publish gate](#mechanical-pre-publish-gate))
 
@@ -754,8 +787,7 @@ A drafted issue's human-readable prose sections — `## Background` (or
   drafted prose use that language.
 - The literal `match-source` matches the operator's live conversational
   language during an interactive/hearing issue-authoring session.
-- An absent field defaults to English, codifying today's actual
-  emergent behavior.
+- An absent field defaults to English.
 
 See `docs/customization.md`'s Authoring Language section for the full
 field definition.
@@ -783,6 +815,14 @@ authoring skill should catch these issues before publishing:
 | Actionability (Check 5)  | `ready` or escalated | Ensure the issue describes concrete work; escalate if blocked by human decision |
 | Autonomy (Check 6)       | `ready` or escalated | Ensure agent can complete without external coordination                         |
 | Verifiability (Check 7)  | `ready` or escalated | Ensure success is verifiable; escalate if it requires subjective approval       |
+
+**Check 7 escape-hatch pattern**: an either/or acceptance-criteria bullet
+where one branch is a substantive change and the other reads as "or
+document the gap/tradeoff" is not an automatic Check 7 PASS -- the
+documentation branch must itself name a concrete, checkable requirement,
+or evaluate it on its own merits and route to `needs-decision`. See
+`idd-suitability.instructions.md`'s Edge Cases section ("Escape-hatch
+acceptance criteria") for the full worked example.
 
 Pre-publish validation checklist:
 
@@ -899,8 +939,9 @@ can never match. A nested/child list item's reference is evaluated
 together with its full ancestor chain's coordination-language text
 instead of being scoped away from it, while a sibling bullet at the same
 indentation — nested or top-level — still starts its own separate scope,
-preserving the tight-list sentence-conflation fix mentioned above. This
-holds for every nested child under a given parent, at any depth — not
+so a tight list (no blank line between sibling items) never reads two
+consecutive bullets' coordination language as one continuous sentence.
+This holds for every nested child under a given parent, at any depth — not
 only the first. A continuation line resuming at an ancestor's own
 indentation, after a deeper child has already opened, is attributed to
 that ancestor rather than the deepest open child. A loose list (a blank
@@ -1082,9 +1123,9 @@ Binding rules:
   gates, and a large (`L`) issue stays fully claimable when it is the only
   ready work.
 - **Fail-safe on absence.** A missing, non-`S|M|L`, or conflicting
-  marker means "no effort hint": selection behaves exactly as it does
-  today (a missing hint sorts as the neutral middle, as-if `M`).
-  Pre-existing issues with no effort footer keep flowing.
+  marker means "no effort hint": it sorts as the neutral middle, as-if
+  `M`, per `idd-discover.instructions.md` A4 Step 2. Pre-existing issues
+  with no effort footer keep flowing.
 
 Backfill is opportunistic and follows the same claim-state precondition
 as the suitability footer.
@@ -1109,8 +1150,8 @@ published before this marker existed.
 
 Binding rules:
 
-- **Two axes only.** Scoped to the two buckets with a real behavioral
-  consequence today (a required label) — `deferred` and `out-of-scope`
+- **Two axes only.** Scoped to the two buckets that require a label
+  (`needs-decision`, `blocked-by-human`) — `deferred` and `out-of-scope`
   have none, so they carry no marker.
 - **Folds the existing suitability-1 check.** When present, this marker
   decides `suitability-blocked-by-human`'s applicability instead of the
@@ -1132,6 +1173,37 @@ Binding rules:
 
 Backfill is opportunistic and follows the same claim-state precondition
 as the suitability footer.
+
+## Upstream-candidate marker
+
+A locally authored issue may additionally carry a hidden
+**upstream-candidate marker** recording that its root cause was judged
+to be a defect in an `idd-template`-sourced instruction, doc, or
+helper itself, not in the current repository. See
+[Upstream-candidate escalation](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/.github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation)
+for the qualifying criteria; this section documents only the
+marker/label pair.
+
+```text
+<!-- {marker-prefix}-upstream-candidate: true -->
+```
+
+Binding rules:
+
+- **Opt-in, gated.** Produced only when `upstreamEscalation.enabled`
+  is `true` in `.github/idd/config.json`; absent or `false` means
+  this marker and label are never applied.
+- **Paired with a label.** Carries the GitHub label
+  `status:upstream-candidate` alongside the marker;
+  `audit-authored-issue.mts`'s `upstream-candidate-marker-label` check
+  enforces the two agree, gated on the same
+  `upstreamEscalation.enabled` toggle.
+- **Authoring marker, not operational marker.** Like
+  `autopilot-suitability`, it is body content and must never be added
+  to `OPERATIONAL_MARKERS` or subjected to F4 minimization.
+- **Local-only.** Never a cross-repository write. The marker and label
+  exist entirely within the current repository; nothing is ever
+  posted upstream by this workflow.
 
 ## Authoring hold and release
 
@@ -1172,6 +1244,20 @@ only approval boundary.
   <!-- <marker-prefix>-authoring-publication-intent: target=<opaque-target-id>; anchor=<opaque-anchor-id>; set=<opaque-set-id>; session=<opaque-session-id>; token=<opaque-publication-token>; journal=<owner>/<repo>#<number>; issue=<owner>/<repo>#<number>|none; actor=<trusted-marker-actor>; state=<pending|member|cleanup|abandoned> -->
   ```
 
+  Append the visible note below immediately after this HTML comment, joined
+  by a single newline (no blank line between them, matching the
+  `authoring-owner` marker's own posted shape) — this exact pairing is the
+  canonical rendered template `matchCanonicalAuthoringMarkerFamily`
+  (`marker-helpers.mts`) matches for the hide-on-supersede step below.
+  Historical comments predating this canonical pin may use a different
+  separator, note text, or no note at all (#2750); those never
+  byte-exact-match the canonical template and are correctly left visible —
+  expected fail-closed behavior, not retroactive cleanup:
+
+  ```text
+  _Issue-authoring publication-intent record. Do not edit or delete._
+  ```
+
   `issue` is the returned canonical issue identity or `none`. Append
   `state=pending; issue=none` before creation, then append the returned
   identity while it remains `pending`, append `member` only after the owner
@@ -1183,11 +1269,17 @@ only approval boundary.
 
   `journal` is the durable record location. For an existing set, use the
   verified originating Stage 1 hold; for a standalone set with no existing
-  issue or anchor, use a pre-existing repository-level authoring journal
-  target designated by repository policy. Do not create that journal as part
-  of the same set. If neither location exists or its identity cannot be
-  verified, stop with `blocked-by-human` before creating any target. On every
-  paginated replay, require `actor` to equal the API author and verify that
+  issue or anchor, use the repository-level authoring journal target
+  configured at `issueAuthoring.journalIssue` in `.github/idd/config.json`
+  (an `owner/repo#number` reference to a pre-existing, durable, comment-only
+  issue) -- an unset `issueAuthoring.journalIssue` only blocks a standalone
+  set; an existing set with a verified Stage 1 hold needs no journal
+  configuration at all. Do not create that journal as part of the same set.
+  If the applicable location cannot be resolved -- no verified Stage 1 hold
+  for an existing set, or `issueAuthoring.journalIssue` unset or
+  unverifiable for a standalone set -- stop with `blocked-by-human` before
+  creating any target. On every paginated replay, require `actor` to equal
+  the API author and verify that
   actor is a trusted marker login with the required write-level permission or
   configured bot/app trust. An untrusted, malformed, or conflicting
   exact-token record is not valid evidence; fail closed and retain the hold.
@@ -1249,6 +1341,15 @@ only approval boundary.
   ```
 
   _Issue-authoring ownership marker. Do not edit or delete._
+
+  Join the HTML comment and the visible note above by a single newline (no
+  blank line between them) -- this exact pairing, for any `mode`, is the
+  canonical rendered template `matchCanonicalAuthoringMarkerFamily`
+  (`marker-helpers.mts`) matches for the hide-on-supersede step below.
+  Historical comments predating this canonical pin may use a blank-line
+  separator instead (#2750); those never byte-exact-match the canonical
+  template and are correctly left visible -- expected fail-closed behavior,
+  not retroactive cleanup.
 
   The companion uses the same `body-sha256` and `snapshot-sha256` fields as the
   portable owner protocol. Target markers hash the exact UTF-8 body from the
@@ -1321,7 +1422,19 @@ only approval boundary.
   and matching prior owner token. A `release` marker must match the current
   owner and set, but remains provisional while its set release is in
   progress; an individual label removal never closes that target's
-  generation. Only after a fresh re-read verifies every target's release
+  generation. During the owning set's own Stage 2 (observed 2026-09-09,
+  kurone-kito/idd-skill#2791), the heartbeat renewal and the pre-removal
+  ownership recheck must treat that set's provisional `mode=release`
+  markers and the anchor's `mode=release-guard` as the expected state
+  rather than as a competing generation; the acquisition-time rule that
+  a target carrying a release marker cannot be re-acquired until that
+  release's `release-complete` is found applies to a later session's
+  fresh acquisition of the child, not to the releasing set's own
+  rechecks or to a resume of the exact interrupted set, which stays
+  the established recovery path when `release-complete` is missing;
+  the releasing set's own rechecks never change the current winner,
+  unlike a valid resume marker for that exact set, which does. Only
+  after a fresh re-read verifies every target's release
   marker and label removal and the anchor's `release-complete` marker does
   the set-level release close all target generations, after which a later
   `acquire` starts a new generation. The
@@ -1369,20 +1482,107 @@ only approval boundary.
   the designated lead target as the anchor. The anchor winner serializes
   acquisition for the whole set; no session may publish or acquire children
   independently. Before each child acquisition or resume, append and verify
-  a same-owner heartbeat on the anchor, re-fetch the anchor's paginated log,
-  and require its current owner token, set, anchor, and session. Append the
-  child marker only after that validation, then immediately re-fetch both
-  anchor and child and require the same anchor ownership; if either read
-  changes, leave the child hold in place and stop rather than forming a split
-  set. If any target cannot be acquired under that anchor, stop all body and
-  relationship edits, leave labels and append-only markers in place, and
-  require an exact verified resume of that set rather than allowing a split
-  ownership set.
+  a same-owner heartbeat on the anchor (or reuse one per the coalesce rule
+  below), re-fetch the anchor's paginated log, and require its current owner
+  token, set, anchor, and session. Append the child marker only after that
+  validation, then immediately re-fetch both anchor and child and require the
+  same anchor ownership; if either read changes, leave the child hold in
+  place and stop rather than forming a split set. If any target cannot be
+  acquired under that anchor, stop all body and relationship edits, leave
+  labels and append-only markers in place, and require an exact verified
+  resume of that set rather than allowing a split ownership set.
   After each `acquire`/`resume`/`bootstrap` marker POST, wait the configured
   `claim.verifySettleDelay`, replay the full paginated log, and choose the
   winner by deterministic comment order; an immediate local read never
   authorizes edits. Apply the same settle delay and full paginated replay after
   every heartbeat before it authorizes an edit or label removal.
+- **Heartbeat coalescing (`issueAuthoring.heartbeatCoalesceWindow`,
+  default `PT2M`, #2768).** Before appending any heartbeat at the three
+  sites in this section (the anchor heartbeat above, "Renew before every
+  edit" below, and Stage 2's pre-label-removal heartbeat below), first
+  replay the target's paginated owner-marker log. Reuse the latest
+  trusted marker instead of appending a new one when **all four** hold:
+  it is for the same owner, set, and session; its `mode` is `acquire`,
+  `bootstrap`, `resume`, or `heartbeat`; its GitHub `created_at` is
+  younger than the configured window; and its `body-sha256` equals the
+  digest of the body just fetched. Re-fetch and verify the reused marker
+  exactly as a freshly posted one would be — only the redundant POST is
+  skipped, never the replay or ownership verification. Any other case —
+  an older marker, a different owner/set/session, a mode outside that
+  list, a changed body digest, or the marker cannot be found
+  conclusively — keeps today's append-and-verify path. This window never
+  applies to `acquire`, `bootstrap`, `resume`, `release`,
+  `release-guard`, or `release-complete` markers; only a `heartbeat`
+  append may be skipped.
+- **Hide superseded owner/publication-intent markers.** Opportunistic:
+  see the mandatory Stage 2 sweep below for the mechanism this contract
+  actually relies on. Measured 2026-09-11 across 22 issues published
+  after this per-post step first shipped (#2750/#2821): of 95
+  expected-hideable `authoring-owner`/`authoring-publication-intent`
+  comments, only 3 (about 3%) were actually minimized (#2896). Following
+  this step in the moment is correct and still worth doing when
+  convenient -- every comment it hides is one the Stage 2 sweep below
+  does not have to -- but it is not something this contract can depend
+  on by itself: a step invoked 3-9+ times per issue, buried mid-protocol
+  with no mechanical enforcement, is too easy to skip under load. Once a
+  fresh `authoring-owner` marker (any `mode`, including the first,
+  generation-opening `acquire`/`bootstrap`) or `authoring-publication-intent`
+  record (any `state`) has been posted and its own POST and re-fetch/verify
+  above have both succeeded -- never before, and never interleaved with
+  posting -- scan that same target's prior comments (the target issue for
+  `authoring-owner`; the journal issue named in the record's own `journal`
+  field for `authoring-publication-intent`, which naturally also hides other
+  authoring sets' already superseded journal records on that shared journal
+  -- intentional, since the journal read path is the same paginated scan and
+  is unaffected either way) and minimize (classifier `OUTDATED`) every prior
+  comment from a trusted marker actor whose body is a byte-exact match of the
+  canonical rendered template for the same marker family.
+  `matchCanonicalAuthoringMarkerFamily` (`marker-helpers.mts`, re-exported by
+  `protocol-helpers.mts`) implements that check: it parses the candidate,
+  re-renders the parsed fields with `renderAuthoringOwnerMarker` /
+  `renderAuthoringPublicationIntentMarker`, and requires the result to equal
+  the candidate's body exactly. A candidate that deviates from the template
+  in any way -- reordered or extra fields, altered spacing, trailing
+  content, a different visible note -- is never minimized; leave it visible
+  rather than guessing. Skip the just-posted comment itself and any
+  candidate whose `isMinimized` is already `true` (idempotent; the minimize
+  helper's own probe already enforces this).
+
+  Convert each eligible candidate's REST comment id to its GraphQL node id
+  (the paginated comment list already carries it as `node_id` -- no extra
+  fetch needed) and call the existing minimize helper -- reuse it rather
+  than reimplementing the mutation:
+
+  ```sh
+  node scripts/minimize-superseded-markers.mjs --subject-ids <id1,id2,...> \
+    --classifier OUTDATED --trusted-marker-logins <trusted-login-1,...> \
+    --apply
+  ```
+
+  Or, for npx/package-manager profiles, the equivalent
+  `idd-minimize-superseded-markers` command.
+
+  **Best-effort, never blocking.** A permission error, an unreadable
+  comment list, or an unavailable helper runtime (`instructions-only`
+  profile, or Node.js absent) skips this step silently and continues the
+  normal marker-posting flow unmodified -- this must never retry-loop or
+  fail the authoring flow. Mirrors `docs/idd-comment-minimization.md`'s
+  framing: this is UI cleanup only and never replaces the append-only
+  audit trail.
+
+  **Scope.** In scope: `authoring-owner` and `authoring-publication-intent`
+  only. Out of scope: `authoring-publication` -- a body-line token embedded
+  in the newly created issue's own body at creation time, not a comment, so
+  there is nothing to minimize -- and every marker family already covered
+  by the post-merge F4 cleanup driver (for example `claimed-by`,
+  `review-watermark`, `advisory-wait`; see `docs/idd-comment-minimization.md`).
+  Do not add `authoring-owner`, `authoring-publication-intent`, or
+  `authoring-publication` to `OPERATIONAL_MARKERS`, and do not fold this
+  step or the Stage 2 sweep below into the F4 driver: minimization for
+  this marker family stays a separate, earlier-lifecycle behavior owned
+  by the issue-authoring protocol itself, not the post-merge cleanup
+  driver -- whether triggered opportunistically here or mandatorily at
+  Stage 2 release.
 - **Conflict check before every edit.** Immediately before each body or
   roadmap relationship update, re-fetch both the target and the set anchor
   (the same fresh snapshot serves both roles when the target is the anchor).
@@ -1399,14 +1599,16 @@ only approval boundary.
   `instructions-only` installs.
 - **Renew before every edit.** After that conflict check and immediately
   before the body or relationship mutation, append and verify a trusted
-  `mode=heartbeat` marker for the set anchor first, then re-fetch and verify
-  its current owner, set, anchor, and session. Only after the anchor renewal
+  `mode=heartbeat` marker for the set anchor first (or reuse one per the
+  heartbeat-coalescing rule above), then re-fetch and verify its current
+  owner, set, anchor, and session. Only after the anchor renewal
   succeeds, append and verify the edited target's heartbeat when it is a
-  distinct target, then re-fetch both and require each target's expected owner
-  token independently, plus the same set, anchor, owning session, and expected
-  target snapshot. If either heartbeat cannot be posted or verified, or a
-  newer owner appears, stop without editing. A heartbeat never starts a new
-  generation and never authorizes release.
+  distinct target (reuse applies here too), then re-fetch both and require
+  each target's expected owner token independently, plus the same set,
+  anchor, owning session, and expected target snapshot. If either
+  heartbeat cannot be posted/reused or verified, or a newer owner appears,
+  stop without editing. A heartbeat never starts a new generation and
+  never authorizes release.
 - A target already held by another set is unavailable. A later session may
   resume only when the invocation identifies the exact interrupted set and
   the hold is past `issueAuthoring.authoringStaleAge`; append a
@@ -1426,9 +1628,76 @@ only approval boundary.
   any published body; the `audit-authored-issue` linter (or its manual
   fallback) is green on every published body in the set. Keep the authoring
   label in place until the checklist passes and the user explicitly requests
-  release from the authoring hold. Keep the set anchor held until every other
+  release from the authoring hold, except for the narrow auto-release
+  exception below. Keep the set anchor held until every other
   target's label removal is verified, and remove the anchor label last. For
   every target, first re-fetch owner comments during release-marker preflight.
+  **Mandatory release-time hide-on-supersede sweep (#2896, #2935).** At
+  this same point -- before the reuse-or-append decision below, so a
+  retried or resumed release (which reuses an existing `release` marker
+  and never appends a new one) still runs the sweep every time this
+  preflight step is reached -- run the single fetch-driven sweep command
+  against the target issue and the journal issue named in this session's
+  own records:
+
+  ```sh
+  node scripts/sweep-authoring-markers.mjs --issue <target-issue-number> \
+    --issue <journal-issue-number> \
+    --marker-prefix <resolved-target-prefix> \
+    --trusted-marker-logins <trusted-login-1,...> \
+    --deadline-ms 300000 --apply || true
+  ```
+
+  The trailing `|| true` keeps this step's own non-zero exit (a fetch or
+  mutation failure) from aborting an automated `set -e` release script:
+  the sweep's exit code exists for a caller that wants to check its
+  outcome directly, not to make this attempted-not-blocking step itself
+  block release when run inline (#2935 review, round 5, Copilot) --
+  read the sweep's own JSON/table report, not its exit status, to see
+  whether anything needs a human look.
+
+  The journal setting can itself name a **different** repository (a
+  full `owner/repo#number` reference); when it does, pass that shape to
+  `--issue` instead of a bare number -- that one `--issue` is fetched
+  from its own repository while every bare-number `--issue` in the same
+  invocation still uses the current repository (or `--owner`/`--repo`,
+  given together or not at all). Or, for
+  npx/package-manager profiles, the equivalent
+  `idd-sweep-authoring-markers` command. One invocation performs the
+  whole sweep that used to be an ~8-step manual procedure (#2935): it
+  fetches each `--issue`'s comments via GraphQL (selecting `isMinimized`
+  directly -- REST's issue-comments endpoint never carries that field,
+  so this command never falls back to REST), classifies every comment
+  with `matchCanonicalAuthoringMarkerFamily` (`marker-helpers.mts`,
+  unchanged), determines "newest" only among **trusted-actor** matches
+  per family (#2896 review, Codex -- an untrusted actor's later
+  byte-exact comment must never be mistaken for the live marker to keep,
+  since `minimize-superseded-markers.mjs` itself refuses to minimize any
+  comment outside `--trusted-marker-logins` regardless of this
+  selection, so wrongly treating the untrusted comment as newest would
+  instead select the legitimate trusted marker for minimization --
+  exactly backwards; mirrors `checkAuthoringMarkerMinimizationBacklog`'s
+  own audit-side rule -- the two share one implementation,
+  `classifyAuthoringMarkerFamily` in `marker-helpers.mts`, so they cannot
+  drift), excludes any candidate already `isMinimized: true`, and
+  minimizes (classifier `OUTDATED`) every remaining eligible candidate in
+  one mutation pass -- reusing `minimize-superseded-markers.mjs`'s own
+  `runMinimize` rather than reimplementing the mutation. `--deadline-ms`
+  bounds the WHOLE invocation (every `--issue`'s own GraphQL pagination
+  plus the final minimize pass, for example `--deadline-ms 300000` --
+  five minutes), guarding against the same degraded-GitHub-API risk a
+  large, long-lived shared journal's full history would otherwise pose.
+
+  Attempt this once per target here, and once more on the anchor
+  immediately before the release-complete preflight below; this is the
+  sweep the contract depends on, but "mandatory" means **attempted**, not
+  blocking -- a failed invocation (permission error, an unreadable
+  comment list, or an unavailable helper runtime) skips silently and
+  never stops release, matching the opportunistic step's own best-effort
+  framing. See the **Closing sweep** bullet below for the third sweep
+  point this preflight sweep alone does not cover, and for the explicit
+  `authoring-marker-minimization-backlog` invocation that makes each
+  sweep attempt's outcome a visible, countable signal instead of silence.
   If a valid current-owner/set `mode=release` marker already exists, reuse the
   earliest matching GitHub comment ID; otherwise append one with `supersedes`
   equal to the current owner token, re-fetch to verify it, and record its
@@ -1442,16 +1711,25 @@ only approval boundary.
   stop. The guard suppresses Discover for the whole set during the provisional
   label-removal window; it does not close the set. Then,
   immediately before each label removal, append and verify the set anchor's
-  `mode=heartbeat` first, re-fetching it and requiring its current owner, set,
-  anchor, and session. Only after that succeeds, append and verify the target
+  `mode=heartbeat` first (or reuse one per the heartbeat-coalescing rule
+  above), re-fetching it and requiring its current owner, set, anchor, and
+  session. Only after that succeeds, append and verify the target
   heartbeat when it is distinct (one marker serves both roles when they
-  coincide), then re-fetch both and require each target's expected owner token
-  independently, plus the shared set/anchor/session, recorded release-marker
-  comment, and expected label/body snapshot. Remove non-anchor labels one
+  coincide; reuse applies here too), then re-fetch both and require each
+  target's expected owner token independently, plus the shared
+  set/anchor/session, recorded release-marker comment, and expected
+  label/body snapshot. Remove non-anchor labels one
   target at a time and re-fetch each result. After the final anchor label
   removal is verified, re-fetch every target and verify its current release
   marker, absent label, and expected body snapshot; any drift leaves the set
-  open and prevents completion. Then reuse the earliest
+  open and prevents completion. Immediately before the release-complete
+  reuse-or-append decision below, repeat the same mandatory sweep once
+  more -- the same `sweep-authoring-markers.mjs` command above, now
+  scoped to `--issue <anchor-issue-number> --issue <journal-issue-number>`
+  -- covering the anchor's own owner-marker log and the journal's
+  publication-intent log -- idempotent with every earlier target's own
+  sweep above, since a comment either was already minimized or was not
+  yet the newest for its family either way. Then reuse the earliest
   valid current-owner/set/session `mode=release-complete`
   marker on the anchor, or append one and record its returned comment ID.
   Re-fetch that ID and the anchor's paginated owner-marker log with bounded
@@ -1475,7 +1753,179 @@ only approval boundary.
   and verify the restored set state; leave every target generation open and
   stop. If restoration cannot be completed or a newer owner has appeared,
   record a set-level recovery hold and never claim a partial release. Release
-  is a human action; nothing in this bundle auto-releases a held issue set.
+  is a human action; nothing in this bundle auto-releases a held issue set,
+  except the narrow, marker-scoped exception immediately below.
+- **Closing sweep (after Stage 2 closes, #2896 review, Codex; #2935).**
+  The two sweep points above run _before_ Stage 2's own later marker
+  appends for the same generation -- the per-target `release` marker,
+  the pre-label-removal heartbeat each target receives immediately
+  before its own label removal, and (on the anchor) `release-guard` and
+  `release-complete` itself. None of those markers exist yet when their
+  target's preflight sweep runs, so the preflight sweep(s) alone can
+  never clear them, and a target's Stage 2 for a given generation runs
+  only once -- there is no future preflight sweep that would ever
+  revisit them. Once the set-level release actually closes (the
+  successful-close branch immediately above: the trusted
+  `release-complete` marker is found and every label is confirmed
+  absent), attempt the mandatory sweep one more time, in a single
+  invocation covering every target's now-final owner-marker log (the
+  anchor's included this time, not just its own) and the journal's
+  publication-intent log:
+
+  ```sh
+  node scripts/sweep-authoring-markers.mjs --issue <target-1> \
+    --issue <target-2> ... --issue <anchor-issue-number> \
+    --issue <journal-issue-number-or-owner/repo#number> \
+    --marker-prefix <resolved-target-prefix> \
+    --trusted-marker-logins <trusted-login-1,...> \
+    --deadline-ms 300000 --apply || true
+  ```
+
+  Same attempted-not-blocking framing (and the same `|| true` reasoning
+  above): a failed invocation here does not reopen the set or roll back
+  the close already recorded above.
+
+  **Make every sweep attempt's outcome visible.** Immediately after each
+  of the three sweep attempts in this section (per-target preflight,
+  anchor-before-release-complete, and this closing sweep), run
+  `audit-authored-issue.mjs`'s `authoring-marker-minimization-backlog`
+  check and note its reported count -- always with `--trusted-marker-logins`
+  (or the equivalent `trustedMarkerActors` option on `auditAuthoredIssue()`)
+  set to the same trusted actors the sweep itself used, so the check's
+  own eligibility rule matches what the sweep could actually clear;
+  omitting it makes the count overstate the real backlog by including
+  untrusted-authored matches the sweep was never going to touch.
+  **Normalize the author field before writing the comments-file JSON**
+  (#2896 review, Codex): the paginated GitHub REST/GraphQL response
+  this section already fetches exposes a comment's author nested as
+  `user.login` (REST) or `author.login` (GraphQL), never as a flat
+  `author` string -- write each entry's `--comments-file` /
+  `--journal-comments-file` JSON with `author` set to that nested
+  login, not passed through unmapped. Skipping this normalization does
+  not error: every comment silently loses its author, the trust filter
+  above then excludes every candidate as unknown-author, and the count
+  falsely reports zero backlog even when the sweep was skipped or
+  failed entirely -- the opposite failure mode from omitting
+  `--trusted-marker-logins` (that overstates; this understates to
+  nothing).
+  **Feed it the sweep's own post-mutation result, never the
+  pre-mutation snapshot the sweep read.** The minimize mutation applies
+  directly to GitHub; it never updates an in-memory or on-disk comment
+  snapshot. Before running the check, update the just-fetched snapshot's
+  `isMinimized` field to `true` for every candidate the sweep command's
+  own report (`sweep-authoring-markers.mjs`'s `items[]`, each entry
+  tagged with the family it belongs to and keyed by subject id) lists
+  with **either** `status: "applied"` **or**
+  `status: "skipped", reason: "already-minimized"` -- the latter fires
+  whenever the fetched snapshot's own `isMinimized` was already stale or
+  absent for a comment GitHub already considers minimized (for example
+  one an earlier sweep or the opportunistic per-post step already
+  cleared), and counts exactly the same as a fresh `"applied"` for this
+  update: both mean the comment is minimized now, regardless of which
+  attempt did it. Missing either status keeps that comment's snapshot
+  entry wrongly `isMinimized: false`. Re-fetching the paginated log
+  fresh **via GraphQL** (matching the sweep's own fetch above) is an
+  acceptable alternative to this snapshot update, not merely a
+  fallback -- either one produces the same accurate post-sweep state.
+  A REST re-fetch is not a valid alternative here (#2896 review,
+  Codex): REST's issue-comments endpoint never carries `isMinimized`
+  at all, so a REST re-fetch is exactly as blind to minimization state
+  as the stale pre-mutation snapshot this paragraph exists to correct
+  -- it produces a different but equally wrong snapshot, not an
+  accurate one.
+  Skipping both and auditing the unmodified pre-mutation snapshot reports
+  every comment the sweep (or a prior one) already minimized as
+  still-outstanding backlog, making even a fully successful, fully
+  idempotent sweep look like it failed. A nonzero count after this update
+  means the
+  sweep attempt genuinely did not fully clear the backlog it was
+  supposed to (a partial permission failure or a genuine defect) --
+  record it, but never block release on it; this is the mechanical
+  signal that makes a skipped or partially-failed sweep attempt visible
+  instead of silent, the same kind of gap that went unnoticed for weeks
+  in the original per-post-only instruction this section replaces
+  (measured effectiveness cited above).
+
+  **When the backlog check itself cannot run, record that fact through a
+  runtime-independent path (#2896 review, Codex).** The check depends on
+  the same paginated comment snapshot and the same helper runtime
+  (Node.js) as the sweep it audits, so the one scenario this whole
+  mechanism exists to catch -- the sweep silently skipped because the
+  helper runtime is unavailable (`instructions-only` profile, or Node.js
+  absent), or because the paginated comment fetch itself failed -- is
+  exactly the scenario in which the mechanical count also cannot run,
+  leaving no signal at all if nothing else is done. When either the
+  sweep or the audit could not run for this reason, still post an
+  explicit plain-text note through a path that needs no helper runtime
+  (a `gh`/HTTP comment on the target, or the session's own live status
+  digest) -- for example "hide-on-supersede sweep skipped this cycle:
+  helper runtime unavailable" -- naming the reason. This never blocks
+  release either; it only ensures a fully-silent skip never happens even
+  in the one failure mode the mechanical signal cannot itself cover.
+- **Narrow auto-release exception (review-fix-loop-cutoff).** A
+  follow-up issue whose body carried the exact marker
+  `<!-- <marker-prefix>-authoring-defer-source: review-fix-loop-cutoff -->` at
+  Stage 1 publication time — part of the initial `authoring-publication` body
+  write, never added by a later edit — may complete the full Stage 2
+  sequence above (release-marker preflight, release-guard, heartbeat
+  renewal, verified label removal, release-complete reconciliation,
+  every other mechanical gate unchanged) without the "user explicitly
+  requests release" precondition, immediately after Stage 1 publication
+  completes for that issue. The exception is additive, not a
+  relaxation: it replaces only that one precondition; it applies only
+  to the single target carrying the marker, never to a roadmap anchor
+  or a sibling target in the same authoring set that lacks it; and a
+  marker added after Stage 1 publication never qualifies a target
+  retroactively. **Provenance check (`#2877`):** before honoring this
+  exception, the releasing session must recompute the target's current
+  body-sha256 from a fresh read and compare it against that same
+  target's own `mode=acquire` owner marker's `body-sha256` (hashed from
+  the fresh read taken immediately before that marker was posted, so it
+  already reflects the published body — see "Per-target ownership"
+  above). A mismatch — the body changed since Stage 1 acquire — fails
+  closed: the auto-release exception does not apply for that release
+  attempt (this does not retroactively fail Stage 1 itself), and the
+  target falls back to the ordinary human-release-request precondition.
+  Perform this comparison immediately before the label-removal step
+  itself, not only once earlier in the sequence -- matching this
+  section's existing discipline of re-verifying immediately before
+  each removal for owner/set/anchor/session and the expected
+  label/body snapshot -- so a body edit landing between an earlier
+  check and the actual removal cannot silently bypass this
+  precondition. The `authoring-owner-provenance` helper (`node
+  scripts/authoring-owner-provenance.mjs --issue <number>`; see
+  `docs/idd-helper-scripts.md`) performs and verifies this comparison
+  mechanically (`#2891`). This
+  exists because
+  `idd-review-triage.instructions.md`'s round-count cutoff files this
+  exact marker on a follow-up issue during unattended autonomous
+  execution, where no human is present to issue a release request —
+  left under the ordinary human-gated boundary above, that deferred
+  work would sit under the authoring label indefinitely on a fully
+  autonomous repository, silently defeating the point of deferring it
+  at all (preventive; no observed incident yet). **Roadmap-anchor
+  scope (accepted limitation, `#2877`):** the "never to a roadmap
+  anchor" exclusion above is permanent, not a gap awaiting a fix — a
+  roadmap anchor carrying this marker under `issue-scope: roadmap`
+  with orphan discovery disabled still requires the ordinary
+  human-gated explicit release request, since this exception's
+  single-target design intentionally does not extend to anchor
+  release. See `docs/idd-autonomy-contract.md`'s Stage 2 label-removal
+  row for the same note in table form. **Sequencing with the
+  originating issue (`#2877`):** the round-count cutoff's follow-up
+  issue also carries a `Refs #<originating-issue>` line back to the
+  deferred work (the D3 follow-up-issue rule in
+  `idd-pr-submit.instructions.md`); `discover-readiness-check.mts`
+  treats that specific `Refs` reference as a hard blocker — resolved
+  the same way an ordinary `Blocked by #<N>` line is — while
+  `#<originating-issue>` stays open, a narrow exception to `Refs`
+  otherwise being non-blocking everywhere else in this workflow. The
+  marked follow-up must carry exactly one `Refs` keyword line naming
+  exactly one issue: nothing in body text lets Discover safely tell the
+  true origin apart from an unrelated `Refs` citation that also starts
+  its own line, or apart from a second number on the same line, so more
+  than one line or more than one number fails closed instead of
+  guessing.
 
 ## Publication boundary
 
@@ -1485,4 +1935,6 @@ need a separate user approval once it passes the mechanical
 [Authoring hold and release](#authoring-hold-and-release) above for the
 full two-stage contract. Removing the authoring label and starting the
 IDD execution loop both require the user's explicit hold-release
-request; nothing else authorizes either.
+request, except the narrow auto-release exception documented in
+[Authoring hold and release](#authoring-hold-and-release) above; nothing
+else authorizes either.

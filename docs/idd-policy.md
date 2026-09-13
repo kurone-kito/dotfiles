@@ -265,6 +265,26 @@ Discover loop starts. See its
 [bundled contract](../.claude/skills/issue-authoring/references/contract.md)
 for the readiness buckets, output chooser, and approval boundary.
 
+## Spec-Audit Companion
+
+- **Status**: `installed` at `.claude/skills/idd-spec-audit/`, adopted
+  during the `v0.11.0` re-import (roadmap #419, track #423). Upstream
+  graduated this companion the same way `issue-authoring` was
+  distributed, in the `v0.10.0` round.
+
+This companion runs a read-only, N-parallel-pass semantic audit of the
+instruction corpus (`.github/instructions/**`, the `issue-authoring`
+bundle, and every installed agent entry file) for leaked session
+context, cross-file contradictions, fresh-memory completability gaps,
+automation blockers, and restatement-discipline drift — a semantic
+check this repository's own byte-level lint/spell tooling does not
+cover. It never edits a file or mutates an issue; findings
+route back through the normal issue-authoring flow (or this
+installation's manual issue-filing process when that companion is not
+installed). See its
+[SKILL.md](../.claude/skills/idd-spec-audit/SKILL.md) for the five rule
+sets and execution model.
+
 ## Issue Scope
 
 **Policy**: `roadmap-first` (migrated from `roadmap`, confirmed by
@@ -637,7 +657,7 @@ same convention.
 | `issueAuthoring.journalIssue` | **explicit: `"kurone-kito/dotfiles#380"`** | Owner-confirmed before #419 was authored (see #419's "Decisions confirmed before authoring"): formalizes the already-in-use ad hoc authoring-journal practice for a standalone authoring set with no existing issue or anchor. |
 | `labels.untrustedLabelerLogins` | **explicit: `["coderabbitai[bot]"]`** | `coderabbitai[bot]` is confirmed active (`.coderabbit.yaml`'s `issue_enrichment.labeling.auto_apply_labels: true`; its most recent repo-wide `labeled` event is 2026-09-12). `reviewpad[bot]` -- present in this repository's historical label-event actor list -- was checked and excluded: its latest `labeled` event is 2023-10-21 (issue #77), roughly three years stale, and no `.reviewpad*` configuration file exists anywhere in the repository. Schema-supported metadata only; no distributed enforcement (CI guard generation) reads this list yet, per the key's own schema description. |
 | `worktreeGuard.refuseBaseBranchCommits` | **explicit: `true`** | Owner-confirmed (#419): catches a session that skips B1 entirely and commits directly on `master`, a gap the existing `branchPatterns` check does not cover. **Not yet behaviorally wired**: `.githooks/pre-commit`/`.githooks/pre-push` do not yet read this key (confirmed by grep) -- Track C (#422) owns the githooks resync that will teach the hook scripts about it. Schema-adopted but inert until then -- the same transitional-skew-window pattern the 0.7.0/0.9.0 rounds above already recorded for `.claude/skills/` gaps. |
-| `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Not yet behaviorally wired**: no file under `.github/instructions/` or `.claude/skills/` references `upstreamEscalation` yet (confirmed by grep) -- Track B (#421, instructions resync) is expected to add the consuming logic. Same transitional-skew-window caveat as the row above. |
+| `upstreamEscalation.enabled` | **explicit: `true`** | Owner-confirmed (#419): this repository's owner also maintains `kurone-kito/idd-skill` upstream, the exact scenario this feature bridges. **Partially wired as of Track E (#423)**: `.claude/skills/issue-authoring/references/contract.md`'s `upstream-candidate` marker/label binding rules now gate on this key (confirmed by grep). `.github/instructions/` still has no consumer -- Track B (#421, instructions resync) is expected to add that half. Same transitional-skew-window caveat as the row above, now narrower. |
 | `critiqueLoop.telemetryHook` | **explicit: `{"command": "idd-critique-telemetry"}`** | Introduced among the upstream `v0.10.0` opt-in toggles (not `v0.11.0`-only, per #419's own background section). Cross-referenced from #389/PR #426's own review: wiring this key into `.github/idd/config.json` there would have paired it with this repository's then-still-`0.9.0` `iddVersion` (the `v0.9.0` schema has no `telemetryHook` property, `additionalProperties: false`), so adoption was deferred to this issue instead. Bare command name (`idd-critique-telemetry`), matching the sibling `critiqueLoop.delegate.command` entry's own PATH-relative convention; PR #426 already shipped the resolving launcher (`home/dot_local/bin/executable_idd-critique-telemetry` plus `.ps1`/`.cmd` Windows launchers). **Not yet behaviorally wired** in the instruction files for the same Track B reason as the two rows above -- the C-phase procedure text itself does not yet walk an executing agent through invoking this hook (mirroring the `critiqueLoop.delegate` gap #407 already found and fixed for a different key). |
 | `critiqueLoop.deferAfterRounds` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`15`) this round -- no repository-specific override adopted. |
 | `issueAuthoring.heartbeatCoalesceWindow` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`PT2M`) this round -- no repository-specific override adopted. |
