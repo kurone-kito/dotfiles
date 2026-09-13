@@ -502,8 +502,16 @@ local runtime's user-global config file apply. A repository may also
 configure `critiqueLoop.telemetryHook` for a separate fire-and-forget
 per-round JSON record (round, repo, issue, PR,
 findings/severity/accepted/rejected counts, delegate usage, timestamp)
-that C2/C4 below invoke but that never gates control flow; see
-`docs/idd-workflow.md`'s "Critique pass invocation" section for both.
+that C2/C4 below invoke but that never gates control flow. Invoke it by
+piping that JSON payload (compact or pretty-printed; either is
+accepted) as stdin to the configured `command` — this repository's own
+`critiqueLoop.telemetryHook.command` is the repo-local PATH binary
+`idd-critique-telemetry` (`home/dot_local/bin/`, applied via chezmoi;
+not an `idd-skill` package facade, so no ephemeral-npx/package-manager
+resolution applies here), which appends one compacted JSONL line to
+its own log and never blocks or fails the round on a write error. See
+`docs/idd-workflow.md`'s "Critique pass invocation" section for
+`critiqueLoop.delegate`.
 
 **Objective diff validation floor**: neither C2 nor C4 below may skip to
 `idd-pr-submit.instructions.md` unless **fix-validate** — the same

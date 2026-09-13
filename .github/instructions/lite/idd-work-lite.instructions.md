@@ -328,6 +328,14 @@ pass asks, never a separate pass to run on top of the one that ran.
 4. Zero-issue round confirmed (either branch below is still a zero-finding
    round and must not lose its record): invoke `critiqueLoop.telemetryHook`
    (C1) with zero findings/accepted/rejected counts — fire-and-forget.
+   Invoke it (here and at C4) by piping the round's JSON payload as
+   stdin to the configured `command` — this repository's own
+   `critiqueLoop.telemetryHook.command` is the repo-local PATH binary
+   `idd-critique-telemetry` (`home/dot_local/bin/`, applied via
+   chezmoi; not an `idd-skill` package facade, so no
+   ephemeral-npx/package-manager resolution applies), which appends
+   one compacted JSONL line to its own log and never blocks or fails
+   the round on a write error.
 5. If the floor has not passed, continue to C5 to repair validation.
 6. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
    now.

@@ -286,11 +286,14 @@ all here — `.github/workflows/strip-untrusted-labels.yml` auto-strips
 this label whenever an untrusted bot applies it, so an apply/strip
 cycle from CodeRabbit or Codex would be indistinguishable, from label
 state alone, from a genuine maintainer resolution. Instead, treat a
-comment on the issue, posted after the rejection by a trusted marker
-actor (the same authorization check this pre-check's own opening
-sentence already applies to the rejection comment itself — never a
-normal contributor's unverified claim), explicitly confirming the
-external coordination is resolved, as also making the rejection stale.
+comment on the issue, posted after the rejection by a **maintainer
+approval actor** (`idd-discover.instructions.md`'s A3.5 definition —
+verified against `maintainerApprovalActorPolicy` via the collaborator
+permission API; never the trusted marker actor set, which can include
+configured automation and is a distinct concept from this label's own
+"human maintainer only" ownership contract in
+`docs/idd-concept-ownership.md`), explicitly confirming the external
+coordination is resolved, as also making the rejection stale.
 A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a
