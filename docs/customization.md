@@ -139,10 +139,20 @@ npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f9
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
-The tarball URL is pinned to the same upstream commit used as the
-import baseline for this repository's IDD instructions and companion
-bundle, so the helper code never drifts ahead of the checked-in
-phase docs. This repository also runs the manifest under
+The tarball URL is normally pinned to the same upstream commit used as
+the import baseline for this repository's IDD instructions and
+companion bundle, so the helper code never drifts ahead of the
+checked-in phase docs — bump it deliberately whenever the IDD
+instructions are re-imported. As of roadmap #419's Track D (#424),
+this repository is mid-transition: the pin above already reads
+`v0.11.0` (`1f90787`), while `.github/instructions/` and
+`.claude/skills/` remain on the prior `v0.9.0` (`d005098`) baseline
+until Tracks B/C (#421/#422) land — a **transitional skew window**,
+the same pattern `docs/idd-policy.md`'s Helper Runtime Profile section
+already documents for the analogous `v0.6.0`→`v0.7.0` round. Track G's
+(#425) final-verification sweep confirms the pin, the instructions, and
+the skills bundle all track `v0.11.0` uniformly again once that window
+closes. This repository also runs the manifest under
 `--profile ephemeral-npx` rather than upstream's own
 `--profile package-manager` default (see #115 for the rationale).
 Replace `--profile ephemeral-npx` with the profile your repository
