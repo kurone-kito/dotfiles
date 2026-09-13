@@ -280,25 +280,15 @@ edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
 for this rule, since Groom applies it as inline body prose). For a
 `blocked-by-human` rejection specifically, A4.5 never applies
-`labels.blockedByHumanLabelName` itself (Mutation Policy above) and the
-rejection comment carries no marker, so a label-removal signal alone is
-often unreachable; treat either of the following as also making the
-rejection stale: the configured `labels.blockedByHumanLabelName` label
-being present (applied by some other phase) and then removed with no
-accompanying title/body edit — that removal is
-`docs/idd-concept-ownership.md`'s own documented maintainer recovery
-action for this blocker, **but only when it is genuinely that**: read
-the issue timeline's `UnlabeledEvent` for this label (`actor`,
-`createdAt`) and require both that its `actor` is a trusted marker
-actor and that its `createdAt` postdates the specific rejection
-comment being evaluated — `.github/workflows/strip-untrusted-labels.yml`
-auto-strips this label whenever an untrusted bot applies it, so an
-untrusted or unordered removal (including one from an earlier,
-unrelated label cycle) is never evidence of resolution and must not
-trigger a Check 1-7 rerun; fail closed when the timeline read cannot
-establish both facts. Or, independent of label state, a trusted
-maintainer's comment on the issue, posted after the rejection,
-explicitly confirming the external coordination is resolved. A
+`labels.blockedByHumanLabelName` itself (Mutation Policy above), and
+label state is otherwise too unreliable a staleness signal to use at
+all here — `.github/workflows/strip-untrusted-labels.yml` auto-strips
+this label whenever an untrusted bot applies it, so an apply/strip
+cycle from CodeRabbit or Codex would be indistinguishable, from label
+state alone, from a genuine maintainer resolution. Instead, treat a
+trusted maintainer's comment on the issue, posted after the rejection,
+explicitly confirming the external coordination is resolved, as also
+making the rejection stale. A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a
 second rejection comment and loop; a stale rejection requires posting
