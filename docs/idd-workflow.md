@@ -1396,6 +1396,16 @@ exit, so a clean round that skips C3/C4 entirely still emits a record
 The lite work profile (`lite/idd-work-lite.instructions.md`) does not
 invoke this hook -- per-round telemetry is a full-profile-only feature
 for now.
+<!-- dotfiles-divergence: lite-telemetry-parity -->
+**This repository is the exception**: `lite/idd-work-lite.instructions.md`'s
+own C1/C2/C4 steps do invoke `critiqueLoop.telemetryHook`, added during
+this repository's own issue 421 review-fix round, since this repository
+actually configures the hook and a lite-profile session dropping every
+telemetry record silently was a real gap, not a stock-upstream behavior
+this repository chose not to enable. Treat the "full-profile-only"
+framing above as
+the stock-template default this repository has locally overridden, not
+as this repository's own current behavior.
 
 The JSON payload written to the hook command's stdin:
 
