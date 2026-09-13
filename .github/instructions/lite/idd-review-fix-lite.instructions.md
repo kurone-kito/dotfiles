@@ -81,85 +81,146 @@ other GitHub side effect, confirm all of the following:
    the package-manager-profile `idd:claim-lock` command with the same
    arguments — resolve the exact command from
    `docs/idd-helper-scripts.md` if unsure). A `collision` result is
-   fail-closed: stop rather than proceed.
+   fail-closed: stop rather than proceed. Then, separately, run
+   `--read-tokens --worktree <this-worktree-path> --claim-id <id>`
+   and require `present: true` with no `malformed`; otherwise recover
+   per `docs/idd-helper-scripts.md` (gated: each step succeeds,
+   `reacquired: true` both ends), else stop.
 6. If any check fails, stop.
 
 ## E9 — Fix accepted issues
 
-1. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
-2. Run `fix-validate`.
-3. Commit fixes atomically — one logical change per commit.
-4. When an accepted finding is one instance of a systemic class, sweep
+1. PATH A/PATH B (from `idd-review-triage.instructions.md` E4): PATH A
+   is actionable feedback needing a code change or maintainer decision
+   (human reviewer threads, regular comments, `CHANGES_REQUESTED`
+   bodies, critique-pass findings); PATH B is Copilot and CI advisory
+   bot comments included for traceability, even when they do not
+   require a code change.
+2. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
+3. Run `fix-validate`.
+4. Commit fixes atomically — one logical change per commit.
+5. When an accepted finding is one instance of a systemic class, sweep
    the current diff and adjacent touched sections and fix every
    instance in the same commit.
-5. When a fix introduces a precision (a name, value, path, or described
+6. When a fix introduces a precision (a name, value, path, or described
    behavior) to satisfy a reviewer, verify it against the actual
    implementation before committing.
-6. If an Accepted item is already fixed by a prior commit in this same
+7. If an Accepted item is already fixed by a prior commit in this same
    round, do not duplicate the fix. Confirm the existing commit
    addresses it and let E13 cite that SHA.
-7. Do not push yet. All of this round's fixes push together at E12.
+8. Do not push yet. All of this round's fixes push together at E12.
 
 ## E10 — Validate fixes with critique pass
 
-1. Run a critique pass to verify the E9 fixes address the root causes
-   and are correct. Also apply these lenses when they fit, composing
-   when both do: **Mutation / write-side** (the diff implements a
-   helper that mutates GitHub state, mutates git state, or performs a
-   merge) — Fail-closed inputs; Validate/execute scope parity;
-   Unsafe-output suppression; Schema strictness parity.
-   **Gate-mirroring** (the diff implements a helper that predicts,
-   mirrors, or pre-checks another gate's decision) — Validation-path
-   parity; Input completeness; Whole-identity comparison; Snapshot
-   identity; Point-in-time parity.
-2. If the critique pass reports zero issues, continue to E11.
-3. If it reports additional issues, fix them, commit atomically, and
+1. Resolve the delegate verdict with the profile-selected
+   `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs` for
+   vendored-node/source-repo; `idd:critique-delegate` is a `package.json`
+   script identifier, run via the package manager, not a directly
+   executable command; for this repository's configured `ephemeral-npx`
+   profile, run the bin directly instead: `npx --yes --package
+   <helper-package-spec> idd-critique-delegate` — this repository
+   leaves `helperRuntime.packageSpec` unset in `.github/idd/config.json`
+   by deliberate convention (`docs/idd-policy.md`'s policy-decision
+   table records that choice for this exact key); resolve
+   `<helper-package-spec>` instead from the literal pinned tarball URL
+   in `docs/idd-policy.md`'s "Helper Runtime Profile" section — the
+   single source of truth for this repository's current
+   `ephemeral-npx` pin, bumped there whenever the instructions are
+   re-imported.
+   Read its
+   `usable` field as the next step's verdict directly — never re-derive
+   it — and, when `usable` is `true`, its `source`/`command`/`mode` fields
+   as the delegate to run below. This file is helper-enabled only: if the
+   helper is missing, fails, or disagrees with live state, stop and ask
+   instead of falling back to prose.
+2. `usable: false` means no delegate at this layer — run the per-agent
+   critique pass on the E9 fixes and go to step 6. `usable: true` means
+   the helper already applied every configuration fail-safe; use its
+   `command` and `mode` as-is below.
+3. Otherwise run the delegate's `command` against the E9 fixes. It
+   **failed** if the command is absent, exits non-zero, times out, or its
+   output cannot be read as a findings list. Otherwise it **succeeded** —
+   including when it returns a readable list with no issues in it.
+   Failure only decides whether the per-agent pass runs in step 4; it
+   never discards a readable findings list the delegate did emit, which
+   stays part of this pass's output.
+4. Read `mode` (`fallback` when the key is absent) to decide whether the
+   per-agent pass also runs: `combined` always, without waiting on the
+   delegate's outcome; `fallback` only when the delegate failed;
+   `on-success` only when it succeeded; `never` not at all. If both ran,
+   union their reported issues — including a failed delegate's own
+   readable list alongside the per-agent pass's findings. Treat a
+   delegate that, under `on-success` or `never`, leaves no readable
+   findings list as a hold, not a clean zero-issue round.
+5. These lenses apply only within a per-agent pass (step 2 or step 4) —
+   when only the delegate ran instead, never apply them yourself in its
+   place. When a per-agent pass did run, also apply, composing when both
+   fit: **Mutation / write-side** (the diff implements a helper that
+   mutates GitHub state, mutates git state, or performs a merge) —
+   Fail-closed inputs; Validate/execute scope parity; Unsafe-output
+   suppression; Schema strictness parity. **Gate-mirroring** (the diff
+   implements a helper that predicts, mirrors, or pre-checks another
+   gate's decision) — Validation-path parity; Input completeness;
+   Whole-identity comparison; Snapshot identity; Point-in-time parity.
+6. If the critique pass (delegate, per-agent, or both) reports zero
+   issues, continue to E11.
+7. If it reports additional issues, fix them, commit atomically, and
    run E10 again.
-4. Count "meaningful progress" as removing at least one Accepted
+8. Count "meaningful progress" as removing at least one Accepted
    finding, narrowing a remaining finding's root cause or scope, or
    producing a materially new fix direction. A reworded duplicate
    finding does not count.
-5. If the same Accepted findings recur for more than
+9. If the same Accepted findings recur for more than
    `critiqueLoop.e10NoProgressHoldAfter` (default 3) consecutive E10
    passes without meaningful progress, stop the loop, post a hold
    comment summarizing the repeated findings and attempted fixes, and
    wait for a maintainer decision.
-6. Do not use step 5 to bypass a serious issue: unresolved High or
-   Medium findings stay blockers until fixed or explicitly redirected
-   by a maintainer.
-7. Heuristic: several new, non-repeated same-area findings across
-   rounds (3-4) may mean one structural fix converges faster than
-   another patch. If that fix keeps drawing new findings, prefer
-   simplifying/removing the mechanism over a second redesign -- only
-   once confirmed non-required by the issue's acceptance criteria or
-   contract; if required, stop for a maintainer decision.
+10. Do not use step 9 to bypass a serious issue: unresolved High or
+    Medium findings stay blockers until fixed or explicitly redirected
+    by a maintainer.
+11. Heuristic: several new, non-repeated same-area findings across
+    rounds (3-4) may mean one structural fix converges faster than
+    another patch. If that fix keeps drawing new findings, prefer
+    simplifying/removing the mechanism over a second redesign -- only
+    once confirmed non-required by the issue's acceptance criteria or
+    contract; if required, stop for a maintainer decision.
 
 <!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
 
-1. Check for conflicts between the feature branch and `master`.
-2. If none exist, continue to E12.
-3. If conflicts exist, and the PR has unresolved review threads,
-   unreplied comments, or a reviewer's latest state is
-   `CHANGES_REQUESTED`, get explicit operator confirmation before
-   merging — the merge commit will appear in the PR history.
+1. Check state with the profile-selected branch-conflict-state helper:
+   `node scripts/branch-conflict-state.mjs --pr {pr-number}` for
+   vendored-node/source-repo; `idd:branch-conflict-state` is a
+   `package.json` script identifier (run via the package manager, e.g.
+   `npm run idd:branch-conflict-state -- --pr {pr-number}`), not a
+   directly executable command; for this repository's configured
+   `ephemeral-npx` profile, run the bin directly instead:
+   `npx --yes --package <helper-package-spec> idd-branch-conflict-state
+   --pr {pr-number}` (this repository leaves `helperRuntime.packageSpec`
+   unset in `.github/idd/config.json` by deliberate convention —
+   resolve `<helper-package-spec>` instead from the literal pinned
+   tarball URL in `docs/idd-policy.md`'s "Helper Runtime Profile"
+   section, the single source of truth for this repository's current
+   `ephemeral-npx` pin) — reflects the last pushed head, not
+   local unpushed fixes.
+   Missing, failing, or disagreeing? Stop and ask (Helper runtime
+   contract above) — no non-helper fallback here.
+2. Not a confirmed conflict (clean, behind-no-conflict, computing,
+   dirty, force-push-exception, unknown)? Skip the merge, continue to
+   E12 — F1 (`idd-pre-merge-lite.instructions.md`) handles those
+   downstream.
+3. Conflict (`mergeable` `CONFLICTING`)? Unresolved review threads,
+   unreplied comments, or reviewer state `CHANGES_REQUESTED`: get
+   explicit operator confirmation first — the merge commit will appear
+   in the PR history.
 4. <!-- dotfiles-divergence: master-branch -->
-   Run `git fetch origin master && git merge origin/master`.
-5. On a signed-commit repo whose primary signing is non-interactive
-   hostile (GPG pinentry or hardware-touch) but that provides a
-   fallback signing wrapper for arbitrary git subcommands (pass
-   `-c gpg.format=ssh -c user.signingkey=<abs-path> -c
-   commit.gpgsign=true` to `git` before the subcommand, plus
-   `-m "chore: merge origin/master into the claimed branch"` on the
-   first `merge` so a commitlint hook accepts the subject — `git -c …
-   merge`, not `git merge -c …`; a commit-only alias like
-   `git commit-ssh` will not run `merge`), run this merge through that
-   wrapper, not the plain command.
-6. Resolve any conflicts and complete the merge.
-7. If the merge needed `--continue`, run it through the same wrapper
-   used in step 5 (`git -c … merge --continue`), never the plain
-   `git merge --continue` — the wrapper must own the whole operation, or
-   the merge commit reverts to the stalling primary signing.
+   Run `git fetch origin master && git merge origin/master`. On
+   non-interactive-hostile primary signing (GPG pinentry or
+   hardware-touch) with a fallback wrapper, run the whole merge
+   (including `--continue`) through that wrapper instead — see
+   `docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure`
+   for the command form and the commitlint `-m` requirement.
+5. Resolve conflicts, complete the merge.
 
 ## E12 — Lint, test, push
 
@@ -239,11 +300,12 @@ other GitHub side effect, confirm all of the following:
    bot re-posted the same summary. Only disposition it again if the bot
    replaced the notice with an actual completed review of the current
    HEAD.
-6. After all replies and resolutions in this step are complete, update
-   the PR live status digest: `Phase` to `E13 feedback replied`, `Open
-   blockers` to any remaining reviewer, advisory, or CI wait, `Next
-   action` to E14 or E15, and `Authoritative by` to the replies,
-   resolved threads, current HEAD, and verified claim.
+6. After all replies and resolutions complete, update the PR live
+   status digest if the next route is still review-fix or CI wait:
+   `Phase` to `E13 feedback replied`, `Open blockers` to any
+   remaining reviewer, advisory, or CI wait, `Next action` to E14 or
+   E15, and `Authoritative by` to the replies, resolved threads,
+   current HEAD, and verified claim.
 
 ## E14 — Re-review request
 

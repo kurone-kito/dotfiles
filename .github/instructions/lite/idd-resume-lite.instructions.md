@@ -4,7 +4,9 @@ Lite profile for weak / local models. Same semantics as
 `idd-resume.instructions.md`. Prefer helpers over prose.
 
 **Load this file alone** for resume routing. Do not open the standard
-resume file in the same turn.
+resume file in the same turn — the sole exception is Step 0's
+Operator-present release row below, which explicitly hands off to the
+standard file's own procedure for that one route.
 
 ## Helper runtime contract
 
@@ -22,6 +24,12 @@ Never invent forced-handoff markers. Unattended sessions only
 **consume** already-recorded human-gated forced-handoff evidence.
 
 ## Always run helpers first (helper-enabled profiles)
+
+The bare `node scripts/*.mjs` forms below are the `vendored-node` /
+source-repo invocation. For `package-manager` / `ephemeral-npx`, resolve
+each to its profile-selected `idd-*` facade command instead — the bare
+script name is not a runnable command on those profiles; see
+`docs/idd-helper-scripts.md` for the exact per-command mapping.
 
 ```sh
 # Claim state (required before any mutation)
@@ -63,7 +71,8 @@ Use GitHub **server** timestamps only. Stale age default: **12 h**
 | Issue closed or PR merged                                      | Step 1 cleanup only → STOP                                             |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                                |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                              |
-| Non-owned active claim, no valid forced-handoff                | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
+| Non-owned active claim + evidence satisfying the standard file's Operator-present release conditions + operator-supplied input received | Open `idd-resume.instructions.md`'s **Operator-present release** section directly — this lite file does not mirror that procedure; return here once unblocked |
+| Non-owned active claim, no valid forced-handoff and not the operator-present-release row above | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
 | Otherwise                                                      | Step 1                                                                 |
 
 <!-- dotfiles-divergence: claim-timing -->
@@ -127,16 +136,36 @@ the issue branch.
 
 ## Step 3 — PR / CI / review route (helper-first)
 
-On helper-enabled profiles, run `resume-route-selection.mjs --issue <N>`
-(and stop-and-ask on failure — do not use the written table). Map `route`:
+On helper-enabled profiles, run the profile-selected `resume-route-selection`
+helper (`node scripts/resume-route-selection.mjs --issue <N>` for
+vendored-node/source-repo; resolve the package-manager/`ephemeral-npx`
+facade command from `docs/idd-helper-scripts.md` if unsure — see the
+"Always run helpers first" note above) (and stop-and-ask on failure —
+do not use the written table). Map
+`route`:
 
-| `route`                | Next phase                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `D1`                   | `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open PR)                     |
-| `D4`                   | `idd-pr-submit-lite.instructions.md`, D4 section only (CI wait) — do not re-run D1-D3 |
-| `E1` / `E15` / `Esync` | Review snapshot / CI wait / branch-sync                                               |
-| `F1` / `F2`            | `idd-pre-merge-lite.instructions.md`, from the top (covers both F1 and F2)            |
-| `stop`                 | STOP — report helper `reason`                                                         |
+- `D1` → `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open
+  PR)
+- `D4` → `idd-pr-submit-lite.instructions.md`, D4 section only (CI
+  wait) — do not re-run D1-D3
+- `E1` → `idd-review-snapshot-lite.instructions.md`
+- `E15` → `idd-review-fix-lite.instructions.md` E15 (invokes
+  `idd-ci-lite.instructions.md` for polling)
+- `Esync` → the standard `idd-review-triage.instructions.md`'s
+  **E-phase branch-sync check** for classification only — see note
+  below
+- `F1` / `F2` → `idd-pre-merge-lite.instructions.md`, from the top
+  (covers both F1 and F2)
+- `stop` → STOP — report helper `reason`
+
+`Esync` resumes at the standard
+`idd-review-triage.instructions.md`'s **E-phase branch-sync check**
+for branch-state classification only. Two of its exits point outside
+the lite profile: the `clean` exit continues to non-lite
+`idd-pre-merge.instructions.md` — go to
+`idd-pre-merge-lite.instructions.md` instead. The sync path's step 6
+returns to non-lite `idd-review-snapshot.instructions.md` — return to
+`idd-review-snapshot-lite.instructions.md` (E1) instead.
 
 Before any mutation after routing: re-validate claim ownership, PR HEAD,
 and CI live state.
@@ -152,6 +181,11 @@ Written table (`instructions-only` profile only):
 | Success | clean reviews; branch clean                | → F2                  |
 | Success | clean; branch behind only                  | → F1 then F2 or sync  |
 | Success | content conflict                           | → Esync               |
+
+Above, `E1` / `E15` / `Esync` route as in the Step 3 list and
+**E-phase branch-sync check** note above (which also names
+`idd-review-snapshot-lite.instructions.md` and
+`idd-ci-lite.instructions.md`).
 
 Forced-handoff recovery on an open PR: final success still → **E1** until
 this claim posts its own review-watermark and baseline.

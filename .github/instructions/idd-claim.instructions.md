@@ -278,11 +278,18 @@ incomplete/current authoring hold blocks; only exact anchor/set/session
 `release-complete` allows a completed generation.
 Route directly to already-claimed/Discover fallback (A0-T stops), never A5(c).
 
-Post the claim comment using the exact format and posting mechanics
-already defined in
+First record `{agent-id}`/`{claim-id}` via `--record-tokens`; then post
+the claim comment using the exact format and posting mechanics already
+defined in
 [Claim format](idd-overview-core.instructions.md#claim-format) — do not
 re-derive them here. `emit-marker` (`--type claimed-by`, emit-only) also
-renders the body without posting.
+renders the body without posting. **Exception**: forced-handoff
+recovery's adopt-verbatim path skips this record/post entirely — no
+`claimed-by` marker at all, only its own activation-nonce (see Claim
+verification's adopt-verbatim guidance below); the already-posted,
+verified `forced-handoff` marker is itself the claim evidence (rule 7),
+so posting a new `claimed-by` here would contest or overwrite the
+sticky successor claim.
 
 **Nothing appended after the note.** A `claimed-by` / `unclaimed-by`
 marker body must be exactly the HTML comment token followed by, at
@@ -316,9 +323,10 @@ verification_ below); never skip it for any activation path:
 _{agent-id}: claim activation nonce — IDD automation marker. Do not edit._
 ```
 
-`{nonce}` is fresh; record it with `{agent-id}` / `{claim-id}`. For multiple
-trusted markers sharing a claim, the lexicographically earliest nonce wins;
-no marker means no comparison. With helper runtime, post it using
+`{nonce}` is fresh; record it via `--record-tokens` before posting. For
+multiple trusted markers sharing a claim, the lexicographically earliest
+nonce wins; no marker means no comparison. With helper runtime, post it
+using
 `post-idd-marker --type activation-nonce --target issue <number> --apply`
 with the four fields defined in `docs/idd-helper-scripts.md`.
 
@@ -361,9 +369,11 @@ race-safe checks below:
    forced-handoff, where steps 1–4 see nothing to disagree about (both
    `{claim-id}`s genuinely match). No marker posted: treat as passed.
 
-6. Re-fetch labels/paginated owner log; a hold contests this claim. If active and
-   step 5 passed, release/verify `unclaimed-by`, then use `(A0-T)`, not A5(c).
-   If step 5 failed, retain it; never release on nonce mismatch.
+6. Re-fetch labels and the paginated owner-marker log. If an authoring
+   hold is active on this issue, it contests this claim: when step 5
+   passed, post and verify `unclaimed-by`, then take the
+   already-claimed/Discover fallback (A0-T stops) — never A5(c); when
+   step 5 failed, keep the claim and never release on a nonce mismatch.
 
 If any check fails, treat the claim as contested.
 
@@ -408,21 +418,20 @@ rule 7). Adopt **both fields verbatim** as your own `{agent-id}` /
 fresh claim-id or keeping your own native agent-id; no separate
 `claimed-by supersedes: none` post is required for the transfer itself.
 
-**Adopt-verbatim is still an activation**: immediately before every activation
-nonce, including this nonce-only handoff, repeat the label/authoring-state
-guard above.
-Post your own
+**Adopt-verbatim is still an activation**: immediately before this nonce,
+repeat the label/authoring-state guard above. Post your own
 [activation-nonce marker](#activation-nonce-format) for `new-claim-id`
 too (see the
-[rationale](../../docs/idd-design-rationale.md#activation-nonce-why-a-separate-marker-and-what-stays-deferred)
-for why this path needs its own nonce). Verify it the same way step 5
-above does: wait `claim.verifySettleDelay`, recompute the nonce winner
-for `new-claim-id`, and confirm it is yours — the only nonce check
-that fires here, since posting no `claimed-by` means this path never
-enters _Claim verification_ above. After nonce verification, repeat that
-guard; on mismatch or either hold, re-resolve pair/nonce before fallback. If
-the pair still owns claim and nonce (or none competes), post/verify
-`unclaimed-by`; else leave successor claim.
+[rationale](../../docs/idd-design-rationale.md#activation-nonce-why-a-separate-marker-and-what-stays-deferred)).
+Verify it the same way step 5 above does: wait `claim.verifySettleDelay`,
+recompute the nonce winner for `new-claim-id`, and confirm it is yours —
+the only nonce check here (this path posts no `claimed-by`). After nonce
+verification, repeat that guard. On nonce mismatch or an incomplete or
+current authoring hold, re-resolve the adopted pair and nonce; if that
+pair still owns claim and nonce (or none competes), post/verify
+`unclaimed-by` for the adopted pair (this session cannot keep that
+activation); else leave the successor claim; then take the
+already-claimed/Discover fallback (A0-T stops).
 
 Always use the assigned pair verbatim: never invent `claimed-by` or reuse the
 displaced `{claim-id}`. A native agent-id that is not the assigned value fails
@@ -497,23 +506,36 @@ recognizing the brief reassigns it to a single-issue worker role. The
 delegation brief must state explicitly that the delegate is the sole
 worker for the named issue, that no peer workers exist for it to
 coordinate with or wait on, and that it must perform the implementation
-work itself rather than re-delegate or wait for a reply (#2179). Prefer
-a non-context-inheriting mechanism instead, when the tool offers one —
-see [docs/idd-workflow.md's Orchestrator fan-out
+work itself rather than re-delegate or wait for a reply (#2179). Use a
+non-context-inheriting mechanism whenever the tool offers one — this
+is a strong preference, not a suggestion; a context-inheriting
+mechanism (e.g. forking the orchestrator's own conversation) is a
+fallback only when no non-context-inheriting option exists. See
+[docs/idd-workflow.md's Orchestrator fan-out
 variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant).
 
-**Restate the CI/advisory-wait topology-safety condition; use the
-snapshot-then-stop pattern.** Carry — verbatim or by reference — the
-topology-safety condition from [idd-ci.instructions.md's Wake-up
+**Known limitation.** Neither this wording nor an added negative
+instruction reliably stops a context-inheriting delegate from
+misreading itself as a sub-orchestrator waiting on a nonexistent
+sub-worker (#2802) — an accepted residual risk of the fallback path;
+see
+[docs/idd-design-rationale.md](../../docs/idd-design-rationale.md#context-inheriting-delegation-residual-risk)
+for the field evidence.
+
+**Restate the CI/advisory-wait topology-safety condition.** Carry —
+verbatim or by reference — the topology-safety condition from
+[idd-ci.instructions.md's Wake-up
 discipline](idd-ci.instructions.md#wake-up-discipline) (also in
 [docs/idd-workflow.md's Orchestrator fan-out
 variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant));
 without it, a worker can stall indefinitely on an unconfirmed
-backgrounded wait (#2210). Default: the worker takes one non-blocking
-snapshot, reports it, stops if incomplete, never polls or waits on a
-notification. The orchestrator alone polls and resumes via a
-follow-up message (a fresh delegate re-inherits stale context and
-no-ops).
+backgrounded wait (#2210).
+
+**Restate the scratchpad file-naming requirement.** See
+[docs/idd-workflow.md's Orchestrator fan-out
+variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant):
+each worker must prefix scratchpad filenames with the issue number,
+or use an issue-numbered subdirectory.
 
 ### Hide displaced claim chain on takeover
 
@@ -564,8 +586,10 @@ for the full algorithm.
 ### Worktree-local lock file (same-machine collision)
 
 A same-machine fast path complementing the cross-machine claim check
-above. Acquire once the B1 worktree exists (before the first mutation),
-then re-run alongside every later pre-mutation check:
+above. Acquire once the B1 worktree exists (before the first mutation;
+also re-run `--record-tokens` there (with `--nonce`)), then re-run
+alongside every later
+pre-mutation check:
 `node scripts/claim-lock.mjs --acquire --worktree <path> --agent-id
 {agent-id} --claim-id {claim-id}`.
 
@@ -582,6 +606,10 @@ remove` at F4 deletes the lock with the worktree, so a crashed
 session's leftover lock resolves the same way. See
 `docs/idd-helper-scripts.md`'s Worktree-local claim lock entry for
 mechanical detail.
+
+**Generated-tokens record.** Re-check with `--read-tokens` alongside
+`--acquire`; absent/malformed recovers only via step 5
+(`idd-overview-core.instructions.md`).
 
 Then continue to `idd-work.instructions.md`.
 
@@ -636,7 +664,16 @@ chronologically and apply these rules:
      `role_name == write` or `permission == write` so custom write-base
      roles still satisfy the loose policy;
    - `forcedHandoff.mode` is `human-gated` (default `disabled`);
-   - `oldAgentId` / `oldClaimId` / `branch` all match the active claim.
+   - `oldAgentId` / `oldClaimId` / `branch` all match the active claim;
+   - when an open PR backs the active claim: an `issue-plus-pr`
+     marker's `linkedPr` must name that PR; only an `issue-only` marker
+     may instead rely on a caller-supplied `prFirstCommitAt` (PR
+     context, not marker evidence), honored when the handoff predates
+     it — the Part B allowance from issue #1058, which the merge
+     write-gate opts into but Resume routing never does (see
+     [Forced-handoff strictness](../../docs/idd-design-rationale.md#forced-handoff-strictness-strict-resume-vs-lenient-relay-merge));
+     every other combination, including a mismatched `linkedPr`, leaves
+     the marker ignored.
 
    When all hold, replace the active claim with the successor
    (`newAgentId` / `newClaimId`, same `branch`, `supersedes =

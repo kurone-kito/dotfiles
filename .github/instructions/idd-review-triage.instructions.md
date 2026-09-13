@@ -15,6 +15,38 @@ no-sync-required `clean`/`behind-no-conflict` exit applies the
 
 ## E4 — Classify and score ReviewItems_snapshot
 
+Once per triage pass (not per item), read the claimed issue's own body
+and note any explicit out-of-scope statement in it, trusted for the
+scope fence below only if it predates the B2 plan
+(`idd-work.instructions.md`) — an author keeps edit rights throughout
+the claim and could otherwise time an edit to force-reject a legitimate
+finding. Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
+unrelated activity, so it will not do), paginating until
+`pageInfo.hasNextPage` is `false` — a successfully returned but
+truncated connection can select an older qualifying entry and apply
+scope decisions to the wrong plan-time body, and is not itself an
+"unavailable or failed" read, so the fail-closed rule below must be
+applied explicitly when pagination cannot be confirmed complete. Each
+entry's `diff` is the full
+body text as it stood immediately after that specific edit — verified
+directly against live GraphQL data; despite GitHub's schema describing
+it generically as "a summary of the changes for this edit," it is not a
+line-level patch, so no replay or accumulation across entries is
+needed. Reconstruct the body as it stood at or before the plan's post
+time by taking the entry with the latest `editedAt` at or before that
+time and reading its `diff` directly as that state. If no entry
+qualifies: zero edits exist at all, so the current body already is
+that state; or at least one edit exists but every one postdates the
+plan, so the pre-first-edit (creation) content is not obtainable from
+this API at all — no entry captures state before the earliest edit.
+Treat that second case, an unavailable, failed, or incompletely-paginated
+`userContentEdits` read, or any reconstruction that cannot be completed
+with confidence,
+the same way: fail closed, never assume no post-plan edit occurred. A
+statement absent from the reconstructed (or, in the zero-edit case,
+current) state — added later, or present now but not there — needs
+independent corroboration (a maintainer comment, not another edit).
+
 For each item in ReviewItems_snapshot, first classify it:
 
 - **PATH A — actionable feedback**: human reviewer threads and regular
@@ -47,6 +79,28 @@ Then apply path-specific scoring:
 - **PATH B**: no High/Medium/Low. Score only a _completed_ review of
   current HEAD as `Accepted` (confirmed/useful) or `Rejected`
   (noted, no action) — route a non-review notice to E6 instead.
+- **Scope fence (PATH A and PATH B).** A finding that asks to
+  introduce, or further broaden, a change class the claimed issue's own
+  body explicitly places out of scope scores `Low` (PATH A) or
+  `Rejected` (PATH B) and disposes **Reject forced**, regardless of
+  technical correctness or tractability, from the point that class is
+  introduced onward. A refinement or bug fix inside an
+  already-introduced instance of that class is still in-scope work and
+  scores normally. This fence
+  overrides PATH A's High-tier `Accept forced` rule: even a
+  correctness finding that would introduce or broaden a fenced class
+  does not reach `Accept forced` merely for being High-severity.
+  Record a rejected instance as a known limitation in the PR body's
+  follow-up-issues content (`idd-pr-submit.instructions.md` — mapped
+  onto the template's "Follow-up issues" section when one exists), not
+  a defect. Edit it under E12's "PR body sync" safeguards
+  (`idd-review-fix.instructions.md`: claim revalidation first, fetch
+  the full body, edit only this claim, post the full result back,
+  re-check `closingIssuesReferences`) even when E8's zero-Accepted-
+  PATH-A skip bypasses E9-E15, and E12 with it. This rule parallels
+  E10's "Round-count heuristic for genuinely-new findings" (same file):
+  that heuristic covers a shared root cause once PATH A work is
+  underway; this fence applies earlier, at PATH A/B scoring.
 
 ## E5 — Record Accept / Reject decisions
 
@@ -55,7 +109,8 @@ Record a path-specific disposition for every item:
 - **PATH A**: High-severity items reach Accepted only via "Verify
   before accept" below, or — when the actor-permission cap applies —
   an explicit maintainer confirmation reply; Medium/Low require an
-  explicit Accept or Reject decision.
+  explicit Accept or Reject decision, except a scope-fenced finding
+  (E4), which is Reject forced regardless of severity.
 - **PATH B** (a _completed_ review of the current HEAD): `Accepted`
   means the advisory confirms the implementation or captures useful
   context; `Rejected` means noted, no action required. An advisory
@@ -129,12 +184,20 @@ state of its own, but can still match a prior resolved thread's claim.
   at current HEAD, or the new occurrence carries genuinely new
   information the prior thread did not address.
 
-**Reasoned-rejection convergence.** The iterate-to-zero loop may converge
-by reasoned rejection of peripheral or verified-false items — not every
-comment needs a code change. Record the reason in the disposition reply;
-"a bot raised it" alone never forces a change (e.g., a "credential
-leak" flag on a placeholders-only config file:
-`**Rejected** — verified placeholders-only`).
+**Round-count cutoff (`critiqueLoop.deferAfterRounds`, default `15`).**
+Once the claim's `review-watermark` post count (paginated,
+including minimized ones and this pass's own E1 post) reaches the
+threshold, disposition an undispositioned Low-severity (E4) PATH A
+item **Reject (defer)** instead of the normal judgment — never an
+already-Accepted item mid-fix (`e10NoProgressHoldAfter` unaffected) nor
+a CODEOWNER/required-reviewer item (E6's AMD exception applies). Reply
+`**Rejected** — deferred to follow-up issue #<n> (round
+<round>/<threshold>): {reason}`, resolve normally, and bundle every
+item from this cutoff into one follow-up issue per E6's
+follow-up-issue rule, each with an AC bullet and the
+`<!-- dotfiles-authoring-defer-source: review-fix-loop-cutoff -->`
+marker. See
+[rationale](../../docs/idd-design-rationale.md#e4e5-round-count-defer-cutoff).
 
 ## E6 — Post disposition replies
 
@@ -318,14 +381,8 @@ review-ack --from-pr <pr-number> --agent-id <id> --timestamp
 review-ack: {agent-id} {PR_HEAD_SHA} {ISO8601-acknowledged-at}
 ```
 
-_Worked example_: a review posts a regular-comment finding plus a
-suppressed one. Disposition the regular-comment finding normally
-(`**Rejected** — verified placeholders-only`), then also post
-`review-ack: claude-code-1a2b3c4d 4b825dc642cb6eb9a060e54bf8d69288fbee4904 2026-08-19T00:10:00Z`
-(plain text, no HTML comment) to cover the suppressed one — the
-regular-comment rejection alone never sets `converged`, and this is
-not a license to skip **AW6** or the fix flow when the suppressed
-finding needs a code change.
+_Worked example_: see
+[rationale](../../docs/idd-design-rationale.md#review-ack-worked-example).
 
 PATH B — Advisory non-review notice (rate-limit / quota / queued / bare
 ack / error, as defined in E4):
@@ -439,10 +496,9 @@ update unless you intentionally return to E1 afterward.
 
 ## E8 — Accepted PATH A count check
 
-If the Accepted PATH A count is zero → proceed to the
-**E-phase branch-sync check** below.
-
-Otherwise continue to `idd-review-fix.instructions.md`.
+Zero Accepted PATH A → **E-phase branch-sync check** below (per the
+Skip condition note above); otherwise →
+`idd-review-fix.instructions.md`.
 
 ## E-phase branch-sync check
 
@@ -535,14 +591,27 @@ rollup: see [rerun mechanics](idd-ci.instructions.md#rerun-mechanics).
 ## Zero-Accepted-PATH-A advisory re-review gate
 
 Applies only from the branch-sync check's no-sync-required `clean` /
-`behind-no-conflict` exit, and only when the last non-empty
-`ReviewItems_snapshot` pass this episode had zero Accepted PATH A items
-**and** at least one PATH B item got a _completed-review_ disposition
-(never a notice-only rejection — see the E6 non-review-notice rule).
-Otherwise a no-op: a true-virgin empty snapshot (no PATH B ever
-dispositioned this episode) never fires it; a later-pass empty snapshot
-after a sync loop-back still does, since the lookback still finds the
-prior non-empty pass. (Rationale for the gap this closes:
+`behind-no-conflict` exit, and fires under either of two conditions:
+(a) the last non-empty `ReviewItems_snapshot` pass this episode had
+zero Accepted PATH A items **and** at least one PATH B item got a
+_completed-review_ disposition (never a notice-only rejection — see
+the E6 non-review-notice rule); or (b) the current HEAD is eligible
+for **AW3-S**'s settled-window (non-pending) entry (running
+`advisory-wait-state` reports `staleRequestRecovery.action` as
+`"attempt"` for that entry) — D4 and F2 each already consult **AW3-S**
+independently for this same settled-window entry (`#2726`), but a
+true-virgin empty snapshot otherwise never runs E14 through this gate
+specifically; condition (b) is a defense-in-depth backstop that
+guarantees this path also reaches the stale-request recovery cycle
+(and its route to `COPILOT_UNAVAILABLE`), rather than depending
+solely on D4/F2 revisits eventually accumulating enough AW3-S cycles
+on their own. Otherwise a no-op: a true-virgin empty snapshot with no
+entry eligible for AW3-S's settled-window (no PATH B ever
+dispositioned this episode, and no stale same-head request either)
+never fires it; a
+later-pass empty snapshot after a sync loop-back still fires via (a),
+since the lookback still finds the prior non-empty pass. (Rationale
+for the gap condition (a) closes:
 [design rationale](../../docs/idd-design-rationale.md#zero-accepted-path-a-advisory-re-review-gate).)
 Run this gate **after** any branch-sync merge settles — requesting
 first would let a later merge invalidate the review just obtained.

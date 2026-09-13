@@ -216,23 +216,42 @@ header comment — not present in the portable stub this template
 ships). For a stuck or stale rollup entry, rerun the _existing_
 PR-linked run (`gh run rerun <run-id>`) instead of `workflow_dispatch`.
 
-A second cause: GitHub gates a bot-triggered run (e.g. Copilot's
-`pull_request_review`/`pull_request_review_comment` event) to
-`action_required`, and the bot event alone never refreshes the check.
-Recover by rerunning the _existing_ non-bot `pull_request`-triggered
+**Topology (as of `v0.11.0`, `#424`)**: the required check itself now
+registers only `pull_request`/`pull_request_target` — `pull_request_review`
+and `pull_request_review_comment` moved entirely to the non-required
+companion `idd-advisory-convergence-comment.yml` (there is no
+`pull_request_review_target` variant, so keeping either trigger on the
+required workflow would leave it PR-editable). A review submission or
+review-thread reply no longer creates or cancels an
+`idd-advisory-convergence` check-run instance directly; the companion
+workflow instead reruns/refreshes the existing `pull_request`-family
+instance for the current HEAD (`idd-rerun-advisory-convergence
+--refresh-latest`, per the plan below). Regular PR comments
+(`issue_comment`) land on the same companion, but only an
+IDD-originated one (reply-identity stamp, disposition prefix, or a
+recognized operational marker) actually triggers a refresh.
+
+A bot-triggered run (e.g. Copilot's own `pull_request_review`
+submission) still gates to `action_required` regardless of which
+workflow it lands on — this now affects the companion's run, not the
+required check directly — and the bot event alone never refreshes the
+check. Recover by rerunning the _existing_ non-bot `pull_request`-family
 run for this HEAD (subject to `ciWait.rerunPolicy`) — never the gated
 bot run itself, which keeps the original actor's privileges and
 re-enters `action_required` (approve via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` if it must run).
-The check also self-heals on the next non-bot trigger — a push or a
-**review-thread** reply, not a regular PR comment (no `issue_comment`
-subscription).
+The check also self-heals on the next non-bot trigger: a push runs the
+required `pull_request`/`pull_request_target` workflow directly via its
+own `synchronize` event, while a **review-thread** reply or an
+IDD-originated regular PR comment (`issue_comment`) is what the
+companion workflow picks up instead.
 
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several `idd-advisory-convergence`
-check-run instances (the check fires on `pull_request` plus
-`pull_request_review`/`pull_request_review_comment`, and
-`cancel-in-progress` cancels most of them), and GitHub's own required-check
+check-run instances — from the transition-period overlap between
+`pull_request` and `pull_request_target` (see the workflow's own
+header), or left over from before this topology change — and
+`cancel-in-progress` cancels most of them. GitHub's own required-check
 rollup can stay pinned to a bot-triggered instance whose **conclusion** is
 `CANCELLED`. Unlike `action_required`, a `CANCELLED`-conclusion
 bot-triggered instance is **not** gated: rerunning it completes
@@ -275,6 +294,24 @@ next.
 ([Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570)),
 rerun this SAME existing run via the mechanic above — never
 `workflow_dispatch`.
+
+**Automated self-referential-bootstrap-auto waiver (`#2657`)**: alongside
+the manual maintainer-authorized waiver flow above, a PR whose own diff
+touches `idd-advisory-convergence`'s committed trigger-file allowlist gets
+a scoped waiver posted automatically by a separate `issues: write` job in
+`idd-advisory-convergence.yml` itself — no manual waiver or rerun needed
+to unblock it, PROVIDED the adopting repository has also opted into the
+same `ciGate.externalCheckWaivers.mode: "maintainer-authorized"` policy
+and registered `idd-advisory-convergence` under
+`ciGate.externalChecks.waivable` (helper runtime must also be configured;
+the shipped template config leaves all of this unset, in which case the
+job is a documented no-op rather than a failure). See
+[Customizing IDD](../../docs/customization.md) for how to opt in, and
+[External-check waiver contract](../../docs/idd-helper-scripts.md#external-check-waiver-contract)
+for the marker shape, the seven acceptance conditions, and why this one
+waiver kind is evaluated independent of the deadline/terminal-unavailable
+gate. This does not replace the manual flow for any other reason token,
+actor, or check.
 
 <!-- dotfiles-divergence: master-branch -->
 **Stale workflow definition on the PR branch.** `gh run rerun`
@@ -325,7 +362,11 @@ This advisory, tool-agnostic note keeps the **wait itself cheap**: the
 dominant cost is each re-invocation's context re-read (worse past the
 prompt-cache TTL), not the idle time. It applies to a session pushing a
 commit and waiting on CI or bot review outside a formal IDD claim too
-(issue `#2464`) — nothing below depends on being mid-phase.
+(issue `#2464`) — nothing below depends on being mid-phase. The same
+discipline covers any long-running foreground command a phase
+requires — CI polling, bot/advisory review waits, and local
+build/test/lint runs alike (see the local-command guidance below,
+issue `#2798`).
 
 **Portability**: under supervisor/worker topologies, a background
 wait's completion notification often reaches only the supervisor, so
@@ -336,11 +377,24 @@ condition below accounts for this.
   completion, or background only if the topology is confirmed to route
   completion back to this turn; otherwise wait synchronously — block
   with `gh pr checks <pr-number> --watch --required` (works on a
-  fine-grained PAT; `gh run watch <run-id> --exit-status` does not).
-  Both only block, never decide: required-only scoping, duplicate-name
-  collapse, the no-required-checks route, and the
-  `ciWait.runningTimeout`/`generationTimeout` bound all stay with the
-  algorithm above — track elapsed time and apply its rerun-or-hold
+  fine-grained PAT; `gh run watch <run-id> --exit-status` does not) —
+  **but only once** [Required-check discovery](#required-check-discovery)
+  has resolved `noRequiredChecksConfigured: false`. When Required-check
+  discovery has instead resolved `noRequiredChecksConfigured: true`,
+  `--watch --required` returns immediately, non-blocking, printing a
+  "no required checks
+  reported" message even while real CI is still running — block with
+  the bare `gh pr checks <pr-number> --watch` (no `--required`)
+  instead. That bare form still returns once every visible check
+  reaches a terminal GitHub state, which is not the same as "safe to
+  proceed" — a lone `CANCELLED` check with no same-producer successor
+  is one such terminal-but-`pending` case (#2714). None of the three
+  watch forms above decides anything by itself — required-only
+  scoping, duplicate-name collapse, the no-required-checks route, and
+  the `ciWait.runningTimeout`/`generationTimeout` bound are all
+  interpretation-time concerns that stay with the algorithm above
+  regardless of which form blocked the wait — track elapsed time and
+  apply its rerun-or-hold
   decision if a watch outlasts it. Issue that blocking call with an
   execution-timeout override set at or near the calling tool's own
   execution-timeout ceiling, not the tool's default, which can
@@ -348,16 +402,44 @@ condition below accounts for this.
   tool-timeout kill of the watch call is not a CI verdict — re-issue
   the same blocking watch, keep accumulating elapsed time against the
   bound above, and do not fall back to `run_in_background` or another
-  detached/backgrounded mechanism just because of the kill. Neither
-  watches Copilot review state — see
-  `idd-advisory-wait.instructions.md`. A bare `sleep` may
-  be sandboxed or blocked in some runtimes (preventive; no observed
+  detached/backgrounded mechanism just because of the kill. This
+  reissue-on-timeout guidance is scoped to an idempotent, read-only
+  remote poll like the watch call above. The same preventive override
+  applies before issuing a heavy local command (a full build, test,
+  lint, or doctor run) expected to run long: set an explicit
+  execution-timeout override at or near the calling tool's own
+  execution-timeout ceiling before the command starts, rather than
+  relying on the tool's default and discovering the auto-background
+  only after the fact — this has repeatedly stalled a session's turn
+  in practice (issue `#2933`). Never blindly re-issue a
+  heavy local command (a full build, test, or lint run) that
+  auto-backgrounds past the tool's default timeout — being idempotent
+  does not make it safe to run twice at once; two concurrent instances
+  can still collide on shared output (e.g. a `coverage/` directory).
+  Check whether the prior invocation is still running first (e.g. via
+  the calling tool's own background-task listing or equivalent), then
+  await/reap it or reuse its eventual result rather than starting a
+  second concurrent instance. No watch form above watches Copilot
+  review state either — see
+  `idd-advisory-wait.instructions.md`, whose Scope section also covers
+  why a non-primary bot's review must not gate a custom wait either. A
+  bare `sleep` may be sandboxed or blocked in some runtimes (preventive; no observed
   incident yet); a `run_in_background` Bash task or other
   detached/backgrounded mechanism must not be used for this wait
   unless the topology-safety condition above is confirmed. Never
   insert "is it done yet?" turns or end this turn assuming an
   unconfirmed background/async notification resumes it — that stalls
   silently under supervisor/worker topologies.
+- **Main-session turn-ending rule.** The Portability gap above assumes a
+  background wait was at least started; a main (non-delegated) session
+  can fail a different way: ending its turn on a future-tense promise
+  ("I will wait and then...", "I'll check back once...") with no wait
+  mechanism armed at all — not even an unconfirmed one. Pair every such
+  promise with one of the mechanisms in the bullet above (a scheduled
+  wakeup, a confirmed-topology background task, or a synchronous block)
+  before ending the turn. Issue #2221 recorded repeated stalls — one
+  lasting 3.6 hours — from exactly this gap; arming the wait mechanically
+  prevented recurrence once adopted.
 - **Batch post-wait actions** into one turn once the wait resolves
   (disposition, replies, marker, next gate together).
 - **Scope post-fix re-validation** to the changed surface when provably
