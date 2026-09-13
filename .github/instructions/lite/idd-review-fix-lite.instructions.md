@@ -118,10 +118,15 @@ other GitHub side effect, confirm all of the following:
    script identifier, run via the package manager, not a directly
    executable command; for this repository's configured `ephemeral-npx`
    profile, run the bin directly instead: `npx --yes --package
-   <helper-package-spec> idd-critique-delegate` — resolve
-   `<helper-package-spec>` from `helperRuntime.packageSpec` in
-   `.github/idd/config.json`, or `docs/idd-helper-scripts.md`'s
-   "Authoritative invocation surface per profile" section if unsure).
+   <helper-package-spec> idd-critique-delegate` — this repository
+   leaves `helperRuntime.packageSpec` unset in `.github/idd/config.json`
+   by deliberate convention (`docs/idd-policy.md`'s policy-decision
+   table records that choice for this exact key); resolve
+   `<helper-package-spec>` instead from the literal pinned tarball URL
+   in `docs/idd-policy.md`'s "Helper Runtime Profile" section — the
+   single source of truth for this repository's current
+   `ephemeral-npx` pin, bumped there whenever the instructions are
+   re-imported.
    Read its
    `usable` field as the next step's verdict directly — never re-derive
    it — and, when `usable` is `true`, its `source`/`command`/`mode` fields
@@ -191,10 +196,12 @@ other GitHub side effect, confirm all of the following:
    directly executable command; for this repository's configured
    `ephemeral-npx` profile, run the bin directly instead:
    `npx --yes --package <helper-package-spec> idd-branch-conflict-state
-   --pr {pr-number}` (resolve `<helper-package-spec>` from
-   `helperRuntime.packageSpec` in `.github/idd/config.json`, or
-   `docs/idd-helper-scripts.md`'s "Authoritative invocation surface per
-   profile" section if unsure) — reflects the last pushed head, not
+   --pr {pr-number}` (this repository leaves `helperRuntime.packageSpec`
+   unset in `.github/idd/config.json` by deliberate convention —
+   resolve `<helper-package-spec>` instead from the literal pinned
+   tarball URL in `docs/idd-policy.md`'s "Helper Runtime Profile"
+   section, the single source of truth for this repository's current
+   `ephemeral-npx` pin) — reflects the last pushed head, not
    local unpushed fixes.
    Missing, failing, or disagreeing? Stop and ask (Helper runtime
    contract above) — no non-helper fallback here.
