@@ -431,7 +431,14 @@ turns an operator-visible failure into a silent stall.
   can hold uncommitted local changes unrelated to the stale HEAD, and
   `git reset --hard` discards them irrecoverably. If dirty, stop and
   post a hold note rather than discarding local work; only an
-  operator-confirmed discard may proceed. D3.5 step 7's `git log` and D3.7's
+  operator-confirmed discard may proceed. Even when clean, confirm
+  local `HEAD` is an ancestor of (or equal to) the PR's current HEAD
+  SHA (`git merge-base --is-ancestor HEAD {PR-head-sha}`) before
+  resetting: `git status --porcelain` never reports committed-but-unpushed
+  local commits, which `git reset --hard` would silently drop from the
+  branch's reachable history. If local `HEAD` is not an ancestor
+  (diverged or strictly ahead), stop and post a hold note the same way
+  instead of resetting. D3.5 step 7's `git log` and D3.7's
   inherited `git diff` both read local git state, not the remote PR
   directly. Then re-run `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the

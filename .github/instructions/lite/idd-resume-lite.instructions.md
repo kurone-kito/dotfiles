@@ -23,6 +23,12 @@ Never invent forced-handoff markers. Unattended sessions only
 
 ## Always run helpers first (helper-enabled profiles)
 
+The bare `node scripts/*.mjs` forms below are the `vendored-node` /
+source-repo invocation. For `package-manager` / `ephemeral-npx`, resolve
+each to its profile-selected `idd-*` facade command instead — the bare
+script name is not a runnable command on those profiles; see
+`docs/idd-helper-scripts.md` for the exact per-command mapping.
+
 ```sh
 # Claim state (required before any mutation)
 node scripts/resume-claim-routing.mjs --issue <N>

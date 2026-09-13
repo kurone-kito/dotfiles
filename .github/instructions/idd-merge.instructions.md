@@ -177,7 +177,14 @@ Before any mutating action in F3, apply the
      changes unrelated to the stale HEAD, and `git reset --hard`
      discards them irrecoverably. If dirty, stop and post a hold note
      rather than discarding local work; only an operator-confirmed
-     discard may proceed.
+     discard may proceed. Even when clean, confirm local `HEAD` is an
+     ancestor of (or equal to) `${PR_HEAD_SHA_F3}`
+     (`git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`) before
+     resetting: `git status --porcelain` never reports
+     committed-but-unpushed local commits, which `git reset --hard`
+     would silently drop from the branch's reachable history. If local
+     `HEAD` is not an ancestor (diverged or strictly ahead), stop and
+     post a hold note the same way instead of resetting.
      D3.5 step 7's
      `git log` and D3.7's inherited `git diff` both read local git
      state, not the remote PR directly. Skip D3.5 steps 6-7 under the
