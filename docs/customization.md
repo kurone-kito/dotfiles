@@ -1901,6 +1901,16 @@ so also restrict to
 `pull_request_review_comment`-triggered runs and check each run's own
 `pull_requests[].number` against the target pull request (empty for a
 fork-originated pull request, where GitHub never populates that field).
+An `issue_comment`-triggered rerun (a companion workflow like
+`idd-advisory-convergence-comment.yml` can have this trigger too, for
+regular PR comments) needs separate handling: GitHub never populates
+`pull_requests[]` for this event type at all, on any pull request, fork
+or not -- confirmed against a real run in this repository
+(`pull_requests: []` even though the triggering comment was on an open
+PR) -- so attributing these runs by branch name alone, or by checking
+the run's own `github.event.issue.number` if your logging captures the
+triggering payload, is the only option; `pull_requests[].number`
+cannot discriminate them.
 
 **Only your configured required status checks cost every pull request
 unconditionally.** A `pull_request`-triggered workflow that is _not_ one of
