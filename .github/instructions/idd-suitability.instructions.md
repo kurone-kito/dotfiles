@@ -287,7 +287,16 @@ rejection stale: the configured `labels.blockedByHumanLabelName` label
 being present (applied by some other phase) and then removed with no
 accompanying title/body edit — that removal is
 `docs/idd-concept-ownership.md`'s own documented maintainer recovery
-action for this blocker — or, independent of label state, a trusted
+action for this blocker, **but only when it is genuinely that**: read
+the issue timeline's `UnlabeledEvent` for this label (`actor`,
+`createdAt`) and require both that its `actor` is a trusted marker
+actor and that its `createdAt` postdates the specific rejection
+comment being evaluated — `.github/workflows/strip-untrusted-labels.yml`
+auto-strips this label whenever an untrusted bot applies it, so an
+untrusted or unordered removal (including one from an earlier,
+unrelated label cycle) is never evidence of resolution and must not
+trigger a Check 1-7 rerun; fail closed when the timeline read cannot
+establish both facts. Or, independent of label state, a trusted
 maintainer's comment on the issue, posted after the rejection,
 explicitly confirming the external coordination is resolved. A
 non-stale rejection means the session must not claim the candidate —
