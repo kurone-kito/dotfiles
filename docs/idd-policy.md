@@ -259,13 +259,18 @@ overall `.github/instructions/`/`.claude/skills/` template-import
 baseline as one unit, rather than the helper-runtime invocation pin
 specifically. That framing is itself now provisional: Track E (#423,
 already merged) resynced `.claude/skills/` to `v0.11.0` independently,
-so as of this track the paragraph's `v0.9.0` value accurately describes
-only `.github/instructions/`'s own baseline (pending Track B/#421)
-until Track G's (#425) final-verification sweep reconciles the
+so as of this track the paragraph's `v0.9.0` value accurately described
+only `.github/instructions/`'s own baseline (pending Track B/#421),
+awaiting Track G's (#425) final-verification sweep to reconcile the
 wording -- per #420's own note above, updating that paragraph
-(mirroring how it already records the `v0.7.0` → `v0.9.0` round) is
-that track's job, run once every other track under roadmap #419 has
-merged. `idd-doctor` re-run from the
+(mirroring how it already records the `v0.7.0` → `v0.9.0` round) was
+that track's job, to run once every other track under roadmap #419
+had merged. **Track G (#425) has since done exactly that**: the
+**Pinned upstream commit** paragraph near the top of this page now
+reads `v0.11.0`/`1f90787`, recording this round's full six-track
+history (#420-#424, #389) in one place, so the framing above is kept
+only as a historical record of Track #424's own transitional state,
+not current guidance. `idd-doctor` re-run from the
 `v0.11.0` tarball against this repository's current state reports the same two
 pre-existing `WARN`s already documented in [`idd-doctor`
 findings](#idd-doctor-findings) and no new finding.
@@ -706,16 +711,19 @@ same convention.
 | `critiqueLoop.deferAfterRounds` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`15`) this round -- no repository-specific override adopted. |
 | `issueAuthoring.heartbeatCoalesceWindow` | default: unset | Owner-confirmed (#419) to stay at its distributed default (`PT2M`) this round -- no repository-specific override adopted. |
 
-This round intentionally does **not** update the **Pinned upstream
-commit** paragraph near the top of this page or this file's other
-tarball-URL citations -- per roadmap #419's own track split, updating
-this page's historical pin narrative (mirroring how it recorded the
-`v0.7.0` -> `v0.9.0` round) is Track G's (#425) final-verification-sweep
-job, run once every other track (#420-#424, #389) has merged. This
-track's edit surface is `.github/idd/config.json` and this section
-alone. (Separately, `.github/workflows/` pins and the
-`ephemeral-npx`-profile helper-runtime invocation pin are Track D's
-(#424) scope, not this page's.)
+This round (Track #420, PR #427) intentionally did **not** update the
+**Pinned upstream commit** paragraph near the top of this page or this
+file's other tarball-URL citations -- per roadmap #419's own track
+split, updating this page's historical pin narrative (mirroring how it
+recorded the `v0.7.0` -> `v0.9.0` round) was Track G's (#425)
+final-verification-sweep job, to run once every other track
+(#420-#424, #389) had merged. **Now done**: see the **Pinned upstream
+commit** paragraph near the top of this page for the current,
+reconciled `v0.11.0` narrative. Track #420's own edit surface was
+`.github/idd/config.json` and this section alone. (Separately,
+`.github/workflows/` pins and the `ephemeral-npx`-profile
+helper-runtime invocation pin were Track D's (#424) scope, not this
+page's.)
 
 **Known, accepted transitional gap, now closed (Copilot review, PR #427;
 closure confirmed by Track D/#424).** This track intentionally
@@ -787,6 +795,7 @@ Current slugs:
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383, #424                         |
 | `lite-telemetry-parity`              | `lite/idd-work-lite.instructions.md`'s own C2/C4 `critiqueLoop.telemetryHook` call sites (its actual point of use), plus `docs/idd-workflow.md`'s note that the lite profile actually invokes the hook there, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; the marker documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422, #425                               |
 | `ci-companion-topology`              | `.github/instructions/idd-ci.instructions.md`'s corrected rerun-mechanics passage describing the `idd-advisory-convergence-comment.yml` companion-refresh topology, in place of upstream's own still-stale `v0.11.0` template text (filed upstream as [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966); see the deferred-upstream-issues ledger below)                                       | #421, #425                                     |
+| `pre-merge-reset-guard`              | `idd-pre-merge.instructions.md`'s D3.5/D3.7 re-verification bullet, rewritten to avoid a detached-`HEAD` `git checkout <SHA>` (using `git switch {branch-name}` instead, so the claim-revalidation gate's `git branch --show-current` check still works) and to refuse `git reset --hard` when the worktree is dirty or local `HEAD` is not an ancestor of the PR's current HEAD -- both real data-loss guards upstream's own `v0.11.0` text does not have (upstream: a bare "`git fetch` plus `git checkout`/`git reset --hard`" with no dirty/divergence check) | #421, #425                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -866,7 +875,9 @@ rounds above, using each track's own merged-PR file list (see each
 track's PR number cited below) diffed against the files carrying each
 marker. Track #421 (`.github/instructions/`/`lite/`
 re-import, PR #430) touched `claim-timing`, `cleanup-evidence-dedup-recheck`,
-`master-branch`, `needs-triage-label`, and `signing-ladder` markers;
+`master-branch`, `needs-triage-label`, `signing-ladder`, and (as this
+round's own diff-against-pinned-template check later found, see
+"Round three" above) the then-unmarked `pre-merge-reset-guard` markers;
 Track #422 (docs/githooks/scripts/lint-config resync, PR #431) touched
 `claim-timing`, `cleanup-evidence-dedup-recheck`, `master-branch`,
 `onboarding-doc-trim`, and `vendored-file-header`; Track #423
@@ -883,16 +894,19 @@ its marker -- and every other then-registered slug's marker -- still
 has at least one live, findable instance; none has silently reverted
 to upstream's default.
 
-**Register completeness gap found and closed (Codex review of this
-PR, dotfiles#432)**: the grep pass above was scoped to the **11
+**Register completeness gaps found across this PR's own review rounds
+(Codex, dotfiles#432)**: three rounds of review each found a gap the
+previous round's check could not have caught, which is itself the
+finding worth recording -- see "Known limitation" below.
+
+Round one: the grep pass above was scoped to the **11
 already-registered** slugs, not to every distinct `dotfiles-divergence:
 <slug>` string actually present in the repository -- an unbiased
 repo-wide search (`grep -rhoE 'dotfiles-divergence: [a-z-]+'` over the
 same file set excluding `.git`, deduplicated -- note the `+` quantifier,
 not `*`: a zero-width match would otherwise let this very sentence's
 own `dotfiles-divergence: <slug>` prose example count as a spurious
-empty-slug hit) is the check that actually proves completeness, and
-running it found a **twelfth live slug**, `lite-telemetry-parity`
+empty-slug hit) found a **twelfth live slug**, `lite-telemetry-parity`
 (`docs/idd-workflow.md`, with the actual behavioral divergence it
 documents at `lite/idd-work-lite.instructions.md`'s own
 `critiqueLoop.telemetryHook` call sites -- now marked there too, at
@@ -901,15 +915,34 @@ predates this round (added alongside Track #421's own review-fix
 round, marked during Track #422's own PR #431 review-fix round) but
 had never gained its own Register row. Added above, attributed to #421
 and #422 per the marker's own prior history, plus this round's own
-point-of-use marker placement (#425). Separately, this same review
-round surfaced a **thirteenth**, brand-new slug this track itself
-adds: `ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
+point-of-use marker placement (#425). Round two surfaced a
+**thirteenth**, brand-new slug this track itself adds:
+`ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
 marking the local rerun-mechanics correction the deferred-upstream-issues
 ledger below (`kurone-kito/idd-skill#2966`) explains is still absent
-from upstream's own template -- also added above. The Register now
-carries **13** slugs; the unbiased repo-wide search is the
-authoritative completeness check for any future round, not a grep
-scoped to a remembered list.
+from upstream's own template -- also added above.
+
+Round three found a **fourteenth slug that the grep-based check could
+never have found**, because it had no marker at all yet:
+`pre-merge-reset-guard` (`.github/instructions/idd-pre-merge.instructions.md`'s
+D3.5/D3.7 re-verification bullet, rewritten during #421's own PR #430
+review-fix round to guard `git reset --hard` against a dirty or
+diverged worktree -- a real data-loss fix, confirmed absent from the
+pinned `v0.11.0` template by a direct `diff` against it, not by grep).
+This gap could only be found by diffing the resynced files against the
+pinned upstream template directly; no repo-wide grep, however unbiased,
+can discover a divergence that was never marked in the first place.
+Added above, attributed to #421 (the original unmarked rewrite) and to
+this round's own marker plus Register row (#425).
+
+The Register now carries **14** slugs. Correcting the prior "the
+unbiased repo-wide search is the authoritative completeness check"
+claim: that grep is authoritative only for confirming every
+**already-marked** slug is still alive (round one's failure mode); it
+is no substitute for a direct diff against the pinned template, which
+is the only check that can surface a genuine local rewrite still
+missing its marker entirely (round three's failure mode). Both checks
+are needed; neither alone is sufficient.
 
 **Known limitation of this check**: the grep matches the marker's
 literal text wherever it appears, including a documentation bullet
