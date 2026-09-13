@@ -16,8 +16,12 @@
 #
 # Uses `yq` (mikefarah/yq) to query the YAML structurally instead of
 # grepping the raw text, so these assertions survive reformatting. `yq`
-# ships preinstalled on the `ubuntu-slim` GitHub-hosted runner image
-# this suite's own CI job runs on; skip locally if unavailable.
+# ships preinstalled on the `ubuntu-latest` GitHub-hosted runner image
+# this suite's own CI job runs on (.github/workflows/test.yml's Bash
+# tests (bats) job) -- note this is the TEST job's own runner, distinct
+# from the `ubuntu-slim` default the workflow under test resolves for
+# its own `runs-on:` (Copilot review, PR #429); skip locally if yq is
+# unavailable.
 
 bats_require_minimum_version 1.5.0
 
@@ -42,9 +46,14 @@ checkout_step() {
 }
 
 @test "the self-waiver job carries issues: write, not a broader permission set" {
-  run yq '.jobs["idd-advisory-convergence-self-waiver"].permissions.issues' "$WORKFLOW"
+  # Assert the complete permission map, not just one key -- checking
+  # `.permissions.issues` alone would still pass if a future edit added
+  # e.g. `actions: write` or `contents: write` alongside it, silently
+  # widening this job's already-elevated trust boundary (Copilot
+  # review, PR #429).
+  run yq -o=json -I=0 '.jobs["idd-advisory-convergence-self-waiver"].permissions' "$WORKFLOW"
   assert_success
-  assert_output 'write'
+  assert_output '{"contents":"read","pull-requests":"read","issues":"write"}'
 }
 
 @test "the self-waiver job checks out master, not the PR head" {
@@ -76,6 +85,16 @@ checkout_step() {
   assert_output --regexp '^actions/setup-node@[0-9a-f]{40}$'
 }
 
+@test "the self-waiver job pins its upload-artifact step to a commit SHA" {
+  # This job carries issues: write; a future floating or retargeted
+  # upload-artifact reference could execute third-party code under that
+  # write token while the checkout/setup-node pin tests above still pass
+  # (Copilot review, PR #429).
+  run yq '(.jobs["idd-advisory-convergence-self-waiver"].steps[] | select(.uses != null and (.uses | test("upload-artifact")))) as $s | $s.uses' "$WORKFLOW"
+  assert_success
+  assert_output --regexp '^actions/upload-artifact@[0-9a-f]{40}$'
+}
+
 @test "the verdict job depends on the self-waiver job and still runs when it is skipped or cancelled" {
   run yq '.jobs["idd-advisory-convergence"].needs' "$WORKFLOW"
   assert_success
@@ -91,7 +110,10 @@ checkout_step() {
   # pull_request_target) -- the whole point of the transitional
   # trust-boundary tradeoff this workflow's header documents -- must be
   # a deliberate edit to this test, not an unnoticed side effect of an
-  # unrelated change.
+  # unrelated change. mikefarah/yq's `keys` preserves the mapping's own
+  # source order here (verified empirically against this file), not
+  # lexicographic order, so this expected array intentionally matches
+  # the `on:` block's own declared order rather than alphabetical order.
   run yq -o=json -I=0 '.on | keys' "$WORKFLOW"
   assert_success
   assert_output '["pull_request","pull_request_target","workflow_dispatch","workflow_call"]'
