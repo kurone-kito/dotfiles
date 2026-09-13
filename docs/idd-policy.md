@@ -27,14 +27,16 @@ and the upstream template without surprises.
 tag and audited by roadmap #419's final-verification track
 ([`#425`](https://github.com/kurone-kito/dotfiles/issues/425)), which
 supersedes the `v0.9.0`-round pin recorded by roadmap #380's schema-audit
-track (#381). Roadmap #419's six tracks (#420-#424, #389) each resynced
-their own file scope from `v0.9.0` to `v0.11.0` -- schema/config (#420,
-PR #427), `.github/instructions/`/`lite/` (#421, PR #430),
+track (#381). Roadmap #419's five resync tracks (#420-#424) each
+brought their own file scope from `v0.9.0` to `v0.11.0` -- schema/config
+(#420, PR #427), `.github/instructions/`/`lite/` (#421, PR #430),
 docs/githooks/scripts/lint-config (#422, PR #431), CI workflow +
-helper-runtime pin (#424, PR #429), companion skills (#423, PR #428),
-and the critique-telemetry-hook consumer (#389, PR #426) -- before this
-final-verification track (#425) confirmed the pin and swept the
-Divergence Register and deferred-upstream-issues ledger below.
+helper-runtime pin (#424, PR #429), and companion skills (#423, PR #428)
+-- while its sixth track, #389 (PR #426), added the new
+critique-telemetry-hook consumer rather than resyncing an existing
+file scope. This final-verification track (#425) then confirmed the
+pin and swept the Divergence Register and deferred-upstream-issues
+ledger below.
 The `v0.9.0` pin (`d005098bf3a54a27ac79b22fb5eeb88186d235c6`) was itself
 audited by roadmap #380's schema-audit track (#381), superseding the
 `v0.7.0`-round pin recorded by roadmap #292's #293, which itself
@@ -783,6 +785,8 @@ Current slugs:
 | `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294, #382, #421                   |
 | `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233, #383, #422                         |
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383, #424                         |
+| `lite-telemetry-parity`              | `docs/idd-workflow.md`'s note that `lite/idd-work-lite.instructions.md` actually invokes `critiqueLoop.telemetryHook` from its own C1/C2/C4 steps, unlike the stock-template's "lite profile does not invoke this hook" framing (byte-identical to the `v0.11.0` pin) -- the hook call itself was added to the lite file during #421's own review-fix round; this note documents that local behavioral departure from the stock "full-profile-only" description                                | #421, #422                                     |
+| `ci-companion-topology`              | `.github/instructions/idd-ci.instructions.md`'s corrected rerun-mechanics passage describing the `idd-advisory-convergence-comment.yml` companion-refresh topology, in place of upstream's own still-stale `v0.11.0` template text (filed upstream as [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966); see the deferred-upstream-issues ledger below)                                       | #421, #425                                     |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -875,10 +879,30 @@ consumer, PR #426) touched no divergence-marker-carrying file, so
 neither gains a new attribution. `local-docs-index` (`docs/index.md`)
 was not touched by any of this round's six PRs either, but a fresh
 repository-wide `dotfiles-divergence` grep (this round, #425) confirms
-its marker -- and every other registered slug's marker -- still has at
-least one live, findable instance; none has silently reverted to
-upstream's default. The table above now attributes all six tracks
-accordingly.
+its marker -- and every other then-registered slug's marker -- still
+has at least one live, findable instance; none has silently reverted
+to upstream's default.
+
+**Register completeness gap found and closed (Copilot review of this
+PR, dotfiles#432)**: the grep pass above was scoped to the **11
+already-registered** slugs, not to every distinct `dotfiles-divergence:
+<slug>` string actually present in the repository -- an unbiased
+repo-wide search (`grep -rho 'dotfiles-divergence: [a-z-]*'` over the
+same file set, deduplicated) is the check that actually proves
+completeness, and running it found a **twelfth live slug**,
+`lite-telemetry-parity` (`docs/idd-workflow.md`), that predates this
+round (added alongside Track #421's own review-fix round, marked
+during Track #422's own PR #431 review-fix round) but had never
+gained its own Register row. Added above, attributed to #421/#422 per
+the marker's own history. Separately, this same review round surfaced
+a **thirteenth**, brand-new slug this track itself adds:
+`ci-companion-topology` (`.github/instructions/idd-ci.instructions.md`),
+marking the local rerun-mechanics correction the deferred-upstream-issues
+ledger below (`kurone-kito/idd-skill#2966`) explains is still absent
+from upstream's own template -- also added above. The Register now
+carries **13** slugs; the unbiased repo-wide search is the
+authoritative completeness check for any future round, not a grep
+scoped to a remembered list.
 
 ## Open follow-ups
 
@@ -1307,19 +1331,27 @@ future verification sweep does not have to rediscover them:
 merged target) reports `blocking: true` `placeholderResidue` on exactly
 two files, and `missingTarget: [docs/onboarding/placeholders.md,
 docs/onboarding/policy-decisions.md]` (the already-expected
-`onboarding-doc-trim` exclusion) with an otherwise-empty
-`manifestCompleteness`/`staleImportSignal`. `docs/customization.md` and
+`onboarding-doc-trim` exclusion, and the only `manifestCompleteness`
+finding) with an empty `staleImportSignal`. `docs/customization.md` and
 `docs/onboarding/project-tuning.md` no longer appear in the residue
 list at all -- both are on `idd-onboard --substitute`'s own
 placeholder-reference meta-doc skip-list, and `--verify` now applies
 the same skip-list, so their previously-documented documentation-as-example
 occurrences are no longer flagged (an improvement in the tool itself,
 not a regression: their raw `{{...}}` occurrences are still present and
-unchanged by manual grep). `docs/idd-policy.md` still reports its
-own known documentation-as-example occurrences (`{{REPO_NAME}}` x3,
-`{{TRUSTED_MARKER_ACTOR}}` x1, plus one `{{TOKEN}}` unknown-token hit,
-all inside this very explanatory section) -- unchanged in kind from
-prior rounds. **One genuinely new instance this round**:
+unchanged by manual grep). `docs/idd-policy.md` still reports its own
+known documentation-as-example occurrences of `{{REPO_NAME}}`,
+`{{TRUSTED_MARKER_ACTOR}}`, and one `{{TOKEN}}` unknown-token hit, all
+inside this very explanatory section -- unchanged in kind from prior
+rounds. **Deliberately not restating an exact occurrence count here**,
+per this section's own established practice above: naming a literal
+count in this paragraph would itself add a fresh raw `{{...}}`
+occurrence of that same token every time this text is edited, making
+any recorded number stale, or wrong, the moment it is written (a live
+count goes stale the moment this section's own prose changes; read it
+directly with an occurrence-counting form, e.g. `grep -o
+'{{TOKEN}}' <file> | wc -l`, rather than trusting any number recorded
+here). **One genuinely new instance this round**:
 `docs/idd-design-rationale.md` now also carries one raw
 `{{PROJECT_MARKER_PREFIX}}` occurrence, added during roadmap #419's
 Track B re-import cycle (dotfiles#430) as a worked-example marker
@@ -1603,9 +1635,8 @@ upstream locally the next time the affected file is re-imported:
 - (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged
   during roadmap #419's Track B re-import cycle (dotfiles#430) while
   reconciling a stale-handoff finding from dotfiles#429; verified
-  directly against upstream's own `v0.11.0` source, not introduced by
-  this repository's re-import)
-  [`.github/instructions/idd-ci.instructions.md`](../.github/instructions/idd-ci.instructions.md)'s
+  directly against upstream's own `v0.11.0` source)
+  **upstream's own** `idd-template/.github/instructions/idd-ci.instructions.md`
   rerun-mechanics passage still describes `idd-advisory-convergence` as
   firing directly on `pull_request` plus
   `pull_request_review`/`pull_request_review_comment`, even though
@@ -1614,7 +1645,16 @@ upstream locally the next time the affected file is re-imported:
   workflow (`idd-advisory-convergence-comment.yml`,
   kurone-kito/idd-skill#2657) in the same release -- the instruction
   text was never updated to match its own workflow's `v0.11.0` change.
-  **Filed upstream** at the `v0.11.0` round (#425):
+  **This repository's own copy is not affected**: dotfiles#430 already
+  corrected the local
+  [`.github/instructions/idd-ci.instructions.md`](../.github/instructions/idd-ci.instructions.md)
+  to describe the companion-refresh topology instead, now marked
+  `<!-- dotfiles-divergence: ci-companion-topology -->` (added this
+  round, #425, closing the gap Codex's review of this same PR
+  flagged: the correction differed from the pinned source with no
+  registered marker, so a future re-import could have silently
+  reverted it to upstream's still-stale text). **Filed upstream** at
+  the `v0.11.0` round (#425):
   [`kurone-kito/idd-skill#2966`](https://github.com/kurone-kito/idd-skill/issues/2966).
 - (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged
   during roadmap #419's Track B re-import cycle (dotfiles#430), confirmed
@@ -1637,8 +1677,9 @@ upstream locally the next time the affected file is re-imported:
   verified upstream-verbatim on both the standard and `lite/` sides,
   not introduced by this repository's re-import) at least five
   confirmed instances of a standard `.github/instructions/*.instructions.md`
-  passage with no counterpart in its `lite/` variant: `idd-review-fix
-  .instructions.md`'s E14 `#2327` stale-request-recovery branch (and
+  passage with no counterpart in its `lite/` variant:
+  `idd-review-fix.instructions.md`'s E14 `#2327` stale-request-recovery
+  branch (and
   `lite/idd-advisory-wait-lite.instructions.md`'s stale "F2/F3-only"
   scope claim it contradicts); `idd-pr-submit.instructions.md`'s D1-D3
   CI-job dispatch-only staging gate; `idd-work.instructions.md`'s B2.2
@@ -1672,8 +1713,9 @@ upstream locally the next time the affected file is re-imported:
 - (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
   CodeRabbit review comment during roadmap #419's Track E companion-skills
   resync (dotfiles#428), confirmed genuine and verbatim upstream content,
-  not introduced by this repository's resync) `skills/idd-spec-audit
-  /SKILL.md` contradicts itself on whether `docs/idd-autonomy-contract.md`
+  not introduced by this repository's resync)
+  `skills/idd-spec-audit/SKILL.md` contradicts itself on whether
+  `docs/idd-autonomy-contract.md`
   is authoritative over instruction files: an earlier passage says the
   instruction file wins on disagreement (the contract is a comparison
   baseline only), while a later passage calls the contract "R4's closed
@@ -1687,8 +1729,9 @@ upstream locally the next time the affected file is re-imported:
 - (`v0.11.0`, `1f90787ebf4021673ce6e5eb69741df331fd2037`, flagged by a
   CodeRabbit review comment during roadmap #419's Track E companion-skills
   resync (dotfiles#428), confirmed genuine and verbatim upstream content,
-  not introduced by this repository's resync) `skills/issue-authoring
-  /references/contract.md`'s "Authoring-bucket marker" section binding
+  not introduced by this repository's resync)
+  `skills/issue-authoring/references/contract.md`'s "Authoring-bucket
+  marker" section binding
   rules hardcode the bare literal `status:blocked-by-human` in two
   places, without the "the configured `blocked-by-human` label (default
   `status:blocked-by-human`)" qualifier used consistently elsewhere in
