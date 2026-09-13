@@ -95,6 +95,38 @@ checkout_step() {
   assert_output --regexp '^actions/upload-artifact@[0-9a-f]{40}$'
 }
 
+@test "the self-referential trigger-file allowlist covers exactly the three self-referential files" {
+  # A future edit that silently added a fourth path (broadening which
+  # PRs can auto-post a live waiver) or removed one of these three
+  # (narrowing the bootstrap escape hatch below correctness) would still
+  # pass every other test in this file (Copilot review, PR #429).
+  run yq '.jobs["idd-advisory-convergence-self-waiver"].steps[] | select(.name == "Detect self-referential trigger-file allowlist touch") | .run' "$WORKFLOW"
+  assert_success
+  assert_output --partial '".github/idd/config.json"'
+  assert_output --partial '".github/workflows/idd-advisory-convergence.yml"'
+  assert_output --partial '".github/workflows/idd-advisory-convergence-comment.yml"'
+  local count
+  count=$(grep -c '^\s*"\.[^"]*"\s*$' <<< "$output")
+  [ "$count" -eq 3 ]
+}
+
+@test "the waiver post step binds --check, --reason, and --run-id, and requires --auto-bootstrap" {
+  # This job's whole trust model rests on the consumer verifying these
+  # exact flags against the run's own provenance -- a future edit that
+  # silently dropped --run-id or --auto-bootstrap would still pass every
+  # structural test above (job gate, permissions, action pins) while
+  # posting a waiver the consumer can no longer bind to this run, or one
+  # that is honored without ever having been bootstrap-justified
+  # (Copilot review, PR #429).
+  run yq '.jobs["idd-advisory-convergence-self-waiver"].steps[] | select(.name == "Post the self-referential-bootstrap-auto waiver") | .run' "$WORKFLOW"
+  assert_success
+  assert_output --partial 'idd-external-check-waiver'
+  assert_output --partial '--check idd-advisory-convergence'
+  assert_output --partial '--reason self-referential-bootstrap-auto'
+  assert_output --partial '--run-id "$GITHUB_RUN_ID"'
+  assert_output --partial '--auto-bootstrap'
+}
+
 @test "the verdict job depends on the self-waiver job and still runs when it is skipped or cancelled" {
   run yq '.jobs["idd-advisory-convergence"].needs' "$WORKFLOW"
   assert_success

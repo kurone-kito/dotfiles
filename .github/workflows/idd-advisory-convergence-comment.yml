@@ -182,7 +182,19 @@ defaults:
     shell: bash
 jobs:
   refresh-if-idd-originated:
-    runs-on: ${{ vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
+    # ubuntu-slim (this repository's usual default, and this job's own
+    # default before #424) is a single-CPU GitHub-hosted runner with a
+    # hard, non-overridable 15-minute job timeout regardless of the
+    # `timeout-minutes:` declared below -- see
+    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners.
+    # At the prior `timeout-minutes: 10` that was a non-issue (10 < 15),
+    # but #424's bump to 55 (for the new --refresh-latest wait budget
+    # below) cannot actually be honored on ubuntu-slim: GitHub would
+    # silently kill this job at 15 minutes regardless, defeating the
+    # very reliability fix --refresh-latest exists to provide (Copilot
+    # review, PR #429). `ubuntu-latest` is a standard multi-CPU runner
+    # without that cap; `CI_RUNNER_LABEL` still overrides both.
+    runs-on: ${{ vars.CI_RUNNER_LABEL || 'ubuntu-latest' }}
     # 55, not the required gate's own 10: a pull_request_review
     # submission can land while the required gate's own run is still
     # mid-flight, and `--refresh-latest --apply` then blocks inside

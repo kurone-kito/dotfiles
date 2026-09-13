@@ -45,6 +45,16 @@ step_field() {
   assert_output '55'
 }
 
+@test "the job does not fall back to ubuntu-slim, whose 15-minute hard cap the 55-minute timeout would silently exceed" {
+  # ubuntu-slim is a single-CPU GitHub-hosted runner with a hard,
+  # non-overridable 15-minute job timeout (GitHub Actions docs) --
+  # incompatible with this job's own declared 55-minute wait budget.
+  # Regression guard for the exact bug Copilot's review caught (PR #429).
+  run yq '.jobs["refresh-if-idd-originated"]["runs-on"]' "$WORKFLOW"
+  assert_success
+  refute_output --partial "ubuntu-slim"
+}
+
 @test "the debounce step explicitly excludes pull_request_review" {
   run step_field "Check for newer qualifying event" '.if'
   assert_success
