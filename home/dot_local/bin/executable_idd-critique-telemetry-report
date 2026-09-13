@@ -1,0 +1,104 @@
+#!/bin/sh
+# Summarize the JSONL log written by `idd-critique-telemetry`
+# (`${XDG_STATE_HOME:-$HOME/.local/state}/idd-critique/log.jsonl`) for
+# the effect-measurement use case `critiqueLoop.telemetryHook` exists
+# for -- the fire-and-forget, per-round JSONL payload contract this
+# repository adopts from upstream kurone-kito/idd-skill (see dotfiles
+# issue #389 and roadmap #419): total rounds, total findings, total
+# accepted/rejected, and average rounds per loop (loop boundaries are
+# inferred from `round == 1` entries, each marking the start of a new
+# C-phase self-review loop; a log with no such entry is treated as one
+# loop, to avoid a divide-by-zero).
+#
+# Unlike the fire-and-forget appender, this script is an explicit,
+# interactively-run report -- it fails loudly (nonzero exit, message on
+# stderr) when it cannot do its job, rather than degrading silently.
+set -u
+
+if [ -n "${XDG_STATE_HOME:-}" ]; then
+  STATE_DIR="$XDG_STATE_HOME/idd-critique"
+elif [ -n "${HOME:-}" ]; then
+  STATE_DIR="$HOME/.local/state/idd-critique"
+else
+  echo "idd-critique-telemetry-report: neither XDG_STATE_HOME nor HOME is set; cannot locate the telemetry log" >&2
+  exit 1
+fi
+LOG_FILE="$STATE_DIR/log.jsonl"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "idd-critique-telemetry-report: jq is required but was not found in PATH" >&2
+  exit 1
+fi
+
+if [ -e "$LOG_FILE" ] && [ ! -f "$LOG_FILE" ]; then
+  # Distinguish "the log path exists but is not a regular file" (e.g. a
+  # directory) from "no telemetry recorded yet" (genuinely absent,
+  # handled below): the former means this script cannot do its job and
+  # must fail loudly per its own stated contract, not silently report
+  # all-zero stats -- especially since the appender's own
+  # fire-and-forget contract silently drops events for the exact same
+  # condition.
+  echo "idd-critique-telemetry-report: $LOG_FILE exists but is not a regular file" >&2
+  exit 1
+fi
+
+if [ ! -f "$LOG_FILE" ]; then
+  # No telemetry recorded yet: report all-zero stats rather than
+  # erroring, since "no rounds observed" is a valid, expected state
+  # (e.g. right after adopting the hook, before any C-phase loop ran).
+  LOG_FILE=/dev/null
+fi
+
+# Read raw lines (-R) and parse each one independently with `fromjson?`
+# inside the `inputs` generator (not inside `map`), so one malformed or
+# corrupt line -- which the appender's own no-jq raw fallback can
+# produce -- is silently skipped instead of failing the whole summary.
+# `select(type == "object")` additionally drops a line that is valid
+# JSON but not an object (e.g. a bare scalar) -- `fromjson?` alone only
+# guards against a syntax error, not against this shape mismatch, and
+# without this filter a later `.findingsCount` lookup on a non-object
+# value aborts the whole report instead of skipping just that line.
+# Each counter field is also type-checked before summing: `// 0` alone
+# only substitutes for `null`/`false`, so a present-but-nonnumeric value
+# (e.g. a string) would otherwise reach `add`, which errors on a mixed
+# string/number list and aborts the whole report over one bad record.
+# A record with no positive numeric `round` (e.g. `{}`) is rejected too
+# -- the v0.11 payload contract always includes one, so an entry
+# missing it is not a genuine telemetry round and must not inflate
+# total_rounds/average_rounds_per_loop (kept in parity with the
+# `.ps1` twin's identical check). `is_finite_number` additionally
+# requires the value to be neither NaN nor +/-Infinity: jq (at least
+# 1.7+) accepts the bare `NaN`/`Infinity` tokens in `fromjson` -- not
+# valid JSON, but reachable via the appender's own raw-fallback path,
+# which preserves malformed input verbatim -- reporting `type` as
+# "number" for them despite `NaN` itself serializing back out as
+# `null`, which would otherwise poison the whole `add` result to
+# `null` over one bad record (empirically confirmed). `round` and the
+# counters are also required to be whole numbers in their expected
+# domain (round >= 1, counters >= 0): without this, a fractional or
+# negative-but-finite value (e.g. `{"round":1.5,"findingsCount":-4}`)
+# passed the plain finite-number check and produced impossible
+# negative/fractional totals, with a fractional round also silently
+# treated as a real round with no clean loop boundary (empirically
+# confirmed; kept in parity with the `.ps1` twin's identical check).
+jq -R -n -r '
+  def is_finite_number: type == "number" and (isnan | not) and (isinfinite | not);
+  def is_nonneg_integer: is_finite_number and . >= 0 and (floor == .);
+  def is_positive_integer: is_finite_number and . >= 1 and (floor == .);
+  [inputs | select(length > 0) | fromjson? | select(type == "object")
+    | select(.round? != null and (.round | is_positive_integer))]
+  | {
+      total_rounds: length,
+      total_findings: (map(if (.findingsCount | is_nonneg_integer) then .findingsCount else 0 end) | add // 0),
+      total_accepted: (map(if (.acceptedCount | is_nonneg_integer) then .acceptedCount else 0 end) | add // 0),
+      total_rejected: (map(if (.rejectedCount | is_nonneg_integer) then .rejectedCount else 0 end) | add // 0),
+      loop_count: (map(select(.round == 1)) | length)
+    }
+  | .loop_count = (if .loop_count == 0 then 1 else .loop_count end)
+  | .average_rounds_per_loop = (if .total_rounds == 0 then 0 else (.total_rounds / .loop_count) end)
+  | "Total rounds: \(.total_rounds)",
+    "Total findings: \(.total_findings)",
+    "Total accepted: \(.total_accepted)",
+    "Total rejected: \(.total_rejected)",
+    "Average rounds per loop: \(.average_rounds_per_loop)"
+' "$LOG_FILE"

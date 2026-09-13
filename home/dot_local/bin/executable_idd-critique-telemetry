@@ -1,0 +1,93 @@
+#!/bin/sh
+# Fire-and-forget IDD critique-loop telemetry sink for
+# `critiqueLoop.telemetryHook.command` -- the fire-and-forget, per-round
+# JSONL payload contract this repository adopts from upstream
+# kurone-kito/idd-skill (see dotfiles issue #389 and roadmap #419).
+# Reads one JSON payload from stdin per invocation and appends it as
+# one JSONL line to a local state log, for later summarizing with the
+# companion `idd-critique-telemetry-report` script.
+#
+# This is a pure observability side channel, never a control-flow gate:
+# it must never let its own failure surface as a nonzero exit that the
+# C-phase loop could notice. Every fallible step below is explicitly
+# guarded so the script always exits 0 -- an empty payload, a missing
+# `jq`, an unresolvable or unwritable log path, or anything else all
+# degrade silently.
+set -u
+
+# Resolve the state directory without tripping `set -u` on a fully
+# unset $HOME (rare, but a fire-and-forget sink must not let this
+# surface as a nonzero exit): fall through to a silent no-op exit when
+# neither variable is available to build a path from.
+if [ -n "${XDG_STATE_HOME:-}" ]; then
+  STATE_DIR="$XDG_STATE_HOME/idd-critique"
+elif [ -n "${HOME:-}" ]; then
+  STATE_DIR="$HOME/.local/state/idd-critique"
+else
+  exit 0
+fi
+LOG_FILE="$STATE_DIR/log.jsonl"
+
+payload=$(cat 2>/dev/null) || exit 0
+
+# Trim to check for "empty or whitespace-only" without acting on the
+# trimmed value itself (a real payload's own leading/trailing
+# whitespace, if any, is preserved when writing below).
+trimmed=$(printf '%s' "$payload" | tr -d '[:space:]')
+[ -n "$trimmed" ] || exit 0
+
+# Canonicalize to a single compact line with jq when available, so a
+# pretty-printed multi-line payload cannot corrupt the one-object-per-
+# line JSONL invariant. Slurp mode (`-s`) plus a length check requires
+# the payload to contain EXACTLY ONE top-level JSON value: plain `jq -c
+# .` emits one output line per top-level value it sees, so two
+# concatenated values in one invocation (e.g. `{"a":1}` immediately
+# followed by `{"b":2}`) would otherwise silently split into two
+# telemetry records instead of being treated as one malformed payload.
+# When jq is unavailable, or the payload fails to parse as JSON, or it
+# does not contain exactly one value, fall back to the raw payload with
+# any embedded newlines flattened -- a JSON string value can never
+# legally contain a raw newline, so this flattening cannot change a
+# well-formed payload's meaning, and it keeps a malformed one on a
+# single JSONL line too.
+if command -v jq >/dev/null 2>&1; then
+  # Also reject a non-finite `round`/findingsCount/acceptedCount/
+  # rejectedCount value (NaN or +/-Infinity) here, before jq's own `-c`
+  # serialization launders it: jq accepts the bare `NaN`/`Infinity`
+  # tokens, but serializing Infinity back out produces the *finite*
+  # value 1.7976931348623157e+308 (JSON has no Infinity literal) --
+  # once that finite text is written to the log, the report's own
+  # isnan/isinfinite guard can no longer recognize it as ever having
+  # been non-finite (empirically confirmed end to end). Falling
+  # through to the raw-payload fallback below instead preserves the
+  # literal `NaN`/`Infinity` token as text, which the report's guard
+  # -- parsing fresh, not re-parsing an already-laundered value --
+  # correctly rejects.
+  line=$(printf '%s' "$payload" | jq -c -s '
+    if length == 1 then .[0] else empty end
+    | . as $v
+    | if ($v | type) == "object" and
+         ([$v.round?, $v.findingsCount?, $v.acceptedCount?, $v.rejectedCount?]
+           | map(select(. != null and (type == "number") and (isnan or isinfinite)))
+           | length > 0)
+      then empty
+      else $v
+      end
+  ' 2>/dev/null) || line=""
+fi
+if [ -z "${line:-}" ]; then
+  line=$(printf '%s' "$payload" | tr '\n' ' ')
+fi
+
+mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
+# Group the append so `2>/dev/null` also suppresses the shell's own
+# redirection-setup error, not just a normal write failure: redirections
+# are applied left to right, so a bare `cmd >> file 2>/dev/null` still
+# leaks a "cannot create" diagnostic to real stderr when `>> file`
+# itself fails to open (e.g. log.jsonl unexpectedly exists as a
+# directory) -- that failure happens before `2>/dev/null` takes effect
+# (empirically confirmed). Applying `2>/dev/null` to the whole group
+# suppresses it too.
+{ printf '%s\n' "$line" >> "$LOG_FILE"; } 2>/dev/null || exit 0
+
+exit 0
