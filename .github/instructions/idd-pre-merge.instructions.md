@@ -433,7 +433,7 @@ turns an operator-visible failure into a silent stall.
   post a hold note rather than discarding local work; only an
   operator-confirmed discard may proceed. Even when clean, confirm
   local `HEAD` is an ancestor of (or equal to) the PR's current HEAD
-  SHA (`git merge-base --is-ancestor HEAD {PR-head-sha}`) before
+  SHA (`git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`) before
   resetting: `git status --porcelain` never reports committed-but-unpushed
   local commits, which `git reset --hard` would silently drop from the
   branch's reachable history. If local `HEAD` is not an ancestor

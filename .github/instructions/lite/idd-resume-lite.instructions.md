@@ -133,8 +133,12 @@ the issue branch.
 
 ## Step 3 — PR / CI / review route (helper-first)
 
-On helper-enabled profiles, run `resume-route-selection.mjs --issue <N>`
-(and stop-and-ask on failure — do not use the written table). Map
+On helper-enabled profiles, run the profile-selected `resume-route-selection`
+helper (`node scripts/resume-route-selection.mjs --issue <N>` for
+vendored-node/source-repo; resolve the package-manager/`ephemeral-npx`
+facade command from `docs/idd-helper-scripts.md` if unsure — see the
+"Always run helpers first" note above) (and stop-and-ask on failure —
+do not use the written table). Map
 `route`:
 
 - `D1` → `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open
