@@ -38,8 +38,10 @@
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml (upstream's own dogfooded
 # copy, not the idd-template/ adopter-facing template) at pin
-# d005098bf3a54a27ac79b22fb5eeb88186d235c6 (v0.9.0; reconciled from the
-# prior v0.7.0 pin by #384). This
+# 1f90787ebf4021673ce6e5eb69741df331fd2037 (v0.11.0; #424 bumped from
+# the prior v0.9.0 pin set by #384 -- upstream's own copy of this file
+# is byte-identical between the two refs, so this bump is pin-citation
+# only, no structural merge). This
 # repository runs the ephemeral-npx helper profile (no vendored
 # scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
 # CLI rather than upstream's `node scripts/audit-pr-cleanup.mjs` form --
@@ -155,7 +157,7 @@ jobs:
             fi
           fi
           set +e
-          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
             --apply \

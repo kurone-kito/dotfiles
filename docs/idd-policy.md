@@ -183,7 +183,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/d005098bf3a54a27ac79b22fb5eeb88186d235c6 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -225,6 +225,33 @@ This repository's final-verification track
 ([`#387`](https://github.com/kurone-kito/dotfiles/issues/387))
 confirmed the pin, the instructions, and the skills bundle now all
 track `v0.9.0` uniformly, mirroring #298's role in the prior round.
+
+Roadmap #419's CI-workflow/helper-runtime-pin-bump track
+([`#424`](https://github.com/kurone-kito/dotfiles/issues/424)) bumped
+this same pin to `v0.11.0`
+(`1f90787ebf4021673ce6e5eb69741df331fd2037`), closing the known,
+accepted transitional gap PR #427's review flagged for roadmap #419's
+schema/config-audit track (#420): that track intentionally bumped
+`iddVersion` to `0.11.0` in `.github/idd/config.json` before this pin
+followed, so a manual `idd-doctor`/`idd-helper-bundle-manifest`
+invocation at the still-`v0.9.0` pin briefly reported a genuine
+`additionalProperties` schema `ERROR` against the bumped config (no
+`.github/workflows/` check runs that command as a required status
+check, so the gap was never live-blocking). This track's own edit
+surface is this section, `.github/workflows/idd-advisory-convergence.yml`,
+`.github/workflows/idd-advisory-convergence-comment.yml`,
+`.github/workflows/post-merge-cleanup.yml`, and `docs/customization.md`
+— it deliberately does **not** touch the **Pinned upstream commit**
+paragraph near the top of this page, which tracks the overall
+`.github/instructions/`/`.claude/skills/` template-import baseline
+rather than the helper-runtime invocation pin specifically; per #420's
+own note above, updating that paragraph (mirroring how it already
+records the `v0.7.0` → `v0.9.0` round) is roadmap #419's
+final-verification track's (#425) job, run once every other track
+under roadmap #419 has merged. `idd-doctor` re-run from the
+`v0.11.0` tarball against this repository's current state reports the same two
+pre-existing `WARN`s already documented in [`idd-doctor`
+findings](#idd-doctor-findings) and no new finding.
 The companion prerequisite #96 pins Node.js ~~24.15.0~~ via
 project-local [`.tool-versions`](../.tool-versions) /
 [`.node-version`](../.node-version) / [`.nvmrc`](../.nvmrc) so `npx`
