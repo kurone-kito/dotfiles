@@ -265,6 +265,26 @@ Discover loop starts. See its
 [bundled contract](../.claude/skills/issue-authoring/references/contract.md)
 for the readiness buckets, output chooser, and approval boundary.
 
+## Spec-Audit Companion
+
+- **Status**: `installed` at `.claude/skills/idd-spec-audit/`, adopted
+  during the `v0.11.0` re-import (roadmap #419, track #423). Upstream
+  graduated this companion the same way `issue-authoring` was
+  distributed, in the `v0.10.0` round.
+
+This companion runs a read-only, N-parallel-pass semantic audit of the
+instruction corpus (`.github/instructions/**`, the `issue-authoring`
+bundle, and every installed agent entry file) for leaked session
+context, cross-file contradictions, fresh-memory completability gaps,
+automation blockers, and restatement-discipline drift — a semantic
+check this repository's own byte-level lint/spell tooling does not
+cover. It never edits a file or mutates an issue; findings
+route back through the normal issue-authoring flow (or this
+installation's manual issue-filing process when that companion is not
+installed). See its
+[SKILL.md](../.claude/skills/idd-spec-audit/SKILL.md) for the five rule
+sets and execution model.
+
 ## Issue Scope
 
 **Policy**: `roadmap-first` (migrated from `roadmap`, confirmed by
