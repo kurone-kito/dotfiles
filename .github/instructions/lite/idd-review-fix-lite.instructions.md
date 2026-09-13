@@ -114,11 +114,15 @@ other GitHub side effect, confirm all of the following:
 
 1. Resolve the delegate verdict with the profile-selected
    `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs` for
-   vendored-node/source-repo; the package-manager-profile `idd:critique-delegate`
-   command, or the `idd-critique-delegate` ephemeral-npx bin invocation, for
-   this repository's configured `ephemeral-npx` profile — resolve the exact
-   command from `docs/idd-helper-scripts.md`'s "Authoritative invocation
-   surface per profile" section if unsure). Read its
+   vendored-node/source-repo; `idd:critique-delegate` is a `package.json`
+   script identifier, run via the package manager, not a directly
+   executable command; for this repository's configured `ephemeral-npx`
+   profile, run the bin directly instead: `npx --yes --package
+   <helper-package-spec> idd-critique-delegate` — resolve
+   `<helper-package-spec>` from `helperRuntime.packageSpec` in
+   `.github/idd/config.json`, or `docs/idd-helper-scripts.md`'s
+   "Authoritative invocation surface per profile" section if unsure).
+   Read its
    `usable` field as the next step's verdict directly — never re-derive
    it — and, when `usable` is `true`, its `source`/`command`/`mode` fields
    as the delegate to run below. This file is helper-enabled only: if the
@@ -181,13 +185,17 @@ other GitHub side effect, confirm all of the following:
 
 1. Check state with the profile-selected branch-conflict-state helper:
    `node scripts/branch-conflict-state.mjs --pr {pr-number}` for
-   vendored-node/source-repo; the package-manager-profile
-   `idd:branch-conflict-state` command, or the
-   `idd-branch-conflict-state` ephemeral-npx bin invocation, for this
-   repository's configured `ephemeral-npx` profile (resolve the exact
-   command from `docs/idd-helper-scripts.md`'s "Authoritative
-   invocation surface per profile" section if unsure) — reflects the
-   last pushed head, not local unpushed fixes.
+   vendored-node/source-repo; `idd:branch-conflict-state` is a
+   `package.json` script identifier (run via the package manager, e.g.
+   `npm run idd:branch-conflict-state -- --pr {pr-number}`), not a
+   directly executable command; for this repository's configured
+   `ephemeral-npx` profile, run the bin directly instead:
+   `npx --yes --package <helper-package-spec> idd-branch-conflict-state
+   --pr {pr-number}` (resolve `<helper-package-spec>` from
+   `helperRuntime.packageSpec` in `.github/idd/config.json`, or
+   `docs/idd-helper-scripts.md`'s "Authoritative invocation surface per
+   profile" section if unsure) — reflects the last pushed head, not
+   local unpushed fixes.
    Missing, failing, or disagreeing? Stop and ask (Helper runtime
    contract above) — no non-helper fallback here.
 2. Not a confirmed conflict (clean, behind-no-conflict, computing,

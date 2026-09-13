@@ -240,9 +240,11 @@ run for this HEAD (subject to `ciWait.rerunPolicy`) — never the gated
 bot run itself, which keeps the original actor's privileges and
 re-enters `action_required` (approve via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` if it must run).
-The check also self-heals on the next non-bot trigger — a push, a
-**review-thread** reply, or an IDD-originated regular PR comment
-(`issue_comment`) — any of these the companion picks up.
+The check also self-heals on the next non-bot trigger: a push runs the
+required `pull_request`/`pull_request_target` workflow directly via its
+own `synchronize` event, while a **review-thread** reply or an
+IDD-originated regular PR comment (`issue_comment`) is what the
+companion workflow picks up instead.
 
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several `idd-advisory-convergence`
