@@ -278,7 +278,13 @@ any outcome, not only the four carrying their own
 `dotfiles-triage-verdict` marker. Apply the same
 edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
-for this rule, since Groom applies it as inline body prose). A
+for this rule, since Groom applies it as inline body prose); for a
+`blocked-by-human` rejection specifically, also treat the maintainer's
+removal of the `status:blocked-by-human` label (with no accompanying
+title/body edit) as making the rejection stale — that label's removal
+is `docs/idd-concept-ownership.md`'s own documented recovery action for
+this blocker, and the rejection comment itself carries no marker to
+otherwise signal that resolution. A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a
 second rejection comment and loop; a stale rejection requires posting

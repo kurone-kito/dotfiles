@@ -113,9 +113,12 @@ other GitHub side effect, confirm all of the following:
 ## E10 — Validate fixes with critique pass
 
 1. Resolve the delegate verdict with the profile-selected
-   `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs`, or
-   the package-manager-profile `idd:critique-delegate` command — resolve
-   the exact command from `docs/idd-helper-scripts.md` if unsure). Read its
+   `critique-delegate` helper (`node scripts/idd-critique-delegate.mjs` for
+   vendored-node/source-repo; the package-manager-profile `idd:critique-delegate`
+   command, or the `idd-critique-delegate` ephemeral-npx bin invocation, for
+   this repository's configured `ephemeral-npx` profile — resolve the exact
+   command from `docs/idd-helper-scripts.md`'s "Authoritative invocation
+   surface per profile" section if unsure). Read its
    `usable` field as the next step's verdict directly — never re-derive
    it — and, when `usable` is `true`, its `source`/`command`/`mode` fields
    as the delegate to run below. This file is helper-enabled only: if the

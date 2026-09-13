@@ -69,7 +69,8 @@ Use GitHub **server** timestamps only. Stale age default: **12 h**
 | Issue closed or PR merged                                      | Step 1 cleanup only → STOP                                             |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                                |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                              |
-| Non-owned active claim, no valid forced-handoff                | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
+| Non-owned active claim + evidence satisfying the standard file's Operator-present release conditions + operator-supplied input received | Open `idd-resume.instructions.md`'s **Operator-present release** section directly — this lite file does not mirror that procedure; return here once unblocked |
+| Non-owned active claim, no valid forced-handoff and not the operator-present-release row above | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
 | Otherwise                                                      | Step 1                                                                 |
 
 <!-- dotfiles-divergence: claim-timing -->
