@@ -119,13 +119,18 @@ name: IDD advisory-convergence comment refresh
 #
 # Job id is deliberately NOT `idd-advisory-convergence`.
 #
-# Runner: reads the `CI_RUNNER_LABEL` repository variable, matching
-# the required idd-advisory-convergence.yml companion, falling back to
-# `ubuntu-slim` when unset -- this workflow has no `workflow_dispatch`
-# trigger of its own, so there is no `runner` input to check first. This
-# matches the `idd-template/` copy's own v0.9.0 content exactly (root's
-# copy hardcodes `ubuntu-slim` with no override at all). Likewise, the
-# `PR_NUMBER` empty-guard in the "Rerun required HEAD check" step below
+# Runner: reads the `CI_RUNNER_LABEL` repository variable, falling back
+# to `ubuntu-latest` when unset -- this workflow has no
+# `workflow_dispatch` trigger of its own, so there is no `runner` input
+# to check first. This no longer matches the required
+# idd-advisory-convergence.yml companion's own `ubuntu-slim` fallback
+# (or the `idd-template/` copy's hardcoded `ubuntu-slim`, with no
+# override at all, at v0.9.0): #424 changed this job's own fallback to
+# `ubuntu-latest` specifically, since `ubuntu-slim` is a single-CPU
+# runner with a hard 15-minute job timeout that this job's own
+# `timeout-minutes: 55` cannot be honored under -- see the job's own
+# comment below for the full rationale (Copilot review, PR #429).
+# Likewise, the `PR_NUMBER` empty-guard in the "Rerun required HEAD check" step below
 # matches `idd-template/`'s v0.9.0 content; this copy additionally
 # applies the same guard to "Check for newer qualifying event", which
 # neither upstream copy does -- a small, repository-added hardening
@@ -176,9 +181,12 @@ defaults:
     # Pins every run: step's shell regardless of runner OS -- GitHub
     # Actions otherwise picks bash on Linux/macOS but PowerShell Core
     # on Windows, which would silently misinterpret this file's POSIX
-    # shell syntax instead of failing loudly. No-op on this repository's
-    # own ubuntu-slim default; imported for parity with the sibling
-    # idd-advisory-convergence.yml / post-merge-cleanup.yml files.
+    # shell syntax instead of failing loudly. No-op on this job's own
+    # ubuntu-latest default (#424) as on the sibling files' ubuntu-slim
+    # one below -- bash is already the default shell on any Ubuntu-based
+    # GitHub-hosted runner, regardless of variant; imported for parity
+    # with the sibling idd-advisory-convergence.yml / post-merge-cleanup.yml
+    # files, both still ubuntu-slim by default.
     shell: bash
 jobs:
   refresh-if-idd-originated:
