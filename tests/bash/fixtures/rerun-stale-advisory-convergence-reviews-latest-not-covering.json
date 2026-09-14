@@ -3,13 +3,13 @@
     {
       "author": { "login": "copilot-pull-request-reviewer" },
       "state": "COMMENTED",
-      "commit": { "oid": "1111111111111111111111111111111111111111" },
+      "commit": { "oid": "2222222222222222222222222222222222222222" },
       "submittedAt": "2026-09-13T00:00:00Z"
     },
     {
-      "author": { "login": "coderabbitai" },
+      "author": { "login": "copilot-pull-request-reviewer" },
       "state": "COMMENTED",
-      "commit": { "oid": "2222222222222222222222222222222222222222" },
+      "commit": { "oid": "9999999999999999999999999999999999999999" },
       "submittedAt": "2026-09-13T00:05:00Z"
     }
   ]

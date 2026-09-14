@@ -20,17 +20,24 @@
 #
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
-#      requires its `path` equal
-#      `.github/workflows/idd-advisory-convergence.yml` exactly. The
-#      GitHub Actions app id alone is not proof of origin: every
-#      Actions-produced check run in the repository shares it,
-#      including one from a workflow a PR branch itself adds (a fork
-#      PR, or any branch with workflow-file write access) -- a branch
-#      could otherwise define its own job literally named
-#      `idd-advisory-convergence` that fails and prints the exact
-#      stale-rollup reason string naming the PR's current head, and
-#      this check is what stops that spoofed run from being accepted.
-#      No match -> skip, never rerun.
+#      requires both its `path` equal
+#      `.github/workflows/idd-advisory-convergence.yml` exactly *and*
+#      its `event` equal `pull_request_target`. The GitHub Actions app
+#      id alone is not proof of origin: every Actions-produced check
+#      run in the repository shares it, including one from a workflow a
+#      PR branch itself adds (a fork PR, or any branch with
+#      workflow-file write access) -- a branch could otherwise define
+#      its own job literally named `idd-advisory-convergence` that
+#      fails and prints the exact stale-rollup reason string naming the
+#      PR's current head. The path check alone is not enough either:
+#      this repository's own idd-advisory-convergence.yml still
+#      registers `pull_request` alongside `pull_request_target` during
+#      a documented migration window, and `pull_request` resolves the
+#      workflow *definition* from the PR branch itself, so a
+#      same-repository PR could edit that exact file to spoof a run at
+#      the same path. Only `pull_request_target` resolves the workflow
+#      from the base branch, immune to PR-branch tampering. No match on
+#      either condition -> skip, never rerun.
 #   2. Reads that specific check-run's own job log via
 #      `gh api repos/{owner}/{repo}/actions/jobs/{job-id}/logs` --
 #      *not* `gh run view <run-id> --log`, which only ever returns the
@@ -52,11 +59,15 @@
 #      the PR's actual current head -> skip, never rerun (acceptance
 #      criterion 7 -- this must never become a blanket
 #      retry-any-failing-check hammer).
-#   4. Confirms, via `gh pr view --json reviews`, that a
+#   4. Confirms, via `gh pr view --json reviews`, that the *latest*
 #      `copilot-pull-request-reviewer` (or `copilot-pull-request-reviewer[bot]`)
 #      review already covers the PR's actual current head (not the
 #      stale run's own parsed `<new-sha>`, which is only ever asserted
-#      equal to it above). No covering review -> skip, never rerun.
+#      equal to it above) -- the latest review specifically, since the
+#      convergence gate itself only ever evaluates the latest one; an
+#      earlier review for the current head completing before a
+#      later-submitted review for an older commit must not be accepted
+#      as covering. No covering review -> skip, never rerun.
 #   5. Re-fetches the PR's live head and requires it still equal the
 #      head read at startup, immediately before authorizing the rerun
 #      -- deliberately *after* the review lookup above, since that
@@ -64,29 +75,37 @@
 #      during. A commit pushed at any point up to this exact instant
 #      must never let this candidate act on an already-obsolete head.
 #      Any change -> skip, never rerun.
-#   6. Otherwise, `gh run rerun <run-id>` (the *run* id, parsed from
-#      `details_url` -- distinct from the job id used for the log
-#      fetch above) and polls until that run's `attempt` counter has
-#      advanced past its pre-rerun value *and* `status` is
-#      `completed` -- checking `status` alone races a genuinely
-#      transient window where GitHub still reports the *previous*
-#      attempt's terminal `status`/`conclusion` for a few seconds
-#      after the rerun call returns. `conclusion == cancelled` (this
-#      repository has observed this happen, apparently deduplicated
-#      against a concurrently triggered sibling rerun) retries exactly
-#      once more, same wait; anything else terminal, or the poll bound
-#      being exhausted, counts as a failed remediation attempt. A
-#      `gh run rerun` invocation that itself fails to even start never
-#      counts as a triggered attempt or advances the poll.
+#   6. Otherwise, resolves the pre-rerun `run_attempt` via
+#      `gh api repos/{owner}/{repo}/actions/runs/{run-id}` -- not
+#      `gh run view --json attempt`, which does not expose this field
+#      on every `gh` client version, mirroring this repository's own
+#      established CI-helper convention (docs/idd-helper-scripts.md).
+#      A lookup that fails or returns anything other than a positive
+#      integer aborts before rerunning (never a rerun with an
+#      unvalidated baseline). Then `gh run rerun <run-id>` (the *run*
+#      id, parsed from `details_url` -- distinct from the job id used
+#      for the log fetch above) and polls the same run-API endpoint
+#      until `run_attempt` has advanced past that pre-rerun value *and*
+#      `status` is `completed` -- checking `status` alone races a
+#      genuinely transient window where GitHub still reports the
+#      *previous* attempt's terminal `status`/`conclusion` for a few
+#      seconds after the rerun call returns. `conclusion == cancelled`
+#      (this repository has observed this happen, apparently
+#      deduplicated against a concurrently triggered sibling rerun)
+#      retries exactly once more, same wait; anything else terminal, or
+#      the poll bound being exhausted, counts as a failed remediation
+#      attempt. A `gh run rerun` invocation that itself fails to even
+#      start never counts as a triggered attempt or advances the poll.
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
 # `SKIPPED=<job-id>:<reason>` or `ACTED=<run-id>:<conclusion-or-
-# timeout-or-rerun-failed>` line per candidate, and a final
-# `RERUN_COUNT=<n>` line. Exits 0 when every candidate was a no-op or
-# skip, or every attempted rerun resolved to `success`; exits 1 when
-# any attempted rerun did not resolve to `success` (including a second
-# `cancelled`, a `failure`, a `rerun-failed`, or a poll timeout).
+# timeout-or-rerun-failed-or-attempt-lookup-failed>` line per
+# candidate, and a final `RERUN_COUNT=<n>` line. Exits 0 when every
+# candidate was a no-op or skip, or every attempted rerun resolved to
+# `success`; exits 1 when any attempted rerun did not resolve to
+# `success` (including a second `cancelled`, a `failure`, a
+# `rerun-failed`, an `attempt-lookup-failed`, or a poll timeout).
 #
 # Poll bounds are overridable via RERUN_STALE_ADVISORY_MAX_POLLS
 # (default 30) and RERUN_STALE_ADVISORY_POLL_INTERVAL seconds (default
@@ -144,17 +163,25 @@ parse_reason() {
   printf '%s' "$match" | sed -E 's/^latest copilot review \(commit ([0-9a-f]{40})\) does not cover current HEAD ([0-9a-f]{40})$/\1 \2/'
 }
 
-# has_covering_review -- true (exit 0) when a
-# copilot-pull-request-reviewer review already covers the given head
-# sha for the given PR. Accepts both the bare login and its `[bot]`
-# suffix form, matching this repository's established Copilot-review
-# matching contract (docs/idd-advisory-wait-shell-fallback.md).
+# has_covering_review -- true (exit 0) when the *latest* (by
+# `submittedAt`) copilot-pull-request-reviewer review for the given PR
+# covers the given head sha. Accepts both the bare login and its
+# `[bot]` suffix form, matching this repository's established
+# Copilot-review matching contract
+# (docs/idd-advisory-wait-shell-fallback.md), which itself sorts by
+# submission time and selects the last entry. Checking only the latest
+# review -- not "any review whose commit matches" -- matters because
+# the advisory-convergence gate itself only ever evaluates the latest
+# review: with overlapping asynchronous review requests, an earlier
+# review for the current head can complete before a later-submitted
+# review for an older commit, and accepting the earlier one alone
+# would authorize a rerun the gate will still fail immediately after.
 has_covering_review() {
-  local pr="$1" head_sha="$2" reviews_json count
+  local pr="$1" head_sha="$2" reviews_json
   reviews_json=$(gh pr view "$pr" --json reviews)
-  count=$(printf '%s' "$reviews_json" | jq --arg sha "$head_sha" \
-    '[.reviews[] | select((.author.login == "copilot-pull-request-reviewer" or .author.login == "copilot-pull-request-reviewer[bot]") and .commit.oid == $sha)] | length')
-  [ "$count" -gt 0 ]
+  printf '%s' "$reviews_json" | jq -e --arg sha "$head_sha" \
+    '[.reviews[] | select(.author.login == "copilot-pull-request-reviewer" or .author.login == "copilot-pull-request-reviewer[bot]")]
+     | sort_by(.submittedAt) | last // empty | .commit.oid == $sha' >/dev/null
 }
 
 # current_head -- prints the PR's live current head commit sha.
@@ -169,43 +196,79 @@ current_head() {
 
 # is_advisory_convergence_workflow_run -- true (exit 0) only when the
 # given run id's own workflow file path is exactly
-# ADVISORY_CONVERGENCE_WORKFLOW_PATH. `GITHUB_ACTIONS_APP_ID` alone is
-# not sufficient producer-identity proof: every GitHub Actions-produced
+# ADVISORY_CONVERGENCE_WORKFLOW_PATH *and* its triggering `event` is
+# `pull_request_target`. `GITHUB_ACTIONS_APP_ID` alone is not
+# sufficient producer-identity proof: every GitHub Actions-produced
 # check run in the repository -- including one from a workflow a PR
 # branch itself adds (a fork PR, or any branch with workflow-file write
 # access) -- shares that same app id. A branch could otherwise define
 # its own job literally named `idd-advisory-convergence` that fails
 # and prints the exact stale-rollup reason string naming the PR's
 # current head, and app-id filtering alone would accept it as genuine.
-# Resolving the run's own `path` and requiring it match this
-# repository's actual advisory-convergence workflow file closes that
-# gap, mirroring the identity-binding convention already documented in
-# docs/idd-helper-scripts.md for advisory-convergence marker
-# verification.
+# The workflow-path check alone is *also* not sufficient: this
+# repository's own idd-advisory-convergence.yml still registers
+# `pull_request` alongside `pull_request_target` during a documented
+# migration window (see that file's own header comment), and
+# `pull_request` resolves the workflow *definition* from the PR branch
+# itself, so a same-repository PR could edit that exact file to spoof
+# a run at the same path. Only `pull_request_target` resolves the
+# workflow from the base branch, immune to PR-branch tampering -- the
+# same trust boundary this repository's own run-bound checks already
+# rely on -- so both conditions together are required before a
+# candidate is accepted.
 is_advisory_convergence_workflow_run() {
-  local run_id="$1" path
-  path=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" | jq -r '.path')
-  [ "$path" = "$ADVISORY_CONVERGENCE_WORKFLOW_PATH" ]
+  local run_id="$1" run_json
+  run_json=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}")
+  [ "$(printf '%s' "$run_json" | jq -r '.path')" = "$ADVISORY_CONVERGENCE_WORKFLOW_PATH" ] &&
+    [ "$(printf '%s' "$run_json" | jq -r '.event')" = 'pull_request_target' ]
+}
+
+# run_attempt -- prints the given run id's current `run_attempt`
+# (a positive integer) via the Actions run API, or prints nothing and
+# returns non-zero if the lookup fails or the field is missing/not a
+# positive integer. `gh run view --json` does not expose this as
+# `attempt` on every `gh` version -- this repository's own existing CI
+# helpers already read `.run_attempt` from
+# `gh api repos/{owner}/{repo}/actions/runs/<id>` instead
+# (docs/idd-helper-scripts.md), so this mirrors that established
+# convention rather than depending on a `gh run view` JSON field whose
+# availability varies by client version.
+run_attempt() {
+  local run_id="$1" json attempt
+  json=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" 2>/dev/null) || return 1
+  attempt=$(printf '%s' "$json" | jq -r '.run_attempt // empty')
+  case "$attempt" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "$attempt" -gt 0 ] || return 1
+  printf '%s' "$attempt"
 }
 
 # wait_for_rerun_conclusion -- polls the given run id until its
-# `attempt` counter has advanced past prior_attempt *and* `status` is
-# `completed`, then prints the resulting `conclusion`. Checking
+# `run_attempt` counter has advanced past prior_attempt *and* `status`
+# is `completed`, then prints the resulting `conclusion`. Checking
 # `status` alone is not sufficient: for a few seconds after `gh run
 # rerun` returns, GitHub can still report the *previous* attempt's
 # terminal status/conclusion, which would otherwise be misread as the
 # rerun's own result. Prints `timeout` if the poll bound is exhausted
-# first.
+# first, or if a poll iteration cannot resolve a valid `run_attempt`
+# (a transient lookup failure never counts as reaching the new
+# attempt).
 wait_for_rerun_conclusion() {
   local run_id="$1" prior_attempt="$2" polls=0 json status attempt conclusion
   while [ "$polls" -lt "$MAX_POLLS" ]; do
-    json=$(gh run view "$run_id" --json status,conclusion,attempt)
-    status=$(printf '%s' "$json" | jq -r '.status')
-    attempt=$(printf '%s' "$json" | jq -r '.attempt')
-    conclusion=$(printf '%s' "$json" | jq -r '.conclusion')
-    if [ "$attempt" -gt "$prior_attempt" ] && [ "$status" = 'completed' ]; then
-      printf '%s' "$conclusion"
-      return 0
+    json=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" 2>/dev/null) || json=''
+    if [ -n "$json" ]; then
+      status=$(printf '%s' "$json" | jq -r '.status')
+      attempt=$(printf '%s' "$json" | jq -r '.run_attempt // empty')
+      conclusion=$(printf '%s' "$json" | jq -r '.conclusion')
+      case "$attempt" in
+        '' | *[!0-9]*) attempt='' ;;
+      esac
+      if [ -n "$attempt" ] && [ "$attempt" -gt "$prior_attempt" ] && [ "$status" = 'completed' ]; then
+        printf '%s' "$conclusion"
+        return 0
+      fi
     fi
     polls=$((polls + 1))
     sleep "$POLL_INTERVAL"
@@ -229,11 +292,19 @@ wait_for_rerun_conclusion() {
 # ignored -- `attempts` would still be incremented and the poll below
 # would wait on a rerun that was never actually triggered, misreporting
 # an unrelated concurrent attempt's outcome (or a bare timeout) as this
-# call's own result.
+# call's own result. The pre-rerun `run_attempt` lookup is checked the
+# same way: if it fails or returns something other than a positive
+# integer, this never triggers a rerun -- an empty/zero prior_attempt
+# would otherwise let a transient GitHub read of the *previous*
+# attempt's already-terminal state be misread as this call's own
+# newly-triggered attempt already having completed.
 rerun_and_wait() {
   local run_id="$1" attempts=0 prior_attempt conclusion
 
-  prior_attempt=$(gh run view "$run_id" --json attempt | jq -r '.attempt')
+  if ! prior_attempt=$(run_attempt "$run_id"); then
+    printf '%s %s' "$attempts" 'attempt-lookup-failed'
+    return 0
+  fi
   if ! gh run rerun "$run_id" >/dev/null; then
     printf '%s %s' "$attempts" 'rerun-failed'
     return 0
@@ -242,7 +313,10 @@ rerun_and_wait() {
   conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
 
   if [ "$conclusion" = 'cancelled' ]; then
-    prior_attempt=$(gh run view "$run_id" --json attempt | jq -r '.attempt')
+    if ! prior_attempt=$(run_attempt "$run_id"); then
+      printf '%s %s' "$attempts" 'attempt-lookup-failed'
+      return 0
+    fi
     if ! gh run rerun "$run_id" >/dev/null; then
       printf '%s %s' "$attempts" 'rerun-failed'
       return 0

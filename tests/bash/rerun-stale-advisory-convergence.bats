@@ -280,6 +280,61 @@ setup() {
   refute_output --partial 'CALL: api repos/{owner}/{repo}/actions/jobs'
 }
 
+@test "requires the latest Copilot review specifically, not merely any matching one" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-latest-not-covering.json"
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:no-covering-review'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "skips (fail-closed) when the workflow-identity lookup itself fails" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_RUN_LOOKUP_FAIL=1
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:wrong-workflow'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "excludes a same-named candidate triggered via pull_request instead of pull_request_target" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_WORKFLOW_EVENT='pull_request'
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:wrong-workflow'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "reports attempt-lookup-failed and exits non-zero when the pre-rerun attempt lookup fails" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_RUN_LOOKUP_FAIL_AFTER_FIRST_CALL=1
+
+  run bash "$SCRIPT" 426
+  assert_failure
+  assert_output --partial 'ACTED=5001:attempt-lookup-failed'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
 @test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"

@@ -3,7 +3,8 @@
     {
       "author": { "login": "copilot-pull-request-reviewer[bot]" },
       "state": "COMMENTED",
-      "commit": { "oid": "2222222222222222222222222222222222222222" }
+      "commit": { "oid": "2222222222222222222222222222222222222222" },
+      "submittedAt": "2026-09-13T00:05:00Z"
     }
   ]
 }
