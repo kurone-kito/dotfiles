@@ -6,14 +6,16 @@
 # call-log convention, and returns canned fixture content for the
 # read-only lookups the real script depends on:
 #
-#   - `gh pr view <pr> --json headRefOid` -> cats
-#     $GH_STUB_PR_HEAD_FIXTURE on its first call; on every call after
-#     the first, cats $GH_STUB_PR_HEAD_FIXTURE_2 instead when that
-#     variable is set (simulating a commit landing on the PR while the
-#     real script is mid-run), otherwise repeats
-#     $GH_STUB_PR_HEAD_FIXTURE unchanged. Call count is derived from
-#     this stub's own `CALL: pr view <pr> --json headRefOid` lines
-#     already in $GH_CALL_LOG.
+#   - `gh pr view <pr> --json headRefOid` -> on call number N (derived
+#     from this stub's own `CALL: pr view <pr> --json headRefOid` lines
+#     already in $GH_CALL_LOG), cats `$GH_STUB_PR_HEAD_FIXTURE_<N>` when
+#     that exact-numbered variable is set (simulating a commit landing
+#     on the PR at a specific point in the real script's own sequence
+#     of live-head checks); otherwise, for any N > 1, cats
+#     $GH_STUB_PR_HEAD_FIXTURE_2 when set (the older "every call after
+#     the first" convention, still honored so a test that only needs
+#     one head change doesn't have to name an exact call number); with
+#     neither set, repeats $GH_STUB_PR_HEAD_FIXTURE unchanged.
 #   - `gh api repos/{owner}/{repo}/pulls/<pr>/reviews --paginate --jq
 #     '<filter>'` -> actually runs the real `jq` binary with the exact
 #     `--jq` filter argument the script passed (extracted from "$@" by
@@ -94,7 +96,10 @@ case "${1:-} ${2:-}" in
   "pr view")
     if printf '%s\n' "$*" | grep -q -- '--json headRefOid'; then
       head_call_count=$(grep -c "^CALL: pr view .* --json headRefOid\$" "$GH_CALL_LOG" || true)
-      if [ "$head_call_count" -gt 1 ] && [ -n "${GH_STUB_PR_HEAD_FIXTURE_2:-}" ]; then
+      exact_var="GH_STUB_PR_HEAD_FIXTURE_${head_call_count}"
+      if [ -n "${!exact_var:-}" ]; then
+        cat "${!exact_var}"
+      elif [ "$head_call_count" -gt 1 ] && [ -n "${GH_STUB_PR_HEAD_FIXTURE_2:-}" ]; then
         cat "$GH_STUB_PR_HEAD_FIXTURE_2"
       else
         cat "${GH_STUB_PR_HEAD_FIXTURE:?GH_STUB_PR_HEAD_FIXTURE must be set}"

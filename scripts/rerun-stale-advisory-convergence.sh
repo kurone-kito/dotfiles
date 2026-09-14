@@ -108,23 +108,45 @@
 #      `completed` -- checking it alone races a genuinely transient
 #      window where GitHub still reports the *previous* attempt's
 #      terminal `status`/`conclusion` for a few seconds after the rerun
-#      call returns. `conclusion == cancelled` (this repository has
-#      observed this happen, apparently deduplicated against a
-#      concurrently triggered sibling rerun) retries exactly once more,
-#      same wait; anything else terminal, or the poll bound being
-#      exhausted, counts as a failed remediation attempt. A
+#      call returns. `conclusion == cancelled` retries exactly once
+#      more, same wait, but only if the live head *still* matches --
+#      this repository has observed a rerun resolve to `cancelled`,
+#      apparently deduplicated against a concurrently triggered sibling
+#      rerun; a head change discovered at this point aborts the retry
+#      and reports the first attempt's own `cancelled` conclusion
+#      rather than silently treating an already-triggered-but-
+#      unresolved rerun as a benign skip. A `success` conclusion is
+#      re-verified against the live head one more time before being
+#      reported: the poll above can itself run long enough for a push
+#      to land after the exact-attempt match already resolved, and a
+#      caller must not treat a success that covered a now-superseded
+#      head as remediation for the *current* one -- this reports
+#      `stale-success` instead. Anything else terminal, or the poll
+#      bound being exhausted, counts as a failed remediation attempt. A
 #      `gh run rerun` invocation that itself fails to even start never
 #      counts as a triggered attempt or advances the poll.
+#
+#      **Known, accepted limitation**: the exact-attempt binding above
+#      narrows but cannot fully close a genuinely concurrent second
+#      actor rerunning the same run id between this invocation's
+#      baseline read and its own `gh run rerun` call -- `gh`/the
+#      Actions REST API expose no per-caller attempt identity to
+#      disambiguate whose call produced a given attempt number. Closing
+#      this fully would need external coordination (locking, serialized
+#      rerun dispatch) this script deliberately does not implement,
+#      matching its actual single-maintainer, low-concurrency operating
+#      context.
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
 # `SKIPPED=<job-id>:<reason>` or `ACTED=<run-id>:<conclusion-or-
-# timeout-or-rerun-failed-or-attempt-lookup-failed>` line per
-# candidate, and a final `RERUN_COUNT=<n>` line. Exits 0 when every
-# candidate was a no-op or skip, or every attempted rerun resolved to
-# `success`; exits 1 when any attempted rerun did not resolve to
-# `success` (including a second `cancelled`, a `failure`, a
-# `rerun-failed`, an `attempt-lookup-failed`, or a poll timeout).
+# timeout-or-rerun-failed-or-attempt-lookup-failed-or-stale-success>`
+# line per candidate, and a final `RERUN_COUNT=<n>` line. Exits 0 when
+# every candidate was a no-op or skip, or every attempted rerun
+# resolved to `success` against the still-current head; exits 1 when
+# any attempted rerun did not resolve that way (including a second
+# `cancelled`, a `failure`, a `rerun-failed`, an
+# `attempt-lookup-failed`, a `stale-success`, or a poll timeout).
 #
 # Poll bounds are overridable via RERUN_STALE_ADVISORY_MAX_POLLS
 # (default 30) and RERUN_STALE_ADVISORY_POLL_INTERVAL seconds (default
@@ -291,11 +313,17 @@ run_attempt() {
 # baseline read and its own rerun call, that N+1 completing would
 # satisfy a bare `>` check and be misreported as this call's result
 # while the attempt this call actually triggered (N+2) is still
-# pending or later fails. Exact equality closes that gap for the
-# common single-actor case; a genuinely concurrent second rerun of the
-# same run id is a pre-existing coordination gap this script does not
-# otherwise solve (see the header comment), so this poll now simply
-# times out rather than misattributing in that rarer case. Checking
+# pending or later fails. Exact equality narrows that window (this
+# invocation's own rerun call has to land in the same instant as the
+# other actor's for a false match) but does **not** eliminate it: if
+# the interleaving above happens to produce exactly N+1 as *this*
+# call's own attempt too (both actors racing the same baseline), the
+# other actor's completed N+1 still satisfies this exact check.
+# `gh`/the Actions REST API expose no per-caller attempt identity to
+# close this the rest of the way; a full fix needs external
+# coordination (locking, serialized rerun dispatch) this script
+# deliberately does not implement -- see the header comment's
+# documented scope. Checking
 # `status` alone is not sufficient either way: for a few seconds after
 # `gh run rerun` returns, GitHub can still report the *previous*
 # attempt's terminal status/conclusion. Prints `timeout` if the poll
@@ -357,6 +385,28 @@ wait_for_rerun_conclusion() {
 # between a caller-side check and the actual mutation; checking again
 # right here is the only way to bound that gap for both `gh run rerun`
 # calls, not just the first.
+#
+# A head change discovered **before any rerun has been triggered yet**
+# (`attempts` still 0) is a true no-op: report `head-changed` and let
+# the caller treat it as an ordinary skip, never a failure. A head
+# change discovered **after the first attempt already ran** (the
+# cancelled-retry recheck) is different -- a rerun genuinely happened
+# and resolved `cancelled`, so this must not silently report a benign
+# skip and leave the caller's exit status at 0: the retry is simply not
+# attempted, and the first attempt's own `cancelled` conclusion falls
+# through unchanged, so the caller's existing non-success handling
+# (`ACTED=<run-id>:cancelled`, exit 1) reports the true outcome instead
+# of inventing a separate token for this case.
+#
+# A `success` conclusion is also re-verified against the live head
+# before being reported: `wait_for_rerun_conclusion`'s own poll can run
+# up to `MAX_POLLS * POLL_INTERVAL` seconds, during which a push can
+# still land after the exact-attempt binding above already resolved.
+# Reporting plain `success` here would let a caller treat the *current*
+# PR as remediated even though the successful rerun only ever covered
+# the now-superseded head; `stale-success` (attempts already correctly
+# counted) tells the caller this candidate needs to be re-evaluated
+# against the new head instead.
 rerun_and_wait() {
   local pr="$1" head_sha="$2" run_id="$3" attempts=0 prior_attempt conclusion
 
@@ -375,11 +425,7 @@ rerun_and_wait() {
   attempts=$((attempts + 1))
   conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
 
-  if [ "$conclusion" = 'cancelled' ]; then
-    if [ "$(current_head "$pr")" != "$head_sha" ]; then
-      printf '%s %s' "$attempts" 'head-changed'
-      return 0
-    fi
+  if [ "$conclusion" = 'cancelled' ] && [ "$(current_head "$pr")" = "$head_sha" ]; then
     if ! prior_attempt=$(run_attempt "$run_id"); then
       printf '%s %s' "$attempts" 'attempt-lookup-failed'
       return 0
@@ -390,6 +436,10 @@ rerun_and_wait() {
     fi
     attempts=$((attempts + 1))
     conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
+  fi
+
+  if [ "$conclusion" = 'success' ] && [ "$(current_head "$pr")" != "$head_sha" ]; then
+    conclusion='stale-success'
   fi
 
   printf '%s %s' "$attempts" "$conclusion"

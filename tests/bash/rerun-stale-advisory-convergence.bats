@@ -361,6 +361,35 @@ setup() {
   refute_output --partial 'CALL: run rerun'
 }
 
+@test "reports stale-success and exits non-zero when the PR head changes during the rerun poll" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+  export GH_STUB_PR_HEAD_FIXTURE_3="$FIXTURES/rerun-stale-advisory-convergence-pr-head-changed.json"
+
+  run bash "$SCRIPT" 426
+  assert_failure
+  assert_output --partial 'ACTED=5001:stale-success'
+  assert_output --partial 'RERUN_COUNT=1'
+}
+
+@test "reports the first attempt's cancelled conclusion (not a benign skip) when the head changes before the cancelled retry" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=cancelled
+  export GH_STUB_PR_HEAD_FIXTURE_3="$FIXTURES/rerun-stale-advisory-convergence-pr-head-changed.json"
+
+  run bash "$SCRIPT" 426
+  assert_failure
+  assert_output --partial 'ACTED=5001:cancelled'
+  assert_output --partial 'RERUN_COUNT=1'
+
+  run bash -c "grep -c '^CALL: run rerun 5001\$' '$GH_CALL_LOG'"
+  assert_output '1'
+}
+
 @test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
