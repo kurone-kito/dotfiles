@@ -176,7 +176,12 @@ Migrated from platform-native package managers to mise
 `ip7z/7zip` fully replaces WinGet's official 7-Zip
 (maintainer-confirmed): the current WinGet-provisioned package's
 Explorer shell integration ("Extract here" / "Add to archive") is
-intentionally accepted as lost. `ollama` fully replaces the native
+intentionally accepted as lost. On Windows this package's aqua
+registry entry only shims `7za.exe` (the standalone-lite build), not
+`7z.exe`/`7zz.exe`, so a script invoking the bare `7z` command must use
+`7za` instead — accepted, disclosed, and unrelated to the Explorer
+integration tradeoff above; Linux/macOS shim the full `7zz` build with
+no such gap. `ollama` fully replaces the native
 installer on every OS (maintainer-confirmed): losing the tray app /
 menu-bar agent and auto-start-on-login is accepted; starting
 `ollama serve` becomes a manual/separate concern. `neovim` and
