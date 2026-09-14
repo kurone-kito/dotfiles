@@ -1,4 +1,5 @@
 [experimental]
+autoMemoryReclaim=gradual
 sparseVhd=true
 
 [wsl2]
