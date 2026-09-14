@@ -334,6 +334,24 @@ MOCK
   assert_output --partial '"0.1.18"'
 }
 
+@test "allows low downloads for inshellisense past aube's reputation gate, unpinned" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"npm:@microsoft/inshellisense"' "$config"
+  assert_success
+  assert_output --partial 'allow_low_downloads = true'
+  assert_output --partial 'version = "latest"'
+}
+
+@test "allows low downloads for fast-cli past aube's reputation gate, unpinned" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"npm:fast-cli"' "$config"
+  assert_success
+  assert_output --partial 'allow_low_downloads = true'
+  assert_output --partial 'version = "latest"'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------

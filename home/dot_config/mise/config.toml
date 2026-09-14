@@ -113,7 +113,18 @@ yt-dlp = "latest"
 "npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
 "npm:@github/copilot" = "latest"
-"npm:@microsoft/inshellisense" = "latest"
+# aube's low-download-count reputation gate blocks a non-interactive
+# `mise install` for this niche tool even though its provenance/trust
+# is fine (published via npm's OIDC trusted-publisher, SLSA
+# attestation present) -- a different gate than the trust/provenance
+# check @playwright/cli hits below, so pinning an older version (this
+# repo's fix for that one) does not help here; aube declines by
+# default when it cannot show its confirmation prompt.
+# allow_low_downloads = true is aube's own documented opt-in for this
+# specific gate. Unlike @playwright/cli's pin, this is not expected to
+# need revisiting -- low download count is inherent to a niche tool,
+# not a transient upstream publishing regression.
+"npm:@microsoft/inshellisense" = { version = "latest", allow_low_downloads = true }
 "npm:@openai/codex" = "latest"
 
 # mise's embedded aube installer rejects the "latest"-resolved 0.1.19
@@ -129,7 +140,10 @@ yt-dlp = "latest"
 # pin should be revisited once that lands in a published release.
 "npm:@playwright/cli" = "0.1.18"
 "npm:bash-language-server" = "latest"
-"npm:fast-cli" = "latest"
+# Same aube low-download-count reputation gate as
+# npm:@microsoft/inshellisense above (see its comment); fast-cli hits
+# it too.
+"npm:fast-cli" = { version = "latest", allow_low_downloads = true }
 
 "github:x-motemen/ghq" = "latest"
 "github:d-kuro/gwq" = "latest"
