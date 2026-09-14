@@ -246,6 +246,14 @@ MOCK
   assert_output --partial 'os = ["linux", "windows"]'
 }
 
+@test "restricts the tmux tool to Linux and macOS" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^tmux' "$config"
+  assert_success
+  assert_output --partial 'os = ["linux", "macos"]'
+}
+
 @test "no longer references the deprecated pstop ubi identifier" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 

@@ -106,6 +106,7 @@ words:
   - Nlcjpw
   - nnoremap
   - nvmrc
+  - ollama
   - onlogon
   - ONNX
   - osascript
@@ -137,6 +138,7 @@ words:
   - unwaived
   - upserts
   - viml
+  - vfox
   - vimrc
   - virtiofs
   - vrchat
