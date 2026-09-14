@@ -18,13 +18,22 @@
 # convention as idd-merge.instructions.md F4). `filter=all` can return
 # more than one check-run record for different attempts of the very
 # same underlying workflow run (each attempt has its own job id/log),
-# so candidates are first grouped by the workflow *run* id parsed from
-# each one's own `details_url`, keeping only the most recent attempt in
-# each group (by `completed_at`, falling back to `started_at`, then the
-# check-run's own numeric `id` as a final deterministic tiebreaker --
-# see select_latest_attempt_job_ids below). Every other, superseded
-# record in a group is skipped (`superseded-attempt`) without ever
-# fetching its log. This is deliberate, not merely an optimization:
+# so every GitHub Actions-produced record for the head commit --
+# *every* conclusion, not only `failure`/`cancelled` -- is first
+# grouped by the workflow *run* id parsed from each one's own
+# `details_url`, keeping only the most recent attempt in each group (by
+# `completed_at`, falling back to `started_at`, then the check-run's
+# own numeric `id` as a final deterministic tiebreaker -- see
+# select_latest_attempt_job_ids below). Every other, superseded record
+# in a group is skipped (`superseded-attempt`) without ever fetching
+# its log -- including when the group's own latest attempt turns out to
+# be a `success` (or still `in_progress`/`timed_out`): grouping across
+# every conclusion, not just the failure/cancelled subset, is what
+# lets an older failure be recognized as superseded once the run has
+# already resolved (or is still resolving) some other way, rather than
+# being crowned "latest" purely because the actually-latest record was
+# filtered out before grouping ever saw it. This is deliberate, not
+# merely an optimization:
 # `gh run rerun <run-id>` always operates on that run's *current*
 # (latest) attempt, so the latest attempt's own log is the only one
 # that reflects what a rerun would actually re-execute. Picking any
@@ -251,26 +260,40 @@ run_id_from_details_url() {
   printf '%s' "$run_id"
 }
 
-# select_latest_attempt_job_ids -- given the full candidates JSON
-# array, prints a JSON object mapping each workflow *run* id (parsed
-# via run_id_from_details_url) present among candidates with a valid
-# run id to the check-run `id` (job id) of whichever one of its
-# candidate records is the most recent attempt. A candidate whose own
-# details_url does not yield a valid run id is not represented in the
-# output at all -- the caller's own invalid-run-id handling covers
-# that case separately.
+# select_latest_attempt_job_ids -- given every GitHub Actions-produced
+# check-run record for the head commit (every conclusion -- `success`,
+# `failure`, `cancelled`, `in_progress`, `timed_out`, etc. -- not just
+# the failure/cancelled subset the caller treats as rerun candidates),
+# prints a JSON object mapping each workflow *run* id (parsed via
+# run_id_from_details_url) present among those records with a valid
+# run id to the check-run `id` (job id) of whichever one of its own
+# records is the most recent attempt. A record whose own details_url
+# does not yield a valid run id is not represented in the output at
+# all -- the caller's own invalid-run-id handling covers that case
+# separately.
+#
+# Must be computed from every conclusion, not only failure/cancelled:
+# if a run's true latest attempt already succeeded (or is still
+# in-progress, or timed out) but an *older* attempt of the same run
+# failed with the exact stale-review reason string, restricting this
+# lookup to the failure/cancelled subset would filter the successful
+# attempt out before grouping ever sees it -- crowning the older
+# failure "latest" by default and authorizing a rerun of a run that, in
+# reality, has already resolved (or is already in flight). The caller
+# still applies the failure/cancelled eligibility test only to
+# whichever record this function names as the winner for a run id.
 #
 # "Most recent" is decided by `completed_at`, falling back to
 # `started_at` when null (a `cancelled` conclusion can leave
-# `completed_at` unset on some GitHub API responses), then by the
-# check-run's own numeric `id` as a final deterministic tiebreaker --
-# job ids are assigned in strictly increasing order over time
-# platform-wide, so this never leaves two same-run-id candidates
-# genuinely tied. All three are combined into one lexicographically
-# comparable string (ISO-8601 timestamps already compare correctly as
-# strings; the numeric id is zero-padded to a fixed width so it does
-# too), so plain string comparison in jq is enough -- no need for a
-# richer comparator.
+# `completed_at` unset on some GitHub API responses, and a still
+# `in_progress`/`queued` record has neither), then by the check-run's
+# own numeric `id` as a final deterministic tiebreaker -- job ids are
+# assigned in strictly increasing order over time platform-wide, so
+# this never leaves two same-run-id records genuinely tied. All three
+# are combined into one lexicographically comparable string (ISO-8601
+# timestamps already compare correctly as strings; the numeric id is
+# zero-padded to a fixed width so it does too), so plain string
+# comparison in jq is enough -- no need for a richer comparator.
 #
 # See the header comment for *why* only the latest attempt is ever
 # treated as a rerun candidate for a given run id: `gh run rerun
@@ -278,11 +301,11 @@ run_id_from_details_url() {
 # attempt's log is never authoritative for deciding whether *this*
 # invocation should trigger another rerun.
 select_latest_attempt_job_ids() {
-  local candidates="$1" count idx=0 winners='{}'
-  count=$(printf '%s' "$candidates" | jq 'length')
+  local records="$1" count idx=0 winners='{}'
+  count=$(printf '%s' "$records" | jq 'length')
   while [ "$idx" -lt "$count" ]; do
     local item job_id details_url run_id sort_key
-    item=$(printf '%s' "$candidates" | jq -c ".[$idx]")
+    item=$(printf '%s' "$records" | jq -c ".[$idx]")
     job_id=$(printf '%s' "$item" | jq -r '.id')
     details_url=$(printf '%s' "$item" | jq -r '.details_url')
     run_id=$(run_id_from_details_url "$details_url")
@@ -576,7 +599,7 @@ main() {
   head_sha=$(gh pr view "$pr" --json headRefOid | jq -r '.headRefOid')
   [ -n "$head_sha" ] || die "could not resolve the current head commit for PR #${pr}"
 
-  local check_runs_json candidates_json candidate_count
+  local check_runs_json all_actions_records_json candidates_json candidate_count
   # `--paginate --slurp` follows every page (the endpoint's own
   # `filter` defaults to `latest`, and `per_page=100` alone only
   # bounds a single page -- either gap would silently omit a stale
@@ -584,13 +607,30 @@ main() {
   # rollup) and wraps each page's response object into a JSON array,
   # so every page's `check_runs` must be flattened with `.[].check_runs[]`
   # rather than the single-page `.check_runs[]`. The `app.id` filter
-  # restricts candidates to check runs the GitHub Actions app itself
+  # restricts records to check runs the GitHub Actions app itself
   # produced (see `GITHUB_ACTIONS_APP_ID` above) -- a same-named,
   # same-conclusion check run from a different integration must never
   # be treated as a genuine stale idd-advisory-convergence instance.
+  #
+  # `all_actions_records_json` deliberately keeps every conclusion
+  # (`success`, `in_progress`, `timed_out`, etc.), not just
+  # `failure`/`cancelled` -- select_latest_attempt_job_ids (below) must
+  # decide which record is *actually* the latest attempt for a given
+  # run id across its full history, not merely across its own
+  # already-failed/cancelled records. Filtering to failure/cancelled
+  # first would let an OLDER failed attempt be crowned "latest" purely
+  # because a run's true latest attempt (a `success`, say) had already
+  # been filtered out before grouping -- authorizing a rerun of a run
+  # that has, in reality, already resolved successfully.
+  # `candidates_json` narrows to the failure/cancelled subset only for
+  # the loop's own per-record eligibility checks below; the winner
+  # lookup (`latest_job_ids_json`) is always computed from the
+  # unfiltered set.
   check_runs_json=$(gh api --paginate --slurp "repos/{owner}/{repo}/commits/${head_sha}/check-runs?check_name=${CHECK_NAME}&filter=all&per_page=100")
-  candidates_json=$(printf '%s' "$check_runs_json" | jq -c --argjson app_id "$GITHUB_ACTIONS_APP_ID" \
-    '[.[].check_runs[] | select((.conclusion == "failure" or .conclusion == "cancelled") and .app.id == $app_id)]')
+  all_actions_records_json=$(printf '%s' "$check_runs_json" | jq -c --argjson app_id "$GITHUB_ACTIONS_APP_ID" \
+    '[.[].check_runs[] | select(.app.id == $app_id)]')
+  candidates_json=$(printf '%s' "$all_actions_records_json" | jq -c \
+    '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled")]')
   candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
 
   if [ "$candidate_count" -eq 0 ]; then
@@ -599,12 +639,14 @@ main() {
     exit 0
   fi
 
-  # Resolves, once, which check-run record is the latest attempt for
-  # each distinct workflow run id among the candidates -- see
-  # select_latest_attempt_job_ids's own comment for why only that one
-  # record per run id is ever eligible to trigger a rerun.
+  # Resolves, once, which record is the latest attempt for each
+  # distinct workflow run id, across *every* conclusion this run id
+  # has ever produced (not just the failure/cancelled candidates) --
+  # see select_latest_attempt_job_ids's own comment for why only that
+  # one record per run id is ever eligible to trigger a rerun, and why
+  # it must be computed from the unfiltered record set.
   local latest_job_ids_json
-  latest_job_ids_json=$(select_latest_attempt_job_ids "$candidates_json")
+  latest_job_ids_json=$(select_latest_attempt_job_ids "$all_actions_records_json")
 
   local rerun_count=0 overall_exit=0 idx=0
   while [ "$idx" -lt "$candidate_count" ]; do

@@ -166,6 +166,31 @@ setup() {
   assert_output '0'
 }
 
+@test "never reruns when the run's true latest attempt already succeeded" {
+  # The Codex/Copilot-flagged failure mode: the check-runs fetch (which
+  # candidates_json narrows to failure/cancelled) must not be the input
+  # select_latest_attempt_job_ids groups from. Job 1001 (failure,
+  # completed first) carries the stale-reason match; job 1002 (the same
+  # run 5001's true latest attempt) already resolved to *success*. If
+  # the grouping only saw the failure/cancelled subset, job 1001 -- the
+  # only record it could see -- would be crowned "latest" by default
+  # and authorize an unnecessary rerun of an already-healthy run.
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-latest-attempt-succeeded.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:superseded-attempt'
+  assert_output --partial 'RERUN_COUNT=0'
+  refute_output --partial 'OLD_SHA='
+  refute_output --partial 'ACTED='
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+  refute_output --partial 'CALL: api repos/{owner}/{repo}/actions/jobs/1001/logs'
+}
+
 @test "never reruns based on an older attempt's stale match when the latest attempt is unrelated" {
   # The Codex-flagged failure mode: job 1001 (older, completed first)
   # would carry the exact stale-reason match if its log were ever
