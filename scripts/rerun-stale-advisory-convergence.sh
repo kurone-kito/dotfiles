@@ -11,14 +11,27 @@
 # Usage: scripts/rerun-stale-advisory-convergence.sh <pr-number>
 #
 # For the PR's current head commit, fetches every
-# `idd-advisory-convergence` check-run instance produced by the GitHub
-# Actions app itself (`gh api --paginate --slurp
+# `idd-advisory-convergence`-named check-run instance produced by the
+# GitHub Actions app (`gh api --paginate --slurp
 # repos/{owner}/{repo}/commits/{sha}/check-runs?...&filter=all`; `gh
 # api`'s own auto-templated `{owner}`/`{repo}` placeholders, same
 # convention as idd-merge.instructions.md F4). For each `failure`/
 # `cancelled` instance:
 #
-#   1. Reads that specific check-run's own job log via
+#   1. Resolves the candidate's own workflow run
+#      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
+#      requires its `path` equal
+#      `.github/workflows/idd-advisory-convergence.yml` exactly. The
+#      GitHub Actions app id alone is not proof of origin: every
+#      Actions-produced check run in the repository shares it,
+#      including one from a workflow a PR branch itself adds (a fork
+#      PR, or any branch with workflow-file write access) -- a branch
+#      could otherwise define its own job literally named
+#      `idd-advisory-convergence` that fails and prints the exact
+#      stale-rollup reason string naming the PR's current head, and
+#      this check is what stops that spoofed run from being accepted.
+#      No match -> skip, never rerun.
+#   2. Reads that specific check-run's own job log via
 #      `gh api repos/{owner}/{repo}/actions/jobs/{job-id}/logs` --
 #      *not* `gh run view <run-id> --log`, which only ever returns the
 #      run's *current* (latest) attempt: once a stale instance's own
@@ -30,7 +43,7 @@
 #      the same job id embedded in its `details_url`
 #      (`.../runs/<run-id>/job/<job-id>`), so no separate lookup is
 #      needed to resolve it.
-#   2. Searches that log (unanchored -- each line carries its own
+#   3. Searches that log (unanchored -- each line carries its own
 #      timestamp prefix) for the exact reason string
 #      `latest copilot review (commit <old-sha>) does not cover
 #      current HEAD <new-sha>` (byte-for-byte confirmed against this
@@ -39,17 +52,19 @@
 #      the PR's actual current head -> skip, never rerun (acceptance
 #      criterion 7 -- this must never become a blanket
 #      retry-any-failing-check hammer).
-#   3. Re-fetches the PR's live head and requires it still equal the
-#      head read at startup -- a commit pushed while this script was
-#      running must never let a later candidate act on an
-#      already-obsolete head. Any change -> skip, never rerun.
 #   4. Confirms, via `gh pr view --json reviews`, that a
 #      `copilot-pull-request-reviewer` (or `copilot-pull-request-reviewer[bot]`)
 #      review already covers the PR's actual current head (not the
 #      stale run's own parsed `<new-sha>`, which is only ever asserted
-#      equal to it above -- checked against the freshly re-fetched
-#      head defensively). No covering review -> skip, never rerun.
-#   5. Otherwise, `gh run rerun <run-id>` (the *run* id, parsed from
+#      equal to it above). No covering review -> skip, never rerun.
+#   5. Re-fetches the PR's live head and requires it still equal the
+#      head read at startup, immediately before authorizing the rerun
+#      -- deliberately *after* the review lookup above, since that
+#      lookup is itself a network round-trip a new commit could land
+#      during. A commit pushed at any point up to this exact instant
+#      must never let this candidate act on an already-obsolete head.
+#      Any change -> skip, never rerun.
+#   6. Otherwise, `gh run rerun <run-id>` (the *run* id, parsed from
 #      `details_url` -- distinct from the job id used for the log
 #      fetch above) and polls until that run's `attempt` counter has
 #      advanced past its pre-rerun value *and* `status` is
@@ -84,11 +99,18 @@ REASON_REGEX='latest copilot review \(commit [0-9a-f]{40}\) does not cover curre
 # The GitHub Actions app's own integration id (confirmed against this
 # repository's required-check identity in docs/idd-policy.md, "New
 # 0.5.0/0.6.0 Schema Keys" -> ciGate.trustSourcePinnedRequiredChecks).
-# A different integration could otherwise publish a same-named,
-# same-conclusion check run with the exact stale-rollup log text, and
-# this script would rerun it after finding any current-head Copilot
-# review -- restricting candidates to this app id closes that gap.
+# A cheap pre-filter only -- every Actions-produced check run in the
+# repository shares this same app id, so it narrows out non-Actions
+# integrations early but does not by itself prove which *workflow*
+# produced a candidate. is_advisory_convergence_workflow_run below is
+# the actual identity proof.
 GITHUB_ACTIONS_APP_ID=15368
+
+# The exact workflow file this repository's real
+# idd-advisory-convergence check runs from -- see
+# is_advisory_convergence_workflow_run below for why the app id alone
+# does not prove this.
+ADVISORY_CONVERGENCE_WORKFLOW_PATH='.github/workflows/idd-advisory-convergence.yml'
 
 MAX_POLLS="${RERUN_STALE_ADVISORY_MAX_POLLS:-30}"
 POLL_INTERVAL="${RERUN_STALE_ADVISORY_POLL_INTERVAL:-5}"
@@ -143,6 +165,27 @@ has_covering_review() {
 current_head() {
   local pr="$1"
   gh pr view "$pr" --json headRefOid | jq -r '.headRefOid'
+}
+
+# is_advisory_convergence_workflow_run -- true (exit 0) only when the
+# given run id's own workflow file path is exactly
+# ADVISORY_CONVERGENCE_WORKFLOW_PATH. `GITHUB_ACTIONS_APP_ID` alone is
+# not sufficient producer-identity proof: every GitHub Actions-produced
+# check run in the repository -- including one from a workflow a PR
+# branch itself adds (a fork PR, or any branch with workflow-file write
+# access) -- shares that same app id. A branch could otherwise define
+# its own job literally named `idd-advisory-convergence` that fails
+# and prints the exact stale-rollup reason string naming the PR's
+# current head, and app-id filtering alone would accept it as genuine.
+# Resolving the run's own `path` and requiring it match this
+# repository's actual advisory-convergence workflow file closes that
+# gap, mirroring the identity-binding convention already documented in
+# docs/idd-helper-scripts.md for advisory-convergence marker
+# verification.
+is_advisory_convergence_workflow_run() {
+  local run_id="$1" path
+  path=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" | jq -r '.path')
+  [ "$path" = "$ADVISORY_CONVERGENCE_WORKFLOW_PATH" ]
 }
 
 # wait_for_rerun_conclusion -- polls the given run id until its
@@ -256,6 +299,12 @@ main() {
     details_url=$(printf '%s' "$item" | jq -r '.details_url')
     run_id=$(run_id_from_details_url "$details_url")
 
+    if ! is_advisory_convergence_workflow_run "$run_id"; then
+      echo "SKIPPED=${job_id}:wrong-workflow"
+      idx=$((idx + 1))
+      continue
+    fi
+
     if ! log=$(gh api "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null); then
       echo "SKIPPED=${job_id}:log-fetch-failed"
       idx=$((idx + 1))
@@ -279,21 +328,23 @@ main() {
       continue
     fi
 
-    # Re-fetch the live head immediately before authorizing a rerun.
-    # `head_sha` above was read once at startup; a commit pushed while
-    # this candidate's log/review lookups (or an earlier candidate's
-    # rerun-and-poll cycle) were in flight must never let this
-    # candidate act against an already-obsolete head. Fail closed
-    # (skip, never rerun) on any change rather than re-deriving a new
-    # candidate set mid-loop.
-    if [ "$(current_head "$pr")" != "$head_sha" ]; then
-      echo "SKIPPED=${job_id}:head-changed"
+    if ! has_covering_review "$pr" "$head_sha"; then
+      echo "SKIPPED=${job_id}:no-covering-review"
       idx=$((idx + 1))
       continue
     fi
 
-    if ! has_covering_review "$pr" "$head_sha"; then
-      echo "SKIPPED=${job_id}:no-covering-review"
+    # Re-fetch the live head immediately before authorizing a rerun --
+    # deliberately *after* has_covering_review above, not before it:
+    # that call itself makes a network round-trip, during which a new
+    # commit could still land. `head_sha` was read once at startup, so
+    # a commit pushed at any point up to this exact instant (log fetch,
+    # review lookup, or an earlier candidate's rerun-and-poll cycle)
+    # must never let this candidate act against an already-obsolete
+    # head. Fail closed (skip, never rerun) on any change rather than
+    # re-deriving a new candidate set mid-loop.
+    if [ "$(current_head "$pr")" != "$head_sha" ]; then
+      echo "SKIPPED=${job_id}:head-changed"
       idx=$((idx + 1))
       continue
     fi

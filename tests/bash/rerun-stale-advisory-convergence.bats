@@ -266,6 +266,20 @@ setup() {
   refute_output --partial 'CALL: run rerun'
 }
 
+@test "excludes a same-named candidate produced by a different workflow file" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_WORKFLOW_PATH='.github/workflows/some-other-workflow.yml'
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:wrong-workflow'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+  refute_output --partial 'CALL: api repos/{owner}/{repo}/actions/jobs'
+}
+
 @test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"

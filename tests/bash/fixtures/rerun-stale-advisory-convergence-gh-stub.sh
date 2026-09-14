@@ -22,6 +22,14 @@
 #     $GH_STUB_CHECK_RUNS_FIXTURE (a JSON array of one object per
 #     simulated page, matching real `--paginate --slurp` output
 #     shape).
+#   - `gh api repos/{owner}/{repo}/actions/runs/<run-id>` (no `/job/`
+#     or `/logs` suffix) -> prints `{"path": "<value>"}`, where
+#     `<value>` is `$GH_STUB_WORKFLOW_PATH` when set, or this
+#     repository's real `.github/workflows/idd-advisory-convergence.yml`
+#     otherwise -- so every existing test that never sets this
+#     variable exercises the genuine-workflow path by default, and a
+#     test can override it to simulate a spoofed same-named run from a
+#     different workflow file.
 #   - `gh api repos/{owner}/{repo}/actions/jobs/<id>/logs` -> cats
 #     $GH_STUB_LOG_FIXTURE, or exits 1 with a 404-shaped stderr message
 #     when $GH_STUB_LOG_FETCH_FAIL=1 (simulating a real log-fetch
@@ -117,6 +125,10 @@ fi
 if [ "${1:-}" = 'api' ]; then
   if printf '%s\n' "$*" | grep -q -- '/check-runs'; then
     cat "${GH_STUB_CHECK_RUNS_FIXTURE:?GH_STUB_CHECK_RUNS_FIXTURE must be set}"
+    exit 0
+  fi
+  if printf '%s\n' "$*" | grep -qE -- '/actions/runs/[0-9]+$'; then
+    printf '{"path": "%s"}\n' "${GH_STUB_WORKFLOW_PATH:-.github/workflows/idd-advisory-convergence.yml}"
     exit 0
   fi
   if printf '%s\n' "$*" | grep -q -- '/actions/jobs/.*/logs'; then
