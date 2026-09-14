@@ -1,0 +1,14 @@
+{
+  "reviews": [
+    {
+      "author": { "login": "copilot-pull-request-reviewer" },
+      "state": "COMMENTED",
+      "commit": { "oid": "1111111111111111111111111111111111111111" }
+    },
+    {
+      "author": { "login": "coderabbitai" },
+      "state": "COMMENTED",
+      "commit": { "oid": "2222222222222222222222222222222222222222" }
+    }
+  ]
+}
