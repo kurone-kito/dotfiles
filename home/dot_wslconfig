@@ -1,5 +1,9 @@
 [experimental]
+autoMemoryReclaim=gradual
 sparseVhd=true
 
 [wsl2]
+autoProxy=true
+dnsTunneling=true
+networkingMode=mirrored
 virtiofs=true
