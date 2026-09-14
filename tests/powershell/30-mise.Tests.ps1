@@ -343,11 +343,13 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
   # freshly-created shims dir must not simply be appended after an
   # already-present WinGet\Links -- the fallback branch must place it
   # via the same WinGet\Links-anchored precedence 01-path.ps1 itself
-  # applies. Same PS5.1 scope-capture caveat as the reshim test above
-  # (the mocked function's directory-creation side effect is what this
-  # test actually depends on, not $script:MiseCalls tracking, but it is
-  # skipped for consistency with that established caution).
-  It 'places a freshly-created shims dir ahead of an already-present WinGet\Links' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+  # applies. Unlike the reshim test above, this asserts on the mocked
+  # function's directory-creation side effect and the resulting
+  # $env:PATH order, not $script:MiseCalls -- so the PS5.1
+  # scope-capture quirk that empties $script:MiseCalls does not affect
+  # it, and it runs on PS5.1 too (this fallback merge must stay
+  # PS5.1-compatible).
+  It 'places a freshly-created shims dir ahead of an already-present WinGet\Links' {
     New-TestMiseConfigs
 
     $winGetLinksDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
