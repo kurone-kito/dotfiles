@@ -1,0 +1,15 @@
+[
+  {
+    "total_count": 1,
+    "check_runs": [
+      {
+        "id": 1003,
+        "name": "idd-advisory-convergence",
+        "status": "completed",
+        "conclusion": "failure",
+        "details_url": "https://github.com/kurone-kito/dotfiles/actions/runs/5003/job/1003",
+        "app": { "id": 99999 }
+      }
+    ]
+  }
+]

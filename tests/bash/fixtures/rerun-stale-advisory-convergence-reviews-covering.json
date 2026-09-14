@@ -1,0 +1,12 @@
+[
+  {
+    "user": { "login": "copilot-pull-request-reviewer" },
+    "submitted_at": "2026-09-13T00:00:00Z",
+    "commit_id": "1111111111111111111111111111111111111111"
+  },
+  {
+    "user": { "login": "copilot-pull-request-reviewer" },
+    "submitted_at": "2026-09-13T00:05:00Z",
+    "commit_id": "2222222222222222222222222222222222222222"
+  }
+]
