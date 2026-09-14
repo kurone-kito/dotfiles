@@ -4,7 +4,10 @@
 # same minimal-precedence reconciliation strategy as
 # conf.d/01-path.ps1 (Merge-ManagedPathEntries, lib/managed-paths.ps1):
 # an already-present managed entry keeps its existing registry
-# position; a missing one is appended at the end. Re-runs when the
+# position; a missing one is appended at the end -- except a missing
+# entry ordered ahead of WinGet\Links (see managed-paths.ps1's own
+# comment) is inserted immediately before WinGet\Links's position
+# instead, even when WinGet\Links is already present. Re-runs when the
 # managed-paths list or the winget declaration changes (hashes below).
 #
 # hash: <% include "dot_config/powershell/lib/managed-paths.ps1" | sha256sum %>
