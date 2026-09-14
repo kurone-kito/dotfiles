@@ -20,7 +20,7 @@ if you just want to know which repository owns a given tool, and why.
 
 | Layer | Owns | Examples |
 | ------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| WinGet / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, 7-Zip, GnuPG, Neovim, .NET SDK, Steam, Unity Hub |
+| WinGet / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, GnuPG, .NET SDK, Steam, Unity Hub |
 | mise (this repository) | Delegated CLI tools, language runtimes | Node.js, GitHub CLI, ghq, GitHub Copilot CLI, git-vrc, and more below |
 | managed User `PATH` (this repository) | The Windows User `PATH` | `mise\shims`, `WinGet\Links`, `data.wingetUserPath.packages` entries |
 | Chocolatey (setup.windows) | Fonts, audio drivers | HackGen, VB-CABLE |
