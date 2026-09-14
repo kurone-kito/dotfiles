@@ -14,8 +14,17 @@
 #     $GH_STUB_PR_HEAD_FIXTURE unchanged. Call count is derived from
 #     this stub's own `CALL: pr view <pr> --json headRefOid` lines
 #     already in $GH_CALL_LOG.
-#   - `gh pr view <pr> --json reviews` -> cats
-#     $GH_STUB_PR_REVIEWS_FIXTURE.
+#   - `gh api repos/{owner}/{repo}/pulls/<pr>/reviews --paginate --jq
+#     '<filter>'` -> actually runs the real `jq` binary with the exact
+#     `--jq` filter argument the script passed (extracted from "$@" by
+#     position, not string-matched, since the filter itself contains
+#     spaces) against $GH_STUB_REVIEWS_FIXTURE -- a raw JSON array of
+#     REST-shaped review objects (`user.login` / `submitted_at` /
+#     `commit_id`) -- so this stub exercises the script's own real
+#     `select()` login-matching logic end-to-end instead of
+#     pre-filtering it away, matching real `gh api --jq`'s per-page
+#     streamed-output behavior closely enough for this single-page
+#     fixture shape.
 #   - `gh api --paginate --slurp
 #     repos/{owner}/{repo}/commits/<sha>/check-runs?...` -> cats
 #     $GH_STUB_CHECK_RUNS_FIXTURE (a JSON array of one object per
@@ -86,10 +95,6 @@ case "${1:-} ${2:-}" in
       fi
       exit 0
     fi
-    if printf '%s\n' "$*" | grep -q -- '--json reviews'; then
-      cat "${GH_STUB_PR_REVIEWS_FIXTURE:?GH_STUB_PR_REVIEWS_FIXTURE must be set}"
-      exit 0
-    fi
     echo "gh-stub: unrecognized pr view invocation: $*" >&2
     exit 1
     ;;
@@ -112,6 +117,23 @@ if printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
 fi
 
 if [ "${1:-}" = 'api' ]; then
+  if printf '%s\n' "$*" | grep -qE -- '/pulls/[0-9]+/reviews'; then
+    jq_filter=''
+    prev=''
+    for a in "$@"; do
+      if [ "$prev" = '--jq' ]; then
+        jq_filter="$a"
+        break
+      fi
+      prev="$a"
+    done
+    [ -n "$jq_filter" ] || {
+      echo 'gh-stub: expected --jq on the reviews endpoint' >&2
+      exit 1
+    }
+    jq -c "$jq_filter" "${GH_STUB_REVIEWS_FIXTURE:?GH_STUB_REVIEWS_FIXTURE must be set}"
+    exit 0
+  fi
   if printf '%s\n' "$*" | grep -q -- '/check-runs'; then
     cat "${GH_STUB_CHECK_RUNS_FIXTURE:?GH_STUB_CHECK_RUNS_FIXTURE must be set}"
     exit 0

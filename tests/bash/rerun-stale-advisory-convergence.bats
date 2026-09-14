@@ -97,7 +97,7 @@ setup() {
 @test "parses the old-sha and skips when no covering Copilot review exists yet" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-not-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-not-covering.json"
 
   run bash "$SCRIPT" 426
   assert_success
@@ -112,7 +112,7 @@ setup() {
 @test "skips when the parsed reason string's HEAD does not match the PR's actual current head" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-mismatched-head.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
 
   run bash "$SCRIPT" 426
   assert_success
@@ -127,7 +127,7 @@ setup() {
 @test "reruns exactly once and succeeds when the reason matches and a covering review exists" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
@@ -147,7 +147,7 @@ setup() {
   # from the cancelled-*rerun-result* case below.
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate-cancelled.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
@@ -159,7 +159,7 @@ setup() {
 @test "reruns a second time when the first rerun resolves to cancelled, then succeeds" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=cancelled
   export GH_STUB_CONCLUSION_ATTEMPT_3=success
 
@@ -175,7 +175,7 @@ setup() {
 @test "exits non-zero when an attempted rerun resolves to failure" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=failure
 
   run bash "$SCRIPT" 426
@@ -187,7 +187,7 @@ setup() {
 @test "exits non-zero and reports a timeout when a rerun never completes within the poll bound" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_STAY_INCOMPLETE=1
   export RERUN_STALE_ADVISORY_MAX_POLLS=2
 
@@ -200,7 +200,7 @@ setup() {
 @test "never sends the unsupported --allow-escape-sequences flag on the log fetch" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
@@ -225,7 +225,7 @@ setup() {
 @test "flattens every paginated check-runs page before filtering candidates" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-multi-page.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
@@ -242,7 +242,7 @@ setup() {
 @test "accepts a covering review reported under the [bot]-suffixed login form" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering-bot-suffix.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering-bot-suffix.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
@@ -253,7 +253,7 @@ setup() {
 @test "skips and never reruns when the PR head changes between the initial fetch and the rerun check" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_PR_HEAD_FIXTURE_2="$FIXTURES/rerun-stale-advisory-convergence-pr-head-changed.json"
 
   run bash "$SCRIPT" 426
@@ -283,7 +283,7 @@ setup() {
 @test "requires the latest Copilot review specifically, not merely any matching one" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-latest-not-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-latest-not-covering.json"
 
   run bash "$SCRIPT" 426
   assert_success
@@ -323,7 +323,7 @@ setup() {
 @test "reports attempt-lookup-failed and exits non-zero when the pre-rerun attempt lookup fails" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_RUN_LOOKUP_FAIL_AFTER_FIRST_CALL=1
 
   run bash "$SCRIPT" 426
@@ -338,7 +338,7 @@ setup() {
 @test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
-  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_RERUN_FAIL=1
 
   run bash "$SCRIPT" 426

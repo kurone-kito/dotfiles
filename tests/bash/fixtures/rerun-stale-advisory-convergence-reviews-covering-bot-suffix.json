@@ -1,10 +1,7 @@
-{
-  "reviews": [
-    {
-      "author": { "login": "copilot-pull-request-reviewer[bot]" },
-      "state": "COMMENTED",
-      "commit": { "oid": "2222222222222222222222222222222222222222" },
-      "submittedAt": "2026-09-13T00:05:00Z"
-    }
-  ]
-}
+[
+  {
+    "user": { "login": "copilot-pull-request-reviewer[bot]" },
+    "submitted_at": "2026-09-13T00:05:00Z",
+    "commit_id": "2222222222222222222222222222222222222222"
+  }
+]

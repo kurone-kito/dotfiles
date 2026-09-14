@@ -59,15 +59,19 @@
 #      the PR's actual current head -> skip, never rerun (acceptance
 #      criterion 7 -- this must never become a blanket
 #      retry-any-failing-check hammer).
-#   4. Confirms, via `gh pr view --json reviews`, that the *latest*
-#      `copilot-pull-request-reviewer` (or `copilot-pull-request-reviewer[bot]`)
-#      review already covers the PR's actual current head (not the
-#      stale run's own parsed `<new-sha>`, which is only ever asserted
-#      equal to it above) -- the latest review specifically, since the
-#      convergence gate itself only ever evaluates the latest one; an
-#      earlier review for the current head completing before a
-#      later-submitted review for an older commit must not be accepted
-#      as covering. No covering review -> skip, never rerun.
+#   4. Confirms, via the paginated REST reviews endpoint
+#      (`gh api repos/{owner}/{repo}/pulls/{pr}/reviews --paginate`,
+#      not `gh pr view --json reviews`, whose bounded connection can
+#      omit the true latest review on a PR with enough reviews), that
+#      the *latest* `copilot-pull-request-reviewer` (or
+#      `copilot-pull-request-reviewer[bot]`) review already covers the
+#      PR's actual current head (not the stale run's own parsed
+#      `<new-sha>`, which is only ever asserted equal to it above) --
+#      the latest review specifically, since the convergence gate
+#      itself only ever evaluates the latest one; an earlier review for
+#      the current head completing before a later-submitted review for
+#      an older commit must not be accepted as covering. No covering
+#      review -> skip, never rerun.
 #   5. Re-fetches the PR's live head and requires it still equal the
 #      head read at startup, immediately before authorizing the rerun
 #      -- deliberately *after* the review lookup above, since that
@@ -84,18 +88,22 @@
 #      integer aborts before rerunning (never a rerun with an
 #      unvalidated baseline). Then `gh run rerun <run-id>` (the *run*
 #      id, parsed from `details_url` -- distinct from the job id used
-#      for the log fetch above) and polls the same run-API endpoint
-#      until `run_attempt` has advanced past that pre-rerun value *and*
-#      `status` is `completed` -- checking `status` alone races a
-#      genuinely transient window where GitHub still reports the
-#      *previous* attempt's terminal `status`/`conclusion` for a few
-#      seconds after the rerun call returns. `conclusion == cancelled`
-#      (this repository has observed this happen, apparently
-#      deduplicated against a concurrently triggered sibling rerun)
-#      retries exactly once more, same wait; anything else terminal, or
-#      the poll bound being exhausted, counts as a failed remediation
-#      attempt. A `gh run rerun` invocation that itself fails to even
-#      start never counts as a triggered attempt or advances the poll.
+#      for the log fetch above; the command itself returns no attempt
+#      identifier on success) and polls the same run-API endpoint until
+#      `run_attempt` equals *exactly* the pre-rerun value plus one --
+#      not merely "greater than" -- so a different actor's own
+#      concurrent rerun of the same run id is never misattributed as
+#      this invocation's result. `status` is also required to be
+#      `completed` -- checking it alone races a genuinely transient
+#      window where GitHub still reports the *previous* attempt's
+#      terminal `status`/`conclusion` for a few seconds after the rerun
+#      call returns. `conclusion == cancelled` (this repository has
+#      observed this happen, apparently deduplicated against a
+#      concurrently triggered sibling rerun) retries exactly once more,
+#      same wait; anything else terminal, or the poll bound being
+#      exhausted, counts as a failed remediation attempt. A
+#      `gh run rerun` invocation that itself fails to even start never
+#      counts as a triggered attempt or advances the poll.
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
@@ -164,12 +172,14 @@ parse_reason() {
 }
 
 # has_covering_review -- true (exit 0) when the *latest* (by
-# `submittedAt`) copilot-pull-request-reviewer review for the given PR
+# `submitted_at`) copilot-pull-request-reviewer review for the given PR
 # covers the given head sha. Accepts both the bare login and its
-# `[bot]` suffix form, matching this repository's established
-# Copilot-review matching contract
-# (docs/idd-advisory-wait-shell-fallback.md), which itself sorts by
-# submission time and selects the last entry. Checking only the latest
+# `[bot]` suffix form. Uses the paginated REST reviews endpoint
+# (`gh api ... --paginate`), not `gh pr view --json reviews`: the
+# latter is `gh`'s own bounded reviews connection and can omit the
+# actual latest review on a PR with more than one page of reviews,
+# mirroring this repository's established latest-review lookup
+# (docs/idd-advisory-wait-shell-fallback.md). Checking only the latest
 # review -- not "any review whose commit matches" -- matters because
 # the advisory-convergence gate itself only ever evaluates the latest
 # review: with overlapping asynchronous review requests, an earlier
@@ -177,11 +187,14 @@ parse_reason() {
 # review for an older commit, and accepting the earlier one alone
 # would authorize a rerun the gate will still fail immediately after.
 has_covering_review() {
-  local pr="$1" head_sha="$2" reviews_json
-  reviews_json=$(gh pr view "$pr" --json reviews)
-  printf '%s' "$reviews_json" | jq -e --arg sha "$head_sha" \
-    '[.reviews[] | select(.author.login == "copilot-pull-request-reviewer" or .author.login == "copilot-pull-request-reviewer[bot]")]
-     | sort_by(.submittedAt) | last // empty | .commit.oid == $sha' >/dev/null
+  local pr="$1" head_sha="$2" latest_json latest_sha
+  latest_json=$(
+    gh api "repos/{owner}/{repo}/pulls/${pr}/reviews" --paginate \
+      --jq '.[] | select(.user.login == "copilot-pull-request-reviewer" or .user.login == "copilot-pull-request-reviewer[bot]") | {sa: .submitted_at, cid: .commit_id}' |
+      jq -rs 'sort_by(.sa) | last // {}'
+  )
+  latest_sha=$(printf '%s' "$latest_json" | jq -r '.cid // empty')
+  [ -n "$latest_sha" ] && [ "$latest_sha" = "$head_sha" ]
 }
 
 # current_head -- prints the PR's live current head commit sha.
@@ -245,17 +258,31 @@ run_attempt() {
 }
 
 # wait_for_rerun_conclusion -- polls the given run id until its
-# `run_attempt` counter has advanced past prior_attempt *and* `status`
-# is `completed`, then prints the resulting `conclusion`. Checking
-# `status` alone is not sufficient: for a few seconds after `gh run
-# rerun` returns, GitHub can still report the *previous* attempt's
-# terminal status/conclusion, which would otherwise be misread as the
-# rerun's own result. Prints `timeout` if the poll bound is exhausted
-# first, or if a poll iteration cannot resolve a valid `run_attempt`
-# (a transient lookup failure never counts as reaching the new
-# attempt).
+# `run_attempt` counter equals *exactly* prior_attempt + 1 (the precise
+# attempt this invocation's own `gh run rerun` call created) *and*
+# `status` is `completed`, then prints the resulting `conclusion`.
+# `gh run rerun` itself returns no attempt identifier to bind to (it
+# takes only a run id and prints nothing on success), so an
+# `attempt > prior_attempt` comparison alone can misattribute a
+# *different* actor's own concurrent rerun of the same run id: if
+# another actor's rerun creates attempt N+1 between this invocation's
+# baseline read and its own rerun call, that N+1 completing would
+# satisfy a bare `>` check and be misreported as this call's result
+# while the attempt this call actually triggered (N+2) is still
+# pending or later fails. Exact equality closes that gap for the
+# common single-actor case; a genuinely concurrent second rerun of the
+# same run id is a pre-existing coordination gap this script does not
+# otherwise solve (see the header comment), so this poll now simply
+# times out rather than misattributing in that rarer case. Checking
+# `status` alone is not sufficient either way: for a few seconds after
+# `gh run rerun` returns, GitHub can still report the *previous*
+# attempt's terminal status/conclusion. Prints `timeout` if the poll
+# bound is exhausted first, or if a poll iteration cannot resolve a
+# valid `run_attempt` (a transient lookup failure never counts as
+# reaching the new attempt).
 wait_for_rerun_conclusion() {
-  local run_id="$1" prior_attempt="$2" polls=0 json status attempt conclusion
+  local run_id="$1" prior_attempt="$2" target_attempt polls=0 json status attempt conclusion
+  target_attempt=$((prior_attempt + 1))
   while [ "$polls" -lt "$MAX_POLLS" ]; do
     json=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}" 2>/dev/null) || json=''
     if [ -n "$json" ]; then
@@ -265,7 +292,7 @@ wait_for_rerun_conclusion() {
       case "$attempt" in
         '' | *[!0-9]*) attempt='' ;;
       esac
-      if [ -n "$attempt" ] && [ "$attempt" -gt "$prior_attempt" ] && [ "$status" = 'completed' ]; then
+      if [ -n "$attempt" ] && [ "$attempt" -eq "$target_attempt" ] && [ "$status" = 'completed' ]; then
         printf '%s' "$conclusion"
         return 0
       fi
