@@ -335,6 +335,32 @@ setup() {
   refute_output --partial 'CALL: run rerun'
 }
 
+@test "excludes a candidate whose run is associated with a different PR" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_WORKFLOW_PR_NUMBER=999
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:wrong-workflow'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "excludes a candidate with no PR association (fork-originated run)" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_WORKFLOW_PR_NUMBER=''
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'SKIPPED=1001:wrong-workflow'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
 @test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"

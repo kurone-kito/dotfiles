@@ -20,24 +20,32 @@
 #
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
-#      requires both its `path` equal
-#      `.github/workflows/idd-advisory-convergence.yml` exactly *and*
-#      its `event` equal `pull_request_target`. The GitHub Actions app
-#      id alone is not proof of origin: every Actions-produced check
-#      run in the repository shares it, including one from a workflow a
-#      PR branch itself adds (a fork PR, or any branch with
-#      workflow-file write access) -- a branch could otherwise define
-#      its own job literally named `idd-advisory-convergence` that
-#      fails and prints the exact stale-rollup reason string naming the
-#      PR's current head. The path check alone is not enough either:
-#      this repository's own idd-advisory-convergence.yml still
-#      registers `pull_request` alongside `pull_request_target` during
-#      a documented migration window, and `pull_request` resolves the
+#      requires its `path` equal
+#      `.github/workflows/idd-advisory-convergence.yml` exactly, its
+#      `event` equal `pull_request_target`, *and* its `pull_requests[]`
+#      array include this exact PR number. The GitHub Actions app id
+#      alone is not proof of origin: every Actions-produced check run in
+#      the repository shares it, including one from a workflow a PR
+#      branch itself adds (a fork PR, or any branch with workflow-file
+#      write access) -- a branch could otherwise define its own job
+#      literally named `idd-advisory-convergence` that fails and prints
+#      the exact stale-rollup reason string naming the PR's current
+#      head. The path check alone is not enough either: this
+#      repository's own idd-advisory-convergence.yml still registers
+#      `pull_request` alongside `pull_request_target` during a
+#      documented migration window, and `pull_request` resolves the
 #      workflow *definition* from the PR branch itself, so a
 #      same-repository PR could edit that exact file to spoof a run at
 #      the same path. Only `pull_request_target` resolves the workflow
-#      from the base branch, immune to PR-branch tampering. No match on
-#      either condition -> skip, never rerun.
+#      from the base branch, immune to PR-branch tampering. Finally, the
+#      check-runs lookup below is scoped only by commit SHA, and the
+#      same SHA can be associated with more than one open PR -- without
+#      the `pull_requests[]` check, this could rerun a genuine
+#      `pull_request_target` run created for a *different* PR (see
+#      docs/customization.md's run-attribution guidance); an empty
+#      `pull_requests[]` (always true for a fork-originated PR) fails
+#      closed rather than being treated as an unverifiable pass. No
+#      match on any condition -> skip, never rerun.
 #   2. Reads that specific check-run's own job log via
 #      `gh api repos/{owner}/{repo}/actions/jobs/{job-id}/logs` --
 #      *not* `gh run view <run-id> --log`, which only ever returns the
@@ -73,12 +81,15 @@
 #      an older commit must not be accepted as covering. No covering
 #      review -> skip, never rerun.
 #   5. Re-fetches the PR's live head and requires it still equal the
-#      head read at startup, immediately before authorizing the rerun
-#      -- deliberately *after* the review lookup above, since that
-#      lookup is itself a network round-trip a new commit could land
-#      during. A commit pushed at any point up to this exact instant
-#      must never let this candidate act on an already-obsolete head.
-#      Any change -> skip, never rerun.
+#      head read at startup, immediately before **each** `gh run rerun`
+#      call in step 6 below (both the first attempt and the
+#      cancelled-retry attempt) -- not once here after the review
+#      lookup. The pre-rerun `run_attempt` lookup and the first
+#      attempt's own poll (which can take `MAX_POLLS * POLL_INTERVAL`
+#      seconds) are both network round-trips a new commit could land
+#      during, so the only way to bound that gap for every mutation is
+#      to recheck immediately before each one, not once upfront. Any
+#      change -> skip, never rerun.
 #   6. Otherwise, resolves the pre-rerun `run_attempt` via
 #      `gh api repos/{owner}/{repo}/actions/runs/{run-id}` -- not
 #      `gh run view --json attempt`, which does not expose this field
@@ -209,31 +220,42 @@ current_head() {
 
 # is_advisory_convergence_workflow_run -- true (exit 0) only when the
 # given run id's own workflow file path is exactly
-# ADVISORY_CONVERGENCE_WORKFLOW_PATH *and* its triggering `event` is
-# `pull_request_target`. `GITHUB_ACTIONS_APP_ID` alone is not
-# sufficient producer-identity proof: every GitHub Actions-produced
-# check run in the repository -- including one from a workflow a PR
-# branch itself adds (a fork PR, or any branch with workflow-file write
-# access) -- shares that same app id. A branch could otherwise define
-# its own job literally named `idd-advisory-convergence` that fails
-# and prints the exact stale-rollup reason string naming the PR's
-# current head, and app-id filtering alone would accept it as genuine.
-# The workflow-path check alone is *also* not sufficient: this
-# repository's own idd-advisory-convergence.yml still registers
-# `pull_request` alongside `pull_request_target` during a documented
-# migration window (see that file's own header comment), and
-# `pull_request` resolves the workflow *definition* from the PR branch
-# itself, so a same-repository PR could edit that exact file to spoof
-# a run at the same path. Only `pull_request_target` resolves the
-# workflow from the base branch, immune to PR-branch tampering -- the
-# same trust boundary this repository's own run-bound checks already
-# rely on -- so both conditions together are required before a
+# ADVISORY_CONVERGENCE_WORKFLOW_PATH, its triggering `event` is
+# `pull_request_target`, *and* it is actually associated with the given
+# PR. `GITHUB_ACTIONS_APP_ID` alone is not sufficient producer-identity
+# proof: every GitHub Actions-produced check run in the repository --
+# including one from a workflow a PR branch itself adds (a fork PR, or
+# any branch with workflow-file write access) -- shares that same app
+# id. A branch could otherwise define its own job literally named
+# `idd-advisory-convergence` that fails and prints the exact
+# stale-rollup reason string naming the PR's current head, and app-id
+# filtering alone would accept it as genuine. The workflow-path check
+# alone is *also* not sufficient: this repository's own
+# idd-advisory-convergence.yml still registers `pull_request` alongside
+# `pull_request_target` during a documented migration window (see that
+# file's own header comment), and `pull_request` resolves the workflow
+# *definition* from the PR branch itself, so a same-repository PR could
+# edit that exact file to spoof a run at the same path. Only
+# `pull_request_target` resolves the workflow from the base branch,
+# immune to PR-branch tampering -- the same trust boundary this
+# repository's own run-bound checks already rely on. Finally, the
+# check-runs lookup this candidate came from is scoped only by commit
+# SHA, and the same SHA can be associated with more than one open PR
+# (a shared branch, or a rebase); without also verifying PR
+# association, this could rerun a genuine `pull_request_target` run
+# created for a *different* PR and report its result as remediation for
+# this one. `pull_requests[].number` (see
+# docs/customization.md's run-attribution guidance) proves that
+# association -- GitHub never populates it for a fork-originated PR, so
+# an empty array fails closed (skip) rather than being treated as an
+# unverifiable pass. All conditions together are required before a
 # candidate is accepted.
 is_advisory_convergence_workflow_run() {
-  local run_id="$1" run_json
+  local run_id="$1" pr="$2" run_json
   run_json=$(gh api "repos/{owner}/{repo}/actions/runs/${run_id}")
   [ "$(printf '%s' "$run_json" | jq -r '.path')" = "$ADVISORY_CONVERGENCE_WORKFLOW_PATH" ] &&
-    [ "$(printf '%s' "$run_json" | jq -r '.event')" = 'pull_request_target' ]
+    [ "$(printf '%s' "$run_json" | jq -r '.event')" = 'pull_request_target' ] &&
+    printf '%s' "$run_json" | jq -e --argjson pr "$pr" '[.pull_requests[]?.number] | index($pr) != null' >/dev/null
 }
 
 # run_attempt -- prints the given run id's current `run_attempt`
@@ -325,9 +347,23 @@ wait_for_rerun_conclusion() {
 # would otherwise let a transient GitHub read of the *previous*
 # attempt's already-terminal state be misread as this call's own
 # newly-triggered attempt already having completed.
+#
+# The live-head recheck runs *inside* this function, immediately before
+# **each** `gh run rerun` call (both the first attempt and the
+# cancelled-retry attempt) -- not once in the caller before entering
+# this function. A push can land during the pre-rerun `run_attempt`
+# lookup itself, or during the first attempt's poll (which can take
+# `MAX_POLLS * POLL_INTERVAL` seconds), and either window sits entirely
+# between a caller-side check and the actual mutation; checking again
+# right here is the only way to bound that gap for both `gh run rerun`
+# calls, not just the first.
 rerun_and_wait() {
-  local run_id="$1" attempts=0 prior_attempt conclusion
+  local pr="$1" head_sha="$2" run_id="$3" attempts=0 prior_attempt conclusion
 
+  if [ "$(current_head "$pr")" != "$head_sha" ]; then
+    printf '%s %s' "$attempts" 'head-changed'
+    return 0
+  fi
   if ! prior_attempt=$(run_attempt "$run_id"); then
     printf '%s %s' "$attempts" 'attempt-lookup-failed'
     return 0
@@ -340,6 +376,10 @@ rerun_and_wait() {
   conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
 
   if [ "$conclusion" = 'cancelled' ]; then
+    if [ "$(current_head "$pr")" != "$head_sha" ]; then
+      printf '%s %s' "$attempts" 'head-changed'
+      return 0
+    fi
     if ! prior_attempt=$(run_attempt "$run_id"); then
       printf '%s %s' "$attempts" 'attempt-lookup-failed'
       return 0
@@ -400,7 +440,7 @@ main() {
     details_url=$(printf '%s' "$item" | jq -r '.details_url')
     run_id=$(run_id_from_details_url "$details_url")
 
-    if ! is_advisory_convergence_workflow_run "$run_id"; then
+    if ! is_advisory_convergence_workflow_run "$run_id" "$pr"; then
       echo "SKIPPED=${job_id}:wrong-workflow"
       idx=$((idx + 1))
       continue
@@ -435,29 +475,20 @@ main() {
       continue
     fi
 
-    # Re-fetch the live head immediately before authorizing a rerun --
-    # deliberately *after* has_covering_review above, not before it:
-    # that call itself makes a network round-trip, during which a new
-    # commit could still land. `head_sha` was read once at startup, so
-    # a commit pushed at any point up to this exact instant (log fetch,
-    # review lookup, or an earlier candidate's rerun-and-poll cycle)
-    # must never let this candidate act against an already-obsolete
-    # head. Fail closed (skip, never rerun) on any change rather than
-    # re-deriving a new candidate set mid-loop.
-    if [ "$(current_head "$pr")" != "$head_sha" ]; then
-      echo "SKIPPED=${job_id}:head-changed"
-      idx=$((idx + 1))
-      continue
-    fi
-
+    # The live-head recheck immediately before authorizing a rerun now
+    # runs *inside* rerun_and_wait, immediately before each `gh run
+    # rerun` call it makes (not once here) -- see that function's own
+    # comment for why a single check at this point is not enough.
     local result attempts conclusion
-    result=$(rerun_and_wait "$run_id")
+    result=$(rerun_and_wait "$pr" "$head_sha" "$run_id")
     attempts=$(printf '%s' "$result" | cut -d' ' -f1)
     conclusion=$(printf '%s' "$result" | cut -d' ' -f2)
     rerun_count=$((rerun_count + attempts))
 
     if [ "$conclusion" = 'success' ]; then
       echo "ACTED=${run_id}:success"
+    elif [ "$conclusion" = 'head-changed' ]; then
+      echo "SKIPPED=${job_id}:head-changed"
     else
       echo "ACTED=${run_id}:${conclusion}"
       overall_exit=1

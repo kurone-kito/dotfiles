@@ -45,6 +45,12 @@
 #       - `event`: `$GH_STUB_WORKFLOW_EVENT` when set, or
 #         `pull_request_target` otherwise -- overridable the same way
 #         to simulate a spoofed `pull_request`-triggered run.
+#       - `pull_requests`: `[{"number": 426}]` (every test invokes the
+#         script against PR 426) unless `$GH_STUB_WORKFLOW_PR_NUMBER` is
+#         set, in which case `[{"number": <that value>}]` -- so a test
+#         can simulate a run genuinely associated with a *different*
+#         PR; set it to the empty string to simulate a fork-originated
+#         PR's empty `pull_requests` array instead.
 #       - `run_attempt`: stateful, derived entirely from how many
 #         `CALL: run rerun <run-id>` lines this run id already has in
 #         $GH_CALL_LOG at query time (call it N): reports `N + 1`.
@@ -156,10 +162,16 @@ if [ "${1:-}" = 'api' ]; then
       conclusion_var="GH_STUB_CONCLUSION_ATTEMPT_${run_attempt}"
       conclusion="\"${!conclusion_var:-failure}\""
     fi
-    printf '{"path": "%s", "event": "%s", "run_attempt": %d, "status": "%s", "conclusion": %s}\n' \
+    pr_number="${GH_STUB_WORKFLOW_PR_NUMBER-426}"
+    if [ -n "$pr_number" ]; then
+      pull_requests="[{\"number\": ${pr_number}}]"
+    else
+      pull_requests='[]'
+    fi
+    printf '{"path": "%s", "event": "%s", "pull_requests": %s, "run_attempt": %d, "status": "%s", "conclusion": %s}\n' \
       "${GH_STUB_WORKFLOW_PATH:-.github/workflows/idd-advisory-convergence.yml}" \
       "${GH_STUB_WORKFLOW_EVENT:-pull_request_target}" \
-      "$run_attempt" "$status" "$conclusion"
+      "$pull_requests" "$run_attempt" "$status" "$conclusion"
     exit 0
   fi
   if printf '%s\n' "$*" | grep -q -- '/actions/jobs/.*/logs'; then
