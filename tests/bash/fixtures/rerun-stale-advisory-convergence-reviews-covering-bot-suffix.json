@@ -1,0 +1,9 @@
+{
+  "reviews": [
+    {
+      "author": { "login": "copilot-pull-request-reviewer[bot]" },
+      "state": "COMMENTED",
+      "commit": { "oid": "2222222222222222222222222222222222222222" }
+    }
+  ]
+}

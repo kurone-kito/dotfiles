@@ -11,11 +11,12 @@
 # Usage: scripts/rerun-stale-advisory-convergence.sh <pr-number>
 #
 # For the PR's current head commit, fetches every
-# `idd-advisory-convergence` check-run instance
-# (`gh api repos/{owner}/{repo}/commits/{sha}/check-runs`; `gh api`'s
-# own auto-templated `{owner}`/`{repo}` placeholders, same convention
-# as idd-merge.instructions.md F4). For each `failure`/`cancelled`
-# instance:
+# `idd-advisory-convergence` check-run instance produced by the GitHub
+# Actions app itself (`gh api --paginate --slurp
+# repos/{owner}/{repo}/commits/{sha}/check-runs?...&filter=all`; `gh
+# api`'s own auto-templated `{owner}`/`{repo}` placeholders, same
+# convention as idd-merge.instructions.md F4). For each `failure`/
+# `cancelled` instance:
 #
 #   1. Reads that specific check-run's own job log via
 #      `gh api repos/{owner}/{repo}/actions/jobs/{job-id}/logs` --
@@ -38,13 +39,17 @@
 #      the PR's actual current head -> skip, never rerun (acceptance
 #      criterion 7 -- this must never become a blanket
 #      retry-any-failing-check hammer).
-#   3. Confirms, via `gh pr view --json reviews`, that a
-#      `copilot-pull-request-reviewer` review already covers the PR's
-#      actual current head (not the stale run's own parsed
-#      `<new-sha>`, which is only ever asserted equal to it above --
-#      checked against the freshly re-fetched head defensively). No
-#      covering review -> skip, never rerun.
-#   4. Otherwise, `gh run rerun <run-id>` (the *run* id, parsed from
+#   3. Re-fetches the PR's live head and requires it still equal the
+#      head read at startup -- a commit pushed while this script was
+#      running must never let a later candidate act on an
+#      already-obsolete head. Any change -> skip, never rerun.
+#   4. Confirms, via `gh pr view --json reviews`, that a
+#      `copilot-pull-request-reviewer` (or `copilot-pull-request-reviewer[bot]`)
+#      review already covers the PR's actual current head (not the
+#      stale run's own parsed `<new-sha>`, which is only ever asserted
+#      equal to it above -- checked against the freshly re-fetched
+#      head defensively). No covering review -> skip, never rerun.
+#   5. Otherwise, `gh run rerun <run-id>` (the *run* id, parsed from
 #      `details_url` -- distinct from the job id used for the log
 #      fetch above) and polls until that run's `attempt` counter has
 #      advanced past its pre-rerun value *and* `status` is
@@ -55,16 +60,18 @@
 #      repository has observed this happen, apparently deduplicated
 #      against a concurrently triggered sibling rerun) retries exactly
 #      once more, same wait; anything else terminal, or the poll bound
-#      being exhausted, counts as a failed remediation attempt.
+#      being exhausted, counts as a failed remediation attempt. A
+#      `gh run rerun` invocation that itself fails to even start never
+#      counts as a triggered attempt or advances the poll.
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
 # `SKIPPED=<job-id>:<reason>` or `ACTED=<run-id>:<conclusion-or-
-# timeout>` line per candidate, and a final `RERUN_COUNT=<n>` line.
-# Exits 0 when every candidate was a no-op or skip, or every attempted
-# rerun resolved to `success`; exits 1 when any attempted rerun did not
-# resolve to `success` (including a second `cancelled`, a `failure`, or
-# a poll timeout).
+# timeout-or-rerun-failed>` line per candidate, and a final
+# `RERUN_COUNT=<n>` line. Exits 0 when every candidate was a no-op or
+# skip, or every attempted rerun resolved to `success`; exits 1 when
+# any attempted rerun did not resolve to `success` (including a second
+# `cancelled`, a `failure`, a `rerun-failed`, or a poll timeout).
 #
 # Poll bounds are overridable via RERUN_STALE_ADVISORY_MAX_POLLS
 # (default 30) and RERUN_STALE_ADVISORY_POLL_INTERVAL seconds (default
@@ -73,6 +80,15 @@ set -euo pipefail
 
 CHECK_NAME='idd-advisory-convergence'
 REASON_REGEX='latest copilot review \(commit [0-9a-f]{40}\) does not cover current HEAD [0-9a-f]{40}'
+
+# The GitHub Actions app's own integration id (confirmed against this
+# repository's required-check identity in docs/idd-policy.md, "New
+# 0.5.0/0.6.0 Schema Keys" -> ciGate.trustSourcePinnedRequiredChecks).
+# A different integration could otherwise publish a same-named,
+# same-conclusion check run with the exact stale-rollup log text, and
+# this script would rerun it after finding any current-head Copilot
+# review -- restricting candidates to this app id closes that gap.
+GITHUB_ACTIONS_APP_ID=15368
 
 MAX_POLLS="${RERUN_STALE_ADVISORY_MAX_POLLS:-30}"
 POLL_INTERVAL="${RERUN_STALE_ADVISORY_POLL_INTERVAL:-5}"
@@ -108,13 +124,25 @@ parse_reason() {
 
 # has_covering_review -- true (exit 0) when a
 # copilot-pull-request-reviewer review already covers the given head
-# sha for the given PR.
+# sha for the given PR. Accepts both the bare login and its `[bot]`
+# suffix form, matching this repository's established Copilot-review
+# matching contract (docs/idd-advisory-wait-shell-fallback.md).
 has_covering_review() {
   local pr="$1" head_sha="$2" reviews_json count
   reviews_json=$(gh pr view "$pr" --json reviews)
   count=$(printf '%s' "$reviews_json" | jq --arg sha "$head_sha" \
-    '[.reviews[] | select(.author.login == "copilot-pull-request-reviewer" and .commit.oid == $sha)] | length')
+    '[.reviews[] | select((.author.login == "copilot-pull-request-reviewer" or .author.login == "copilot-pull-request-reviewer[bot]") and .commit.oid == $sha)] | length')
   [ "$count" -gt 0 ]
+}
+
+# current_head -- prints the PR's live current head commit sha.
+# Called both at startup and again immediately before authorizing each
+# rerun, since a commit pushed while this script is running (log
+# fetch, review check, or an earlier candidate's rerun-and-poll) must
+# never let a later candidate act on an already-obsolete head.
+current_head() {
+  local pr="$1"
+  gh pr view "$pr" --json headRefOid | jq -r '.headRefOid'
 }
 
 # wait_for_rerun_conclusion -- polls the given run id until its
@@ -150,17 +178,32 @@ wait_for_rerun_conclusion() {
 # caller-scoped variable directly (deliberately avoids bash namerefs,
 # which macOS's shipped bash -- 3.2, no `local -n` support -- cannot
 # run).
+#
+# `gh run rerun`'s own exit status is checked explicitly rather than
+# relying on `set -e`: this function runs inside the caller's command
+# substitution (`result=$(rerun_and_wait ...)`), where non-POSIX Bash
+# clears `errexit`, so a failed rerun call would otherwise be silently
+# ignored -- `attempts` would still be incremented and the poll below
+# would wait on a rerun that was never actually triggered, misreporting
+# an unrelated concurrent attempt's outcome (or a bare timeout) as this
+# call's own result.
 rerun_and_wait() {
   local run_id="$1" attempts=0 prior_attempt conclusion
 
   prior_attempt=$(gh run view "$run_id" --json attempt | jq -r '.attempt')
-  gh run rerun "$run_id" >/dev/null
+  if ! gh run rerun "$run_id" >/dev/null; then
+    printf '%s %s' "$attempts" 'rerun-failed'
+    return 0
+  fi
   attempts=$((attempts + 1))
   conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
 
   if [ "$conclusion" = 'cancelled' ]; then
     prior_attempt=$(gh run view "$run_id" --json attempt | jq -r '.attempt')
-    gh run rerun "$run_id" >/dev/null
+    if ! gh run rerun "$run_id" >/dev/null; then
+      printf '%s %s' "$attempts" 'rerun-failed'
+      return 0
+    fi
     attempts=$((attempts + 1))
     conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
   fi
@@ -183,8 +226,20 @@ main() {
   [ -n "$head_sha" ] || die "could not resolve the current head commit for PR #${pr}"
 
   local check_runs_json candidates_json candidate_count
-  check_runs_json=$(gh api "repos/{owner}/{repo}/commits/${head_sha}/check-runs?check_name=${CHECK_NAME}&per_page=100")
-  candidates_json=$(printf '%s' "$check_runs_json" | jq -c '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "cancelled")]')
+  # `--paginate --slurp` follows every page (the endpoint's own
+  # `filter` defaults to `latest`, and `per_page=100` alone only
+  # bounds a single page -- either gap would silently omit a stale
+  # instance sitting past the first page or outside the "latest"
+  # rollup) and wraps each page's response object into a JSON array,
+  # so every page's `check_runs` must be flattened with `.[].check_runs[]`
+  # rather than the single-page `.check_runs[]`. The `app.id` filter
+  # restricts candidates to check runs the GitHub Actions app itself
+  # produced (see `GITHUB_ACTIONS_APP_ID` above) -- a same-named,
+  # same-conclusion check run from a different integration must never
+  # be treated as a genuine stale idd-advisory-convergence instance.
+  check_runs_json=$(gh api --paginate --slurp "repos/{owner}/{repo}/commits/${head_sha}/check-runs?check_name=${CHECK_NAME}&filter=all&per_page=100")
+  candidates_json=$(printf '%s' "$check_runs_json" | jq -c --argjson app_id "$GITHUB_ACTIONS_APP_ID" \
+    '[.[].check_runs[] | select((.conclusion == "failure" or .conclusion == "cancelled") and .app.id == $app_id)]')
   candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
 
   if [ "$candidate_count" -eq 0 ]; then
@@ -201,7 +256,7 @@ main() {
     details_url=$(printf '%s' "$item" | jq -r '.details_url')
     run_id=$(run_id_from_details_url "$details_url")
 
-    if ! log=$(gh api "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" --allow-escape-sequences 2>/dev/null); then
+    if ! log=$(gh api "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null); then
       echo "SKIPPED=${job_id}:log-fetch-failed"
       idx=$((idx + 1))
       continue
@@ -220,6 +275,19 @@ main() {
 
     if [ "$new_sha" != "$head_sha" ]; then
       echo "SKIPPED=${job_id}:stale-head-mismatch"
+      idx=$((idx + 1))
+      continue
+    fi
+
+    # Re-fetch the live head immediately before authorizing a rerun.
+    # `head_sha` above was read once at startup; a commit pushed while
+    # this candidate's log/review lookups (or an earlier candidate's
+    # rerun-and-poll cycle) were in flight must never let this
+    # candidate act against an already-obsolete head. Fail closed
+    # (skip, never rerun) on any change rather than re-deriving a new
+    # candidate set mid-loop.
+    if [ "$(current_head "$pr")" != "$head_sha" ]; then
+      echo "SKIPPED=${job_id}:head-changed"
       idx=$((idx + 1))
       continue
     fi

@@ -1,12 +1,15 @@
-{
-  "total_count": 1,
-  "check_runs": [
-    {
-      "id": 1002,
-      "name": "idd-advisory-convergence",
-      "status": "completed",
-      "conclusion": "cancelled",
-      "details_url": "https://github.com/kurone-kito/dotfiles/actions/runs/5002/job/1002"
-    }
-  ]
-}
+[
+  {
+    "total_count": 1,
+    "check_runs": [
+      {
+        "id": 1002,
+        "name": "idd-advisory-convergence",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "details_url": "https://github.com/kurone-kito/dotfiles/actions/runs/5002/job/1002",
+        "app": { "id": 15368 }
+      }
+    ]
+  }
+]

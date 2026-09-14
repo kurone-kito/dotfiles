@@ -196,3 +196,84 @@ setup() {
   assert_output --partial 'ACTED=5001:timeout'
   assert_output --partial 'RERUN_COUNT=1'
 }
+
+@test "never sends the unsupported --allow-escape-sequences flag on the log fetch" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+
+  run bash "$SCRIPT" 426
+  assert_success
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial '--allow-escape-sequences'
+}
+
+@test "excludes a same-named check-run instance from a different app/integration" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-wrong-app.json"
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'nothing to do'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "flattens every paginated check-runs page before filtering candidates" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-multi-page.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial "OLD_SHA=${OLD_SHA}"
+  assert_output --partial 'ACTED=5001:success'
+  assert_output --partial 'RERUN_COUNT=1'
+
+  run cat "$GH_CALL_LOG"
+  assert_output --partial -- '--paginate'
+  assert_output --partial -- '--slurp'
+}
+
+@test "accepts a covering review reported under the [bot]-suffixed login form" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering-bot-suffix.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'ACTED=5001:success'
+}
+
+@test "skips and never reruns when the PR head changes between the initial fetch and the rerun check" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_PR_HEAD_FIXTURE_2="$FIXTURES/rerun-stale-advisory-convergence-pr-head-changed.json"
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial "OLD_SHA=${OLD_SHA}"
+  assert_output --partial 'SKIPPED=1001:head-changed'
+  assert_output --partial 'RERUN_COUNT=0'
+
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+}
+
+@test "reports rerun-failed and exits non-zero when gh run rerun itself fails to start" {
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_PR_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_RERUN_FAIL=1
+
+  run bash "$SCRIPT" 426
+  assert_failure
+  assert_output --partial 'ACTED=5001:rerun-failed'
+  assert_output --partial 'RERUN_COUNT=0'
+}
