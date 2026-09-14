@@ -74,15 +74,22 @@
 #     exercise the `attempt-lookup-failed` conclusion specifically,
 #     distinct from the `wrong-workflow` skip.
 #   - `gh api repos/{owner}/{repo}/actions/jobs/<id>/logs` -> cats
-#     $GH_STUB_LOG_FIXTURE, or exits 1 with a 404-shaped stderr message
-#     when $GH_STUB_LOG_FETCH_FAIL=1 (simulating a real log-fetch
-#     failure -- expired logs, API error -- so a test can assert the
-#     real script treats that as a skip, never a rerun). Exits 1 with
-#     an "unknown flag" message if the invocation still carries the
-#     unsupported `--allow-escape-sequences` flag `gh api` never
-#     actually accepted -- this stub deliberately does NOT accept that
-#     flag, so a regression reintroducing it fails every log-fetch
-#     call instead of silently passing.
+#     $GH_STUB_LOG_FIXTURE_JOB_<id> when that exact per-job variable is
+#     set (so a test can give two check-run records sharing one run id
+#     but different job ids genuinely different log content -- e.g. an
+#     earlier attempt's expired/non-matching log alongside a later
+#     attempt's eligible one), else falls back to $GH_STUB_LOG_FIXTURE
+#     unchanged (every existing test that never sets the per-job
+#     variable keeps serving one fixture for every job id). Exits 1
+#     with a 404-shaped stderr message when $GH_STUB_LOG_FETCH_FAIL=1
+#     (simulating a real log-fetch failure -- expired logs, API error
+#     -- so a test can assert the real script treats that as a skip,
+#     never a rerun). Exits 1 with an "unknown flag" message if the
+#     invocation still carries the unsupported `--allow-escape-
+#     sequences` flag `gh api` never actually accepted -- this stub
+#     deliberately does NOT accept that flag, so a regression
+#     reintroducing it fails every log-fetch call instead of silently
+#     passing.
 #   - `gh run rerun <run-id>` -> pure recording no-op, exit 0 (or exit 1
 #     with no side effect when $GH_STUB_RERUN_FAIL=1, simulating the
 #     rerun call itself failing to start). Never talks to GitHub, so
@@ -184,7 +191,13 @@ if [ "${1:-}" = 'api' ]; then
       echo 'gh: Not Found (HTTP 404)' >&2
       exit 1
     fi
-    cat "${GH_STUB_LOG_FIXTURE:?GH_STUB_LOG_FIXTURE must be set}"
+    job_id=$(printf '%s\n' "$*" | grep -oE '/actions/jobs/[0-9]+' | grep -oE '[0-9]+')
+    job_var="GH_STUB_LOG_FIXTURE_JOB_${job_id}"
+    if [ -n "${!job_var:-}" ]; then
+      cat "${!job_var}"
+    else
+      cat "${GH_STUB_LOG_FIXTURE:?GH_STUB_LOG_FIXTURE must be set}"
+    fi
     exit 0
   fi
 fi

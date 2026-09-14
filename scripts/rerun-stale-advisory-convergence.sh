@@ -15,16 +15,19 @@
 # GitHub Actions app (`gh api --paginate --slurp
 # repos/{owner}/{repo}/commits/{sha}/check-runs?...&filter=all`; `gh
 # api`'s own auto-templated `{owner}`/`{repo}` placeholders, same
-# convention as idd-merge.instructions.md F4), then deduplicates the
-# candidates by the underlying workflow *run* id parsed from each
-# one's own `details_url` before processing any of them: `filter=all`
-# can return more than one check-run record for different attempts of
-# the very same run, and processing each record independently could
-# rerun the same run id twice -- the first rerun succeeding and a
-# later duplicate then rerunning that now-successful run again,
-# possibly failing it and making the script exit 1 despite already
-# remediating the PR. Only the first candidate seen for a given run id
-# is kept. For each remaining `failure`/`cancelled` instance:
+# convention as idd-merge.instructions.md F4). `filter=all` can return
+# more than one check-run record for different attempts of the very
+# same underlying workflow run (each attempt has its own job id/log),
+# so every record is still inspected independently on its own merits
+# (own log, own reason match) -- but only the first record that
+# actually becomes eligible for a rerun ever triggers one: deduplication
+# happens immediately before the mutation (step 6 below), by workflow
+# *run* id, not by discarding un-inspected records upfront. Discarding
+# early would risk suppressing a genuinely eligible later record (an
+# expired or non-matching log on an earlier attempt) behind an
+# ineligible earlier one; deduplicating only at the mutation point
+# still guarantees the same run id is never rerun twice in one
+# invocation. For each `failure`/`cancelled` instance:
 #
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
@@ -156,7 +159,10 @@
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
-# `SKIPPED=<job-id>:<reason>` or `ACTED=<run-id>:<conclusion-or-
+# `SKIPPED=<job-id>:<reason>` (reasons include `invalid-run-id`,
+# `wrong-workflow`, `log-fetch-failed`, `reason-not-matched`,
+# `stale-head-mismatch`, `no-covering-review`, `duplicate-run-id`, and
+# `head-changed`) or `ACTED=<run-id>:<conclusion-or-
 # timeout-or-rerun-failed-or-attempt-lookup-failed-or-stale-success>`
 # line per candidate, and a final `RERUN_COUNT=<n>` line. Exits 0 when
 # every candidate was a no-op or skip, or every attempted rerun
@@ -203,11 +209,33 @@ usage() {
 
 # run_id_from_details_url -- extracts the workflow *run* id from a
 # check-run's details_url
-# (https://…/actions/runs/<run-id>/job/<job-id>[...]). Distinct from
-# the check-run's own `id` field (the *job* id), which is used
-# separately for the per-attempt log fetch.
+# (https://…/actions/runs/<run-id>/job/<job-id>[...]), or prints
+# nothing (empty) when the URL does not carry that exact shape.
+# Distinct from the check-run's own `id` field (the *job* id), which is
+# used separately for the per-attempt log fetch.
+#
+# Fails closed rather than falling through to the unmatched input: a
+# check-run's `details_url` is set by whatever created it via the
+# Checks API, reachable from a workflow run using `GITHUB_TOKEN` --
+# including one triggered from a PR branch, and sharing this script's
+# own `GITHUB_ACTIONS_APP_ID` pre-filter -- so it is attacker-
+# influenced, not a trusted GitHub-internal value. A plain `sed`
+# substitution with no match guarantee passes non-matching input
+# straight through unchanged; a crafted `details_url` would then flow
+# as `run_id` into `gh api "repos/{owner}/{repo}/actions/runs/${run_id}"`
+# and `gh run rerun "$run_id"`, both of which accept either a bare id
+# or a full run URL, so an unvalidated non-numeric value could redirect
+# either call to an arbitrary run in an arbitrary repository under this
+# invocation's own authenticated credentials. Validating the result
+# against `^[0-9]+$` before ever returning it closes that off; callers
+# must treat an empty result as an invalid candidate and skip it.
 run_id_from_details_url() {
-  printf '%s' "$1" | sed -E 's#.*/actions/runs/([0-9]+)/job/[0-9]+.*#\1#'
+  local url="$1" run_id
+  run_id=$(printf '%s' "$url" | sed -E 's#.*/actions/runs/([0-9]+)/job/[0-9]+.*#\1#')
+  case "$run_id" in
+    '' | *[!0-9]*) return 0 ;;
+  esac
+  printf '%s' "$run_id"
 }
 
 # parse_reason -- prints "<old-sha> <new-sha>" (space-separated) to
@@ -505,40 +533,18 @@ main() {
     '[.[].check_runs[] | select((.conclusion == "failure" or .conclusion == "cancelled") and .app.id == $app_id)]')
   candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
 
-  # Deduplicates candidates by the workflow *run* id parsed from each
-  # one's own details_url -- see the header comment for why:
-  # `filter=all` can surface more than one check-run record for
-  # different attempts of the same underlying run, and this repository
-  # has no bash 4+ guarantee (macOS ships bash 3.2, no associative
-  # arrays), so membership is tracked with a plain space-padded string
-  # rather than `declare -A`. Only the first candidate seen for a given
-  # run id survives; a duplicate record for a run id already kept is
-  # dropped before any candidate is ever acted on.
-  if [ "$candidate_count" -gt 0 ]; then
-    local deduped_json='[]' seen_run_ids='' dedup_idx=0
-    while [ "$dedup_idx" -lt "$candidate_count" ]; do
-      local dedup_item dedup_run_id
-      dedup_item=$(printf '%s' "$candidates_json" | jq -c ".[$dedup_idx]")
-      dedup_run_id=$(run_id_from_details_url "$(printf '%s' "$dedup_item" | jq -r '.details_url')")
-      case " $seen_run_ids " in
-        *" $dedup_run_id "*) ;;
-        *)
-          seen_run_ids="$seen_run_ids $dedup_run_id"
-          deduped_json=$(printf '%s' "$deduped_json" | jq -c --argjson item "$dedup_item" '. + [$item]')
-          ;;
-      esac
-      dedup_idx=$((dedup_idx + 1))
-    done
-    candidates_json="$deduped_json"
-    candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
-  fi
-
   if [ "$candidate_count" -eq 0 ]; then
     echo "nothing to do: no stale ${CHECK_NAME} instance found for PR #${pr} (head ${head_sha})"
     echo 'RERUN_COUNT=0'
     exit 0
   fi
 
+  # Tracks which workflow run ids this invocation has already decided
+  # to act on (see rerun_and_wait's own dedup gate below) -- a plain
+  # space-padded string rather than `declare -A`, since this repository
+  # has no bash 4+ guarantee (macOS ships bash 3.2, no associative
+  # arrays).
+  local acted_run_ids=''
   local rerun_count=0 overall_exit=0 idx=0
   while [ "$idx" -lt "$candidate_count" ]; do
     local item job_id details_url run_id log
@@ -546,6 +552,12 @@ main() {
     job_id=$(printf '%s' "$item" | jq -r '.id')
     details_url=$(printf '%s' "$item" | jq -r '.details_url')
     run_id=$(run_id_from_details_url "$details_url")
+
+    if [ -z "$run_id" ]; then
+      echo "SKIPPED=${job_id}:invalid-run-id"
+      idx=$((idx + 1))
+      continue
+    fi
 
     if ! is_advisory_convergence_workflow_run "$run_id" "$pr"; then
       echo "SKIPPED=${job_id}:wrong-workflow"
@@ -581,6 +593,23 @@ main() {
       idx=$((idx + 1))
       continue
     fi
+
+    # Deduplicates by workflow run id right here, immediately before
+    # the mutation -- not earlier in the loop -- so a run id already
+    # acted on by an earlier candidate record (see the header comment:
+    # `filter=all` can surface more than one check-run record for
+    # different attempts of the same run) never triggers a second
+    # `rerun_and_wait` call, while every record still independently
+    # reaches its own log-fetch/reason-match/covering-review checks
+    # above on its own merits.
+    case " $acted_run_ids " in
+      *" $run_id "*)
+        echo "SKIPPED=${job_id}:duplicate-run-id"
+        idx=$((idx + 1))
+        continue
+        ;;
+    esac
+    acted_run_ids="$acted_run_ids $run_id"
 
     # The live-head recheck immediately before authorizing a rerun now
     # runs *inside* rerun_and_wait, immediately before each `gh run
