@@ -5,9 +5,21 @@
 # the managed-path set from this single source and cannot desync.
 #
 # Exposes: $sep, Split-PathEntries, Normalize-PathEntry,
-# Test-IsManagedPath, Get-RegistryUserPath, Set-RegistryUserPath, and
-# $desiredManagedPaths (deduplicated managed directories that exist
-# on disk).
+# Get-WinGetLinksPath, Test-IsManagedPath, Merge-ManagedPathEntries,
+# Get-RegistryUserPath, Set-RegistryUserPath, and $desiredManagedPaths
+# (deduplicated managed directories that exist on disk).
+#
+# Reconciliation strategy (both conf.d/01-path.ps1's session PATH and
+# run_onchange_after_35-register-path.ps1.tmpl's persisted registry
+# PATH use Merge-ManagedPathEntries for this): minimal-precedence, not
+# always-front. An already-present managed entry keeps its existing
+# position; a missing one is appended at the end, after the user's own
+# entries -- never force-prepended ahead of them -- except that a
+# missing entry ordered ahead of WinGet\Links in $desiredManagedPaths
+# is inserted immediately before WinGet\Links's position (never at the
+# very end), even when WinGet\Links is already present. See
+# Merge-ManagedPathEntries's own comment for why this one anchor gets
+# special-cased rather than falling out of plain append order.
 #
 # WinGet declared-package directories (data.wingetUserPath.packages,
 # see docs/winget-user-path.md) are discovered via the deployed
@@ -48,6 +60,14 @@ function Normalize-PathEntry {
   return $normalized.ToLowerInvariant()
 }
 
+function Get-WinGetLinksPath {
+  if ([string]::IsNullOrEmpty($env:LOCALAPPDATA)) {
+    return $null
+  }
+
+  return (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+}
+
 function Get-StaticManagedPaths {
   $paths = @()
 
@@ -60,7 +80,7 @@ function Get-StaticManagedPaths {
     # (ERROR_UNTRUSTED_MOUNT_POINT). PATH resolution has no fallthrough
     # to a later working entry, so the working mise shim must win.
     $paths += (Join-Path (Join-Path $env:LOCALAPPDATA 'mise') 'shims')
-    $paths += (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+    $paths += (Get-WinGetLinksPath)
     $paths += (Join-Path $env:LOCALAPPDATA 'Zellij')
   }
 
@@ -285,4 +305,108 @@ function Set-RegistryUserPath {
   }
 
   [Environment]::SetEnvironmentVariable('PATH', $Value, 'User')
+}
+
+# Merge-ManagedPathEntries -- reconciles a PATH-like entry list against
+# the desired managed-path set using a minimal-precedence strategy: an
+# already-present managed entry keeps its existing position (never
+# moved or re-inserted), a missing managed entry is appended at the
+# end (never force-prepended ahead of the user's own entries), and a
+# managed entry that Test-IsManagedPath still recognizes but that is
+# no longer in $DesiredManagedPaths -- a stale wildcard-resolved winget
+# package version, a since-disabled declared package, or a plain
+# duplicate of an entry already kept -- is dropped. An entry
+# Test-IsManagedPath does not recognize at all is never touched or
+# reordered, regardless of its position.
+#
+# The one documented ordering exception: any $DesiredManagedPaths entry
+# ordered ahead of WinGet\Links (mise\shims per
+# docs/setup-windows-boundary.md, or a winget-declared package bin
+# directory per docs/winget-user-path.md) -- needed because WinGet\Links
+# entries are NTFS reparse points an inbound SSH session's network logon
+# token cannot traverse (ERROR_UNTRUSTED_MOUNT_POINT), so a same-named
+# tool duplicated across both must resolve via the working real
+# directory, not the broken symlink -- is inserted immediately before
+# WinGet\Links's position when missing, even if WinGet\Links is already
+# present. This is the one deliberately WinGet\Links-anchored exception
+# to "never move what is already placed": WinGet\Links itself never
+# moves, but a still-missing entry that must precede it is inserted
+# there rather than appended at the very end. No other
+# $DesiredManagedPaths entry gets this treatment -- an already-present
+# WinGet\Links keeps its position relative to every unrelated (user)
+# entry unchanged, and a missing entry ordered AFTER WinGet\Links in
+# $DesiredManagedPaths is still plain-appended at the end like any other.
+function Merge-ManagedPathEntries {
+  param(
+    [string[]]$CurrentEntries,
+    [string[]]$DesiredManagedPaths
+  )
+
+  $desiredIndex = @{}
+  for ($i = 0; $i -lt $DesiredManagedPaths.Count; $i++) {
+    $normalized = Normalize-PathEntry $DesiredManagedPaths[$i]
+    if (-not $desiredIndex.ContainsKey($normalized)) {
+      $desiredIndex[$normalized] = $i
+    }
+  }
+
+  $winGetLinksNormalized = $null
+  $winGetLinksDesiredIndex = $null
+  $winGetLinksPath = Get-WinGetLinksPath
+  if (-not [string]::IsNullOrEmpty($winGetLinksPath)) {
+    $winGetLinksNormalized = Normalize-PathEntry $winGetLinksPath
+    if ($desiredIndex.ContainsKey($winGetLinksNormalized)) {
+      $winGetLinksDesiredIndex = $desiredIndex[$winGetLinksNormalized]
+    }
+  }
+
+  $result = @()
+  $emitted = @{}
+  foreach ($entry in @($CurrentEntries)) {
+    if (Test-IsManagedPath $entry) {
+      $normalized = Normalize-PathEntry $entry
+      if ($desiredIndex.ContainsKey($normalized) -and -not $emitted.ContainsKey($normalized)) {
+        $result += $entry
+        $emitted[$normalized] = $true
+      }
+      continue
+    }
+
+    $result += $entry
+  }
+
+  foreach ($dir in @($DesiredManagedPaths)) {
+    $normalized = Normalize-PathEntry $dir
+    if ($emitted.ContainsKey($normalized)) {
+      continue
+    }
+
+    $insertIndex = $result.Count
+    if ($null -ne $winGetLinksDesiredIndex -and $desiredIndex[$normalized] -lt $winGetLinksDesiredIndex) {
+      for ($j = 0; $j -lt $result.Count; $j++) {
+        if ((Normalize-PathEntry $result[$j]) -eq $winGetLinksNormalized) {
+          $insertIndex = $j
+          break
+        }
+      }
+    }
+
+    if ($insertIndex -ge $result.Count) {
+      $result += $dir
+    } else {
+      # @() must wrap the WHOLE if/else, not sit inside each branch: a
+      # bare `if (...) { @(...) } else { @() }` still collapses a
+      # one-element array to a scalar when captured, because PowerShell
+      # unrolls a statement's own output stream before the assignment
+      # -- the same unrolling a function's `return` does. Wrapping the
+      # entire statement is what forces array semantics regardless of
+      # element count.
+      $prefix = @(if ($insertIndex -gt 0) { $result[0..($insertIndex - 1)] } else { @() })
+      $suffix = @($result[$insertIndex..($result.Count - 1)])
+      $result = $prefix + @($dir) + $suffix
+    }
+    $emitted[$normalized] = $true
+  }
+
+  return $result
 }

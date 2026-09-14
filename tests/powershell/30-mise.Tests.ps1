@@ -94,6 +94,21 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\WingetMise -ErrorAction SilentlyContinue
     Remove-Item Function:\WingetMiseA -ErrorAction SilentlyContinue
     Remove-Item Function:\WingetMiseB -ErrorAction SilentlyContinue
+    # 30-mise.ps1's Windows branch now dot-sources lib/managed-paths.ps1
+    # (Split-PathEntries / Normalize-PathEntry), same cleanup as
+    # 01-path.Tests.ps1 / 35-register-path.Tests.ps1 so these don't leak
+    # into later test files.
+    Remove-Item Function:\Split-PathEntries -ErrorAction SilentlyContinue
+    Remove-Item Function:\Normalize-PathEntry -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Resolve-WingetUserPathBinDirectory -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
   }
 
   It 'prefers the PATH command before the Windows fallback' {
@@ -127,8 +142,13 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'PathMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    # Windows: shims dir prepended to PATH (not activate)
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # The shims dir was never present in the real host $env:PATH this
+    # test started from, so the fallback merge (Merge-ManagedPathEntries)
+    # placed it -- position is not what this test is about, since the
+    # merge can also append another existing-but-absent managed dir
+    # (e.g. HomeLocalBin, created above as the official-fallback
+    # mise.exe location) alongside it.
+    @($env:PATH -split [IO.Path]::PathSeparator) | Should -Contain $script:ShimsDir
   }
 
   It 'uses the official Windows fallback before winget package bins' {
@@ -169,7 +189,13 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'FallbackMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # The shims dir was never present in the real host $env:PATH this
+    # test started from, so the fallback merge (Merge-ManagedPathEntries)
+    # placed it -- position is not what this test is about, since the
+    # merge can also append another existing-but-absent managed dir
+    # (e.g. HomeLocalBin, created above as the official-fallback
+    # mise.exe location) alongside it.
+    @($env:PATH -split [IO.Path]::PathSeparator) | Should -Contain $script:ShimsDir
   }
 
   It 'uses the winget package-bin executable when other Windows paths are unavailable' {
@@ -218,7 +244,13 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'WingetMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # The shims dir was never present in the real host $env:PATH this
+    # test started from, so the fallback merge (Merge-ManagedPathEntries)
+    # placed it -- position is not what this test is about, since the
+    # merge can also append another existing-but-absent managed dir
+    # (e.g. HomeLocalBin, created above as the official-fallback
+    # mise.exe location) alongside it.
+    @($env:PATH -split [IO.Path]::PathSeparator) | Should -Contain $script:ShimsDir
   }
 
   It 'de-duplicates winget package-bin candidates that resolve to one executable' {
@@ -279,7 +311,13 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'WingetMiseA'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # The shims dir was never present in the real host $env:PATH this
+    # test started from, so the fallback merge (Merge-ManagedPathEntries)
+    # placed it -- position is not what this test is about, since the
+    # merge can also append another existing-but-absent managed dir
+    # (e.g. HomeLocalBin, created above as the official-fallback
+    # mise.exe location) alongside it.
+    @($env:PATH -split [IO.Path]::PathSeparator) | Should -Contain $script:ShimsDir
   }
 
   # PS5.1: $script:MiseCalls stays empty here even though the reshim call
@@ -299,6 +337,78 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'reshim' }).Count |
       Should -Be 1
+  }
+
+  # Codex P2 regression guard (review-fix round 1 on PR #438): a
+  # freshly-created shims dir must not simply be appended after an
+  # already-present WinGet\Links -- the fallback branch must place it
+  # via the same WinGet\Links-anchored precedence 01-path.ps1 itself
+  # applies. Unlike the reshim test above, this asserts on the mocked
+  # function's directory-creation side effect and the resulting
+  # $env:PATH order, not $script:MiseCalls -- so the PS5.1
+  # scope-capture quirk that empties $script:MiseCalls does not affect
+  # it, and it runs on PS5.1 too (this fallback merge must stay
+  # PS5.1-compatible).
+  It 'places a freshly-created shims dir ahead of an already-present WinGet\Links' {
+    New-TestMiseConfigs
+
+    $winGetLinksDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+    New-Item -ItemType Directory -Path $winGetLinksDir -Force | Out-Null
+    $env:PATH = @(
+      'TestDrive:\unrelated-a'
+      $winGetLinksDir
+      'TestDrive:\unrelated-b'
+    ) -join [IO.Path]::PathSeparator
+
+    # Remove the pre-created shims dir so the reshim branch fires, and
+    # make the mocked `mise reshim` invocation actually create it --
+    # mirroring the real mise CLI's side effect -- so the merge below
+    # has something new to place.
+    Remove-Item -LiteralPath $script:ShimsDir -Recurse -Force
+
+    Set-Item -Path 'Function:\PathMise' -Value {
+      param([Parameter(ValueFromRemainingArguments = $true)][object[]] $Arguments)
+
+      $script:MiseCalls += [pscustomobject]@{
+        Command   = 'PathMise'
+        Arguments = [string[]]$Arguments
+      }
+
+      if ($Arguments[0] -eq 'activate') { return '$null' }
+      if ($Arguments[0] -eq 'reshim') {
+        New-Item -ItemType Directory -Path $script:ShimsDir -Force | Out-Null
+      }
+    }
+    $pathCommand = Microsoft.PowerShell.Core\Get-Command PathMise
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+
+    . $script:Subject
+
+    $entries = @($env:PATH -split [IO.Path]::PathSeparator)
+    $entries | Should -Contain $script:ShimsDir
+    ([array]::IndexOf($entries, $script:ShimsDir)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $winGetLinksDir))
+  }
+
+  It 'is a no-op when mise\shims is already present anywhere in PATH' {
+    New-TestMiseConfigs
+
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+
+    # Simulate 01-path.ps1 having already placed the shims dir at a
+    # user-chosen, non-first position -- the common case, since it
+    # runs first at conf.d load order (01- before 30-).
+    $env:PATH = @(
+      'TestDrive:\unrelated-a'
+      $script:ShimsDir
+      'TestDrive:\unrelated-b'
+    ) -join [IO.Path]::PathSeparator
+    $beforePath = $env:PATH
+
+    . $script:Subject
+
+    $env:PATH | Should -Be $beforePath
   }
 
 }

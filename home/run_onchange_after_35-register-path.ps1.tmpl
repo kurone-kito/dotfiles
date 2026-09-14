@@ -1,8 +1,14 @@
 # chezmoi:template:left-delimiter=<% right-delimiter=%>
 <%- if eq .chezmoi.os "windows" %>
-# Register tool directories in User PATH (Windows registry).
-# Re-runs when the managed-paths list or the winget declaration
-# changes (hashes below).
+# Register tool directories in User PATH (Windows registry), using the
+# same minimal-precedence reconciliation strategy as
+# conf.d/01-path.ps1 (Merge-ManagedPathEntries, lib/managed-paths.ps1):
+# an already-present managed entry keeps its existing registry
+# position; a missing one is appended at the end -- except a missing
+# entry ordered ahead of WinGet\Links (see managed-paths.ps1's own
+# comment) is inserted immediately before WinGet\Links's position
+# instead, even when WinGet\Links is already present. Re-runs when the
+# managed-paths list or the winget declaration changes (hashes below).
 #
 # hash: <% include "dot_config/powershell/lib/managed-paths.ps1" | sha256sum %>
 # winget user path packages hash: <% (dig "wingetUserPath" "packages" dict .) | toJson | sha256sum %>
@@ -15,14 +21,7 @@
 <% include "dot_config/powershell/lib/managed-paths.ps1" %>
 
 $currentEntries = @(Split-PathEntries (Get-RegistryUserPath))
-$remainingEntries = @()
-foreach ($entry in $currentEntries) {
-  if (-not (Test-IsManagedPath $entry)) {
-    $remainingEntries += $entry
-  }
-}
-
-$newEntries = @($desiredManagedPaths + $remainingEntries)
+$newEntries = @(Merge-ManagedPathEntries -CurrentEntries $currentEntries -DesiredManagedPaths $desiredManagedPaths)
 $currentNormalized = @($currentEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
 $newNormalized = @($newEntries | ForEach-Object { Normalize-PathEntry $_ }) -join $sep
 
