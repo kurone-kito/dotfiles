@@ -94,6 +94,21 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     Remove-Item Function:\WingetMise -ErrorAction SilentlyContinue
     Remove-Item Function:\WingetMiseA -ErrorAction SilentlyContinue
     Remove-Item Function:\WingetMiseB -ErrorAction SilentlyContinue
+    # 30-mise.ps1's Windows branch now dot-sources lib/managed-paths.ps1
+    # (Split-PathEntries / Normalize-PathEntry), same cleanup as
+    # 01-path.Tests.ps1 / 35-register-path.Tests.ps1 so these don't leak
+    # into later test files.
+    Remove-Item Function:\Split-PathEntries -ErrorAction SilentlyContinue
+    Remove-Item Function:\Normalize-PathEntry -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-StaticManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManifestPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathDeclaredPackages -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetPackagesRoot -ErrorAction SilentlyContinue
+    Remove-Item Function:\Resolve-WingetUserPathBinDirectory -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-WingetUserPathManagedPaths -ErrorAction SilentlyContinue
+    Remove-Item Function:\Test-IsManagedPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Get-RegistryUserPath -ErrorAction SilentlyContinue
+    Remove-Item Function:\Set-RegistryUserPath -ErrorAction SilentlyContinue
   }
 
   It 'prefers the PATH command before the Windows fallback' {
@@ -128,7 +143,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
     # Windows: shims dir prepended to PATH (not activate)
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # Append-only now (01-path.ps1's own "never move what's already
+    # placed" principle, issue #434): the shims dir was never present
+    # in the real host $env:PATH this test started from, so it lands
+    # at the end, not the front.
+    $env:PATH.Split([IO.Path]::PathSeparator)[-1] | Should -Be $script:ShimsDir
   }
 
   It 'uses the official Windows fallback before winget package bins' {
@@ -169,7 +188,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'FallbackMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # Append-only now (01-path.ps1's own "never move what's already
+    # placed" principle, issue #434): the shims dir was never present
+    # in the real host $env:PATH this test started from, so it lands
+    # at the end, not the front.
+    $env:PATH.Split([IO.Path]::PathSeparator)[-1] | Should -Be $script:ShimsDir
   }
 
   It 'uses the winget package-bin executable when other Windows paths are unavailable' {
@@ -218,7 +241,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'WingetMise'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # Append-only now (01-path.ps1's own "never move what's already
+    # placed" principle, issue #434): the shims dir was never present
+    # in the real host $env:PATH this test started from, so it lands
+    # at the end, not the front.
+    $env:PATH.Split([IO.Path]::PathSeparator)[-1] | Should -Be $script:ShimsDir
   }
 
   It 'de-duplicates winget package-bin candidates that resolve to one executable' {
@@ -279,7 +306,11 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
     $usedCommands[0] | Should -Be 'WingetMiseA'
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'trust' }).Count |
       Should -Be 2
-    $env:PATH.Split([IO.Path]::PathSeparator)[0] | Should -Be $script:ShimsDir
+    # Append-only now (01-path.ps1's own "never move what's already
+    # placed" principle, issue #434): the shims dir was never present
+    # in the real host $env:PATH this test started from, so it lands
+    # at the end, not the front.
+    $env:PATH.Split([IO.Path]::PathSeparator)[-1] | Should -Be $script:ShimsDir
   }
 
   # PS5.1: $script:MiseCalls stays empty here even though the reshim call
@@ -299,6 +330,27 @@ Describe '30-mise' -Skip:($IsWindows -eq $false) {
 
     ($script:MiseCalls | Where-Object { $_.Arguments[0] -eq 'reshim' }).Count |
       Should -Be 1
+  }
+
+  It 'is a no-op when mise\shims is already present anywhere in PATH' {
+    New-TestMiseConfigs
+
+    $pathCommand = New-TestMiseCommand -Name 'PathMise'
+    Mock Get-Command { $pathCommand } -ParameterFilter { $Name -eq 'mise' }
+
+    # Simulate 01-path.ps1 having already placed the shims dir at a
+    # user-chosen, non-first position -- the common case, since it
+    # runs first at conf.d load order (01- before 30-).
+    $env:PATH = @(
+      'TestDrive:\unrelated-a'
+      $script:ShimsDir
+      'TestDrive:\unrelated-b'
+    ) -join [IO.Path]::PathSeparator
+    $beforePath = $env:PATH
+
+    . $script:Subject
+
+    $env:PATH | Should -Be $beforePath
   }
 
 }

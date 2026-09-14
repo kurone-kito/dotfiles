@@ -113,23 +113,49 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $script:BaseWingetManifestPath = $null
   }
 
-  It 'reconciles managed entries and removes stale winget package paths' {
+  It 'reconciles managed entries with minimal precedence, dropping stale winget package paths' {
+    # WinGetLinks (already present, kept exactly where it was) is
+    # never moved to the front; StaleMiseBin (managed but no longer
+    # desired -- its directory does not exist on disk) is dropped;
+    # every missing managed entry (CurrentMiseBin, MiseShims, Zellij,
+    # GnuWin32, HomeLocalBin, HomeCargoBin) is appended at the end, in
+    # $desiredManagedPaths order, after the user's own entries.
     . $script:Subject
 
     $env:PATH | Should -Be (@(
+      $script:Paths.UnrelatedA
+      $script:Paths.WinGetLinks
+      $script:Paths.UnrelatedB
       $script:Paths.CurrentMiseBin
       $script:Paths.MiseShims
-      $script:Paths.WinGetLinks
       $script:Paths.Zellij
       $script:Paths.GnuWin32
       $script:Paths.HomeLocalBin
       $script:Paths.HomeCargoBin
-      $script:Paths.UnrelatedA
-      $script:Paths.UnrelatedB
     ) -join ';')
   }
 
-  It 'orders mise shims ahead of WinGet\Links' {
+  It 'leaves an already-present WinGet\Links in place even when mise\shims is newly appended after it' {
+    # The mise\shims-before-WinGet\Links ordering guarantee is scoped
+    # (per the issue's acceptance criteria) to the case where BOTH are
+    # newly added in the same reconcile pass. Here WinGetLinks is
+    # already present in the seed PATH -- rule 1 (never move what is
+    # already placed) takes priority, so it keeps its original
+    # position even though mise\shims (missing here) ends up after it.
+    . $script:Subject
+
+    $entries = @($env:PATH -split ';')
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+    ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
+      Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+  }
+
+  It 'orders mise shims ahead of WinGet\Links when both are newly added together' {
+    $env:PATH = @(
+      $script:Paths.UnrelatedA
+      $script:Paths.UnrelatedB
+    ) -join ';'
+
     . $script:Subject
 
     $entries = @($env:PATH -split ';')
@@ -137,6 +163,32 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     $entries | Should -Contain $script:Paths.WinGetLinks
     ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
       Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+  }
+
+  It 'keeps an already-present managed entry at its original non-first position' {
+    $env:PATH = @(
+      $script:Paths.UnrelatedA
+      $script:Paths.WinGetLinks
+      $script:Paths.UnrelatedB
+    ) -join ';'
+
+    . $script:Subject
+
+    $entries = @($env:PATH -split ';')
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+  }
+
+  It 'appends a newly-added managed entry after all pre-existing user entries' {
+    $env:PATH = @(
+      $script:Paths.UnrelatedA
+      $script:Paths.UnrelatedB
+    ) -join ';'
+
+    . $script:Subject
+
+    $entries = @($env:PATH -split ';')
+    ([array]::IndexOf($entries, $script:Paths.Zellij)) |
+      Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.UnrelatedB))
   }
 
   It 'is idempotent across repeated profile loads' {
@@ -236,7 +288,13 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       }
     }
 
-    It 'adds a declared package real bin directory ahead of WinGet\Links' {
+    It 'appends a newly-discovered declared package bin directory (no precedence over an already-present WinGet\Links)' {
+      # The mise\shims-before-WinGet\Links ordering guarantee is scoped
+      # to that specific pair, per the issue's acceptance criteria --
+      # no other declared package gets precedence over an
+      # already-present WinGet\Links. WinGetLinks is already present
+      # in the outer BeforeEach's seed PATH, so it keeps its position
+      # and the newly-discovered binDir is appended after it.
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
       New-Item -ItemType Directory -Path $binDir -Force | Out-Null
@@ -248,7 +306,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries = @($env:PATH -split ';')
       $entries | Should -Contain $binDir
       ([array]::IndexOf($entries, $binDir)) |
-        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+        Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
     }
 
     It 'removes a stale sibling directory of a declared package while keeping the current one' {
@@ -419,14 +477,14 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       . $script:Subject
 
       $env:PATH | Should -Be (@(
-        $script:Paths.MiseShims
+        $script:Paths.UnrelatedA
         $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin
         $script:Paths.HomeCargoBin
-        $script:Paths.UnrelatedA
-        $script:Paths.UnrelatedB
       ) -join ';')
     }
 
@@ -445,14 +503,14 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       . $script:Subject
 
       $env:PATH | Should -Be (@(
-        $script:Paths.MiseShims
+        $script:Paths.UnrelatedA
         $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin
         $script:Paths.HomeCargoBin
-        $script:Paths.UnrelatedA
-        $script:Paths.UnrelatedB
       ) -join ';')
     }
   }

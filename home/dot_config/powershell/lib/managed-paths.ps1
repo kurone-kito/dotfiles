@@ -5,9 +5,18 @@
 # the managed-path set from this single source and cannot desync.
 #
 # Exposes: $sep, Split-PathEntries, Normalize-PathEntry,
-# Test-IsManagedPath, Get-RegistryUserPath, Set-RegistryUserPath, and
-# $desiredManagedPaths (deduplicated managed directories that exist
-# on disk).
+# Test-IsManagedPath, Merge-ManagedPathEntries, Get-RegistryUserPath,
+# Set-RegistryUserPath, and $desiredManagedPaths (deduplicated managed
+# directories that exist on disk).
+#
+# Reconciliation strategy (both conf.d/01-path.ps1's session PATH and
+# run_onchange_after_35-register-path.ps1.tmpl's persisted registry
+# PATH use Merge-ManagedPathEntries for this): minimal-precedence, not
+# always-front. An already-present managed entry keeps its existing
+# position; a missing one is appended at the end, after the user's own
+# entries -- never force-prepended ahead of them. See
+# Merge-ManagedPathEntries's own comment for the one documented
+# ordering exception (mise\shims before WinGet\Links).
 #
 # WinGet declared-package directories (data.wingetUserPath.packages,
 # see docs/winget-user-path.md) are discovered via the deployed
@@ -285,4 +294,68 @@ function Set-RegistryUserPath {
   }
 
   [Environment]::SetEnvironmentVariable('PATH', $Value, 'User')
+}
+
+# Merge-ManagedPathEntries -- reconciles a PATH-like entry list against
+# the desired managed-path set using a minimal-precedence strategy: an
+# already-present managed entry keeps its existing position (never
+# moved or re-inserted), a missing managed entry is appended at the
+# end (never force-prepended ahead of the user's own entries), and a
+# managed entry that Test-IsManagedPath still recognizes but that is
+# no longer in $DesiredManagedPaths -- a stale wildcard-resolved winget
+# package version, a since-disabled declared package, or a plain
+# duplicate of an entry already kept -- is dropped. An entry
+# Test-IsManagedPath does not recognize at all is never touched or
+# reordered, regardless of its position.
+#
+# The one documented ordering exception --
+# docs/setup-windows-boundary.md's mise\shims-before-WinGet\Links
+# constraint, needed because WinGet\Links entries are NTFS reparse
+# points an inbound SSH session's network logon token cannot traverse
+# (ERROR_UNTRUSTED_MOUNT_POINT), so a same-named tool duplicated across
+# both must resolve via the working mise shim -- falls out of this for
+# free rather than needing special-case code: Get-StaticManagedPaths
+# already places mise\shims ahead of WinGet\Links in
+# $DesiredManagedPaths, and missing entries are appended in
+# $DesiredManagedPaths's own order below, so two entries that are BOTH
+# missing keep that relative order in the result. This is guaranteed
+# only for that case: if one of the two is already present elsewhere
+# in $CurrentEntries, the "never move what is already placed" rule
+# above takes priority and no repositioning relative to the other is
+# attempted.
+function Merge-ManagedPathEntries {
+  param(
+    [string[]]$CurrentEntries,
+    [string[]]$DesiredManagedPaths
+  )
+
+  $desiredLookup = @{}
+  foreach ($dir in @($DesiredManagedPaths)) {
+    $desiredLookup[(Normalize-PathEntry $dir)] = $true
+  }
+
+  $result = @()
+  $emitted = @{}
+  foreach ($entry in @($CurrentEntries)) {
+    if (Test-IsManagedPath $entry) {
+      $normalized = Normalize-PathEntry $entry
+      if ($desiredLookup.ContainsKey($normalized) -and -not $emitted.ContainsKey($normalized)) {
+        $result += $entry
+        $emitted[$normalized] = $true
+      }
+      continue
+    }
+
+    $result += $entry
+  }
+
+  foreach ($dir in @($DesiredManagedPaths)) {
+    $normalized = Normalize-PathEntry $dir
+    if (-not $emitted.ContainsKey($normalized)) {
+      $result += $dir
+      $emitted[$normalized] = $true
+    }
+  }
+
+  return $result
 }

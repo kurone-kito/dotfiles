@@ -1,9 +1,16 @@
-# Prepend known tool directories to PATH when they exist on disk.
-# Session-level fallback — the primary mechanism is the chezmoi
-# run_onchange script (35-register-path) which persists these in
-# the Windows User PATH registry. This reconciles the repo-managed
-# subset so profile reloads do not accumulate stale or duplicate
-# entries while preserving unrelated PATH entries.
+# Reconciles the repo-managed subset of PATH using a minimal-precedence
+# strategy (Merge-ManagedPathEntries, lib/managed-paths.ps1): an
+# already-present managed entry keeps its existing position; a missing
+# one is appended at the end, after the user's own existing entries
+# (never force-prepended ahead of them) — except the one documented
+# mise\shims-before-WinGet\Links ordering constraint (see
+# managed-paths.ps1's own comment). Session-level fallback — the
+# primary mechanism is the chezmoi run_onchange script
+# (35-register-path) which persists these in the Windows User PATH
+# registry. This reconciles the repo-managed subset so profile reloads
+# do not accumulate stale or duplicate entries while preserving the
+# user's own PATH ordering, including entries set via the user's own
+# `setx PATH ...` invocation.
 
 # Windows-only: manage user-scoped tool directories here.
 if ($IsWindows -eq $false) { return }
@@ -12,14 +19,7 @@ if ($IsWindows -eq $false) { return }
 . (Join-Path $PSScriptRoot (Join-Path '..' (Join-Path 'lib' 'managed-paths.ps1')))
 
 $currentEntries = @(Split-PathEntries $env:PATH)
-$remainingEntries = @()
-foreach ($entry in $currentEntries) {
-  if (-not (Test-IsManagedPath $entry)) {
-    $remainingEntries += $entry
-  }
-}
-
-$newEntries = @($desiredManagedPaths + $remainingEntries)
+$newEntries = @(Merge-ManagedPathEntries -CurrentEntries $currentEntries -DesiredManagedPaths $desiredManagedPaths)
 
 # Sync missing User PATH entries from the Windows registry.
 # GUI-launched processes like VS Code inherit the PATH from their

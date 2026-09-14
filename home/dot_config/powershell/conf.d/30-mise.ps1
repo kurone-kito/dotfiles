@@ -123,7 +123,25 @@ if ($IsWindows -ne $false) {
     & $miseCommand reshim 2>$null
   }
   if (Test-Path $shimsDir) {
-    $env:PATH = "$shimsDir$([IO.Path]::PathSeparator)$env:PATH"
+    # conf.d load order (01- before this file's 30-) means
+    # 01-path.ps1 already placed $shimsDir via Merge-ManagedPathEntries
+    # whenever it existed on disk at that point -- the common case.
+    # Nested Join-Path for PS5 compatibility (no -AdditionalChildPath).
+    . (Join-Path $PSScriptRoot (Join-Path '..' (Join-Path 'lib' 'managed-paths.ps1')))
+
+    $shimsAlreadyPresent = @(Split-PathEntries $env:PATH) | Where-Object {
+      (Normalize-PathEntry $_) -eq (Normalize-PathEntry $shimsDir)
+    }
+
+    if (-not $shimsAlreadyPresent) {
+      # 01-path.ps1 could not have placed $shimsDir if it did not yet
+      # exist on disk at that point -- e.g. `& $miseCommand reshim`
+      # above just created it. Append rather than prepend: nothing the
+      # user's own PATH already has can conflict with a directory that
+      # did not exist moments ago, the same "never force ahead of
+      # existing entries" principle 01-path.ps1 itself now follows.
+      $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$shimsDir"
+    }
   }
 } else {
   (& $miseCommand activate pwsh --quiet 2>$null) | Out-String | Invoke-Expression
