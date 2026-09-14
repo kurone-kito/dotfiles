@@ -140,6 +140,27 @@ setup() {
   assert_output '1'
 }
 
+@test "deduplicates two check-run records sharing the same run id, reruns only once" {
+  # filter=all can surface more than one check-run record for
+  # different attempts of the very same underlying workflow run (here:
+  # job 1001 and job 1002, both under run 5001's details_url). Without
+  # deduplication the loop would process both independently and could
+  # rerun run 5001 twice.
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-duplicate-run-id.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial "OLD_SHA=${OLD_SHA}"
+  assert_output --partial 'ACTED=5001:success'
+  assert_output --partial 'RERUN_COUNT=1'
+
+  run bash -c "grep -c '^CALL: run rerun 5001\$' '$GH_CALL_LOG'"
+  assert_output '1'
+}
+
 @test "matches a cancelled starting conclusion too, and reruns it once to success" {
   # The script's own candidate filter matches conclusion == failure OR
   # conclusion == cancelled -- exercised here with a check-run whose

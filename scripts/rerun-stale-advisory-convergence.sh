@@ -15,8 +15,16 @@
 # GitHub Actions app (`gh api --paginate --slurp
 # repos/{owner}/{repo}/commits/{sha}/check-runs?...&filter=all`; `gh
 # api`'s own auto-templated `{owner}`/`{repo}` placeholders, same
-# convention as idd-merge.instructions.md F4). For each `failure`/
-# `cancelled` instance:
+# convention as idd-merge.instructions.md F4), then deduplicates the
+# candidates by the underlying workflow *run* id parsed from each
+# one's own `details_url` before processing any of them: `filter=all`
+# can return more than one check-run record for different attempts of
+# the very same run, and processing each record independently could
+# rerun the same run id twice -- the first rerun succeeding and a
+# later duplicate then rerunning that now-successful run again,
+# possibly failing it and making the script exit 1 despite already
+# remediating the PR. Only the first candidate seen for a given run id
+# is kept. For each remaining `failure`/`cancelled` instance:
 #
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
@@ -80,27 +88,30 @@
 #      the current head completing before a later-submitted review for
 #      an older commit must not be accepted as covering. No covering
 #      review -> skip, never rerun.
-#   5. Re-fetches the PR's live head and requires it still equal the
-#      head read at startup, immediately before **each** `gh run rerun`
-#      call in step 6 below (both the first attempt and the
-#      cancelled-retry attempt) -- not once here after the review
-#      lookup. The pre-rerun `run_attempt` lookup and the first
-#      attempt's own poll (which can take `MAX_POLLS * POLL_INTERVAL`
-#      seconds) are both network round-trips a new commit could land
-#      during, so the only way to bound that gap for every mutation is
-#      to recheck immediately before each one, not once upfront. Any
-#      change -> skip, never rerun.
-#   6. Otherwise, resolves the pre-rerun `run_attempt` via
+#   5. Resolves the pre-rerun `run_attempt` via
 #      `gh api repos/{owner}/{repo}/actions/runs/{run-id}` -- not
 #      `gh run view --json attempt`, which does not expose this field
 #      on every `gh` client version, mirroring this repository's own
 #      established CI-helper convention (docs/idd-helper-scripts.md).
 #      A lookup that fails or returns anything other than a positive
 #      integer aborts before rerunning (never a rerun with an
-#      unvalidated baseline). Then `gh run rerun <run-id>` (the *run*
-#      id, parsed from `details_url` -- distinct from the job id used
-#      for the log fetch above; the command itself returns no attempt
-#      identifier on success) and polls the same run-API endpoint until
+#      unvalidated baseline). *Then*, immediately afterward, re-fetches
+#      the PR's live head and requires it still equal the head read at
+#      startup, immediately before **each** `gh run rerun` call in step
+#      6 below (both the first attempt and the cancelled-retry
+#      attempt) -- not once here after the review lookup, and
+#      deliberately *after* the `run_attempt` lookup rather than
+#      before it: that lookup is itself a network round-trip a new
+#      commit could land during, so placing the head check after it
+#      leaves `gh run rerun` as the very next call with nothing else
+#      in between, the tightest ordering these two independent reads
+#      allow. Any head change -> skip, never rerun (see
+#      rerun_and_wait's own comment for how the first attempt and the
+#      cancelled-retry attempt each report this differently).
+#   6. Otherwise, calls `gh run rerun <run-id>` (the *run* id, parsed
+#      from `details_url` -- distinct from the job id used for the log
+#      fetch above; the command itself returns no attempt identifier
+#      on success) and polls the same run-API endpoint until
 #      `run_attempt` equals *exactly* the pre-rerun value plus one --
 #      not merely "greater than" -- so a different actor's own
 #      concurrent rerun of the same run id is never misattributed as
@@ -135,7 +146,13 @@
 #      this fully would need external coordination (locking, serialized
 #      rerun dispatch) this script deliberately does not implement,
 #      matching its actual single-maintainer, low-concurrency operating
-#      context.
+#      context. With the `run_attempt` lookup ordered *before* the live
+#      head recheck (step 5 above), the `gh run rerun` call itself is
+#      the only remaining network round-trip between the last check and
+#      the mutation it guards -- an irreducible residual given the
+#      Actions API offers no atomic "rerun only if head is still X"
+#      primitive. Further narrowing is not possible without such a
+#      primitive; this is the final position, not a step toward one.
 #
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
@@ -376,15 +393,19 @@ wait_for_rerun_conclusion() {
 # attempt's already-terminal state be misread as this call's own
 # newly-triggered attempt already having completed.
 #
-# The live-head recheck runs *inside* this function, immediately before
-# **each** `gh run rerun` call (both the first attempt and the
+# Within each attempt (the first, and the cancelled-retry), the
+# `run_attempt` baseline lookup runs *before* the live-head recheck,
+# not after: both are network round-trips a push can land during, so
+# ordering the head check last leaves `gh run rerun` as the very next
+# call with nothing else in between -- the tightest bound these two
+# independent reads allow (see the header comment's "Known, accepted
+# limitation" for why a `gh run rerun`-sized gap is still irreducible).
+# The live-head recheck itself runs *inside* this function, immediately
+# before **each** `gh run rerun` call (both the first attempt and the
 # cancelled-retry attempt) -- not once in the caller before entering
-# this function. A push can land during the pre-rerun `run_attempt`
-# lookup itself, or during the first attempt's poll (which can take
-# `MAX_POLLS * POLL_INTERVAL` seconds), and either window sits entirely
-# between a caller-side check and the actual mutation; checking again
-# right here is the only way to bound that gap for both `gh run rerun`
-# calls, not just the first.
+# this function, since the first attempt's own poll (which can take
+# `MAX_POLLS * POLL_INTERVAL` seconds) is a further window a push can
+# land during before the retry's own mutation.
 #
 # A head change discovered **before any rerun has been triggered yet**
 # (`attempts` still 0) is a true no-op: report `head-changed` and let
@@ -396,7 +417,13 @@ wait_for_rerun_conclusion() {
 # attempted, and the first attempt's own `cancelled` conclusion falls
 # through unchanged, so the caller's existing non-success handling
 # (`ACTED=<run-id>:cancelled`, exit 1) reports the true outcome instead
-# of inventing a separate token for this case.
+# of inventing a separate token for this case. A `run_attempt` lookup
+# failure on the retry path is reported as `attempt-lookup-failed`
+# regardless of whether the head has also changed by that point -- the
+# lookup is attempted unconditionally (mirroring the first attempt's
+# own unconditional lookup), and a failed baseline read is a genuine
+# fault this script cannot safely recover a conclusion from either
+# way.
 #
 # A `success` conclusion is also re-verified against the live head
 # before being reported: `wait_for_rerun_conclusion`'s own poll can run
@@ -410,12 +437,12 @@ wait_for_rerun_conclusion() {
 rerun_and_wait() {
   local pr="$1" head_sha="$2" run_id="$3" attempts=0 prior_attempt conclusion
 
-  if [ "$(current_head "$pr")" != "$head_sha" ]; then
-    printf '%s %s' "$attempts" 'head-changed'
-    return 0
-  fi
   if ! prior_attempt=$(run_attempt "$run_id"); then
     printf '%s %s' "$attempts" 'attempt-lookup-failed'
+    return 0
+  fi
+  if [ "$(current_head "$pr")" != "$head_sha" ]; then
+    printf '%s %s' "$attempts" 'head-changed'
     return 0
   fi
   if ! gh run rerun "$run_id" >/dev/null; then
@@ -425,17 +452,19 @@ rerun_and_wait() {
   attempts=$((attempts + 1))
   conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
 
-  if [ "$conclusion" = 'cancelled' ] && [ "$(current_head "$pr")" = "$head_sha" ]; then
+  if [ "$conclusion" = 'cancelled' ]; then
     if ! prior_attempt=$(run_attempt "$run_id"); then
       printf '%s %s' "$attempts" 'attempt-lookup-failed'
       return 0
     fi
-    if ! gh run rerun "$run_id" >/dev/null; then
-      printf '%s %s' "$attempts" 'rerun-failed'
-      return 0
+    if [ "$(current_head "$pr")" = "$head_sha" ]; then
+      if ! gh run rerun "$run_id" >/dev/null; then
+        printf '%s %s' "$attempts" 'rerun-failed'
+        return 0
+      fi
+      attempts=$((attempts + 1))
+      conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
     fi
-    attempts=$((attempts + 1))
-    conclusion=$(wait_for_rerun_conclusion "$run_id" "$prior_attempt")
   fi
 
   if [ "$conclusion" = 'success' ] && [ "$(current_head "$pr")" != "$head_sha" ]; then
@@ -475,6 +504,34 @@ main() {
   candidates_json=$(printf '%s' "$check_runs_json" | jq -c --argjson app_id "$GITHUB_ACTIONS_APP_ID" \
     '[.[].check_runs[] | select((.conclusion == "failure" or .conclusion == "cancelled") and .app.id == $app_id)]')
   candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
+
+  # Deduplicates candidates by the workflow *run* id parsed from each
+  # one's own details_url -- see the header comment for why:
+  # `filter=all` can surface more than one check-run record for
+  # different attempts of the same underlying run, and this repository
+  # has no bash 4+ guarantee (macOS ships bash 3.2, no associative
+  # arrays), so membership is tracked with a plain space-padded string
+  # rather than `declare -A`. Only the first candidate seen for a given
+  # run id survives; a duplicate record for a run id already kept is
+  # dropped before any candidate is ever acted on.
+  if [ "$candidate_count" -gt 0 ]; then
+    local deduped_json='[]' seen_run_ids='' dedup_idx=0
+    while [ "$dedup_idx" -lt "$candidate_count" ]; do
+      local dedup_item dedup_run_id
+      dedup_item=$(printf '%s' "$candidates_json" | jq -c ".[$dedup_idx]")
+      dedup_run_id=$(run_id_from_details_url "$(printf '%s' "$dedup_item" | jq -r '.details_url')")
+      case " $seen_run_ids " in
+        *" $dedup_run_id "*) ;;
+        *)
+          seen_run_ids="$seen_run_ids $dedup_run_id"
+          deduped_json=$(printf '%s' "$deduped_json" | jq -c --argjson item "$dedup_item" '. + [$item]')
+          ;;
+      esac
+      dedup_idx=$((dedup_idx + 1))
+    done
+    candidates_json="$deduped_json"
+    candidate_count=$(printf '%s' "$candidates_json" | jq 'length')
+  fi
 
   if [ "$candidate_count" -eq 0 ]; then
     echo "nothing to do: no stale ${CHECK_NAME} instance found for PR #${pr} (head ${head_sha})"
