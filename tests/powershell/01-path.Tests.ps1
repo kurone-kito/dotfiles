@@ -397,18 +397,26 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     It 'does not reintroduce a stale registry-only managed entry whose directory still exists on disk' {
       # CodeRabbit regression guard: the registry-recovery loop must
       # exclude any Test-IsManagedPath-recognized entry, not just skip
-      # ones already in the live-merged result -- otherwise a stale
-      # sibling version directory sitting only in the registry (its
-      # directory still present on disk, so it would pass a
-      # Test-Path-only guard) gets silently reintroduced, undoing the
-      # stale-cleanup Merge-ManagedPathEntries already performed.
+      # ones already in the live-merged result -- otherwise a
+      # since-disabled declared package's directory, sitting only in
+      # the registry (its directory still present on disk, so it
+      # would pass a Test-Path-only guard), gets silently reintroduced
+      # even though Merge-ManagedPathEntries itself would never re-add
+      # it. Uses "disabled" rather than a second on-disk sibling
+      # directory for "stale", because Get-WingetUserPathManagedPaths
+      # itself enumerates every directory matching <id>_* for an
+      # enabled package (a second sibling would legitimately also
+      # resolve into $desiredManagedPaths, defeating the point of this
+      # guard); Test-IsManagedPath's pattern match, unlike
+      # $desiredManagedPaths, ignores "enabled", so this directory is
+      # still recognized as managed and must still be excluded here.
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-      $currentBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
-      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
-      New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
+      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
       New-Item -ItemType Directory -Path $staleBinDir -Force | Out-Null
 
-      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+      Set-Content -Path $script:WingetManifestPath -Value (
+        '[{"label":"gh","id":"GitHub.cli","bin":"bin","enabled":false}]'
+      )
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH = $staleBinDir
 
@@ -416,7 +424,6 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
       $entries = @($env:PATH -split ';')
       $entries | Should -Not -Contain $staleBinDir
-      $entries | Should -Contain $currentBinDir
     }
 
     It 'removes a previously-added directory once its declared package''s bin changes' {
