@@ -207,4 +207,37 @@ Describe 'managed-paths parity' -Skip:($IsWindows -eq $false) {
     $confDManagedPaths | Should -Contain $ffmpegDir
     $registerManagedPaths | Should -Be $confDManagedPaths
   }
+
+  It 'reconciles to the identical WinGet\Links-anchored order on both surfaces when WinGet\Links is already present' {
+    # Both surfaces must agree not only on the desired managed-path
+    # SET (the four tests above) but on the reconciled RESULT of
+    # Merge-ManagedPathEntries's WinGet\Links-anchored insertion
+    # exception -- the behavior under dispute in review. Seeds both
+    # surfaces' "current entries" input identically (conf.d/01-path.ps1
+    # via $env:PATH, the registry fixture via
+    # $env:DOTFILES_TEST_REGISTRY_USER_PATH) with WinGet\Links already
+    # present and sandwiched between two user entries, and compares
+    # the actual reconciled order, not just the desired set.
+    $winGetLinks = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+    $unrelatedA = (New-Item -ItemType Directory -Path 'TestDrive:\unrelated-a' -Force).FullName
+    $unrelatedB = (New-Item -ItemType Directory -Path 'TestDrive:\unrelated-b' -Force).FullName
+
+    $seedPath = @($unrelatedA, $winGetLinks, $unrelatedB) -join ';'
+    $env:PATH = $seedPath
+    $env:DOTFILES_TEST_REGISTRY_USER_PATH = $seedPath
+
+    . $script:ConfDScript
+    $confDEntries = @($env:PATH -split ';')
+
+    . $script:RegisterFixture 6>&1 | Out-Null
+    $registerEntries = @($newEntries)
+
+    $confDEntries | Should -Not -BeNullOrEmpty
+    $registerEntries | Should -Be $confDEntries
+
+    ([array]::IndexOf($confDEntries, $unrelatedA)) |
+      Should -BeLessThan ([array]::IndexOf($confDEntries, $winGetLinks))
+    ([array]::IndexOf($confDEntries, $winGetLinks)) |
+      Should -BeLessThan ([array]::IndexOf($confDEntries, $unrelatedB))
+  }
 }
