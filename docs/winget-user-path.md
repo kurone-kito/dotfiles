@@ -109,8 +109,8 @@ For each enabled declared package, the shared managed-path source
 directories under `%LOCALAPPDATA%\Microsoft\WinGet\Packages\`
 matching `<id>_*`, resolves `bin` if set (including any `*` wildcard
 segment, against directories actually present on disk), and includes
-any resulting path that currently exists — ahead of `WinGet\Links` and
-any other static managed entries. Directories that no longer exist are
+any resulting path that currently exists — ahead of `WinGet\Links`.
+Directories that no longer exist are
 simply not included on the next reconciliation, and any stale entry
 previously registered for a declared package (matching the same
 `<id>_*` pattern, independent of its current `bin` resolution) is

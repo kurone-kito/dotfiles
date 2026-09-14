@@ -106,20 +106,23 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
   }
 
   It 'reconciles managed entries with minimal precedence, dropping stale winget package paths' {
-    # WinGetLinks (already present, kept exactly where it was) is
-    # never moved to the front; StaleMiseBin (managed but no longer
-    # desired -- its directory does not exist on disk) is dropped;
-    # every missing managed entry (CurrentMiseBin, MiseShims, Zellij,
-    # GnuWin32, HomeLocalBin, HomeCargoBin) is appended at the end, in
-    # $desiredManagedPaths order, after the user's own entries.
+    # WinGetLinks (already present) is never moved past the user's own
+    # UnrelatedA/UnrelatedB entries; StaleMiseBin (managed but no
+    # longer desired -- its directory does not exist on disk) is
+    # dropped; every missing managed entry ordered ahead of WinGet\Links
+    # in $desiredManagedPaths (CurrentMiseBin, MiseShims) is inserted
+    # immediately before WinGet\Links's position rather than appended at
+    # the very end; every entry ordered after it (Zellij, GnuWin32,
+    # HomeLocalBin, HomeCargoBin) is plain-appended, in
+    # $desiredManagedPaths order.
     . $script:Fixture 6>&1 | Out-Null
 
     $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
       $script:Paths.UnrelatedA
-      $script:Paths.WinGetLinks
-      $script:Paths.UnrelatedB
       $script:Paths.CurrentMiseBin
       $script:Paths.MiseShims
+      $script:Paths.WinGetLinks
+      $script:Paths.UnrelatedB
       $script:Paths.Zellij
       $script:Paths.GnuWin32
       $script:Paths.HomeLocalBin
@@ -127,19 +130,21 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     ) -join ';')
   }
 
-  It 'leaves an already-present WinGet\Links in place even when mise\shims is newly appended after it' {
-    # The mise\shims-before-WinGet\Links ordering guarantee is scoped
-    # (per the issue's acceptance criteria) to the case where BOTH are
-    # newly added in the same reconcile pass. Here WinGetLinks is
-    # already present in the seed registry value -- rule 1 (never move
-    # what is already placed) takes priority, so it keeps its original
-    # position even though mise\shims (missing here) ends up after it.
+  It 'preserves WinGet\Links position among the user own entries while inserting missing mise entries ahead of it' {
+    # WinGet\Links is already present in the seed registry value; rule
+    # 1 (never move what is already placed) means it never moves past
+    # the user's own UnrelatedA/UnrelatedB entries -- but the
+    # WinGet\Links-anchored exception still inserts the missing
+    # mise\shims entry immediately before it, not after.
     . $script:Fixture 6>&1 | Out-Null
 
     $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
-    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+    ([array]::IndexOf($entries, $script:Paths.UnrelatedA)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.UnrelatedB))
     ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
-      Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }
 
   It 'orders mise shims ahead of WinGet\Links when both are newly added together' {
@@ -158,6 +163,11 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
   }
 
   It 'keeps an already-present managed entry at its original non-first position' {
+    # WinGet\Links's absolute index can shift when a still-missing
+    # entry ordered ahead of it (per the WinGet\Links-anchored
+    # exception) gets inserted before it -- what "never moved" actually
+    # guarantees is its position relative to the user's own entries,
+    # not a fixed absolute index.
     $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
       $script:Paths.UnrelatedA
       $script:Paths.WinGetLinks
@@ -167,7 +177,10 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
     . $script:Fixture 6>&1 | Out-Null
 
     $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
-    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+    ([array]::IndexOf($entries, $script:Paths.UnrelatedA)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.UnrelatedB))
   }
 
   It 'appends a newly-added managed entry after all pre-existing user entries' {
@@ -229,13 +242,13 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       }
     }
 
-    It 'appends a newly-discovered declared package bin directory (no precedence over an already-present WinGet\Links)' {
-      # The mise\shims-before-WinGet\Links ordering guarantee is scoped
-      # to that specific pair, per the issue's acceptance criteria --
-      # no other declared package gets precedence over an
-      # already-present WinGet\Links. WinGetLinks is already present
-      # in the outer BeforeEach's seed registry value, so it keeps its
-      # position and the newly-discovered binDir is appended after it.
+    It 'adds a declared package real bin directory ahead of an already-present WinGet\Links' {
+      # WinGet\Links is already present in the outer BeforeEach's seed
+      # registry value; the WinGet\Links-anchored exception still
+      # inserts this newly-discovered declared-package bin directory
+      # immediately before it (not after), matching
+      # docs/winget-user-path.md's documented "ahead of WinGet\Links"
+      # guarantee for every declared package, not just mise.
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
       New-Item -ItemType Directory -Path $binDir -Force | Out-Null
@@ -247,7 +260,7 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
       $entries = @($env:DOTFILES_TEST_REGISTRY_USER_PATH -split ';')
       $entries | Should -Contain $binDir
       ([array]::IndexOf($entries, $binDir)) |
-        Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
     }
 
     It 'removes a stale sibling directory of a declared package while keeping the current one' {
@@ -339,9 +352,9 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
         $script:Paths.UnrelatedA
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.UnrelatedB
-        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin
@@ -365,9 +378,9 @@ Describe '35-register-path' -Skip:($IsWindows -eq $false) {
 
       $env:DOTFILES_TEST_REGISTRY_USER_PATH | Should -Be (@(
         $script:Paths.UnrelatedA
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.UnrelatedB
-        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin

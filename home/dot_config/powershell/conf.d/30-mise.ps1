@@ -123,24 +123,33 @@ if ($IsWindows -ne $false) {
     & $miseCommand reshim 2>$null
   }
   if (Test-Path $shimsDir) {
-    # conf.d load order (01- before this file's 30-) means
-    # 01-path.ps1 already placed $shimsDir via Merge-ManagedPathEntries
-    # whenever it existed on disk at that point -- the common case.
-    # Nested Join-Path for PS5 compatibility (no -AdditionalChildPath).
-    . (Join-Path $PSScriptRoot (Join-Path '..' (Join-Path 'lib' 'managed-paths.ps1')))
-
-    $shimsAlreadyPresent = @(Split-PathEntries $env:PATH) | Where-Object {
-      (Normalize-PathEntry $_) -eq (Normalize-PathEntry $shimsDir)
+    # Lightweight presence check with no dot-source of
+    # managed-paths.ps1 -- conf.d load order (01- before this file's
+    # 30-) means 01-path.ps1 already placed $shimsDir via
+    # Merge-ManagedPathEntries whenever it existed on disk at that
+    # point, the common case, so this normal path never repeats
+    # managed-paths.ps1's manifest parsing and WinGet package
+    # enumeration on every session startup.
+    $normalizedShimsDir = ($shimsDir -replace '/', '\').TrimEnd('\')
+    $shimsDirInPath = @($env:PATH -split [IO.Path]::PathSeparator) | Where-Object {
+      (($_ -replace '/', '\').TrimEnd('\')) -ieq $normalizedShimsDir
     }
 
-    if (-not $shimsAlreadyPresent) {
+    if (-not $shimsDirInPath) {
       # 01-path.ps1 could not have placed $shimsDir if it did not yet
       # exist on disk at that point -- e.g. `& $miseCommand reshim`
-      # above just created it. Append rather than prepend: nothing the
-      # user's own PATH already has can conflict with a directory that
-      # did not exist moments ago, the same "never force ahead of
-      # existing entries" principle 01-path.ps1 itself now follows.
-      $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$shimsDir"
+      # above just created it. Dot-source managed-paths.ps1 (the one
+      # place this pays the full discovery cost) and re-run the same
+      # shared minimal-precedence merge 01-path.ps1 itself uses, so
+      # $shimsDir lands with the same mise\shims-before-WinGet\Links
+      # precedence 01-path.ps1 would have applied, instead of a bare
+      # unconditional append that could land it after an
+      # already-present WinGet\Links.
+      # Nested Join-Path for PS5 compatibility (no -AdditionalChildPath).
+      . (Join-Path $PSScriptRoot (Join-Path '..' (Join-Path 'lib' 'managed-paths.ps1')))
+      $env:PATH = @(
+        Merge-ManagedPathEntries -CurrentEntries (Split-PathEntries $env:PATH) -DesiredManagedPaths $desiredManagedPaths
+      ) -join $sep
     }
   }
 } else {

@@ -114,20 +114,23 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
   }
 
   It 'reconciles managed entries with minimal precedence, dropping stale winget package paths' {
-    # WinGetLinks (already present, kept exactly where it was) is
-    # never moved to the front; StaleMiseBin (managed but no longer
-    # desired -- its directory does not exist on disk) is dropped;
-    # every missing managed entry (CurrentMiseBin, MiseShims, Zellij,
-    # GnuWin32, HomeLocalBin, HomeCargoBin) is appended at the end, in
-    # $desiredManagedPaths order, after the user's own entries.
+    # WinGetLinks (already present) is never moved past the user's own
+    # UnrelatedA/UnrelatedB entries; StaleMiseBin (managed but no
+    # longer desired -- its directory does not exist on disk) is
+    # dropped; every missing managed entry ordered ahead of WinGet\Links
+    # in $desiredManagedPaths (CurrentMiseBin, MiseShims) is inserted
+    # immediately before WinGet\Links's position rather than appended at
+    # the very end; every entry ordered after it (Zellij, GnuWin32,
+    # HomeLocalBin, HomeCargoBin) is plain-appended, in
+    # $desiredManagedPaths order.
     . $script:Subject
 
     $env:PATH | Should -Be (@(
       $script:Paths.UnrelatedA
-      $script:Paths.WinGetLinks
-      $script:Paths.UnrelatedB
       $script:Paths.CurrentMiseBin
       $script:Paths.MiseShims
+      $script:Paths.WinGetLinks
+      $script:Paths.UnrelatedB
       $script:Paths.Zellij
       $script:Paths.GnuWin32
       $script:Paths.HomeLocalBin
@@ -135,19 +138,21 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     ) -join ';')
   }
 
-  It 'leaves an already-present WinGet\Links in place even when mise\shims is newly appended after it' {
-    # The mise\shims-before-WinGet\Links ordering guarantee is scoped
-    # (per the issue's acceptance criteria) to the case where BOTH are
-    # newly added in the same reconcile pass. Here WinGetLinks is
-    # already present in the seed PATH -- rule 1 (never move what is
-    # already placed) takes priority, so it keeps its original
-    # position even though mise\shims (missing here) ends up after it.
+  It 'preserves WinGet\Links position among the user own entries while inserting missing mise entries ahead of it' {
+    # WinGet\Links is already present in the seed PATH; rule 1 (never
+    # move what is already placed) means it never moves past the
+    # user's own UnrelatedA/UnrelatedB entries -- but the
+    # WinGet\Links-anchored exception still inserts the missing
+    # mise\shims entry immediately before it, not after.
     . $script:Subject
 
     $entries = @($env:PATH -split ';')
-    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+    ([array]::IndexOf($entries, $script:Paths.UnrelatedA)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.UnrelatedB))
     ([array]::IndexOf($entries, $script:Paths.MiseShims)) |
-      Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
   }
 
   It 'orders mise shims ahead of WinGet\Links when both are newly added together' {
@@ -166,6 +171,11 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
   }
 
   It 'keeps an already-present managed entry at its original non-first position' {
+    # WinGet\Links's absolute index can shift when a still-missing
+    # entry ordered ahead of it (per the WinGet\Links-anchored
+    # exception) gets inserted before it -- what "never moved" actually
+    # guarantees is its position relative to the user's own entries,
+    # not a fixed absolute index.
     $env:PATH = @(
       $script:Paths.UnrelatedA
       $script:Paths.WinGetLinks
@@ -175,7 +185,10 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     . $script:Subject
 
     $entries = @($env:PATH -split ';')
-    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) | Should -Be 1
+    ([array]::IndexOf($entries, $script:Paths.UnrelatedA)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+    ([array]::IndexOf($entries, $script:Paths.WinGetLinks)) |
+      Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.UnrelatedB))
   }
 
   It 'appends a newly-added managed entry after all pre-existing user entries' {
@@ -262,6 +275,57 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
       $secondPath | Should -Be $firstPath
     }
+
+    It 'incorporates a registry-only user entry ahead of freshly-added managed entries (stale parent-process PATH)' {
+      # Simulates a GUI-launched process (e.g. VS Code) whose own
+      # $env:PATH is stale/incomplete relative to the registry: it is
+      # missing both a registry-only user entry AND every managed
+      # entry. Registry recovery must happen before the managed-path
+      # merge so the recovered user entry lands ahead of freshly
+      # appended managed entries, not after them.
+      $registryOnly = 'TestDrive:\registry-only-stale-parent'
+      New-Item -ItemType Directory -Path $registryOnly -Force | Out-Null
+
+      $env:PATH = $script:Paths.UnrelatedA
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = @(
+        $script:Paths.UnrelatedA
+        $registryOnly
+      ) -join ';'
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Contain $registryOnly
+      ([array]::IndexOf($entries, $registryOnly)) |
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.MiseShims))
+    }
+
+    It 'writes a registry-recovered entry even when the managed-path merge itself makes no change' {
+      # Regression guard: comparing the post-merge result against the
+      # registry-enriched baseline (instead of the true live $env:PATH)
+      # would make this a false no-op whenever the managed set is
+      # already fully reconciled and only the registry-recovered entry
+      # is new.
+      $env:PATH = @(
+        $script:Paths.UnrelatedA
+        $script:Paths.CurrentMiseBin
+        $script:Paths.MiseShims
+        $script:Paths.WinGetLinks
+        $script:Paths.UnrelatedB
+        $script:Paths.Zellij
+        $script:Paths.GnuWin32
+        $script:Paths.HomeLocalBin
+        $script:Paths.HomeCargoBin
+      ) -join ';'
+
+      $registryOnly = 'TestDrive:\registry-only-no-merge-change'
+      New-Item -ItemType Directory -Path $registryOnly -Force | Out-Null
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = $registryOnly
+
+      . $script:Subject
+
+      @($env:PATH -split ';') | Should -Contain $registryOnly
+    }
   }
 
   Context 'winget declared packages' {
@@ -288,13 +352,13 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       }
     }
 
-    It 'appends a newly-discovered declared package bin directory (no precedence over an already-present WinGet\Links)' {
-      # The mise\shims-before-WinGet\Links ordering guarantee is scoped
-      # to that specific pair, per the issue's acceptance criteria --
-      # no other declared package gets precedence over an
-      # already-present WinGet\Links. WinGetLinks is already present
-      # in the outer BeforeEach's seed PATH, so it keeps its position
-      # and the newly-discovered binDir is appended after it.
+    It 'adds a declared package real bin directory ahead of an already-present WinGet\Links' {
+      # WinGet\Links is already present in the outer BeforeEach's seed
+      # PATH; the WinGet\Links-anchored exception still inserts this
+      # newly-discovered declared-package bin directory immediately
+      # before it (not after), matching docs/winget-user-path.md's
+      # documented "ahead of WinGet\Links" guarantee for every declared
+      # package, not just mise.
       $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
       $binDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
       New-Item -ItemType Directory -Path $binDir -Force | Out-Null
@@ -306,7 +370,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries = @($env:PATH -split ';')
       $entries | Should -Contain $binDir
       ([array]::IndexOf($entries, $binDir)) |
-        Should -BeGreaterThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
+        Should -BeLessThan ([array]::IndexOf($entries, $script:Paths.WinGetLinks))
     }
 
     It 'removes a stale sibling directory of a declared package while keeping the current one' {
@@ -328,6 +392,31 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       $entries = @($env:PATH -split ';')
       $entries | Should -Contain $currentBinDir
       $entries | Should -Not -Contain $staleBinDir
+    }
+
+    It 'does not reintroduce a stale registry-only managed entry whose directory still exists on disk' {
+      # CodeRabbit regression guard: the registry-recovery loop must
+      # exclude any Test-IsManagedPath-recognized entry, not just skip
+      # ones already in the live-merged result -- otherwise a stale
+      # sibling version directory sitting only in the registry (its
+      # directory still present on disk, so it would pass a
+      # Test-Path-only guard) gets silently reintroduced, undoing the
+      # stale-cleanup Merge-ManagedPathEntries already performed.
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      $currentBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_test') 'bin'
+      $staleBinDir = Join-Path (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_stale') 'bin'
+      New-Item -ItemType Directory -Path $currentBinDir -Force | Out-Null
+      New-Item -ItemType Directory -Path $staleBinDir -Force | Out-Null
+
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"gh","id":"GitHub.cli","bin":"bin"}]'
+
+      $env:DOTFILES_TEST_REGISTRY_USER_PATH = $staleBinDir
+
+      . $script:Subject
+
+      $entries = @($env:PATH -split ';')
+      $entries | Should -Not -Contain $staleBinDir
+      $entries | Should -Contain $currentBinDir
     }
 
     It 'removes a previously-added directory once its declared package''s bin changes' {
@@ -478,9 +567,9 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
       $env:PATH | Should -Be (@(
         $script:Paths.UnrelatedA
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.UnrelatedB
-        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin
@@ -504,9 +593,9 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
 
       $env:PATH | Should -Be (@(
         $script:Paths.UnrelatedA
+        $script:Paths.MiseShims
         $script:Paths.WinGetLinks
         $script:Paths.UnrelatedB
-        $script:Paths.MiseShims
         $script:Paths.Zellij
         $script:Paths.GnuWin32
         $script:Paths.HomeLocalBin
