@@ -45,8 +45,19 @@ jq = "latest"
 # Linux CPU archive, so os is not restricted (unlike pstop).
 "llama.cpp" = { version = "latest", prerelease = true }
 mkcert = "latest"
+# ollama via mise fully replaces the native installer on every OS
+# (maintainer-confirmed): GitHub releases publish a standalone
+# CLI-only archive per OS, but this intentionally drops the tray app /
+# menu-bar agent and auto-start-on-login the full installers
+# additionally wire up -- starting `ollama serve` becomes a
+# manual/separate concern.
+ollama = "latest"
+starship = "latest"
 tealdeer = "latest"
 terraform = "latest"
+# tmux/tmux-builds has no Windows release asset (tmux has no native
+# Windows build), so this is restricted to linux/macos only.
+tmux = { version = "latest", os = ["linux", "macos"] }
 # tsl0922/ttyd's aqua-registry entry declares
 # supported_envs: [linux, windows/amd64] with no darwin entry, so
 # macOS is not a supported target for this backend. vhs (which needs
@@ -60,7 +71,30 @@ yt-dlp = "latest"
 
 "aqua:anomalyco/opencode" = "latest"
 "aqua:google-antigravity/antigravity-cli" = "latest"
+# ip7z/7zip via mise fully replaces WinGet-provisioned 7-Zip on Windows
+# (maintainer-confirmed): its GitHub releases publish portable
+# CLI-only archives, distinct from the GUI installer assets, but the
+# current WinGet-provisioned official 7-Zip's Explorer shell
+# integration ("Extract here" / "Add to archive") is intentionally
+# lost, not an oversight.
+#
+# Windows binary naming gap (accepted, disclosed): the aqua registry's
+# Windows override for this package
+# (github.com/aquaproj/aqua-registry: pkgs/ip7z/7zip/registry.yaml)
+# only shims 7za.exe (the standalone-lite build), not 7z.exe/7zz.exe.
+# Windows scripts invoking the bare `7z` command must instead invoke
+# `7za`, which supports the same core archive/extract syntax but fewer
+# formats (no rar, limited codec support). Linux and macOS shim `7zz`
+# (the full build) with no such gap.
+"aqua:ip7z/7zip" = "latest"
 "aqua:nektos/act" = "latest"
+# mise's registry lists neovim's vfox backend
+# (vfox:mise-plugins/vfox-neovim) before its aqua backend
+# (aqua:neovim/neovim), so the bare `neovim` shorthand resolves to
+# vfox, not the precompiled-binary aqua entry this repository actually
+# investigated and wants (`mise tool neovim` confirms the bare-name
+# resolution). Pin the backend explicitly.
+"aqua:neovim/neovim" = "latest"
 "aqua:supabase/cli" = "latest"
 
 # mise's npm backend now defaults to its embedded aube installer

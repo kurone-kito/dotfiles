@@ -20,7 +20,7 @@ if you just want to know which repository owns a given tool, and why.
 
 | Layer | Owns | Examples |
 | ------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| WinGet / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, 7-Zip, GnuPG, Neovim, .NET SDK, Steam, Unity Hub |
+| WinGet / DSC (setup.windows) | GUI apps, MSI/Inno/WiX/burn-style installers, OS settings | Git, GnuPG, .NET SDK, Steam, Unity Hub |
 | mise (this repository) | Delegated CLI tools, language runtimes | Node.js, GitHub CLI, ghq, GitHub Copilot CLI, git-vrc, and more below |
 | managed User `PATH` (this repository) | The Windows User `PATH` | `mise\shims`, `WinGet\Links`, `data.wingetUserPath.packages` entries |
 | Chocolatey (setup.windows) | Fonts, audio drivers | HackGen, VB-CABLE |
@@ -160,6 +160,44 @@ through mise instead. `ttyd`'s aqua-registry entry declares
 `supported_envs: [linux, windows/amd64]` with no `darwin` entry, so
 macOS is not a supported target for this backend.
 
+### Second wave (this repository owns install; see #436)
+
+Migrated from platform-native package managers to mise
+([#436](https://github.com/kurone-kito/dotfiles/issues/436)):
+
+| Tool | mise key |
+| ------------------------ | ----------------------- |
+| 7-Zip | `aqua:ip7z/7zip` |
+| Neovim | `aqua:neovim/neovim` |
+| ollama | `ollama` |
+| starship | `starship` |
+| tmux (Linux/macOS-only) | `tmux` |
+
+`ip7z/7zip` fully replaces WinGet's official 7-Zip
+(maintainer-confirmed): the current WinGet-provisioned package's
+Explorer shell integration ("Extract here" / "Add to archive") is
+intentionally accepted as lost. On Windows this package's aqua
+registry entry only shims `7za.exe` (the standalone-lite build), not
+`7z.exe`/`7zz.exe`, so a script invoking the bare `7z` command must use
+`7za` instead — accepted, disclosed, and unrelated to the Explorer
+integration tradeoff above; Linux/macOS shim the full `7zz` build with
+no such gap. `ollama` fully replaces the native
+installer on every OS (maintainer-confirmed): losing the tray app /
+menu-bar agent and auto-start-on-login is accepted; starting
+`ollama serve` becomes a manual/separate concern. `neovim` and
+`starship` are low-risk precompiled-binary migrations. `tmux` is
+restricted to Linux/macOS since no Windows release asset exists
+upstream.
+
+`neovim`'s mise registry entry lists a `vfox` backend
+(`vfox:mise-plugins/vfox-neovim`) before its `aqua` backend
+(`aqua:neovim/neovim`), so the bare `neovim` shorthand resolves to
+`vfox`, not the precompiled-binary `aqua` entry this repository
+investigated — the config pins the backend explicitly for that
+reason. `ollama`, `starship`, and `tmux`'s bare shorthands do resolve
+to their intended `aqua` backends (`mise tool <name>` confirms each),
+so those stay unprefixed to match this file's existing style.
+
 ### Always-here
 
 Never a WinGet `portable` duplicate on the setup.windows side — these
@@ -184,8 +222,8 @@ as exclusive to either repository.
 
 ## What stays in WinGet
 
-Five packages stay WinGet-only by design, per the rationale setup.windows
-issue 111 recorded:
+Five *portable* packages stay WinGet-only by design, per the rationale
+setup.windows issue 111 recorded:
 
 - **`jdx.mise`** — the bootstrap portable. This repository manages
   mise *tools*, not the mise binary itself, so `jdx.mise` stays in the
@@ -206,6 +244,21 @@ issue 111 recorded:
 
 See [docs/winget-user-path.md](winget-user-path.md) for how this
 repository keeps these five reachable over SSH without moving them.
+
+`ImageMagick.ImageMagick` also stays in WinGet (Homebrew on
+macOS/Ubuntu), but for a different, narrower reason confirmed in
+[#436](https://github.com/kurone-kito/dotfiles/issues/436): it is an
+*installer* package (lands under `Program Files`), not a `WinGet\Links`
+portable, so it never needed the SSH-reachability workaround above.
+It stays out of mise purely on dependency-resolution grounds — the
+same `conda:` single-package gap as FFmpeg/SQLite (ImageMagick depends
+on libpng/libjpeg/libtiff/etc.); its only other registry entry,
+`asdf:mise-plugins/mise-imagemagick`, is worse for this repository's
+purposes, since its `bin/install` script builds ImageMagick from
+source (`./configure && make && make install`) expecting
+`-I/usr/local/include`/`-L/usr/local/lib` to already contain those
+same dependent headers/libs, with no dependency bundling and no
+Windows toolchain support.
 
 ## Today's dual-install overlap
 

@@ -246,6 +246,49 @@ MOCK
   assert_output --partial 'os = ["linux", "windows"]'
 }
 
+@test "restricts the tmux tool to Linux and macOS" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^tmux' "$config"
+  assert_success
+  assert_output --partial 'os = ["linux", "macos"]'
+}
+
+@test "pins 7zip to the aqua:ip7z/7zip backend" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"aqua:ip7z/7zip"' "$config"
+  assert_success
+  assert_output --partial '"latest"'
+}
+
+@test "pins neovim to the aqua:neovim/neovim backend, not the registry's default vfox backend" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^"aqua:neovim/neovim"' "$config"
+  assert_success
+  assert_output --partial '"latest"'
+
+  run grep -q '^neovim ' "$config"
+  assert_failure 1
+}
+
+@test "declares ollama with the plain registry short name" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^ollama' "$config"
+  assert_success
+  assert_output --partial '"latest"'
+}
+
+@test "declares starship with the plain registry short name" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep '^starship' "$config"
+  assert_success
+  assert_output --partial '"latest"'
+}
+
 @test "no longer references the deprecated pstop ubi identifier" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
