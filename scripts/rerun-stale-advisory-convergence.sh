@@ -18,16 +18,29 @@
 # convention as idd-merge.instructions.md F4). `filter=all` can return
 # more than one check-run record for different attempts of the very
 # same underlying workflow run (each attempt has its own job id/log),
-# so every record is still inspected independently on its own merits
-# (own log, own reason match) -- but only the first record that
-# actually becomes eligible for a rerun ever triggers one: deduplication
-# happens immediately before the mutation (step 6 below), by workflow
-# *run* id, not by discarding un-inspected records upfront. Discarding
-# early would risk suppressing a genuinely eligible later record (an
-# expired or non-matching log on an earlier attempt) behind an
-# ineligible earlier one; deduplicating only at the mutation point
-# still guarantees the same run id is never rerun twice in one
-# invocation. For each `failure`/`cancelled` instance:
+# so candidates are first grouped by the workflow *run* id parsed from
+# each one's own `details_url`, keeping only the most recent attempt in
+# each group (by `completed_at`, falling back to `started_at`, then the
+# check-run's own numeric `id` as a final deterministic tiebreaker --
+# see select_latest_attempt_job_ids below). Every other, superseded
+# record in a group is skipped (`superseded-attempt`) without ever
+# fetching its log. This is deliberate, not merely an optimization:
+# `gh run rerun <run-id>` always operates on that run's *current*
+# (latest) attempt, so the latest attempt's own log is the only one
+# that reflects what a rerun would actually re-execute. Picking any
+# other attempt's record to justify eligibility is actively unsafe --
+# an older attempt's log can carry the exact stale-reason match this
+# script looks for while the run's current attempt has since failed for
+# a genuinely different, unrelated reason (e.g. a prior manual rerun
+# that surfaced a real bug); authorizing a rerun from the older
+# attempt's stale match would then rerun that unrelated current failure
+# under false pretenses, defeating the exact-reason safety guard
+# (acceptance criterion 7 -- this must never become a blanket
+# retry-any-failing-check hammer). Grouping by recency rather than by
+# array position also avoids the opposite failure mode: an eligible
+# latest attempt must never be discarded just because some other,
+# unrelated record for the same run id happens to sort earlier. For
+# each remaining (latest-attempt) `failure`/`cancelled` instance:
 #
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
@@ -160,9 +173,9 @@
 # Output contract (stdout): one `OLD_SHA=<sha>` line per candidate
 # whose reason string parsed successfully, one
 # `SKIPPED=<job-id>:<reason>` (reasons include `invalid-run-id`,
-# `wrong-workflow`, `log-fetch-failed`, `reason-not-matched`,
-# `stale-head-mismatch`, `no-covering-review`, `duplicate-run-id`, and
-# `head-changed`) or `ACTED=<run-id>:<conclusion-or-
+# `superseded-attempt`, `wrong-workflow`, `log-fetch-failed`,
+# `reason-not-matched`, `stale-head-mismatch`, `no-covering-review`,
+# and `head-changed`) or `ACTED=<run-id>:<conclusion-or-
 # timeout-or-rerun-failed-or-attempt-lookup-failed-or-stale-success>`
 # line per candidate, and a final `RERUN_COUNT=<n>` line. Exits 0 when
 # every candidate was a no-op or skip, or every attempted rerun
@@ -236,6 +249,53 @@ run_id_from_details_url() {
     '' | *[!0-9]*) return 0 ;;
   esac
   printf '%s' "$run_id"
+}
+
+# select_latest_attempt_job_ids -- given the full candidates JSON
+# array, prints a JSON object mapping each workflow *run* id (parsed
+# via run_id_from_details_url) present among candidates with a valid
+# run id to the check-run `id` (job id) of whichever one of its
+# candidate records is the most recent attempt. A candidate whose own
+# details_url does not yield a valid run id is not represented in the
+# output at all -- the caller's own invalid-run-id handling covers
+# that case separately.
+#
+# "Most recent" is decided by `completed_at`, falling back to
+# `started_at` when null (a `cancelled` conclusion can leave
+# `completed_at` unset on some GitHub API responses), then by the
+# check-run's own numeric `id` as a final deterministic tiebreaker --
+# job ids are assigned in strictly increasing order over time
+# platform-wide, so this never leaves two same-run-id candidates
+# genuinely tied. All three are combined into one lexicographically
+# comparable string (ISO-8601 timestamps already compare correctly as
+# strings; the numeric id is zero-padded to a fixed width so it does
+# too), so plain string comparison in jq is enough -- no need for a
+# richer comparator.
+#
+# See the header comment for *why* only the latest attempt is ever
+# treated as a rerun candidate for a given run id: `gh run rerun
+# <run-id>` always operates on that run's current attempt, so an older
+# attempt's log is never authoritative for deciding whether *this*
+# invocation should trigger another rerun.
+select_latest_attempt_job_ids() {
+  local candidates="$1" count idx=0 winners='{}'
+  count=$(printf '%s' "$candidates" | jq 'length')
+  while [ "$idx" -lt "$count" ]; do
+    local item job_id details_url run_id sort_key
+    item=$(printf '%s' "$candidates" | jq -c ".[$idx]")
+    job_id=$(printf '%s' "$item" | jq -r '.id')
+    details_url=$(printf '%s' "$item" | jq -r '.details_url')
+    run_id=$(run_id_from_details_url "$details_url")
+    if [ -n "$run_id" ]; then
+      sort_key=$(printf '%s' "$item" | jq -r \
+        '(.completed_at // .started_at // "") + "|" + (.id | tostring | ("00000000000000000000" + .)[-20:])')
+      winners=$(printf '%s' "$winners" | jq -c \
+        --arg rid "$run_id" --arg key "$sort_key" --arg jobid "$job_id" \
+        'if (.[$rid] == null) or ($key >= .[$rid].key) then . + {($rid): {key: $key, jobId: $jobid}} else . end')
+    fi
+    idx=$((idx + 1))
+  done
+  printf '%s' "$winners" | jq -c 'with_entries(.value |= .jobId)'
 }
 
 # parse_reason -- prints "<old-sha> <new-sha>" (space-separated) to
@@ -539,12 +599,13 @@ main() {
     exit 0
   fi
 
-  # Tracks which workflow run ids this invocation has already decided
-  # to act on (see rerun_and_wait's own dedup gate below) -- a plain
-  # space-padded string rather than `declare -A`, since this repository
-  # has no bash 4+ guarantee (macOS ships bash 3.2, no associative
-  # arrays).
-  local acted_run_ids=''
+  # Resolves, once, which check-run record is the latest attempt for
+  # each distinct workflow run id among the candidates -- see
+  # select_latest_attempt_job_ids's own comment for why only that one
+  # record per run id is ever eligible to trigger a rerun.
+  local latest_job_ids_json
+  latest_job_ids_json=$(select_latest_attempt_job_ids "$candidates_json")
+
   local rerun_count=0 overall_exit=0 idx=0
   while [ "$idx" -lt "$candidate_count" ]; do
     local item job_id details_url run_id log
@@ -555,6 +616,14 @@ main() {
 
     if [ -z "$run_id" ]; then
       echo "SKIPPED=${job_id}:invalid-run-id"
+      idx=$((idx + 1))
+      continue
+    fi
+
+    local latest_job_id
+    latest_job_id=$(printf '%s' "$latest_job_ids_json" | jq -r --arg rid "$run_id" '.[$rid] // empty')
+    if [ "$latest_job_id" != "$job_id" ]; then
+      echo "SKIPPED=${job_id}:superseded-attempt"
       idx=$((idx + 1))
       continue
     fi
@@ -594,23 +663,11 @@ main() {
       continue
     fi
 
-    # Deduplicates by workflow run id right here, immediately before
-    # the mutation -- not earlier in the loop -- so a run id already
-    # acted on by an earlier candidate record (see the header comment:
-    # `filter=all` can surface more than one check-run record for
-    # different attempts of the same run) never triggers a second
-    # `rerun_and_wait` call, while every record still independently
-    # reaches its own log-fetch/reason-match/covering-review checks
-    # above on its own merits.
-    case " $acted_run_ids " in
-      *" $run_id "*)
-        echo "SKIPPED=${job_id}:duplicate-run-id"
-        idx=$((idx + 1))
-        continue
-        ;;
-    esac
-    acted_run_ids="$acted_run_ids $run_id"
-
+    # No further per-run-id dedup gate is needed here: the
+    # latest_job_ids_json lookup above already guarantees at most one
+    # candidate per workflow run id ever reaches this point in a single
+    # invocation.
+    #
     # The live-head recheck immediately before authorizing a rerun now
     # runs *inside* rerun_and_wait, immediately before each `gh run
     # rerun` call it makes (not once here) -- see that function's own

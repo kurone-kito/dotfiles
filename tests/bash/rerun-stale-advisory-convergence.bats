@@ -140,14 +140,13 @@ setup() {
   assert_output '1'
 }
 
-@test "deduplicates two check-run records sharing the same run id, reruns only once" {
+@test "keeps only the latest attempt when two check-run records share the same run id" {
   # filter=all can surface more than one check-run record for
   # different attempts of the very same underlying workflow run (here:
-  # job 1001 and job 1002, both under run 5001's details_url). Both
-  # records independently pass their own log/reason/review checks
-  # (this stub serves the same log fixture regardless of job id), but
-  # the second must be deduplicated at the mutation point rather than
-  # triggering a second rerun of the same run id.
+  # job 1001 and job 1002, both under run 5001's details_url, job 1002
+  # completing later). The older record (1001) must be dropped as a
+  # superseded attempt before its log is ever fetched, never counted
+  # as a candidate in its own right.
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-duplicate-run-id.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
   export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
@@ -155,36 +154,44 @@ setup() {
 
   run bash "$SCRIPT" 426
   assert_success
+  assert_output --partial 'SKIPPED=1001:superseded-attempt'
   assert_output --partial "OLD_SHA=${OLD_SHA}"
   assert_output --partial 'ACTED=5001:success'
-  assert_output --partial 'SKIPPED=1002:duplicate-run-id'
   assert_output --partial 'RERUN_COUNT=1'
 
   run bash -c "grep -c '^CALL: run rerun 5001\$' '$GH_CALL_LOG'"
   assert_output '1'
+
+  run bash -c "grep -c '^CALL: api repos/{owner}/{repo}/actions/jobs/1001/logs\$' '$GH_CALL_LOG'"
+  assert_output '0'
 }
 
-@test "still reruns when an earlier duplicate record for the same run id is ineligible" {
-  # The Copilot-flagged failure mode: job 1001 (processed first) has a
-  # non-matching log and would be skipped on its own merits, but job
-  # 1002 -- a second check-run record for the *same* run id 5001 --
-  # has the eligible log. Deduplicating before inspecting logs would
-  # have discarded 1002 behind 1001's own ineligibility; the
-  # mutation-point dedup must not do that.
-  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-duplicate-run-id.json"
+@test "never reruns based on an older attempt's stale match when the latest attempt is unrelated" {
+  # The Codex-flagged failure mode: job 1001 (older, completed first)
+  # would carry the exact stale-reason match if its log were ever
+  # inspected, but job 1002 -- the *latest* attempt of the same run
+  # 5001 -- failed for an unrelated reason (its own log does not
+  # match). Only the latest attempt's own disposition may ever justify
+  # a rerun: job 1001's log must never even be fetched (it is dropped
+  # as superseded before that point), so using its stale match to
+  # rerun job 1002's genuinely unrelated failure -- defeating the
+  # exact-reason safety guard -- is structurally impossible here. No
+  # rerun must be triggered at all.
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-stale-attempt-superseded.json"
   export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-no-match.txt"
-  export GH_STUB_LOG_FIXTURE_JOB_1002="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
   export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
-  export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
   assert_success
-  assert_output --partial 'SKIPPED=1001:reason-not-matched'
-  assert_output --partial 'ACTED=5001:success'
-  assert_output --partial 'RERUN_COUNT=1'
+  assert_output --partial 'SKIPPED=1001:superseded-attempt'
+  assert_output --partial 'SKIPPED=1002:reason-not-matched'
+  assert_output --partial 'RERUN_COUNT=0'
+  refute_output --partial 'OLD_SHA='
+  refute_output --partial 'ACTED='
 
-  run bash -c "grep -c '^CALL: run rerun 5001\$' '$GH_CALL_LOG'"
-  assert_output '1'
+  run cat "$GH_CALL_LOG"
+  refute_output --partial 'CALL: run rerun'
+  refute_output --partial 'CALL: api repos/{owner}/{repo}/actions/jobs/1001/logs'
 }
 
 @test "skips (fail-closed) a candidate whose details_url does not carry a valid run id" {
