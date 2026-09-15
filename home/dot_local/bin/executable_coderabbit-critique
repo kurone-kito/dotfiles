@@ -175,7 +175,91 @@ deadline_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-deadline.XXXXXX")" |
   echo "coderabbit-critique: mktemp failed; cannot track review deadline" >&2
   exit 1
 }
-trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp"' EXIT
+review_status_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-status.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot track review status" >&2
+  exit 1
+}
+review_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-wrapper.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot create the review supervisor" >&2
+  exit 1
+}
+trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp" "$review_status_tmp" "$review_wrapper_tmp"' EXIT
+
+# `timeout` must supervise a process that remains alive until CodeRabbit has
+# exited and forwards the termination signal to that child. A direct
+# `timeout coderabbit ...` invocation can reap CodeRabbit while a descendant
+# continues running, so the caller would return while an unauthenticated
+# browser/OAuth flow remained orphaned. This small POSIX supervisor records a
+# marker in the timeout handler before forwarding TERM, and schedules a
+# bounded KILL as a second line of defense when a timeout implementation only
+# kills the wrapper itself. The marker is an event from the timeout signal,
+# not a wall-clock comparison, so a natural review exit with status 124, 137,
+# or 143 remains `review-failed`.
+if ! cat >"$review_wrapper_tmp" << 'EOF'
+#!/bin/sh
+
+status_file=$1
+deadline_file=$2
+shift 2
+child_pid=
+killer_pid=
+
+kill_child() {
+  if [ -n "$child_pid" ]; then
+    kill "$1" "$child_pid" 2>/dev/null || true
+  fi
+}
+
+on_term() {
+  printf '1\n' >"$deadline_file" 2>/dev/null || true
+  kill_child TERM
+  if [ -n "$child_pid" ]; then
+    (
+      sleep 2
+      kill -KILL "$child_pid" 2>/dev/null || true
+    ) &
+    killer_pid=$!
+  fi
+}
+
+on_int() {
+  kill_child INT
+}
+
+trap 'on_term' TERM
+trap 'on_int' INT
+
+"$@" &
+child_pid=$!
+child_status=0
+while :; do
+  wait "$child_pid"
+  child_status=$?
+  if kill -0 "$child_pid" 2>/dev/null; then
+    continue
+  fi
+  break
+done
+
+if [ -n "$killer_pid" ]; then
+  kill "$killer_pid" 2>/dev/null || true
+  wait "$killer_pid" 2>/dev/null || true
+fi
+printf '%s\n' "$child_status" >"$status_file" 2>/dev/null || true
+exit "$child_status"
+EOF
+then
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: could not create the review supervisor" >&2
+  exit 1
+fi
+if ! chmod +x "$review_wrapper_tmp"; then
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: could not make the review supervisor executable" >&2
+  exit 1
+fi
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
@@ -185,60 +269,36 @@ printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeo
   "$BASE_BRANCH" "$TIMEOUT_SECONDS" >&2
 
 set +e
-start_epoch="$(date -u '+%s' 2>/dev/null || printf '0')"
-case "$start_epoch" in
-  '' | *[!0-9]*) start_epoch=0 ;;
-esac
-deadline_epoch=$((start_epoch + TIMEOUT_SECONDS))
-
 "$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
+  "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" \
   coderabbit review --agent --base "$BASE_BRANCH" \
   >"$stdout_tmp" 2>"$stderr_tmp" &
 timeout_pid=$!
-(
-  timer_pid=""
-  stop_timer() {
-    if [ -n "$timer_pid" ]; then
-      kill "$timer_pid" 2>/dev/null || true
-    fi
-    exit 0
-  }
-  sleep "$TIMEOUT_SECONDS" &
-  timer_pid=$!
-  trap 'stop_timer' TERM INT
-  wait "$timer_pid" 2>/dev/null || exit 0
-  if kill -0 "$timeout_pid" 2>/dev/null; then
-    printf '1\n' >"$deadline_tmp" 2>/dev/null || true
-  fi
-) &
-watchdog_pid=$!
-
 wait "$timeout_pid"
 status=$?
-now_epoch="$(date -u '+%s' 2>/dev/null || printf '0')"
-case "$now_epoch" in
-  '' | *[!0-9]*) now_epoch=0 ;;
-esac
-deadline_expired=false
-if [ -s "$deadline_tmp" ]; then
-  deadline_expired=true
-elif [ "$start_epoch" -ne 0 ] && [ "$now_epoch" -ge "$deadline_epoch" ]; then
-  wait "$watchdog_pid" 2>/dev/null || true
-  if [ -s "$deadline_tmp" ]; then
-    deadline_expired=true
-  fi
-else
-  kill "$watchdog_pid" 2>/dev/null || true
-  wait "$watchdog_pid" 2>/dev/null || true
-fi
 set -e
 stdout_output="$(cat "$stdout_tmp")"
 stderr_output="$(cat "$stderr_tmp")"
+deadline_expired=false
+if [ -s "$deadline_tmp" ]; then
+  deadline_expired=true
+elif [ ! -s "$review_status_tmp" ] && {
+  [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || [ "$status" -eq 143 ]
+}; then
+  # If the outer timeout had to KILL the supervisor before its TERM trap
+  # could persist the marker, its status is still one of the signal-derived
+  # values above and the supervisor has no natural child status file. A
+  # natural CodeRabbit exit writes that file before returning, which keeps
+  # the immediate 124/137/143 cases fail-closed as review-failed.
+  deadline_expired=true
+fi
 
-if [ "$status" -ne 0 ]; then
-  # --preserve-status keeps CodeRabbit's own exit status intact. The
-  # separate watchdog records whether the timeout deadline actually fired,
-  # so an immediate review exit of 15, 137, or 143 is still review-failed.
+if [ "$status" -ne 0 ] || [ "$deadline_expired" = true ]; then
+  # --preserve-status keeps the supervisor's child status intact. The
+  # supervisor's deadline marker records whether timeout actually sent TERM,
+  # so an immediate review exit of 15, 137, or 143 is still review-failed,
+  # and a child that handles the deadline signal by returning 0 is still a
+  # timeout rather than a successful review.
   if [ "$deadline_expired" = true ]; then
     log_fallback_reason timeout
   else

@@ -282,6 +282,7 @@ exit 1
   link_system_command cat
   link_system_command rm
   link_system_command mkdir
+  link_system_command chmod
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
@@ -721,6 +722,33 @@ exit 1
 
   assert_failure
   assert [ "$elapsed" -lt 10 ]
+  assert_fallback_reason timeout
+  assert_no_git_calls
+}
+
+@test "keeps a deadline timeout fail-closed when the review handles TERM with exit 0" {
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  sleep_pid=$!
+  trap "kill $sleep_pid 2>/dev/null || true; exit 0" TERM
+  wait "$sleep_pid"
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
   assert_fallback_reason timeout
   assert_no_git_calls
 }
