@@ -412,6 +412,47 @@ EOF
   assert_no_git_calls
 }
 
+@test "cleans an earlier temp file when a later mktemp fails" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+exit 1
+'
+  allocated_temp="$BATS_TEST_TMPDIR/allocated.tmp"
+  mktemp_counter="$BATS_TEST_TMPDIR/mktemp.counter"
+  export CODERABBIT_MKTEMP_COUNTER="$mktemp_counter"
+  export CODERABBIT_MKTEMP_FIRST="$allocated_temp"
+  later_mktemp_dir="$BATS_TEST_TMPDIR/later-mktemp-bin"
+  mkdir -p "$later_mktemp_dir"
+  make_mock mktemp '
+if [ ! -e "$CODERABBIT_MKTEMP_COUNTER" ]; then
+  : > "$CODERABBIT_MKTEMP_COUNTER"
+  : > "$CODERABBIT_MKTEMP_FIRST"
+  printf "%s\n" "$CODERABBIT_MKTEMP_FIRST"
+  exit 0
+fi
+exit 1
+'
+  mv "$BATS_TEST_TMPDIR/bin/mktemp" "$later_mktemp_dir/mktemp"
+  link_system_command date
+  link_system_command jq
+  link_system_command mkdir
+  link_system_command ps
+  link_system_command rm
+
+  run --separate-stderr env PATH="$later_mktemp_dir:$BATS_TEST_TMPDIR/bin:/usr/bin:/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "mktemp failed"
+  assert_fallback_reason mktemp-failed
+  assert [ ! -e "$allocated_temp" ]
+  assert_no_git_calls
+}
+
 @test "keeps stderr out of a successful findings response" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'
@@ -924,7 +965,7 @@ exit 1
   assert_equal 130 "$status"
   review_pid=$(cat "$review_pid_file")
   review_alive=true
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
     if ! kill -0 "$review_pid" 2>/dev/null; then
       review_alive=false
       break

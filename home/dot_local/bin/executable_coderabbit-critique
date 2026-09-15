@@ -174,11 +174,26 @@ fi
 # secret-deploy-state); failing to create it fails closed rather than
 # falling back to a merged capture that would reintroduce the leak this
 # split exists to close.
+cleanup_tmp_files() {
+  for tmp in \
+    "${stderr_tmp:-}" \
+    "${stdout_tmp:-}" \
+    "${deadline_tmp:-}" \
+    "${review_status_tmp:-}" \
+    "${review_wrapper_tmp:-}" \
+    "${review_members_tmp:-}"; do
+    if [ -n "$tmp" ]; then
+      rm -f "$tmp" 2>/dev/null || true
+    fi
+  done
+}
+
 stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
   log_fallback_reason mktemp-failed
   echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
   exit 1
 }
+trap 'cleanup_tmp_files' EXIT
 stdout_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stdout.XXXXXX")" || {
   log_fallback_reason mktemp-failed
   echo "coderabbit-critique: mktemp failed; cannot capture review output" >&2
@@ -204,7 +219,6 @@ review_members_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-members.XXXXXX
   echo "coderabbit-critique: mktemp failed; cannot inspect the review process group" >&2
   exit 1
 }
-trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp" "$review_status_tmp" "$review_wrapper_tmp" "$review_members_tmp"' EXIT
 
 # `timeout` must supervise a process that remains alive until CodeRabbit has
 # exited and forwards termination to that child. A direct `timeout coderabbit
