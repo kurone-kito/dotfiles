@@ -473,6 +473,18 @@ Describe 'coderabbit-critique' {
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
     }
 
+    It 'logs review-failed when the authentication probe cannot be started' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated {
+        throw [InvalidOperationException]::new('simulated auth probe start failure')
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
+    }
+
     It 'fails when the base branch cannot be resolved' {
       Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
       Mock Test-DotfilesCoderabbitAuthenticated { $true }

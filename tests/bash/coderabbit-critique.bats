@@ -282,7 +282,7 @@ exit 1
   link_system_command cat
   link_system_command rm
   link_system_command mkdir
-  link_system_command chmod
+  link_system_command setsid
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
@@ -751,6 +751,84 @@ exit 1
   assert_output --partial "coderabbit review failed"
   assert_fallback_reason timeout
   assert_no_git_calls
+}
+
+@test "cleans up a descendant after the review exits successfully" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/descendant.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_success
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
+@test "forwards external TERM to the timeout job before exiting" {
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  trap "kill $review_pid 2>/dev/null || true; echo term >> \"$CODERABBIT_CRITIQUE_LOG\"; exit 143" TERM
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+  output_file="$BATS_TEST_TMPDIR/outer.stdout"
+  error_file="$BATS_TEST_TMPDIR/outer.stderr"
+
+  "$SCRIPT" >"$output_file" 2>"$error_file" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -TERM "$script_pid"
+  set +e
+  wait "$script_pid"
+  status=$?
+  set -e
+
+  assert_equal 143 "$status"
+  run grep -c '^term$' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
+  review_pid=$(cat "$review_pid_file")
+  run kill -0 "$review_pid"
+  assert_failure
 }
 
 @test "uses CODERABBIT_CRITIQUE_BASE for the review base branch, skipping auto-detection" {

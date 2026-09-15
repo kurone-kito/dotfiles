@@ -152,6 +152,19 @@ if [ -z "$BASE_BRANCH" ]; then
   exit 1
 fi
 
+# `setsid` gives the review command a process group that is separate from
+# this supervisor and from `timeout` itself. The wrapper can then terminate
+# descendants left behind by a normally exiting CodeRabbit process, not only
+# the direct child that `wait` observes. If the session helper is unavailable,
+# fail closed rather than run an unbounded descendant tree without a safe way
+# to clean it up.
+SESSION_CMD="$(command -v setsid 2>/dev/null || true)"
+if [ -z "$SESSION_CMD" ]; then
+  log_fallback_reason review-failed
+  echo "coderabbit-critique: setsid not found; cannot isolate and clean up the review process group" >&2
+  exit 1
+fi
+
 # stdout and stderr are captured separately (stderr via a temp file) so a
 # clean run's own stdout carries only the reviewed process's findings --
 # a progress line or diagnostic written to stderr must never reach C1 as
@@ -188,51 +201,57 @@ review_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-wrapper.XXXXXX
 trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp" "$review_status_tmp" "$review_wrapper_tmp"' EXIT
 
 # `timeout` must supervise a process that remains alive until CodeRabbit has
-# exited and forwards the termination signal to that child. A direct
-# `timeout coderabbit ...` invocation can reap CodeRabbit while a descendant
-# continues running, so the caller would return while an unauthenticated
-# browser/OAuth flow remained orphaned. This small POSIX supervisor records a
-# marker in the timeout handler before forwarding TERM, and schedules a
-# bounded KILL as a second line of defense when a timeout implementation only
-# kills the wrapper itself. The marker is an event from the timeout signal,
-# not a wall-clock comparison, so a natural review exit with status 124, 137,
-# or 143 remains `review-failed`.
+# exited and forwards termination to that child. A direct `timeout coderabbit
+# ...` invocation can reap CodeRabbit while a descendant continues running,
+# so the caller would return while an unauthenticated browser/OAuth flow
+# remained orphaned. This small POSIX supervisor records a marker in the
+# timeout handler before forwarding TERM, isolates the review in its own
+# session, and cleans that process group after the direct child exits. The
+# marker is an event from the timeout signal, not a wall-clock comparison, so
+# a natural review exit with status 124, 137, or 143 remains `review-failed`.
 if ! cat >"$review_wrapper_tmp" << 'EOF'
 #!/bin/sh
 
 status_file=$1
 deadline_file=$2
-shift 2
+session_command=$3
+shift 3
 child_pid=
+review_group_pid=
 killer_pid=
 
-kill_child() {
-  if [ -n "$child_pid" ]; then
-    kill "$1" "$child_pid" 2>/dev/null || true
+review_group_exists() {
+  [ -n "$review_group_pid" ] && kill -0 "-$review_group_pid" 2>/dev/null
+}
+
+signal_review_group() {
+  if [ -n "$review_group_pid" ]; then
+    kill "-$1" "-$review_group_pid" 2>/dev/null || true
   fi
 }
 
 on_term() {
   printf '1\n' >"$deadline_file" 2>/dev/null || true
-  kill_child TERM
-  if [ -n "$child_pid" ]; then
+  signal_review_group TERM
+  if [ -n "$review_group_pid" ]; then
     (
       sleep 2
-      kill -KILL "$child_pid" 2>/dev/null || true
+      signal_review_group KILL
     ) &
     killer_pid=$!
   fi
 }
 
 on_int() {
-  kill_child INT
+  signal_review_group INT
 }
 
 trap 'on_term' TERM
 trap 'on_int' INT
 
-"$@" &
+"$session_command" "$@" &
 child_pid=$!
+review_group_pid=$child_pid
 child_status=0
 while :; do
   wait "$child_pid"
@@ -247,6 +266,24 @@ if [ -n "$killer_pid" ]; then
   kill "$killer_pid" 2>/dev/null || true
   wait "$killer_pid" 2>/dev/null || true
 fi
+
+# A review can leave a worker or browser helper behind and still report a
+# successful direct-child status. Terminate the isolated group before writing
+# that status so the caller never returns with a live descendant. Ignore
+# TERM/INT while doing this cleanup: those signals are for the review group,
+# not for this supervisor, and the bounded KILL below is the final guarantee.
+if review_group_exists; then
+  trap '' TERM INT
+  signal_review_group TERM
+  remaining=2
+  while [ "$remaining" -gt 0 ] && review_group_exists; do
+    sleep 1
+    remaining=$((remaining - 1))
+  done
+  if review_group_exists; then
+    signal_review_group KILL
+  fi
+fi
 printf '%s\n' "$child_status" >"$status_file" 2>/dev/null || true
 exit "$child_status"
 EOF
@@ -255,11 +292,19 @@ then
   echo "coderabbit-critique: could not create the review supervisor" >&2
   exit 1
 fi
-if ! chmod +x "$review_wrapper_tmp"; then
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: could not make the review supervisor executable" >&2
-  exit 1
-fi
+
+timeout_pid=""
+forward_review_signal() {
+  signal=$1
+  signal_status=$2
+  if [ -n "$timeout_pid" ]; then
+    kill "-$signal" "$timeout_pid" 2>/dev/null || true
+    wait "$timeout_pid" 2>/dev/null || true
+  fi
+  exit "$signal_status"
+}
+trap 'forward_review_signal TERM 143' TERM
+trap 'forward_review_signal INT 130' INT
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
@@ -270,7 +315,7 @@ printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeo
 
 set +e
 "$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
-  "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" \
+  sh "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" "$SESSION_CMD" \
   coderabbit review --agent --base "$BASE_BRANCH" \
   >"$stdout_tmp" 2>"$stderr_tmp" &
 timeout_pid=$!

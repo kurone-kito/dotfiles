@@ -392,7 +392,15 @@ function global:Invoke-DotfilesCoderabbitCritique {
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
-  if (-not (Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $coderabbitCommand)) {
+  try {
+    $authenticated = Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $coderabbitCommand
+  } catch {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
+    [Console]::Error.WriteLine("coderabbit authentication status could not be checked: $($_.Exception.Message)")
+    return [pscustomobject]@{ Success = $false; Output = '' }
+  }
+
+  if (-not $authenticated) {
     Write-DotfilesCoderabbitFallbackReason -Reason 'unauthenticated'
     [Console]::Error.WriteLine('coderabbit is not authenticated (run: coderabbit auth login)')
     return [pscustomobject]@{ Success = $false; Output = '' }
