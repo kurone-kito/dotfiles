@@ -979,6 +979,17 @@ exit 1
     esac
     sleep 0.1
   done
+  if [ "$review_alive" = true ]; then
+    {
+      printf 'coderabbit-critique INT diagnostic: review_pid=%s\n' "$review_pid"
+      printf '%s\n' '--- review process ---'
+      ps -o pid=,ppid=,pgid=,sid=,stat=,args= -p "$review_pid" || true
+      printf '%s\n' '--- related processes ---'
+      ps -eo pid=,ppid=,pgid=,sid=,stat=,args= | awk -v target="$review_pid" '$1 == target || $2 == target || $3 == target || /coderabbit-critique|coderabbit|sleep 30/ { print }' || true
+      printf '%s\n' '--- outer stderr ---'
+      sed -n '1,160p' "$BATS_TEST_TMPDIR/outer-int.stderr" || true
+    } >&2
+  fi
   assert [ "$review_alive" = false ]
 }
 
