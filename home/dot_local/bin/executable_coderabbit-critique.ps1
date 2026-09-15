@@ -413,9 +413,15 @@ function global:Invoke-DotfilesCoderabbitCritique {
   [Console]::Error.WriteLine(
     "coderabbit-critique: invoking coderabbit review --agent --base $baseBranch (timeout ${timeoutSeconds}s)")
 
-  $result = Invoke-DotfilesCoderabbitReviewWithTimeout `
-    -CoderabbitCommand $coderabbitCommand -BaseBranch $baseBranch `
-    -TimeoutSeconds $timeoutSeconds
+  try {
+    $result = Invoke-DotfilesCoderabbitReviewWithTimeout `
+      -CoderabbitCommand $coderabbitCommand -BaseBranch $baseBranch `
+      -TimeoutSeconds $timeoutSeconds
+  } catch {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
+    [Console]::Error.WriteLine("coderabbit review could not be started: $($_.Exception.Message)")
+    return [pscustomobject]@{ Success = $false; Output = '' }
+  }
 
   if ($result.TimedOut) {
     Write-DotfilesCoderabbitFallbackReason -Reason 'timeout'

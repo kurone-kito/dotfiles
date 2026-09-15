@@ -484,6 +484,19 @@ Describe 'coderabbit-critique' {
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'base-branch-unresolved'
     }
 
+    It 'logs review-failed when the review process cannot be started' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'master' }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        throw [InvalidOperationException]::new('simulated process start failure')
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
+    }
+
     It 'fails when the review times out' {
       Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
       Mock Test-DotfilesCoderabbitAuthenticated { $true }
