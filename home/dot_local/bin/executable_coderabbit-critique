@@ -400,11 +400,12 @@ forward_review_signal() {
   signal=$1
   signal_status=$2
   if [ -n "$timeout_pid" ]; then
-    # GNU timeout/gtimeout isolates its command in this process group. Send
-    # cancellation there so the wrapper can run its bounded cleanup; retain
-    # a direct-PID fallback for a timeout implementation without that group.
-    kill "-$signal" "-$timeout_pid" 2>/dev/null || \
-      kill "-$signal" "$timeout_pid" 2>/dev/null || true
+    # Let GNU timeout/gtimeout forward cancellation to the wrapper first. If
+    # a compatible implementation does not forward it, use its dedicated
+    # process group so the wrapper still receives the signal and can run its
+    # bounded cleanup before this supervisor exits.
+    kill "-$signal" "$timeout_pid" 2>/dev/null || \
+      kill "-$signal" "-$timeout_pid" 2>/dev/null || true
     wait "$timeout_pid" 2>/dev/null || true
   fi
   exit "$signal_status"
