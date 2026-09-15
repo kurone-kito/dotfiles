@@ -461,10 +461,17 @@ fi
 # A review can leave a worker or browser helper behind and still report a
 # successful direct-child status. Terminate the isolated group before writing
 # that status so the caller never returns with a live descendant. Ignore
-# TERM/INT while doing this cleanup: those signals are for the review group,
-# not for this supervisor, and the bounded KILL below is the final guarantee.
+# cancellation signals while doing this cleanup: those signals are for the
+# review group, not for this supervisor, and the bounded KILL below is the
+# final guarantee. Keep TERM active enough to preserve the timeout marker if
+# the outer deadline arrives during the cleanup window.
+on_cleanup_term() {
+  printf '1\n' >"$deadline_file" 2>/dev/null || true
+}
+
 if review_group_exists; then
-  trap '' TERM INT HUP QUIT
+  trap 'on_cleanup_term' TERM
+  trap '' INT HUP QUIT
   signal_review_group TERM
   remaining=2
   while [ "$remaining" -gt 0 ] && review_group_exists; do
