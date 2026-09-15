@@ -155,13 +155,14 @@ fi
 # `setsid` gives the review command a process group that is separate from
 # this supervisor and from `timeout` itself. The wrapper can then terminate
 # descendants left behind by a normally exiting CodeRabbit process, not only
-# the direct child that `wait` observes. If the session helper is unavailable,
-# fail closed rather than run an unbounded descendant tree without a safe way
-# to clean it up.
+# the direct child that `wait` observes. macOS does not provide `setsid` in
+# the base system, but GNU `gtimeout` still puts its child in a dedicated
+# process group. In that case the wrapper uses `ps` to signal the group's
+# members while excluding the timeout and wrapper themselves.
 SESSION_CMD="$(command -v setsid 2>/dev/null || true)"
-if [ -z "$SESSION_CMD" ]; then
+if [ -z "$SESSION_CMD" ] && ! command -v ps >/dev/null 2>&1; then
   log_fallback_reason review-failed
-  echo "coderabbit-critique: setsid not found; cannot isolate and clean up the review process group" >&2
+  echo "coderabbit-critique: setsid and ps not found; cannot isolate and clean up the review process group" >&2
   exit 1
 fi
 
@@ -198,7 +199,12 @@ review_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-wrapper.XXXXXX
   echo "coderabbit-critique: mktemp failed; cannot create the review supervisor" >&2
   exit 1
 }
-trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp" "$review_status_tmp" "$review_wrapper_tmp"' EXIT
+review_members_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-members.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot inspect the review process group" >&2
+  exit 1
+}
+trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp" "$review_status_tmp" "$review_wrapper_tmp" "$review_members_tmp"' EXIT
 
 # `timeout` must supervise a process that remains alive until CodeRabbit has
 # exited and forwards termination to that child. A direct `timeout coderabbit
@@ -215,25 +221,73 @@ if ! cat >"$review_wrapper_tmp" << 'EOF'
 status_file=$1
 deadline_file=$2
 session_command=$3
-shift 3
+members_file=$4
+shift 4
 child_pid=
-review_group_pid=
+review_group_id=
 killer_pid=
+cleanup_mode=group
+
+process_group_id() {
+  ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'
+}
+
+process_parent_id() {
+  ps -o ppid= -p "$1" 2>/dev/null | tr -d '[:space:]'
+}
+
+# The process used for the `ps` snapshot is itself briefly a member of the
+# timeout-created group. Run it in the background so its PID can be excluded
+# from the completed snapshot before awk filters the actual review members.
+review_group_members() {
+  ps_pid=
+  ps -axo pid=,pgid= >"$members_file" 2>/dev/null &
+  ps_pid=$!
+  wait "$ps_pid" 2>/dev/null || true
+  awk -v target="$review_group_id" -v self="$$" -v parent="$PPID" \
+    -v leader="$review_group_id" -v snapshot="$ps_pid" \
+    '$2 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot { print $1 }' \
+    "$members_file" 2>/dev/null || true
+}
 
 review_group_exists() {
-  [ -n "$review_group_pid" ] && kill -0 "-$review_group_pid" 2>/dev/null
+  if [ "$cleanup_mode" = members ]; then
+    [ -n "$(review_group_members)" ]
+  else
+    [ -n "$review_group_id" ] && kill -0 "-$review_group_id" 2>/dev/null
+  fi
 }
 
 signal_review_group() {
-  if [ -n "$review_group_pid" ]; then
-    kill "-$1" "-$review_group_pid" 2>/dev/null || true
+  if [ "$cleanup_mode" = members ]; then
+    signal=$1
+    for member in $(review_group_members); do
+      kill "-$signal" "$member" 2>/dev/null || true
+    done
+  elif [ -n "$review_group_id" ]; then
+    kill "-$1" "-$review_group_id" 2>/dev/null || true
   fi
 }
+
+# In the no-setsid path this boundary is supplied by GNU `timeout`/`gtimeout`
+# itself. Verify that the timeout's process group is distinct from the
+# caller's group before launching CodeRabbit; otherwise a group cleanup
+# signal could reach the IDD supervisor or the user's shell.
+timeout_parent_id=
+caller_group_id=
+if [ -z "$session_command" ]; then
+  timeout_parent_id=$(process_parent_id "$PPID")
+  caller_group_id=$(process_group_id "$timeout_parent_id")
+  if [ -z "$timeout_parent_id" ] || [ -z "$caller_group_id" ]; then
+    echo "coderabbit-critique: could not verify timeout process-group isolation" >&2
+    exit 125
+  fi
+fi
 
 on_term() {
   printf '1\n' >"$deadline_file" 2>/dev/null || true
   signal_review_group TERM
-  if [ -n "$review_group_pid" ]; then
+  if [ -n "$review_group_id" ]; then
     (
       sleep 2
       signal_review_group KILL
@@ -249,9 +303,26 @@ on_int() {
 trap 'on_term' TERM
 trap 'on_int' INT
 
-"$session_command" "$@" &
+if [ -n "$session_command" ]; then
+  "$session_command" "$@" &
+else
+  "$@" &
+fi
 child_pid=$!
-review_group_pid=$child_pid
+review_group_id=$(process_group_id "$child_pid")
+if [ -z "$review_group_id" ]; then
+  kill -TERM "$child_pid" 2>/dev/null || true
+  echo "coderabbit-critique: could not identify the review process group" >&2
+  exit 125
+fi
+if [ -z "$session_command" ]; then
+  if [ "$review_group_id" = "$caller_group_id" ]; then
+    kill -TERM "$child_pid" 2>/dev/null || true
+    echo "coderabbit-critique: timeout did not provide an isolated process group" >&2
+    exit 125
+  fi
+  cleanup_mode=members
+fi
 child_status=0
 while :; do
   wait "$child_pid"
@@ -315,7 +386,7 @@ printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeo
 
 set +e
 "$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
-  sh "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" "$SESSION_CMD" \
+  sh "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" "$SESSION_CMD" "$review_members_tmp" \
   coderabbit review --agent --base "$BASE_BRANCH" \
   >"$stdout_tmp" 2>"$stderr_tmp" &
 timeout_pid=$!
