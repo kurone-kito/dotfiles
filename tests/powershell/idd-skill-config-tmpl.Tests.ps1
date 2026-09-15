@@ -125,10 +125,19 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       if ($IsWindows -eq $false) {
         & chmod +x $isolatedChezmoi
       }
+      # Non-Windows branch deliberately omits /usr/bin and /bin: chezmoi
+      # is invoked here by its full isolated-copy path (not resolved via
+      # PATH), and this template's rendering only ever shells out through
+      # the `lookPath "pwsh"` builtin -- no other external command is
+      # needed. Including /usr/bin or /bin would let a native (non-Homebrew)
+      # Linux pwsh install (Microsoft's apt package symlinks to
+      # /usr/bin/pwsh) defeat this context's purpose by letting lookPath
+      # resolve pwsh after all, on a host where it wouldn't on this
+      # repository's own Homebrew-based dev machine.
       $minimalPath = if ($IsWindows -ne $false) {
         "$script:FakeBinDir$([IO.Path]::PathSeparator)$([Environment]::SystemDirectory)"
       } else {
-        "$script:FakeBinDir$([IO.Path]::PathSeparator)/usr/bin$([IO.Path]::PathSeparator)/bin"
+        $script:FakeBinDir
       }
       $script:Render = Invoke-Render -Os 'windows' -ChezmoiPath $isolatedChezmoi -PathOverride $minimalPath
       $script:Config = $script:Render.Output | ConvertFrom-Json
