@@ -240,6 +240,7 @@ shift 4
 child_pid=
 review_group_id=
 killer_pid=
+pending_signal=
 cleanup_mode=group
 
 process_group_id() {
@@ -300,6 +301,10 @@ fi
 
 on_term() {
   printf '1\n' >"$deadline_file" 2>/dev/null || true
+  if [ -z "$review_group_id" ]; then
+    pending_signal=TERM
+    return
+  fi
   signal_review_group TERM
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
     (
@@ -318,6 +323,10 @@ on_int_cleanup() {
 }
 
 on_int() {
+  if [ -z "$review_group_id" ]; then
+    pending_signal=INT
+    return
+  fi
   signal_review_group INT
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
     on_int_cleanup &
@@ -339,21 +348,35 @@ if [ -n "$session_command" ]; then
   # this keeps the Linux path independent of the optional `ps` utility.
   review_group_id=$child_pid
 else
-  review_group_id=$(process_group_id "$child_pid")
-fi
-if [ -z "$review_group_id" ]; then
-  kill -TERM "$child_pid" 2>/dev/null || true
-  echo "coderabbit-critique: could not identify the review process group" >&2
-  exit 125
-fi
-if [ -z "$session_command" ]; then
-  if [ "$review_group_id" = "$caller_group_id" ]; then
+  candidate_group_id=$(process_group_id "$child_pid")
+  if [ -z "$candidate_group_id" ]; then
+    kill -TERM "$child_pid" 2>/dev/null || true
+    echo "coderabbit-critique: could not identify the review process group" >&2
+    exit 125
+  fi
+  if [ "$candidate_group_id" = "$caller_group_id" ]; then
     kill -TERM "$child_pid" 2>/dev/null || true
     echo "coderabbit-critique: timeout did not provide an isolated process group" >&2
     exit 125
   fi
+  review_group_id=$candidate_group_id
   cleanup_mode=members
 fi
+
+# The child can run far enough to receive a cancellation before the shell has
+# assigned `$!` to `review_group_id`. Defer that signal until the isolated
+# group has been identified instead of letting the outer timeout exit with a
+# live review descendant.
+case "$pending_signal" in
+  TERM)
+    pending_signal=
+    on_term
+    ;;
+  INT)
+    pending_signal=
+    on_int
+    ;;
+esac
 child_status=0
 while :; do
   wait "$child_pid"
