@@ -872,6 +872,75 @@ exit 1
   assert_failure
 }
 
+@test "forwards external INT and applies bounded cleanup before exiting" {
+  signal_reset_command="$(command -v perl || true)"
+  if [ -z "$signal_reset_command" ]; then
+    skip "requires perl to reset inherited SIGINT disposition"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" INT TERM
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-int.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  # Background jobs inherit SIGINT=ignored from the non-interactive Bats
+  # shell. Reset it in a tiny exec shim so this exercises the delegate's
+  # real external-cancellation trap rather than the shell's disposition.
+  "$signal_reset_command" -e '$SIG{INT} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/outer-int.stdout" 2>"$BATS_TEST_TMPDIR/outer-int.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -INT "$script_pid"
+  if wait "$script_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  assert_equal 130 "$status"
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
+}
+
 @test "uses CODERABBIT_CRITIQUE_BASE for the review base branch, skipping auto-detection" {
   make_default_mocks
   export CODERABBIT_CRITIQUE_BASE=develop

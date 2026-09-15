@@ -287,7 +287,7 @@ fi
 on_term() {
   printf '1\n' >"$deadline_file" 2>/dev/null || true
   signal_review_group TERM
-  if [ -n "$review_group_id" ]; then
+  if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
     (
       sleep 2
       signal_review_group KILL
@@ -296,8 +296,19 @@ on_term() {
   fi
 }
 
+on_int_cleanup() {
+  sleep 2
+  signal_review_group TERM
+  sleep 2
+  signal_review_group KILL
+}
+
 on_int() {
   signal_review_group INT
+  if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
+    on_int_cleanup &
+    killer_pid=$!
+  fi
 }
 
 trap 'on_term' TERM
@@ -309,7 +320,13 @@ else
   "$@" &
 fi
 child_pid=$!
-review_group_id=$(process_group_id "$child_pid")
+if [ -n "$session_command" ]; then
+  # `setsid` guarantees that the launched PID is also the process-group ID;
+  # this keeps the Linux path independent of the optional `ps` utility.
+  review_group_id=$child_pid
+else
+  review_group_id=$(process_group_id "$child_pid")
+fi
 if [ -z "$review_group_id" ]; then
   kill -TERM "$child_pid" 2>/dev/null || true
   echo "coderabbit-critique: could not identify the review process group" >&2
@@ -369,7 +386,11 @@ forward_review_signal() {
   signal=$1
   signal_status=$2
   if [ -n "$timeout_pid" ]; then
-    kill "-$signal" "$timeout_pid" 2>/dev/null || true
+    # GNU timeout/gtimeout isolates its command in this process group. Send
+    # cancellation there so the wrapper can run its bounded cleanup; retain
+    # a direct-PID fallback for a timeout implementation without that group.
+    kill "-$signal" "-$timeout_pid" 2>/dev/null || \
+      kill "-$signal" "$timeout_pid" 2>/dev/null || true
     wait "$timeout_pid" 2>/dev/null || true
   fi
   exit "$signal_status"
