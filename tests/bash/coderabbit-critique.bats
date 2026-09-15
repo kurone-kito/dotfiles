@@ -573,6 +573,30 @@ exit 1
   assert_no_git_calls
 }
 
+@test "classifies a review exit 124 as review-failed rather than timeout" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "review returned 124" >&2
+  exit 124
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
+  assert_no_git_calls
+}
+
 @test "fails when review times out" {
   make_git_call_recorder
   make_mock coderabbit '

@@ -161,7 +161,12 @@ stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
   echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
   exit 1
 }
-trap 'rm -f "$stderr_tmp"' EXIT
+status_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-status.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot record review exit status" >&2
+  exit 1
+}
+trap 'rm -f "$stderr_tmp" "$status_tmp"' EXIT
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
@@ -171,13 +176,27 @@ printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeo
   "$BASE_BRANCH" "$TIMEOUT_SECONDS" >&2
 
 set +e
-stdout_output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>"$stderr_tmp")"
+stdout_output="$("$TIMEOUT_CMD" --kill-after 2 "$TIMEOUT_SECONDS" sh -c '
+  coderabbit review --agent --base "$1"
+  review_status=$?
+  printf "%s\n" "$review_status" > "$2"
+  exit "$review_status"
+' sh "$BASE_BRANCH" "$status_tmp" 2>"$stderr_tmp")"
 status=$?
 set -e
 stderr_output="$(cat "$stderr_tmp")"
+review_status=""
+if [ -r "$status_tmp" ]; then
+  review_status="$(cat "$status_tmp" 2>/dev/null || true)"
+fi
 
 if [ "$status" -ne 0 ]; then
-  if [ "$status" -eq 124 ]; then
+  # GNU timeout uses 124 both when its child reaches the deadline and when
+  # the child itself exits 124. The wrapper records the latter before it
+  # exits, so status 124 with a recorded child status is a review failure;
+  # an empty record means timeout killed the wrapper before it could report
+  # the child result.
+  if [ "$status" -eq 124 ] && [ "$review_status" != 124 ]; then
     log_fallback_reason timeout
   else
     log_fallback_reason review-failed
