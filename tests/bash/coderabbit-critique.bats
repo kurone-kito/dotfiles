@@ -342,6 +342,22 @@ exit 0
   assert_no_git_calls
 }
 
+@test "waits for setsid to establish its process group before checking isolation" {
+  make_default_mocks
+  real_setsid="$(command -v setsid)"
+  export CODERABBIT_REAL_SETSID="$real_setsid"
+  make_mock setsid '
+sleep 0.1
+exec "$CODERABBIT_REAL_SETSID" "$@"
+'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
 @test "emits a progress line to stderr only, as the first stderr line, before invoking review" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'

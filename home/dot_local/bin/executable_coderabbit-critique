@@ -381,9 +381,20 @@ if [ -n "$session_command" ]; then
   # `setsid` guarantees that the launched PID is also the process-group ID;
   # this keeps the Linux path independent of the optional `ps` utility.
   review_group_id=$child_pid
-  detected_group_id=$(process_group_id "$child_pid")
+  wrapper_group_id=$(process_group_id "$$")
+  detected_group_id=
+  # A shell may briefly report the asynchronous setsid launcher in this
+  # wrapper's group before setsid has created the review session. Recheck a
+  # bounded number of times so that scheduling does not turn a valid launch
+  # into a false status-125 failure.
+  for _ in 1 2 3 4 5; do
+    detected_group_id=$(process_group_id "$child_pid")
+    if [ -z "$detected_group_id" ] || [ -z "$wrapper_group_id" ] || [ "$detected_group_id" != "$wrapper_group_id" ]; then
+      break
+    fi
+    sleep 0.05
+  done
   if [ -n "$detected_group_id" ]; then
-    wrapper_group_id=$(process_group_id "$$")
     if [ -n "$wrapper_group_id" ] && [ "$detected_group_id" = "$wrapper_group_id" ]; then
       kill -TERM "$child_pid" 2>/dev/null || true
       echo "coderabbit-critique: setsid did not provide an isolated process group" >&2
