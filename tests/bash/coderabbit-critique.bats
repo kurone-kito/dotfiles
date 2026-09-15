@@ -114,6 +114,34 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+make_immediate_exit_coderabbit() {
+  exit_status="$1"
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  exit '"$exit_status"'
+fi
+exit 1
+'
+}
+
+assert_immediate_review_exit_is_failure() {
+  make_git_call_recorder
+  make_immediate_exit_coderabbit "$1"
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
+  assert_no_git_calls
+}
+
 make_default_mocks() {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'
@@ -630,6 +658,18 @@ exit 1
   assert_output --partial "coderabbit review failed"
   assert_fallback_reason review-failed
   assert_no_git_calls
+}
+
+@test "classifies an immediate review exit 15 as review-failed" {
+  assert_immediate_review_exit_is_failure 15
+}
+
+@test "classifies an immediate review exit 137 as review-failed" {
+  assert_immediate_review_exit_is_failure 137
+}
+
+@test "classifies an immediate review exit 143 as review-failed" {
+  assert_immediate_review_exit_is_failure 143
 }
 
 @test "fails when review times out" {

@@ -58,17 +58,17 @@ if ! command -v coderabbit >/dev/null 2>&1; then
 fi
 
 # `command -v` only checks that a `timeout`/`gtimeout` binary exists, not
-# that it understands the GNU-specific `--kill-after` option this script
-# invokes it with (e.g. BusyBox's minimal `timeout` applet lacks it) -- a
-# child that ignores SIGTERM would then survive past the bound. Probe
-# --help output for the exact flag string this script invokes with (see
-# ~/.gnupg/pinentry-auto's `timeout_cmd_is_compatible` for the identical
-# pattern and its rationale). Unlike pinentry-auto -- which falls back to
-# unbounded exec because an interactive human is normally present to
-# eventually answer -- this script fails closed when no compatible timeout
-# is found: it runs unattended, and the exact hang this bounds (an
-# unauthenticated coderabbit call blocking on browser OAuth) has no human
-# present to rescue it.
+# that it understands the GNU-specific `--kill-after` and
+# `--preserve-status` options this script invokes it with (e.g. BusyBox's
+# minimal `timeout` applet lacks them) -- a child that ignores SIGTERM
+# would then survive past the bound. Probe --help output for the exact flag
+# strings this script invokes with (see ~/.gnupg/pinentry-auto's
+# `timeout_cmd_is_compatible` for the identical pattern and its rationale).
+# Unlike pinentry-auto -- which falls back to unbounded exec because an
+# interactive human is normally present to eventually answer -- this script
+# fails closed when no compatible timeout is found: it runs unattended, and
+# the exact hang this bounds (an unauthenticated coderabbit call blocking on
+# browser OAuth) has no human present to rescue it.
 timeout_cmd_is_compatible() {
   help_output=$("$1" --help 2>&1)
   case "$help_output" in
@@ -165,7 +165,17 @@ stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
   echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
   exit 1
 }
-trap 'rm -f "$stderr_tmp"' EXIT
+stdout_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stdout.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot capture review output" >&2
+  exit 1
+}
+deadline_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-deadline.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot track review deadline" >&2
+  exit 1
+}
+trap 'rm -f "$stderr_tmp" "$stdout_tmp" "$deadline_tmp"' EXIT
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
@@ -175,18 +185,61 @@ printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeo
   "$BASE_BRANCH" "$TIMEOUT_SECONDS" >&2
 
 set +e
-stdout_output="$("$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" coderabbit review --agent --base "$BASE_BRANCH" 2>"$stderr_tmp")"
+start_epoch="$(date -u '+%s' 2>/dev/null || printf '0')"
+case "$start_epoch" in
+  '' | *[!0-9]*) start_epoch=0 ;;
+esac
+deadline_epoch=$((start_epoch + TIMEOUT_SECONDS))
+
+"$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
+  coderabbit review --agent --base "$BASE_BRANCH" \
+  >"$stdout_tmp" 2>"$stderr_tmp" &
+timeout_pid=$!
+(
+  timer_pid=""
+  stop_timer() {
+    if [ -n "$timer_pid" ]; then
+      kill "$timer_pid" 2>/dev/null || true
+    fi
+    exit 0
+  }
+  sleep "$TIMEOUT_SECONDS" &
+  timer_pid=$!
+  trap 'stop_timer' TERM INT
+  wait "$timer_pid" 2>/dev/null || exit 0
+  if kill -0 "$timeout_pid" 2>/dev/null; then
+    printf '1\n' >"$deadline_tmp" 2>/dev/null || true
+  fi
+) &
+watchdog_pid=$!
+
+wait "$timeout_pid"
 status=$?
+now_epoch="$(date -u '+%s' 2>/dev/null || printf '0')"
+case "$now_epoch" in
+  '' | *[!0-9]*) now_epoch=0 ;;
+esac
+deadline_expired=false
+if [ -s "$deadline_tmp" ]; then
+  deadline_expired=true
+elif [ "$start_epoch" -ne 0 ] && [ "$now_epoch" -ge "$deadline_epoch" ]; then
+  wait "$watchdog_pid" 2>/dev/null || true
+  if [ -s "$deadline_tmp" ]; then
+    deadline_expired=true
+  fi
+else
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+fi
 set -e
+stdout_output="$(cat "$stdout_tmp")"
 stderr_output="$(cat "$stderr_tmp")"
 
 if [ "$status" -ne 0 ]; then
-  # --preserve-status keeps CodeRabbit's own exit 124 distinct from the
-  # timeout command's deadline result. A deadline terminates the directly
-  # monitored CodeRabbit process with a signal (15/137/143 on the supported
-  # GNU-compatible implementations); every other non-zero status belongs
-  # to the review itself.
-  if [ "$status" -eq 15 ] || [ "$status" -eq 137 ] || [ "$status" -eq 143 ]; then
+  # --preserve-status keeps CodeRabbit's own exit status intact. The
+  # separate watchdog records whether the timeout deadline actually fired,
+  # so an immediate review exit of 15, 137, or 143 is still review-failed.
+  if [ "$deadline_expired" = true ]; then
     log_fallback_reason timeout
   else
     log_fallback_reason review-failed
