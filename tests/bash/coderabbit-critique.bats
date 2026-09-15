@@ -15,12 +15,14 @@ setup() {
   _ORIG_PATH="$PATH"
   export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
+  FALLBACK_LOG_FILE="$XDG_STATE_HOME/idd-critique/fallbacks.jsonl"
   export CODERABBIT_CRITIQUE_LOG="$BATS_TEST_TMPDIR/coderabbit-critique.log"
 }
 
 teardown() {
   export PATH="$_ORIG_PATH"
-  unset CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE
+  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE
 }
 
 make_mock() {
@@ -43,6 +45,20 @@ assert_no_git_calls() {
     run grep -c '^git:' "$CODERABBIT_CRITIQUE_LOG"
     assert_output "0"
   fi
+}
+
+assert_fallback_reason() {
+  expected_reason="$1"
+  assert [ -f "$FALLBACK_LOG_FILE" ]
+  run jq -e -s --arg expected "$expected_reason" \
+    'length == 1 and (.[0] | type == "object" and has("timestamp") and (.timestamp | type == "string") and (.timestamp | length > 0) and .reason == $expected)' \
+    "$FALLBACK_LOG_FILE"
+  assert_success
+}
+
+link_system_command() {
+  command_path="$(command -v "$1")"
+  ln -sf "$command_path" "$BATS_TEST_TMPDIR/bin/$1"
 }
 
 # The script probes `timeout`/`gtimeout --help` for --kill-after support
@@ -149,11 +165,14 @@ setup_git_repo_with_base() {
 
   assert_failure
   assert_output --partial "coderabbit not found in PATH"
+  assert_fallback_reason coderabbit-missing
   assert_no_git_calls
 }
 
 @test "fails closed when no compatible timeout/gtimeout is found" {
   make_mock coderabbit 'exit 1'
+  link_system_command date
+  link_system_command mkdir
 
   # Scope PATH to only the mock bin dir (no real system timeout) for the
   # script invocation itself, mirroring pinentry-auto.bats's technique --
@@ -163,10 +182,13 @@ setup_git_repo_with_base() {
 
   assert_failure
   assert_stderr --partial "no timeout/gtimeout"
+  assert_fallback_reason no-compatible-timeout-command
 }
 
 @test "fails closed when timeout exists but lacks --kill-after (BusyBox-style)" {
   make_mock coderabbit 'exit 1'
+  link_system_command date
+  link_system_command mkdir
   make_mock timeout '
 if [ "$1" = "--help" ]; then
   echo "Usage: timeout DURATION COMMAND"
@@ -179,6 +201,7 @@ shift 1; exec "$@"
 
   assert_failure
   assert_stderr --partial "no timeout/gtimeout"
+  assert_fallback_reason no-compatible-timeout-command
 }
 
 @test "resolves to gtimeout when timeout is absent" {
@@ -190,17 +213,26 @@ fi
 exit 1
 '
   make_mock_timeout gtimeout 'shift 3; exec "$@"'
+  link_system_command date
+  link_system_command jq
+  link_system_command mktemp
+  link_system_command cat
+  link_system_command rm
+  link_system_command mkdir
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
   run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
 
   refute_output --partial "no timeout/gtimeout"
+  assert_fallback_reason review-failed
 }
 
 @test "fails closed when jq is not found" {
   make_mock coderabbit 'exit 1'
   make_mock_timeout timeout 'shift 3; exec "$@"'
+  link_system_command date
+  link_system_command mkdir
 
   # Scope PATH to only the mock bin dir (mocked coderabbit/timeout, no
   # real jq) -- the jq preflight check runs before auth_status or review,
@@ -210,6 +242,7 @@ exit 1
 
   assert_failure
   assert_stderr --partial "jq not found"
+  assert_fallback_reason jq-missing
 }
 
 @test "fails without calling review when auth status reports signed out" {
@@ -229,6 +262,7 @@ exit 0
 
   assert_failure
   assert_output --partial "not authenticated"
+  assert_fallback_reason unauthenticated
   run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
   assert_no_git_calls
@@ -310,6 +344,7 @@ EOF
 
   assert_failure
   assert_stderr --partial "mktemp failed"
+  assert_fallback_reason mktemp-failed
   assert_no_git_calls
 }
 
@@ -361,6 +396,33 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
+  assert_no_git_calls
+}
+
+@test "keeps the delegate behavior when the fallback log is unwritable" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"action_required\",\"phase\":\"billing\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+  mkdir -p "$FALLBACK_LOG_FILE"
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_output ""
+  assert_stderr --partial "requires operator action"
+  assert [ -d "$FALLBACK_LOG_FILE" ]
   assert_no_git_calls
 }
 
@@ -384,6 +446,7 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
   assert_no_git_calls
 }
 
@@ -407,6 +470,7 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
   assert_no_git_calls
 }
 
@@ -505,6 +569,7 @@ exit 1
 
   assert_failure
   assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
   assert_no_git_calls
 }
 
@@ -530,6 +595,7 @@ exit 1
 
   assert_failure
   assert_output --partial "coderabbit review failed"
+  assert_fallback_reason timeout
   assert_no_git_calls
 }
 
@@ -604,6 +670,7 @@ exit 1
 
   assert_failure
   assert_stderr --partial "could not determine the default base branch"
+  assert_fallback_reason base-branch-unresolved
 }
 
 @test "fails closed when the base branch cannot be determined" {
@@ -616,5 +683,6 @@ exit 1
 
   assert_failure
   assert_stderr --partial "could not determine the default base branch"
+  assert_fallback_reason base-branch-unresolved
   assert_only_readonly_git_subcommands_and_at_least_one
 }

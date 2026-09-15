@@ -19,12 +19,37 @@ BeforeAll {
   }
 }
 
+function global:Assert-DotfilesCoderabbitFallbackReason {
+  param([Parameter(Mandatory)] [string] $ExpectedReason)
+
+  $rawLines = @(Get-Content -LiteralPath $script:FallbackLogFile -ErrorAction Stop)
+  $records = @($rawLines | ForEach-Object { ConvertFrom-Json -InputObject $_ })
+  $records.Count | Should -Be 1
+  $records[0].PSObject.Properties.Name.Count | Should -Be 2
+  $records[0].PSObject.Properties.Name | Should -Contain 'timestamp'
+  $records[0].PSObject.Properties.Name | Should -Contain 'reason'
+  # ConvertFrom-Json may materialize ISO-8601 strings as DateTime values on
+  # some PowerShell versions, so validate the serialized JSON token itself.
+  $rawLines[0] | Should -Match '"timestamp":"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"'
+  $bytes = [System.IO.File]::ReadAllBytes($script:FallbackLogFile)
+  $hasUtf8Bom = $bytes.Length -ge 3 -and
+    $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf
+  $hasUtf8Bom | Should -BeFalse
+  $records[0].reason | Should -Be $ExpectedReason
+}
+
 Describe 'coderabbit-critique' {
 
   BeforeEach {
     $script:OriginalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
     $script:OriginalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
     $script:OriginalBase = $env:CODERABBIT_CRITIQUE_BASE
+    $script:OriginalXdgStateHome = $env:XDG_STATE_HOME
+    $script:FallbackStateHome = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+    $env:XDG_STATE_HOME = $script:FallbackStateHome
+    $script:FallbackLogFile = Join-Path `
+      (Join-Path $script:FallbackStateHome 'idd-critique') `
+      'fallbacks.jsonl'
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
     Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
     Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
@@ -58,8 +83,14 @@ Describe 'coderabbit-critique' {
     } else {
       $env:CODERABBIT_CRITIQUE_BASE = $script:OriginalBase
     }
+    if ($null -eq $script:OriginalXdgStateHome) {
+      Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue
+    } else {
+      $env:XDG_STATE_HOME = $script:OriginalXdgStateHome
+    }
 
     foreach ($name in @(
+      'Write-DotfilesCoderabbitFallbackReason'
       'Get-DotfilesCoderabbitCommand'
       'Test-DotfilesCoderabbitAuthenticated'
       'Resolve-DotfilesCoderabbitTimeoutSeconds'
@@ -429,6 +460,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'coderabbit-missing'
     }
 
     It 'fails without attempting a review when not authenticated' {
@@ -438,6 +470,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
     }
 
     It 'fails when the base branch cannot be resolved' {
@@ -448,6 +481,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'base-branch-unresolved'
     }
 
     It 'fails when the review times out' {
@@ -460,6 +494,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'timeout'
     }
 
     It 'fails when the review exits non-zero' {
@@ -472,6 +507,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
     }
 
     It 'rejects an action_required response' {
@@ -488,6 +524,7 @@ Describe 'coderabbit-critique' {
 
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'action_required'
     }
 
     It 'rejects a pretty-printed action_required response with whitespace around the marker' {
@@ -996,6 +1033,19 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit review requires operator action'
+    }
+
+    It 'keeps exit, stdout, and stderr unchanged when the fallback log is unwritable' {
+      New-Item -ItemType Directory -Force -Path $script:FallbackLogFile | Out-Null
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        FAKE_AUTH_SIGNED_OUT     = '1'
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'coderabbit is not authenticated'
+      Test-Path -LiteralPath $script:FallbackLogFile -PathType Container | Should -BeTrue
     }
   }
 

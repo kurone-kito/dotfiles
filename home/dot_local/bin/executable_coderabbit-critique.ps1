@@ -14,6 +14,51 @@
 # output must be parsed instead).
 $ErrorActionPreference = 'Stop'
 
+function global:Write-DotfilesCoderabbitFallbackReason {
+  param(
+    [Parameter(Mandatory)]
+    [ValidateSet(
+      'action_required', 'unauthenticated', 'coderabbit-missing',
+      'timeout', 'review-failed', 'base-branch-unresolved',
+      'mktemp-failed', 'no-compatible-timeout-command', 'jq-missing'
+    )]
+    [string] $Reason
+  )
+
+  # This is a best-effort side channel. Guard the complete operation so a
+  # missing/unwritable state path, timestamp failure, or JSON write failure
+  # never changes the delegate result or diagnostics.
+  try {
+    $stateDir = $null
+    if ($env:XDG_STATE_HOME) {
+      $stateDir = Join-Path $env:XDG_STATE_HOME 'idd-critique'
+    } elseif ($env:HOME) {
+      $stateDir = Join-Path $env:HOME '.local/state/idd-critique'
+    } elseif ($env:USERPROFILE) {
+      $stateDir = Join-Path $env:USERPROFILE '.local/state/idd-critique'
+    }
+    if (-not $stateDir) {
+      return
+    }
+
+    $timestamp = [DateTime]::UtcNow.ToString(
+      "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture
+    )
+    $line = ConvertTo-Json -InputObject ([ordered]@{
+        timestamp = $timestamp
+        reason    = $Reason
+      }) -Compress
+    New-Item -ItemType Directory -Force -Path $stateDir -ErrorAction Stop |
+      Out-Null
+    $fallbackLogPath = Join-Path $stateDir 'fallbacks.jsonl'
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::AppendAllText($fallbackLogPath, "$line`n", $utf8NoBom)
+  } catch {
+    # Fire-and-forget: deliberately swallow every logging failure.
+  }
+}
+
 function global:Get-DotfilesCoderabbitCommand {
   return Get-Command coderabbit -ErrorAction SilentlyContinue
 }
@@ -312,11 +357,13 @@ function global:Invoke-DotfilesCoderabbitCritique {
   # OS-level stderr handle, bypassing that host routing entirely.
   $coderabbitCommand = Get-DotfilesCoderabbitCommand
   if (-not $coderabbitCommand) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'coderabbit-missing'
     [Console]::Error.WriteLine('coderabbit not found in PATH')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
   if (-not (Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $coderabbitCommand)) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'unauthenticated'
     [Console]::Error.WriteLine('coderabbit is not authenticated (run: coderabbit auth login)')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
@@ -324,6 +371,7 @@ function global:Invoke-DotfilesCoderabbitCritique {
   $timeoutSeconds = Resolve-DotfilesCoderabbitTimeoutSeconds
   $baseBranch = Resolve-DotfilesCoderabbitBaseBranch
   if (-not $baseBranch) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'base-branch-unresolved'
     [Console]::Error.WriteLine('could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
@@ -340,10 +388,12 @@ function global:Invoke-DotfilesCoderabbitCritique {
     -TimeoutSeconds $timeoutSeconds
 
   if ($result.TimedOut) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'timeout'
     [Console]::Error.WriteLine("coderabbit review timed out after ${timeoutSeconds}s")
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
   if ($result.ExitCode -ne 0) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
     [Console]::Error.WriteLine("coderabbit review failed (exit $($result.ExitCode))")
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
@@ -356,6 +406,7 @@ function global:Invoke-DotfilesCoderabbitCritique {
   # returned as findings below.
   if ((Test-DotfilesActionRequiredType -Text $result.Stdout) -or
     (Test-DotfilesActionRequiredType -Text $result.Stderr)) {
+    Write-DotfilesCoderabbitFallbackReason -Reason 'action_required'
     [Console]::Error.WriteLine('coderabbit review requires operator action; treating as unavailable')
     return [pscustomobject]@{ Success = $false; Output = '' }
   }

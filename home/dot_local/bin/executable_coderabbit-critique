@@ -14,6 +14,34 @@
 # output must be parsed instead).
 set -eu
 
+# Record why this delegate is falling through to the per-agent critique
+# mechanism. This is deliberately a best-effort side channel: every
+# operation, including timestamp generation and redirection setup, is
+# guarded so a logging failure cannot change this script's output or exit
+# status.
+log_fallback_reason() {
+  fallback_reason=${1:-}
+  case "$fallback_reason" in
+    action_required|unauthenticated|coderabbit-missing|timeout|review-failed|base-branch-unresolved|mktemp-failed|no-compatible-timeout-command|jq-missing) ;;
+    *) return 0 ;;
+  esac
+
+  if [ -n "${XDG_STATE_HOME:-}" ]; then
+    fallback_state_dir="$XDG_STATE_HOME/idd-critique"
+  elif [ -n "${HOME:-}" ]; then
+    fallback_state_dir="$HOME/.local/state/idd-critique"
+  else
+    return 0
+  fi
+  fallback_log_file="$fallback_state_dir/fallbacks.jsonl"
+  fallback_timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null) || return 0
+  [ -n "$fallback_timestamp" ] || return 0
+  mkdir -p "$fallback_state_dir" 2>/dev/null || return 0
+  { printf '{"timestamp":"%s","reason":"%s"}\n' \
+      "$fallback_timestamp" "$fallback_reason" >> "$fallback_log_file"; } \
+    2>/dev/null || return 0
+}
+
 # 300s default: an empirically observed real review of a 5-file diff took
 # ~151s end to end (connect, setup, summarize, review); 120s was measured
 # to be too short and cut a genuine in-progress review off mid-flight.
@@ -24,6 +52,7 @@ case "$TIMEOUT_SECONDS" in
 esac
 
 if ! command -v coderabbit >/dev/null 2>&1; then
+  log_fallback_reason coderabbit-missing
   echo "coderabbit not found in PATH" >&2
   exit 1
 fi
@@ -56,6 +85,7 @@ elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_is_compatible gtimeout; 
 fi
 
 if [ -z "$TIMEOUT_CMD" ]; then
+  log_fallback_reason no-compatible-timeout-command
   echo "coderabbit-critique: no timeout/gtimeout with --kill-after found; failing closed rather than risking an unbounded hang" >&2
   exit 1
 fi
@@ -73,6 +103,7 @@ fi
 # there would silently read as "no match" instead of the fail-closed exit
 # this guard exists to guarantee.
 if ! command -v jq >/dev/null 2>&1; then
+  log_fallback_reason jq-missing
   echo "coderabbit-critique: jq not found; failing closed rather than risking an unanchored action_required marker" >&2
   exit 1
 fi
@@ -80,6 +111,7 @@ fi
 auth_status="$(coderabbit auth status 2>&1 || true)"
 case "$auth_status" in
   *"signed out"*)
+    log_fallback_reason unauthenticated
     echo "coderabbit is not authenticated (run: coderabbit auth login)" >&2
     exit 1
     ;;
@@ -111,6 +143,7 @@ if [ -z "$BASE_BRANCH" ]; then
   fi
 fi
 if [ -z "$BASE_BRANCH" ]; then
+  log_fallback_reason base-branch-unresolved
   echo "coderabbit-critique: could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly" >&2
   exit 1
 fi
@@ -124,6 +157,7 @@ fi
 # falling back to a merged capture that would reintroduce the leak this
 # split exists to close.
 stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
   echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
   exit 1
 }
@@ -143,6 +177,11 @@ set -e
 stderr_output="$(cat "$stderr_tmp")"
 
 if [ "$status" -ne 0 ]; then
+  if [ "$status" -eq 124 ]; then
+    log_fallback_reason timeout
+  else
+    log_fallback_reason review-failed
+  fi
   echo "coderabbit review failed or timed out (exit $status)" >&2
   printf '%s\n' "$stdout_output" >&2
   printf '%s\n' "$stderr_output" >&2
@@ -192,6 +231,7 @@ elif is_top_level_action_required "$stderr_output"; then
 fi
 
 if [ "$action_required" = true ]; then
+  log_fallback_reason action_required
   echo "coderabbit review requires operator action; treating as unavailable" >&2
   printf '%s\n' "$stdout_output" >&2
   printf '%s\n' "$stderr_output" >&2
