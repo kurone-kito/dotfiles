@@ -667,6 +667,88 @@ Describe 'coderabbit-critique' {
     }
   }
 
+  Context 'Fallback log concurrency' {
+    It 'serializes concurrent fallback appends' {
+      $barrierDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Force -Path $barrierDir | Out-Null
+      $childScript = Join-Path $barrierDir 'write-fallback.ps1'
+      $childContent = @'
+param(
+  [Parameter(Mandatory)] [string] $SubjectPath,
+  [Parameter(Mandatory)] [string] $StateHome,
+  [Parameter(Mandatory)] [string] $BarrierDir,
+  [Parameter(Mandatory)] [string] $WorkerId
+)
+$env:XDG_STATE_HOME = $StateHome
+$env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
+. $SubjectPath
+New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.ready") |
+  Out-Null
+while (-not (Test-Path -LiteralPath (Join-Path $BarrierDir 'release'))) {
+  Start-Sleep -Milliseconds 25
+}
+Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
+'@
+      [System.IO.File]::WriteAllText(
+        $childScript,
+        $childContent,
+        [System.Text.UTF8Encoding]::new($false)
+      )
+
+      $workerCount = 12
+      $processes = @()
+      $releasePath = Join-Path $barrierDir 'release'
+      try {
+        for ($i = 0; $i -lt $workerCount; $i++) {
+          $arguments = @(
+            '-NoProfile', '-File', $childScript, $script:Subject,
+            $script:FallbackStateHome, $barrierDir, [string] $i
+          )
+          $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+          if ($psi.PSObject.Properties.Name -contains 'ArgumentList') {
+            foreach ($argument in $arguments) {
+              $psi.ArgumentList.Add($argument)
+            }
+          } else {
+            $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+              -ArgumentList $arguments
+          }
+          $psi.UseShellExecute = $false
+          $psi.CreateNoWindow = $true
+          $processes += [Diagnostics.Process]::Start($psi)
+        }
+
+        $readyDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        do {
+          $readyCount = @(Get-ChildItem -LiteralPath $barrierDir -Filter '*.ready').Count
+          if ($readyCount -eq $workerCount) { break }
+          Start-Sleep -Milliseconds 25
+        } while ([DateTime]::UtcNow -lt $readyDeadline)
+        $readyCount | Should -Be $workerCount
+        New-Item -ItemType File -Force -Path $releasePath | Out-Null
+
+        foreach ($process in $processes) {
+          $process.WaitForExit(30000) | Should -BeTrue
+          $process.ExitCode | Should -Be 0
+        }
+      } finally {
+        foreach ($process in $processes) {
+          if (-not $process.HasExited) {
+            try { $process.Kill() } catch [System.Exception] {}
+          }
+          $process.Dispose()
+        }
+      }
+
+      $records = @(Get-Content -LiteralPath $script:FallbackLogFile |
+          ForEach-Object { ConvertFrom-Json -InputObject $_ })
+      $records.Count | Should -Be $workerCount
+      $records | ForEach-Object {
+        $_.reason | Should -Be 'review-failed'
+      }
+    }
+  }
+
   Context 'Full script as a real subprocess (stdout/stderr separation, Unix pwsh)' -Skip:($IsWindows -ne $false) {
     # Every other test in this file dot-sources the script with
     # DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN=1 and mocks internal

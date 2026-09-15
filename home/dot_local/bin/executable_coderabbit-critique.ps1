@@ -53,7 +53,37 @@ function global:Write-DotfilesCoderabbitFallbackReason {
       Out-Null
     $fallbackLogPath = Join-Path $stateDir 'fallbacks.jsonl'
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::AppendAllText($fallbackLogPath, "$line`n", $utf8NoBom)
+    $lockPath = Join-Path $stateDir 'fallbacks.lock'
+    $lockStream = $null
+    $lockDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ($null -eq $lockStream) {
+      try {
+        # Keep the lock file after releasing it: an OS-level exclusive
+        # handle is the synchronization primitive, so a crashed process
+        # cannot leave a stale path that blocks later writers.
+        $lockStream = [System.IO.File]::Open(
+          $lockPath,
+          [System.IO.FileMode]::OpenOrCreate,
+          [System.IO.FileAccess]::ReadWrite,
+          [System.IO.FileShare]::None
+        )
+      } catch [System.IO.IOException] {
+        if ([DateTime]::UtcNow -ge $lockDeadline) {
+          return
+        }
+        Start-Sleep -Milliseconds 25
+      }
+    }
+
+    try {
+      # File.AppendAllText is safe here because every writer first owns the
+      # same cross-process lock. Keep the lock held through the complete
+      # open/write/close sequence so concurrent fallback records are not
+      # silently lost on platforms that reject shared file opens.
+      [System.IO.File]::AppendAllText($fallbackLogPath, "$line`n", $utf8NoBom)
+    } finally {
+      $lockStream.Dispose()
+    }
   } catch {
     # Fire-and-forget: deliberately swallow every logging failure.
   }
