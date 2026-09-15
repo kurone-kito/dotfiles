@@ -347,6 +347,16 @@ if [ -n "$session_command" ]; then
   # `setsid` guarantees that the launched PID is also the process-group ID;
   # this keeps the Linux path independent of the optional `ps` utility.
   review_group_id=$child_pid
+  detected_group_id=$(process_group_id "$child_pid")
+  if [ -n "$detected_group_id" ]; then
+    wrapper_group_id=$(process_group_id "$$")
+    if [ -n "$wrapper_group_id" ] && [ "$detected_group_id" = "$wrapper_group_id" ]; then
+      kill -TERM "$child_pid" 2>/dev/null || true
+      echo "coderabbit-critique: setsid did not provide an isolated process group" >&2
+      exit 125
+    fi
+    review_group_id=$detected_group_id
+  fi
 else
   candidate_group_id=$(process_group_id "$child_pid")
   if [ -z "$candidate_group_id" ]; then
