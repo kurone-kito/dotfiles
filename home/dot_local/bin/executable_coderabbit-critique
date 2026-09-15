@@ -316,9 +316,11 @@ on_term() {
 }
 
 on_int_cleanup() {
-  sleep 2
+  # GNU timeout's --kill-after grace applies to this wrapper's process
+  # group too. Complete the review group's forced cleanup before that
+  # external two-second grace can kill this helper.
+  sleep 1
   signal_review_group TERM
-  sleep 2
   signal_review_group KILL
 }
 
