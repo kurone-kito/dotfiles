@@ -80,6 +80,40 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+make_mock_timeout_with_kill() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << 'EOF'
+#!/bin/sh
+if [ "$1" = "--help" ]; then
+  printf -- '--kill-after --preserve-status\n'
+  exit 0
+fi
+if [ "$1" != "--preserve-status" ] || [ "$2" != "--kill-after" ]; then
+  exit 2
+fi
+kill_after=$3
+duration=$4
+shift 4
+
+"$@" &
+child=$!
+(
+  sleep "$duration"
+  if kill -0 "$child" 2>/dev/null; then
+    kill -TERM "$child" 2>/dev/null || true
+    sleep "$kill_after"
+    kill -KILL "$child" 2>/dev/null || true
+  fi
+) &
+watcher=$!
+wait "$child"
+status=$?
+kill "$watcher" 2>/dev/null || true
+wait "$watcher" 2>/dev/null || true
+exit "$status"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
 make_default_mocks() {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'
@@ -626,6 +660,7 @@ exit 1
 
 @test "times out a review process that ignores TERM without waiting for an orphan" {
   make_git_call_recorder
+  make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
