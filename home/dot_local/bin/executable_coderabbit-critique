@@ -354,9 +354,22 @@ on_hup() {
   fi
 }
 
+on_quit() {
+  if [ -z "$review_group_id" ]; then
+    pending_signal=QUIT
+    return
+  fi
+  signal_review_group QUIT
+  if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
+    on_cancel_cleanup &
+    killer_pid=$!
+  fi
+}
+
 trap 'on_term' TERM
 trap 'on_int' INT
 trap 'on_hup' HUP
+trap 'on_quit' QUIT
 
 if [ -n "$session_command" ]; then
   "$session_command" "$@" &
@@ -414,6 +427,10 @@ case "$pending_signal" in
     pending_signal=
     on_hup
     ;;
+  QUIT)
+    pending_signal=
+    on_quit
+    ;;
 esac
 child_status=0
 while :; do
@@ -436,7 +453,7 @@ fi
 # TERM/INT while doing this cleanup: those signals are for the review group,
 # not for this supervisor, and the bounded KILL below is the final guarantee.
 if review_group_exists; then
-  trap '' TERM INT
+  trap '' TERM INT HUP QUIT
   signal_review_group TERM
   remaining=2
   while [ "$remaining" -gt 0 ] && review_group_exists; do
@@ -474,6 +491,7 @@ forward_review_signal() {
 trap 'forward_review_signal TERM 143' TERM
 trap 'forward_review_signal INT 130' INT
 trap 'forward_review_signal HUP 129' HUP
+trap 'forward_review_signal QUIT 131' QUIT
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
