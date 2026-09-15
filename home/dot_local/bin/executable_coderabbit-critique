@@ -290,11 +290,17 @@ signal_review_group() {
 # signal could reach the IDD supervisor or the user's shell.
 timeout_parent_id=
 caller_group_id=
+timeout_group_id=
 if [ -z "$session_command" ]; then
   timeout_parent_id=$(process_parent_id "$PPID")
   caller_group_id=$(process_group_id "$timeout_parent_id")
-  if [ -z "$timeout_parent_id" ] || [ -z "$caller_group_id" ]; then
+  timeout_group_id=$(process_group_id "$$")
+  if [ -z "$timeout_parent_id" ] || [ -z "$caller_group_id" ] || [ -z "$timeout_group_id" ]; then
     echo "coderabbit-critique: could not verify timeout process-group isolation" >&2
+    exit 125
+  fi
+  if [ "$timeout_group_id" = "$caller_group_id" ]; then
+    echo "coderabbit-critique: timeout did not provide an isolated process group" >&2
     exit 125
   fi
 fi
@@ -315,7 +321,7 @@ on_term() {
   fi
 }
 
-on_int_cleanup() {
+on_cancel_cleanup() {
   # GNU timeout's --kill-after grace applies to this wrapper's process
   # group too. Complete the review group's forced cleanup before that
   # external two-second grace can kill this helper.
@@ -331,13 +337,26 @@ on_int() {
   fi
   signal_review_group INT
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
-    on_int_cleanup &
+    on_cancel_cleanup &
+    killer_pid=$!
+  fi
+}
+
+on_hup() {
+  if [ -z "$review_group_id" ]; then
+    pending_signal=HUP
+    return
+  fi
+  signal_review_group HUP
+  if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
+    on_cancel_cleanup &
     killer_pid=$!
   fi
 }
 
 trap 'on_term' TERM
 trap 'on_int' INT
+trap 'on_hup' HUP
 
 if [ -n "$session_command" ]; then
   "$session_command" "$@" &
@@ -361,17 +380,20 @@ if [ -n "$session_command" ]; then
   fi
 else
   candidate_group_id=$(process_group_id "$child_pid")
-  if [ -z "$candidate_group_id" ]; then
-    kill -TERM "$child_pid" 2>/dev/null || true
-    echo "coderabbit-critique: could not identify the review process group" >&2
-    exit 125
-  fi
-  if [ "$candidate_group_id" = "$caller_group_id" ]; then
+  if [ -n "$candidate_group_id" ] && [ "$candidate_group_id" = "$caller_group_id" ]; then
     kill -TERM "$child_pid" 2>/dev/null || true
     echo "coderabbit-critique: timeout did not provide an isolated process group" >&2
     exit 125
   fi
-  review_group_id=$candidate_group_id
+  # A short-lived launcher can disappear before the `ps` lookup above. The
+  # wrapper itself remains in timeout's isolated group, so retain that
+  # pre-launch boundary and clean its surviving worker members instead of
+  # abandoning them with a status-125 early exit.
+  if [ -n "$candidate_group_id" ]; then
+    review_group_id=$candidate_group_id
+  else
+    review_group_id=$timeout_group_id
+  fi
   cleanup_mode=members
 fi
 
@@ -387,6 +409,10 @@ case "$pending_signal" in
   INT)
     pending_signal=
     on_int
+    ;;
+  HUP)
+    pending_signal=
+    on_hup
     ;;
 esac
 child_status=0
@@ -447,6 +473,7 @@ forward_review_signal() {
 }
 trap 'forward_review_signal TERM 143' TERM
 trap 'forward_review_signal INT 130' INT
+trap 'forward_review_signal HUP 129' HUP
 
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never

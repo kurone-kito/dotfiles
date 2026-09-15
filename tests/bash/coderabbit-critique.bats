@@ -848,9 +848,17 @@ exit 1
   export CODERABBIT_CRITIQUE_BASE=master
 
   ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
-  for command in awk cat date jq mkdir mktemp ps rm sh sleep tr; do
+  real_ps="$(command -v ps)"
+  export CODERABBIT_REAL_PS="$real_ps"
+  for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
     link_system_command "$command"
   done
+  make_mock ps '
+if [ "$1" = "-o" ] && [ "$2" = "pgid=" ]; then
+  sleep 0.2
+fi
+exec "$CODERABBIT_REAL_PS" "$@"
+'
   export PATH="$BATS_TEST_TMPDIR/bin"
 
   # Keep setsid out of PATH so the helper must use the timeout-created
@@ -963,6 +971,72 @@ exit 1
   fi
 
   assert_equal 130 "$status"
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
+}
+
+@test "forwards external HUP and applies bounded cleanup before exiting" {
+  signal_reset_command="$(command -v perl || true)"
+  if [ -z "$signal_reset_command" ]; then
+    skip "requires perl to reset inherited SIGHUP disposition"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" HUP INT TERM
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-hup.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  "$signal_reset_command" -e '$SIG{HUP} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/outer-hup.stdout" 2>"$BATS_TEST_TMPDIR/outer-hup.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -HUP "$script_pid"
+  if wait "$script_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  assert_equal 129 "$status"
   review_pid=$(cat "$review_pid_file")
   review_alive=true
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
