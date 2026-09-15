@@ -61,17 +61,18 @@ link_system_command() {
   ln -sf "$command_path" "$BATS_TEST_TMPDIR/bin/$1"
 }
 
-# The script probes `timeout`/`gtimeout --help` for --kill-after support
-# before selecting either as TIMEOUT_CMD (same probe-before-trust pattern
-# as ~/.gnupg/pinentry-auto's `timeout_cmd_is_compatible`). A GNU/uutils
-# mock must answer that probe itself, on top of its normal behavior, or
-# every test below would silently fail closed on the "no compatible
-# timeout" path instead of exercising the path it means to test.
+# The script probes `timeout`/`gtimeout --help` for --kill-after and
+# --preserve-status support before selecting either as TIMEOUT_CMD (same
+# probe-before-trust pattern as ~/.gnupg/pinentry-auto's
+# `timeout_cmd_is_compatible`). A GNU/uutils mock must answer that probe
+# itself, on top of its normal behavior, or every test below would silently
+# fail closed on the "no compatible timeout" path instead of exercising the
+# path it means to test.
 make_mock_timeout() {
   cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
 #!/bin/sh
 if [ "\$1" = "--help" ]; then
-  printf -- '--kill-after\n'
+  printf -- '--kill-after --preserve-status\n'
   exit 0
 fi
 $2
@@ -81,7 +82,7 @@ EOF
 
 make_default_mocks() {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -212,7 +213,7 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
 fi
 exit 1
 '
-  make_mock_timeout gtimeout 'shift 3; exec "$@"'
+  make_mock_timeout gtimeout 'shift 4; exec "$@"'
   link_system_command date
   link_system_command jq
   link_system_command mktemp
@@ -230,7 +231,7 @@ exit 1
 
 @test "fails closed when jq is not found" {
   make_mock coderabbit 'exit 1'
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   link_system_command date
   link_system_command mkdir
 
@@ -247,7 +248,7 @@ exit 1
 
 @test "fails without calling review when auth status reports signed out" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   printf "auth:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
@@ -280,7 +281,7 @@ exit 0
 
 @test "emits a progress line to stderr only, as the first stderr line, before invoking review" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -316,7 +317,7 @@ exit 1
 
 @test "fails closed when mktemp fails" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -350,7 +351,7 @@ EOF
 
 @test "keeps stderr out of a successful findings response" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -378,7 +379,7 @@ exit 1
 
 @test "rejects an action_required response" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -402,7 +403,7 @@ exit 1
 
 @test "keeps the delegate behavior when the fallback log is unwritable" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -428,7 +429,7 @@ exit 1
 
 @test "rejects a pretty-printed action_required response with whitespace around the marker" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -452,7 +453,7 @@ exit 1
 
 @test "rejects an action_required response arriving only on stderr" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -476,7 +477,7 @@ exit 1
 
 @test "does not trip on an unescaped nested action_required type field inside a finding" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -499,7 +500,7 @@ exit 1
 
 @test "does not trip when the top-level key differs from \"type\" only by case" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -529,7 +530,7 @@ exit 1
   # comparison, so the shell twin was never exposed to this -- this test
   # locks that in.
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -551,7 +552,7 @@ exit 1
 
 @test "fails when review exits non-zero" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -575,7 +576,7 @@ exit 1
 
 @test "classifies a review exit 124 as review-failed rather than timeout" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -623,6 +624,32 @@ exit 1
   assert_no_git_calls
 }
 
+@test "times out a review process that ignores TERM without waiting for an orphan" {
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  exec sleep 30
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  started_at=$(date +%s)
+  run "$SCRIPT"
+  elapsed=$(( $(date +%s) - started_at ))
+
+  assert_failure
+  assert [ "$elapsed" -lt 10 ]
+  assert_fallback_reason timeout
+  assert_no_git_calls
+}
+
 @test "uses CODERABBIT_CRITIQUE_BASE for the review base branch, skipping auto-detection" {
   make_default_mocks
   export CODERABBIT_CRITIQUE_BASE=develop
@@ -635,7 +662,7 @@ exit 1
 }
 
 @test "auto-detects the base branch from origin/HEAD when set" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -660,7 +687,7 @@ exit 1
 }
 
 @test "falls back to origin/main when no origin/HEAD symref is set" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -685,7 +712,7 @@ exit 1
 }
 
 @test "fails closed when both origin/main and origin/master exist without a symref" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit 'exit 1'
   work="$(setup_git_repo_with_base both)"
   make_git_passthrough_logger
@@ -698,7 +725,7 @@ exit 1
 }
 
 @test "fails closed when the base branch cannot be determined" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit 'exit 1'
   work="$(setup_git_repo_with_base none)"
   make_git_passthrough_logger
