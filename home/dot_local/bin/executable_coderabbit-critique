@@ -242,6 +242,11 @@ review_group_id=
 killer_pid=
 pending_signal=
 cleanup_mode=group
+# Keep the supervisor's internal cleanup shorter than the outer GNU
+# timeout's two-second --kill-after grace. If the outer deadline arrives
+# while descendant cleanup is in progress, the supervisor must finish its
+# own group kill before timeout can terminate the supervisor itself.
+cleanup_grace_seconds=1
 
 process_group_id() {
   ps -o pgid= -p "$1" 2>/dev/null | tr -d '[:space:]'
@@ -311,12 +316,12 @@ on_term() {
     pending_signal=TERM
     return
   fi
-  signal_review_group TERM
-  if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
-    (
-      sleep 2
+    signal_review_group TERM
+    if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
+      (
+      sleep "$cleanup_grace_seconds"
       signal_review_group KILL
-    ) &
+      ) &
     killer_pid=$!
   fi
 }
@@ -325,7 +330,7 @@ on_cancel_cleanup() {
   # GNU timeout's --kill-after grace applies to this wrapper's process
   # group too. Complete the review group's forced cleanup before that
   # external two-second grace can kill this helper.
-  sleep 1
+  sleep "$cleanup_grace_seconds"
   signal_review_group TERM
   signal_review_group KILL
 }
@@ -473,9 +478,9 @@ if review_group_exists; then
   trap 'on_cleanup_term' TERM
   trap '' INT HUP QUIT
   signal_review_group TERM
-  remaining=2
+  remaining=$cleanup_grace_seconds
   while [ "$remaining" -gt 0 ] && review_group_exists; do
-    sleep 1
+    sleep "$cleanup_grace_seconds"
     remaining=$((remaining - 1))
   done
   if review_group_exists; then

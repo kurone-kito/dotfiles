@@ -816,6 +816,40 @@ exit 1
   assert_no_git_calls
 }
 
+@test "kills descendants before timeout's grace kills the setsid supervisor" {
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 0.6
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/setsid-cleanup-deadline.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  # Use the real GNU timeout so its process-group kill-after grace races the
+  # supervisor's cleanup window just as it can in production.
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed or timed out"
+  assert_fallback_reason timeout
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
 @test "keeps a deadline timeout fail-closed when the review handles TERM with exit 0" {
   make_git_call_recorder
   make_mock_timeout_with_kill timeout
