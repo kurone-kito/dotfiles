@@ -264,6 +264,9 @@ review_group_members() {
   ps -axo pid=,pgid= >"$members_file" 2>/dev/null &
   ps_pid=$!
   wait "$ps_pid" 2>/dev/null || true
+}
+
+review_group_member_filter() {
   awk -v target="$review_group_id" -v self="$$" -v parent="$PPID" \
     -v leader="$review_group_id" -v snapshot="$ps_pid" \
     '$2 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot { print $1 }' \
@@ -272,7 +275,11 @@ review_group_members() {
 
 review_group_exists() {
   if [ "$cleanup_mode" = members ]; then
-    [ -n "$(review_group_members)" ]
+    review_group_members
+    awk -v target="$review_group_id" -v self="$$" -v parent="$PPID" \
+      -v leader="$review_group_id" -v snapshot="$ps_pid" \
+      '$2 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot { found=1 } END { exit(found ? 0 : 1) }' \
+      "$members_file" 2>/dev/null
   else
     [ -n "$review_group_id" ] && kill -0 "-$review_group_id" 2>/dev/null
   fi
@@ -281,7 +288,8 @@ review_group_exists() {
 signal_review_group() {
   if [ "$cleanup_mode" = members ]; then
     signal=$1
-    for member in $(review_group_members); do
+    review_group_members
+    review_group_member_filter | while IFS= read -r member; do
       kill "-$signal" "$member" 2>/dev/null || true
     done
   elif [ -n "$review_group_id" ]; then

@@ -955,6 +955,45 @@ exec "$CODERABBIT_REAL_PS" "$@"
   assert_no_git_calls
 }
 
+@test "does not count the membership probe as a no-setsid review member" {
+  host_timeout="$(command -v timeout || command -v gtimeout || true)"
+  if [ -z "$host_timeout" ]; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"finding\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
+  real_ps="$(command -v ps)"
+  export CODERABBIT_REAL_PS="$real_ps"
+  for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
+    link_system_command "$command"
+  done
+  make_mock ps 'exec "$CODERABBIT_REAL_PS" "$@"'
+  export PATH="$BATS_TEST_TMPDIR/bin"
+
+  # Keep setsid out of PATH so the wrapper exercises the timeout-created
+  # process group and its file-backed membership probe.
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
 @test "forwards external TERM to the timeout job before exiting" {
   make_git_call_recorder
   make_mock coderabbit '
