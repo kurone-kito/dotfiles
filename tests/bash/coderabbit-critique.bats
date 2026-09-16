@@ -15,12 +15,14 @@ setup() {
   _ORIG_PATH="$PATH"
   export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
+  FALLBACK_LOG_FILE="$XDG_STATE_HOME/idd-critique/fallbacks.jsonl"
   export CODERABBIT_CRITIQUE_LOG="$BATS_TEST_TMPDIR/coderabbit-critique.log"
 }
 
 teardown() {
   export PATH="$_ORIG_PATH"
-  unset CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE
+  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE
 }
 
 make_mock() {
@@ -45,17 +47,32 @@ assert_no_git_calls() {
   fi
 }
 
-# The script probes `timeout`/`gtimeout --help` for --kill-after support
-# before selecting either as TIMEOUT_CMD (same probe-before-trust pattern
-# as ~/.gnupg/pinentry-auto's `timeout_cmd_is_compatible`). A GNU/uutils
-# mock must answer that probe itself, on top of its normal behavior, or
-# every test below would silently fail closed on the "no compatible
-# timeout" path instead of exercising the path it means to test.
+assert_fallback_reason() {
+  expected_reason="$1"
+  assert [ -f "$FALLBACK_LOG_FILE" ]
+  run jq -e -s --arg expected "$expected_reason" \
+    'length == 1 and (.[0] | type == "object" and has("timestamp") and (.timestamp | type == "string") and (.timestamp | length > 0) and .reason == $expected)' \
+    "$FALLBACK_LOG_FILE"
+  assert_success
+}
+
+link_system_command() {
+  command_path="$(command -v "$1")"
+  ln -sf "$command_path" "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+# The script probes `timeout`/`gtimeout --help` for --kill-after and
+# --preserve-status support before selecting either as TIMEOUT_CMD (same
+# probe-before-trust pattern as ~/.gnupg/pinentry-auto's
+# `timeout_cmd_is_compatible`). A GNU/uutils mock must answer that probe
+# itself, on top of its normal behavior, or every test below would silently
+# fail closed on the "no compatible timeout" path instead of exercising the
+# path it means to test.
 make_mock_timeout() {
   cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
 #!/bin/sh
 if [ "\$1" = "--help" ]; then
-  printf -- '--kill-after\n'
+  printf -- '--kill-after --preserve-status\n'
   exit 0
 fi
 $2
@@ -63,9 +80,71 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+make_mock_timeout_with_kill() {
+  cat > "$BATS_TEST_TMPDIR/bin/$1" << 'EOF'
+#!/bin/sh
+if [ "$1" = "--help" ]; then
+  printf -- '--kill-after --preserve-status\n'
+  exit 0
+fi
+if [ "$1" != "--preserve-status" ] || [ "$2" != "--kill-after" ]; then
+  exit 2
+fi
+kill_after=$3
+duration=$4
+shift 4
+
+"$@" &
+child=$!
+(
+  sleep "$duration"
+  if kill -0 "$child" 2>/dev/null; then
+    kill -TERM "$child" 2>/dev/null || true
+    sleep "$kill_after"
+    kill -KILL "$child" 2>/dev/null || true
+  fi
+) &
+watcher=$!
+wait "$child"
+status=$?
+kill "$watcher" 2>/dev/null || true
+wait "$watcher" 2>/dev/null || true
+exit "$status"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+make_immediate_exit_coderabbit() {
+  exit_status="$1"
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  exit '"$exit_status"'
+fi
+exit 1
+'
+}
+
+assert_immediate_review_exit_is_failure() {
+  make_git_call_recorder
+  make_immediate_exit_coderabbit "$1"
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
+  assert_no_git_calls
+}
+
 make_default_mocks() {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -149,11 +228,14 @@ setup_git_repo_with_base() {
 
   assert_failure
   assert_output --partial "coderabbit not found in PATH"
+  assert_fallback_reason coderabbit-missing
   assert_no_git_calls
 }
 
 @test "fails closed when no compatible timeout/gtimeout is found" {
   make_mock coderabbit 'exit 1'
+  link_system_command date
+  link_system_command mkdir
 
   # Scope PATH to only the mock bin dir (no real system timeout) for the
   # script invocation itself, mirroring pinentry-auto.bats's technique --
@@ -163,10 +245,13 @@ setup_git_repo_with_base() {
 
   assert_failure
   assert_stderr --partial "no timeout/gtimeout"
+  assert_fallback_reason no-compatible-timeout-command
 }
 
 @test "fails closed when timeout exists but lacks --kill-after (BusyBox-style)" {
   make_mock coderabbit 'exit 1'
+  link_system_command date
+  link_system_command mkdir
   make_mock timeout '
 if [ "$1" = "--help" ]; then
   echo "Usage: timeout DURATION COMMAND"
@@ -179,6 +264,7 @@ shift 1; exec "$@"
 
   assert_failure
   assert_stderr --partial "no timeout/gtimeout"
+  assert_fallback_reason no-compatible-timeout-command
 }
 
 @test "resolves to gtimeout when timeout is absent" {
@@ -189,18 +275,28 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
 fi
 exit 1
 '
-  make_mock_timeout gtimeout 'shift 3; exec "$@"'
+  make_mock_timeout gtimeout 'shift 4; exec "$@"'
+  link_system_command date
+  link_system_command jq
+  link_system_command mktemp
+  link_system_command cat
+  link_system_command rm
+  link_system_command mkdir
+  link_system_command setsid
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
   run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
 
   refute_output --partial "no timeout/gtimeout"
+  assert_fallback_reason review-failed
 }
 
 @test "fails closed when jq is not found" {
   make_mock coderabbit 'exit 1'
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  link_system_command date
+  link_system_command mkdir
 
   # Scope PATH to only the mock bin dir (mocked coderabbit/timeout, no
   # real jq) -- the jq preflight check runs before auth_status or review,
@@ -210,11 +306,12 @@ exit 1
 
   assert_failure
   assert_stderr --partial "jq not found"
+  assert_fallback_reason jq-missing
 }
 
 @test "fails without calling review when auth status reports signed out" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   printf "auth:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
@@ -229,6 +326,7 @@ exit 0
 
   assert_failure
   assert_output --partial "not authenticated"
+  assert_fallback_reason unauthenticated
   run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
   assert_no_git_calls
@@ -244,9 +342,25 @@ exit 0
   assert_no_git_calls
 }
 
+@test "waits for setsid to establish its process group before checking isolation" {
+  make_default_mocks
+  real_setsid="$(command -v setsid)"
+  export CODERABBIT_REAL_SETSID="$real_setsid"
+  make_mock setsid '
+sleep 0.1
+exec "$CODERABBIT_REAL_SETSID" "$@"
+'
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
 @test "emits a progress line to stderr only, as the first stderr line, before invoking review" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -282,7 +396,7 @@ exit 1
 
 @test "fails closed when mktemp fails" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -310,12 +424,54 @@ EOF
 
   assert_failure
   assert_stderr --partial "mktemp failed"
+  assert_fallback_reason mktemp-failed
+  assert_no_git_calls
+}
+
+@test "cleans an earlier temp file when a later mktemp fails" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+exit 1
+'
+  allocated_temp="$BATS_TEST_TMPDIR/allocated.tmp"
+  mktemp_counter="$BATS_TEST_TMPDIR/mktemp.counter"
+  export CODERABBIT_MKTEMP_COUNTER="$mktemp_counter"
+  export CODERABBIT_MKTEMP_FIRST="$allocated_temp"
+  later_mktemp_dir="$BATS_TEST_TMPDIR/later-mktemp-bin"
+  mkdir -p "$later_mktemp_dir"
+  make_mock mktemp '
+if [ ! -e "$CODERABBIT_MKTEMP_COUNTER" ]; then
+  : > "$CODERABBIT_MKTEMP_COUNTER"
+  : > "$CODERABBIT_MKTEMP_FIRST"
+  printf "%s\n" "$CODERABBIT_MKTEMP_FIRST"
+  exit 0
+fi
+exit 1
+'
+  mv "$BATS_TEST_TMPDIR/bin/mktemp" "$later_mktemp_dir/mktemp"
+  link_system_command date
+  link_system_command jq
+  link_system_command mkdir
+  link_system_command ps
+  link_system_command rm
+
+  run --separate-stderr env PATH="$later_mktemp_dir:$BATS_TEST_TMPDIR/bin:/usr/bin:/bin" CODERABBIT_CRITIQUE_BASE=master "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "mktemp failed"
+  assert_fallback_reason mktemp-failed
+  assert [ ! -e "$allocated_temp" ]
   assert_no_git_calls
 }
 
 @test "keeps stderr out of a successful findings response" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -343,7 +499,7 @@ exit 1
 
 @test "rejects an action_required response" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -361,12 +517,39 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
+  assert_no_git_calls
+}
+
+@test "keeps the delegate behavior when the fallback log is unwritable" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"action_required\",\"phase\":\"billing\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+  mkdir -p "$FALLBACK_LOG_FILE"
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_output ""
+  assert_stderr --partial "requires operator action"
+  assert [ -d "$FALLBACK_LOG_FILE" ]
   assert_no_git_calls
 }
 
 @test "rejects a pretty-printed action_required response with whitespace around the marker" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -384,12 +567,13 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
   assert_no_git_calls
 }
 
 @test "rejects an action_required response arriving only on stderr" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -407,12 +591,13 @@ exit 1
 
   assert_failure
   assert_output --partial "requires operator action"
+  assert_fallback_reason action_required
   assert_no_git_calls
 }
 
 @test "does not trip on an unescaped nested action_required type field inside a finding" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -435,7 +620,7 @@ exit 1
 
 @test "does not trip when the top-level key differs from \"type\" only by case" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -465,7 +650,7 @@ exit 1
   # comparison, so the shell twin was never exposed to this -- this test
   # locks that in.
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -487,7 +672,7 @@ exit 1
 
 @test "fails when review exits non-zero" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -505,7 +690,44 @@ exit 1
 
   assert_failure
   assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
   assert_no_git_calls
+}
+
+@test "classifies a review exit 124 as review-failed rather than timeout" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "review returned 124" >&2
+  exit 124
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
+  assert_fallback_reason review-failed
+  assert_no_git_calls
+}
+
+@test "classifies an immediate review exit 15 as review-failed" {
+  assert_immediate_review_exit_is_failure 15
+}
+
+@test "classifies an immediate review exit 137 as review-failed" {
+  assert_immediate_review_exit_is_failure 137
+}
+
+@test "classifies an immediate review exit 143 as review-failed" {
+  assert_immediate_review_exit_is_failure 143
 }
 
 @test "fails when review times out" {
@@ -530,7 +752,496 @@ exit 1
 
   assert_failure
   assert_output --partial "coderabbit review failed"
+  assert_fallback_reason timeout
   assert_no_git_calls
+}
+
+@test "times out a review process that ignores TERM without waiting for an orphan" {
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  exec sleep 30
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  started_at=$(date +%s)
+  run "$SCRIPT"
+  elapsed=$(( $(date +%s) - started_at ))
+
+  assert_failure
+  assert [ "$elapsed" -lt 10 ]
+  assert_fallback_reason timeout
+  assert_no_git_calls
+}
+
+@test "records a deadline when timeout interrupts descendant cleanup" {
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 0.6
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/cleanup-deadline.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed or timed out"
+  assert_fallback_reason timeout
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
+@test "kills descendants before timeout's grace kills the setsid supervisor" {
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 0.6
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/setsid-cleanup-deadline.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  # Use the real GNU timeout so its process-group kill-after grace races the
+  # supervisor's cleanup window just as it can in production.
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed or timed out"
+  assert_fallback_reason timeout
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
+@test "keeps a deadline timeout fail-closed when the review handles TERM with exit 0" {
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  sleep_pid=$!
+  trap "kill $sleep_pid 2>/dev/null || true; exit 0" TERM
+  wait "$sleep_pid"
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_failure
+  assert_output --partial "coderabbit review failed"
+  assert_fallback_reason timeout
+  assert_no_git_calls
+}
+
+@test "cleans up a descendant after the review exits successfully" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/descendant.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  run "$SCRIPT"
+
+  assert_success
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
+@test "uses timeout's process group when setsid is unavailable" {
+  host_timeout="$(command -v timeout || command -v gtimeout || true)"
+  if [ -z "$host_timeout" ]; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_DESCENDANT_PID_FILE"
+  exit 0
+fi
+exit 1
+'
+  descendant_pid_file="$BATS_TEST_TMPDIR/descendant.pid"
+  export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
+  real_ps="$(command -v ps)"
+  export CODERABBIT_REAL_PS="$real_ps"
+  for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
+    link_system_command "$command"
+  done
+  make_mock ps '
+if [ "$1" = "-o" ] && [ "$2" = "pgid=" ]; then
+  sleep 0.2
+fi
+exec "$CODERABBIT_REAL_PS" "$@"
+'
+  export PATH="$BATS_TEST_TMPDIR/bin"
+
+  # Keep setsid out of PATH so the helper must use the timeout-created
+  # process group, as it does on macOS with Homebrew's gtimeout.
+  run "$SCRIPT"
+
+  assert_success
+  descendant_pid=$(cat "$descendant_pid_file")
+  run kill -0 "$descendant_pid"
+  assert_failure
+  assert_no_git_calls
+}
+
+@test "does not count the membership probe as a no-setsid review member" {
+  host_timeout="$(command -v timeout || command -v gtimeout || true)"
+  if [ -z "$host_timeout" ]; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  echo "{\"type\":\"finding\"}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
+  real_ps="$(command -v ps)"
+  export CODERABBIT_REAL_PS="$real_ps"
+  for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
+    link_system_command "$command"
+  done
+  make_mock ps 'exec "$CODERABBIT_REAL_PS" "$@"'
+  export PATH="$BATS_TEST_TMPDIR/bin"
+
+  # Keep setsid out of PATH so the wrapper exercises the timeout-created
+  # process group and its file-backed membership probe.
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"type":"finding"'
+  assert_no_git_calls
+}
+
+@test "forwards external TERM to the timeout job before exiting" {
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  trap "kill $review_pid 2>/dev/null || true; echo term >> \"$CODERABBIT_CRITIQUE_LOG\"; exit 143" TERM
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+  output_file="$BATS_TEST_TMPDIR/outer.stdout"
+  error_file="$BATS_TEST_TMPDIR/outer.stderr"
+
+  "$SCRIPT" >"$output_file" 2>"$error_file" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -TERM "$script_pid"
+  set +e
+  wait "$script_pid"
+  status=$?
+  set -e
+
+  assert_equal 143 "$status"
+  run grep -c '^term$' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
+  review_pid=$(cat "$review_pid_file")
+  run kill -0 "$review_pid"
+  assert_failure
+}
+
+@test "forwards external INT and applies bounded cleanup before exiting" {
+  signal_reset_command="$(command -v perl || true)"
+  if [ -z "$signal_reset_command" ]; then
+    skip "requires perl to reset inherited SIGINT disposition"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" INT TERM
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-int.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  # Background jobs inherit SIGINT=ignored from the non-interactive Bats
+  # shell. Reset it in a tiny exec shim so this exercises the delegate's
+  # real external-cancellation trap rather than the shell's disposition.
+  "$signal_reset_command" -e '$SIG{INT} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/outer-int.stdout" 2>"$BATS_TEST_TMPDIR/outer-int.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -INT "$script_pid"
+  if wait "$script_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  assert_equal 130 "$status"
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
+}
+
+@test "forwards external HUP and applies bounded cleanup before exiting" {
+  signal_reset_command="$(command -v perl || true)"
+  if [ -z "$signal_reset_command" ]; then
+    skip "requires perl to reset inherited SIGHUP disposition"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" HUP INT TERM
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-hup.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  "$signal_reset_command" -e '$SIG{HUP} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/outer-hup.stdout" 2>"$BATS_TEST_TMPDIR/outer-hup.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -HUP "$script_pid"
+  if wait "$script_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  assert_equal 129 "$status"
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
+}
+
+@test "forwards external QUIT and applies bounded cleanup before exiting" {
+  signal_reset_command="$(command -v perl || true)"
+  if [ -z "$signal_reset_command" ]; then
+    skip "requires perl to reset inherited SIGQUIT disposition"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "Account      : test-user"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" QUIT HUP INT TERM
+  sleep 30 &
+  review_pid=$!
+  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$review_pid"
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-quit.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  "$signal_reset_command" -e '$SIG{QUIT} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/outer-quit.stdout" 2>"$BATS_TEST_TMPDIR/outer-quit.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -QUIT "$script_pid"
+  if wait "$script_pid"; then
+    status=0
+  else
+    status=$?
+  fi
+
+  assert_equal 131 "$status"
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
 }
 
 @test "uses CODERABBIT_CRITIQUE_BASE for the review base branch, skipping auto-detection" {
@@ -545,7 +1256,7 @@ exit 1
 }
 
 @test "auto-detects the base branch from origin/HEAD when set" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -570,7 +1281,7 @@ exit 1
 }
 
 @test "falls back to origin/main when no origin/HEAD symref is set" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "Account      : test-user"
@@ -595,7 +1306,7 @@ exit 1
 }
 
 @test "fails closed when both origin/main and origin/master exist without a symref" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit 'exit 1'
   work="$(setup_git_repo_with_base both)"
   make_git_passthrough_logger
@@ -604,10 +1315,11 @@ exit 1
 
   assert_failure
   assert_stderr --partial "could not determine the default base branch"
+  assert_fallback_reason base-branch-unresolved
 }
 
 @test "fails closed when the base branch cannot be determined" {
-  make_mock_timeout timeout 'shift 3; exec "$@"'
+  make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit 'exit 1'
   work="$(setup_git_repo_with_base none)"
   make_git_passthrough_logger
@@ -616,5 +1328,6 @@ exit 1
 
   assert_failure
   assert_stderr --partial "could not determine the default base branch"
+  assert_fallback_reason base-branch-unresolved
   assert_only_readonly_git_subcommands_and_at_least_one
 }
