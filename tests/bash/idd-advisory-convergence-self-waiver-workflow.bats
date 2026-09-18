@@ -54,9 +54,11 @@ checkout_step() {
   # review, PR #429). `pull-requests: write` (not `read`) is
   # load-bearing, not an overgrant: kurone-kito/idd-skill#2951 found the
   # marker POST 403s with only `read` -- see the job's own comment.
+  # `checks: read` / `statuses: read` (kurone-kito/idd-skill#2995, #450)
+  # are required so `--auto-bootstrap` can read `pr.statusCheckRollup`.
   run yq -o=json -I=0 '.jobs["idd-advisory-convergence-self-waiver"].permissions' "$WORKFLOW"
   assert_success
-  assert_output '{"contents":"read","pull-requests":"write","issues":"write"}'
+  assert_output '{"contents":"read","pull-requests":"write","issues":"write","checks":"read","statuses":"read"}'
 }
 
 @test "the self-waiver job checks out master, not the PR head" {
