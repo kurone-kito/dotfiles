@@ -1014,9 +1014,10 @@ that quotes a marker verbatim inside backticks -- so a future silent
 reversion of the real marker at its point of use would not necessarily
 drop that slug's count to zero if a quoted copy elsewhere still
 matches. Treat a positive grep hit as necessary but not sufficient;
-confirm at least one match is an actual uncommented `<!--` HTML
-comment at the divergence's point of use, not only a quoted
-documentation example, before trusting the count.
+confirm at least one match is an actual uncommented marker at the
+divergence's point of use -- HTML `<!-- ... -->` in Markdown/YAML/
+instruction files, or a `//` line comment in JavaScript -- not only a
+quoted documentation example, before trusting the count.
 
 **Reaffirmed this round (v0.12.0, 2026-09-18, #452)**: both required
 checks from the `v0.11.0` round were re-run against the merged
@@ -1025,7 +1026,9 @@ tree of issues 447-451 at `fcce7c5`.
 Method one, `git grep -hoE 'dotfiles-divergence: [a-z-]+'` over
 tracked files, deduplicated, found **17** live slugs after the two
 retirements below. Every remaining registered slug has at least one
-point-of-use `<!--` marker (not only a quoted documentation example).
+point-of-use marker for its file type (HTML `<!--` in Markdown/YAML/
+instruction files; `//` in JavaScript for `vendored-file-header`), not
+only a quoted documentation example.
 `lite-operator-present-release` had no live marker instance at all
 (table-and-prose only); `ci-companion-topology` had no point-of-use
 marker in `idd-ci.instructions.md` (quoted copies in this file only).
@@ -1412,13 +1415,17 @@ gap introduced by roadmap #419's six tracks.
 
 **Reaffirmed this round (v0.12.0, 2026-09-18, #452)**: a fresh
 `idd-doctor` run under the now-pinned `11105d7` (`v0.12.0`) tarball
-(`npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30
-idd-doctor`) against this track's own worktree (siblings #447-#451
-already merged at `fcce7c5`) reports `result: passed (2 warning(s))`
-with exactly the same two `markdownlint-cli2` toolchain-residue
-`WARN`s quoted above and no new finding -- no regression and no new
-gap introduced by roadmap #446's five tracks. Full transcript is in
-this issue's PR body.
+against this track's own worktree (siblings #447-#451 already merged
+at `fcce7c5`) reports `result: passed (2 warning(s))` with exactly
+the same two `markdownlint-cli2` toolchain-residue `WARN`s quoted
+above and no new finding -- no regression and no new gap introduced
+by roadmap #446's five tracks. Full transcript is in this issue's
+PR body.
+
+```sh
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+  idd-doctor
+```
 
 ### `idd-onboard --verify` findings
 
