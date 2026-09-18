@@ -105,9 +105,12 @@ other GitHub side effect, confirm all of the following:
 6. When a fix introduces a precision (a name, value, path, or described
    behavior) to satisfy a reviewer, verify it against the actual
    implementation before committing.
-7. If an Accepted item is already fixed by a prior commit in this same
-   round, do not duplicate the fix. Confirm the existing commit
-   addresses it and let E13 cite that SHA.
+7. If an Accepted PATH A item is already fixed by an earlier commit --
+   this round's own prior fix, or a previous round's E12 push --
+   confirm the commit addresses it, applying the same file-path-touch
+   check as
+   `idd-review-snapshot-lite.instructions.md`'s Cold-start edge case 1.
+   Do not duplicate the fix; let E13 cite that SHA.
 8. Do not push yet. All of this round's fixes push together at E12.
 
 ## E10 — Validate fixes with critique pass
@@ -185,6 +188,15 @@ other GitHub side effect, confirm all of the following:
     simplifying/removing the mechanism over a second redesign -- only
     once confirmed non-required by the issue's acceptance criteria or
     contract; if required, stop for a maintainer decision.
+12. Third tier: when each new finding is instead a genuine, distinct gap
+    against an open-ended external correctness domain (a grammar,
+    protocol, or wire format) rather than a symptom of one mechanism,
+    tiers 1-2 do not apply -- there is no mechanism to simplify, since
+    coverage of that domain is itself the acceptance criterion. Once
+    several rounds each surface a genuinely new in-scope gap rather than
+    repeating one, list every outstanding gap with evidence and the
+    round count in a hold comment and stop for a maintainer decision
+    (`#2865`).
 
 <!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
@@ -290,6 +302,10 @@ other GitHub side effect, confirm all of the following:
    (`<!-- {markerPrefix}-review-reply -->`) — same stamp mechanics and
    constraints, applied here to the `**Accepted**`-only prefix this
    phase posts.
+   Citing a commit that did not fix this item in the current round
+   requires it to have already passed the file-path-touch check (E9
+   item 7, or `idd-review-snapshot-lite.instructions.md`'s Cold-start
+   edge case 1).
 3. For a review thread, immediately resolve the thread after posting
    the reply. Reply first, resolve second, so a failed reply never
    leaves a silently-resolved thread.
@@ -334,7 +350,11 @@ other GitHub side effect, confirm all of the following:
    fall back to a manual per-field fetch.
 4. Read the helper's `outcome` field and apply this decision table, top
    to bottom, first match wins:
-   - `SATISFIED` → continue to E15.
+   - `SATISFIED`, `copilotPending` `false`, `copilotPendingCoversHead`
+     `false` (settled by elapsed time alone, never proven the request
+     reached Copilot, `#2327`): lite has no bounded recovery cycle to
+     run here — continue to E15 the same as an ordinary `SATISFIED`.
+   - `SATISFIED` (otherwise) → continue to E15.
    - `RECOVERY_NEEDED`: post the recovery marker
      `advisory-wait-recovery: {agent-id} {PR_HEAD_SHA}
      {ISO8601-recovery-time}` as plain text. Do not request another

@@ -154,11 +154,19 @@ Before any mutating action in F3, apply the
    - advisory `f3Outcome` is `SATISFIED` (the authoritative advisory
      gate — do not add stricter sub-conditions; e.g. a pending-window
      `SATISFIED` can keep `copilotPending` true and
-     `LAST_COPILOT_COMMIT` off the head);
+     `LAST_COPILOT_COMMIT` off the head). **Manual-fallback
+     equivalent** (helper unavailable or discarded): the AW1/AW2/AW3
+     decision table (`idd-advisory-wait.instructions.md`), run in full
+     for `PR_HEAD_SHA_F3`, returns `SATISFIED` — not merely any step 3
+     branch that says "proceed with the merge";
    - no unwaived `copilot-terminal-unavailable` in the helper's
      `blockers[]` — separate from `f3Outcome`, not a stricter
      sub-condition on it
-     ([Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570));
+     ([Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570)).
+     **Manual-fallback equivalent**: apply that Terminal routing
+     section in full — satisfied only when its **Unwaived** hold does
+     not apply to this HEAD; its waiver/declaration validity rules are
+     not paraphrased here;
    - all required CI checks pass for the current head;
    - claim ownership still uses your `{claim-id}`;
    - <!-- dotfiles-divergence: pre-merge-reset-guard -->
@@ -673,13 +681,24 @@ Before any mutating action in F3, apply the
    (WorkTrunk may be used for steps 5–6, the deletion steps —
    step 4's local `{development-branch}` update is a plain git
    operation, not a WorkTrunk one.)
-7. Re-validate the active claim one final time. If it still uses your
-   `{claim-id}`, post `unclaimed-by` for your own `{agent-id}` /
-   `{claim-id}` (see
+7. Re-validate the active claim before each mutation below. If it
+   still uses your `{claim-id}`, upsert the claimed issue's own digest
+   with `Phase: F4 complete`, `Claim: none`, `Branch: none`, `Open
+   blockers: none`, `Next action: none`, and `Authoritative by`
+   pointing to the merge commit — mirroring F3's own PR-digest upsert
+   but targeting the issue instead, so a closed/merged issue never
+   stays stuck at a stale digest phase (`#3079`). Proceed only when
+   the upsert reports `create`, `update`, or `noop`; on `duplicate` or
+   any other failure, keep the claim, re-validate, then post a hold
+   comment with the helper output, and stop for repair. Re-validate
+   again; if it still
+   uses your `{claim-id}`, post `unclaimed-by` for your own
+   `{agent-id}` / `{claim-id}` (see
    [Unclaim format](idd-overview-core.instructions.md#unclaim-format))
-   to release the claim now that cleanup is complete (`#2220`). If it
-   no longer uses your `{claim-id}`, do not post a release comment —
-   another session already took over.
+   to release the claim now that cleanup is complete (`#2220`). If
+   either re-validation finds anything other than your `{claim-id}`
+   — including no active claim — stop that mutation: the claim was
+   lost.
 
 ## F5 — Loop
 

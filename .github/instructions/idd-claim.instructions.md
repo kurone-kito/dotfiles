@@ -278,12 +278,13 @@ incomplete/current authoring hold blocks; only exact anchor/set/session
 `release-complete` allows a completed generation.
 Route directly to already-claimed/Discover fallback (A0-T stops), never A5(c).
 
-First record `{agent-id}`/`{claim-id}` via `--record-tokens`; then post
-the claim comment using the exact format and posting mechanics already
-defined in
+First record `{agent-id}`/`{claim-id}` via
+`<profile-selected-claim-lock-command> --record-tokens --worktree
+<path> --agent-id {agent-id} --claim-id {claim-id}` (resolve the same
+way as A5(a) above); then post the claim comment using the exact
+format and posting mechanics already defined in
 [Claim format](idd-overview-core.instructions.md#claim-format) — do not
-re-derive them here. `emit-marker` (`--type claimed-by`, emit-only) also
-renders the body without posting. **Exception**: forced-handoff
+re-derive them here. **Exception**: forced-handoff
 recovery's adopt-verbatim path skips this record/post entirely — no
 `claimed-by` marker at all, only its own activation-nonce (see Claim
 verification's adopt-verbatim guidance below); the already-posted,
@@ -307,9 +308,7 @@ or embedded mid-prose (not the literal first bytes of the body) is
 never treated as live or flagged; anti-spoofing is unaffected.
 
 **Also post an [activation-nonce marker](#activation-nonce-format)** for
-every fresh `{claim-id}` this section generates (fresh claim, takeover, or
-legacy migration) — not on a plain heartbeat, which reuses the existing
-`{claim-id}`.
+every fresh `{claim-id}`.
 
 ## Activation-nonce format
 
@@ -323,7 +322,8 @@ verification_ below); never skip it for any activation path:
 _{agent-id}: claim activation nonce — IDD automation marker. Do not edit._
 ```
 
-`{nonce}` is fresh; record it via `--record-tokens` before posting. For
+`{nonce}` is fresh; record it via the `--record-tokens` call above
+plus `--nonce {nonce}`. For
 multiple trusted markers sharing a claim, the lexicographically earliest
 nonce wins; no marker means no comparison. With helper runtime, post it
 using
@@ -342,12 +342,11 @@ in this file's Claim-state parsing section).
 
 ## Claim verification
 
-After posting `claimed-by`, wait for the configured settle delay to let
-GitHub eventual consistency settle. Use `.github/idd/config.json`
-`claim.verifySettleDelay` (distributed default: `PT5S`), then re-read
-the full issue comment stream and parse the active claim in
-chronological order using the shared claim-state rules. Apply all
-race-safe checks below:
+After posting `claimed-by`, wait for the configured settle delay
+(`.github/idd/config.json` `claim.verifySettleDelay`, distributed
+default: `PT5S`), then re-read the full issue comment stream and parse
+the active claim in chronological order using the shared claim-state
+rules. Apply all race-safe checks below:
 
 1. Build the same-second contender set from **all** trusted `claimed-by`
    markers (including your own) that share your claim event's `created_at`
@@ -522,14 +521,15 @@ see
 [docs/idd-design-rationale.md](../../docs/idd-design-rationale.md#context-inheriting-delegation-residual-risk)
 for the field evidence.
 
-**Restate the CI/advisory-wait topology-safety condition.** Carry —
-verbatim or by reference — the topology-safety condition from
+**Restate the CI/advisory-wait wake-up discipline.** Carry —
+verbatim or by reference — both mitigations from
 [idd-ci.instructions.md's Wake-up
-discipline](idd-ci.instructions.md#wake-up-discipline) (also in
+discipline](idd-ci.instructions.md#wake-up-discipline): the
+topology-safety condition (#2210; also in
 [docs/idd-workflow.md's Orchestrator fan-out
-variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant));
-without it, a worker can stall indefinitely on an unconfirmed
-backgrounded wait (#2210).
+variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant))
+and the execution-timeout override for a heavy or long-running local
+command (#2933).
 
 **Restate the scratchpad file-naming requirement.** See
 [docs/idd-workflow.md's Orchestrator fan-out
@@ -588,10 +588,9 @@ for the full algorithm.
 A same-machine fast path complementing the cross-machine claim check
 above. Acquire once the B1 worktree exists (before the first mutation;
 also re-run `--record-tokens` there (with `--nonce`)), then re-run
-alongside every later
-pre-mutation check:
-`node scripts/claim-lock.mjs --acquire --worktree <path> --agent-id
-{agent-id} --claim-id {claim-id}`.
+alongside every later pre-mutation check:
+`<profile-selected-claim-lock-command> --acquire --worktree <path>
+--agent-id {agent-id} --claim-id {claim-id}`.
 
 A matching `{claim-id}` re-acquires as a read-only check; a different
 `{claim-id}` is always a collision, regardless of lock age. Run
@@ -604,8 +603,8 @@ unavailable or malformed, fall back to this file's Claim-state parsing
 rules below for the same verdict. No release step — `git worktree
 remove` at F4 deletes the lock with the worktree, so a crashed
 session's leftover lock resolves the same way. See
-`docs/idd-helper-scripts.md`'s Worktree-local claim lock entry for
-mechanical detail.
+`docs/idd-helper-scripts.md`'s Worktree-local claim lock entry for the
+package-manager / ephemeral-npx forms and mechanical detail.
 
 **Generated-tokens record.** Re-check with `--read-tokens` alongside
 `--acquire`; absent/malformed recovers only via step 5

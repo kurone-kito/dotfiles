@@ -37,6 +37,7 @@ prefixes and whose GitHub author is a trusted marker actor per
 
 - `<!-- review-watermark:`
 - `<!-- review-baseline:`
+- `<!-- zero-accepted-path-a-gate:`
 - `<!-- claimed-by:`
 - `<!-- unclaimed-by:`
 - `advisory-wait:`
@@ -65,12 +66,10 @@ Additionally, fetch the **current CI state** for `{head-SHA}`:
 treated-as-passed) CI run as `{latest-ci-completed-at}`, or `none` if no
 CI pass exists yet for this HEAD.
 
-**Non-Copilot advisory safety net.** This E1 snapshot + the Step 2
-watermark are the load-bearing safety net for non-Copilot advisory
-bots, which get no settle/wait window from the advisory-wait protocol
-— see `idd-advisory-wait.instructions.md`'s Scope section. This is why
-Step 1 fetches the entire activity universe and Step 2 watermarks all
-of it.
+**Non-Copilot advisory safety net.** This E1 snapshot and Step 2's
+watermark are the only settle/wait coverage non-Copilot advisory bots
+get (`idd-advisory-wait.instructions.md`'s Scope section) — why Step 1
+fetches the full activity universe and Step 2 watermarks all of it.
 
 **Step 2 — Record the watermark.** Using the `{head-SHA}` stored at the
 start of Step 1, compute `{max-activity-updatedAt}` as the highest
@@ -104,8 +103,7 @@ _{agent-id}: review triage snapshot — IDD automation marker. Do not edit._
 The HTML comment is the machine-readable token; the italic line is a
 visible note for human readers. Detect the language of the PR body and
 write the visible note in that language (default to English if
-ambiguous). Example Japanese note:
-`_{agent-id}: レビュートリアージのスナップショット — IDD 自動化マーカー。編集しないでください。_`
+ambiguous).
 
 **Nothing appended after the note.** As with `claimed-by`/`unclaimed-by`
 in `idd-claim.instructions.md`, a `review-watermark` (and
@@ -125,9 +123,8 @@ no-code-fence note.
   pass observed during this E1 snapshot (or `none`). F2 uses this to
   detect a new CI pass that completed after the snapshot fetch.
 - **E1 execution marker**: the GitHub-assigned `createdAt` of this
-  comment (set server-side). Used only to verify the watermark is
-  recent; activity and CI freshness are tracked via the data fields
-  above.
+  comment (set server-side), used only to verify watermark recency —
+  activity/CI freshness are tracked via the data fields above.
 
 Use server-reported timestamps, not the local wall clock.
 
@@ -144,12 +141,10 @@ the Step 1 snapshot and post the watermark — a merge-gate run
 completing _after_ the watermark forces a wasted E1↔F2 round-trip
 (F2's `ci-pass-drift`) with no new review activity.
 
-Note: some GitHub client tools (e.g., `gh issue comment`, `gh api -f
-body=`) silently reject HTML-comment-only bodies; this format's
-visible text avoids that, but the HTTP `POST` path is still
-recommended for reliability. `gh api`'s `-f` also treats a leading `@`
-as literal — only `-F` reads `@file` contents. The post-idd-marker
-helper above performs this JSON `POST` under `--apply`.
+Note: the post-idd-marker helper above performs this JSON `POST`
+under `--apply`, sidestepping the `gh issue comment`/`gh api -f body=`
+HTML-body and leading-`@` pitfalls `idd-overview-core.instructions.md`'s
+Claim format note already covers.
 
 On resume or restart, read the latest same-claim, trusted-author
 `<!-- review-watermark: {agent-id} {claim-id} … -->` comment to
@@ -162,9 +157,9 @@ ignore them and rerun E1 under the successor claim.
 
 **Hide superseded same-claim watermarks.** After the new watermark is
 verified on GitHub, minimize every strictly older trusted **same-claim**
-`review-watermark`/`review-baseline` comment as `OUTDATED` (cuts F4
-backlog and review-page noise). Find candidate subject IDs (older
-trusted same-claim watermarks), then call:
+`review-watermark`/`review-baseline` comment as `OUTDATED`. Find
+candidate subject IDs (older trusted same-claim watermarks), then
+call:
 
 `--subject-ids` needs a GraphQL node id, not a REST numeric id;
 convert with `gh api repos/{owner}/{repo}/issues/comments/{comment_id}
@@ -206,17 +201,20 @@ regardless of maintainer response).
 re-review-requested in a previous E13/E14 pass. **Embedded-finding
 gap (helper-first, optional):** a `COMMENTED`-state review can still
 carry a file/line-cited finding with no thread of its own, in an
-older collapsible body format some bots use (e.g. CodeRabbit's
-"Nitpick comments" / "Outside diff range comments") — a helper that
-parses the embedded findings and compares against the threaded-comment
-count (see `docs/idd-design-rationale.md`) detects this; add one
-PATH B item per uncovered finding.
+older collapsible body format some bots use — a helper that parses
+the embedded findings and compares against the threaded-comment count
+(see `docs/idd-design-rationale.md`) detects this; add one PATH B
+item per uncovered finding.
 
 **Regular comments** where the last speaker isn't any IDD agent and no
-reply from **you** exists after that comment's timestamp — exclude
-periodic notification bots (Renovate, etc.). Include Copilot/CI
-advisory bot comments; they follow PATH B in E4-E7 (non-review notices
-are dispositioned under the E6 rule).
+reply from **you** exists after that comment's timestamp, or where the
+comment's most recent IDD-agent reply starts
+`**Awaiting maintainer decision**` (remains an active
+`ReviewItems_snapshot` entry regardless of the last-speaker exclusion
+rule for this plain comment) — exclude periodic notification bots
+(Renovate, etc.). Include Copilot/CI advisory bot comments; they follow
+PATH B in E4-E7 (non-review notices are dispositioned under the E6
+rule).
 
 **Resolved-thread index (for the E5 duplicate pre-check).** Also carry
 forward a light index of this PR's **resolved** threads
@@ -265,3 +263,76 @@ If ReviewItems_snapshot is empty → proceed to the E-phase branch-sync
 check in `idd-review-triage.instructions.md`.
 
 Otherwise → proceed to `idd-review-triage.instructions.md` (E4).
+
+## Cold-start ReviewItems_snapshot reconstruction
+
+Read this section when entering E4 (`idd-review-triage.instructions.md`)
+or E9 (`idd-review-fix.instructions.md`) without ReviewItems_snapshot
+from this episode's own E1-E3 pass -- following
+`idd-overview-core.instructions.md`'s unconditional "Snapshot done" /
+"Review feedback accepted" routing rows, or an orchestrator delegation
+brief that hands off mid-review.
+
+**Procedure**: run E1 Steps 1-3 above (Step 2 already posts the
+watermark; do not post a second one) -- re-running them now _is_ the
+reconstruction. Run edge case 2's steps 1-3
+below unconditionally before E3 -- a local fix can predate E4 and
+never re-surface there; edge case 1's check at E4 then covers it.
+Then continue through E2, E3, and, only when E3 finds
+ReviewItems_snapshot non-empty, E4-E8 in full before any E9 work --
+an item edge case 1 routed to E14 runs E14, after edge case 2's own
+push if any (targeting the post-push HEAD), before branch-sync.
+
+Two correctness-sensitive gaps need an explicit rule (preventive; no
+observed incident yet), since a naive rebuild can silently drop or
+duplicate an item:
+
+**Edge case 1 -- an item without a completed disposition.** Covers a
+lost session mid-E4 classification (E6 defers PATH A Accept replies to
+E13); one whose E12 push landed but lost the session before E13; and a
+`CHANGES_REQUESTED` body Step 3 re-surfaces solely for a missing E14
+request (its exclusion needs both) -- if it already carries an E13
+`**Accepted** — fixed in` reply with no reviewer reply or reopen
+since, skip reclassification and route straight to E14. Otherwise
+Step 3 decides inclusion; the rebuild re-includes each as ordinary
+work only when Step 3 does. Before E5
+verifies it, check whether a branch commit newer than its timestamp
+already fixes it (a lost E12 push, or edge case 2's local-ahead diff
+below) -- both read false against E5's claim-truth test by design;
+that commit is the confirmation, cap included, only when its diff
+touches the item's anchored path(s) (its review-thread `path`, or a
+file explicitly named in a regular comment's context) -- the
+file-path-touch check; otherwise it is
+not coverage and normal E5/E9 handling applies. A covered in-scope
+reviewer-feedback PATH A item Accepts on that basis, skips E9, E13
+cites the commit; everything else follows E5-E8 as normal.
+
+**Edge case 2 -- an E9 fix committed but not yet pushed.** GitHub
+cannot see this; a fix for a session-local E2 finding may never
+re-surface at E4 (E2's findings are not durable) -- an empty E3
+result alone is not proof there is nothing to recover, since F2 resets
+the worktree to the PR's remote HEAD before merge. Run this
+unconditionally, in the **same surviving claimed worktree**:
+
+1. `PR_HEAD={head-SHA}` -- E1 Step 1's stored value; a re-fetch
+   here could race an external rewrite and pass step 2 falsely.
+2. `git merge-base --is-ancestor "$PR_HEAD" HEAD` -- a failure
+   (external rewrite, diverged worktree) stops for reconciliation;
+   never fall through to edge case 1's rule instead, which
+   risks F2 discarding real local work.
+3. `git status --porcelain` must report clean -- a dirty worktree
+   can't prove which uncommitted lines belong to which item. Treat it
+   as unverified input (never trust or discard): stop for
+   reconciliation before E9 work.
+4. `git log "$PR_HEAD"..HEAD` non-empty: record the diff -- edge
+   case 1's check above covers this diff too. Either way, even with
+   zero Accepted items, the diff still runs E10-E12 and pushes before
+   branch-sync. **E3 empty** (an E2-only finding): resume at E10 for
+   the diff itself -- E10, not E12, because a cold session cannot know
+   whether E10's critique pass already ran against it, and
+   [the fail-closed default](idd-overview-core.instructions.md#fail-closed-default)
+   governs that ambiguity.
+
+Clean worktree, no local-ahead commits: E3's own routing applies
+unchanged. A fresh or lost worktree falls back to edge case 1's rule
+instead, re-triaged from scratch.
