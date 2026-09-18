@@ -7,10 +7,12 @@ tags: [onboarding, bootstrap]
 
 # Onboarding Reference — Issue-Mediated Bootstrap
 
-Use this reference alongside `idd-template/ONBOARDING.md` when the
-operator wants an audited bootstrap trail instead of the distributed
-default direct-import ("theirs-flow") path. This page is the detailed
-companion for the pointer subsection between Step 1C and Step 2.
+Use this reference alongside
+[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md)
+when the operator wants an audited bootstrap trail instead of the
+distributed default direct-import ("theirs-flow") path. This page is
+the detailed companion for the pointer subsection between Step 1C and
+Step 2.
 
 **This mode is opt-in, not a replacement.** The existing direct-import
 path (Steps 2, 4, 5, and 6 as already written in
@@ -37,7 +39,7 @@ an operator who simply prefers not to grant an agent a direct-commit
 path even for the first action. Treat this as an explicit operator
 choice made alongside the other Step 1B policy decisions (see
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/policy-decisions.md)),
+Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md)),
 not an automatic upgrade applied whenever a review bot happens to be
 available.
 If the operator does not state a preference, propose theirs-flow (the
@@ -64,12 +66,13 @@ there is no `.github/idd/config.json` yet in the target repository for
 an executing session to read those values from — the target repository
 is still pre-import. Embed the confirmed values for the placeholders
 listed in [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/placeholders.md)
-directly in the issue body (the resolved
-values themselves, not a reference to where they live), together with
+Values](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/placeholders.md)
+directly in the issue body (the resolved values themselves, not a
+reference to where they live), together with
 the confirmed Step 1B decisions (merge policy, PR review profile,
 review-thread resolution policy, and the rest of the list in
-[Onboarding Reference — Policy Decisions](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/policy-decisions.md)).
+[Onboarding Reference — Policy
+Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md)).
 
 **Pin the process reference.** The issue's process section must point
 at idd-skill's own canonical `idd-template/ONBOARDING.md` Steps 2
@@ -227,13 +230,13 @@ transcript.
 **The raw transcript is not enough for the issue-authoring companion
 item on its own.** The transcript's `issue-authoring-companion` answer
 only carries the operator's real choice (`installed` / `not
-installed`). This bootstrap issue always defers those files (see
-"Do not draft this" below) and, when the real choice is `installed`,
-also needs the confirmed native destination for the companion
-follow-up issue to read later — neither the forced `not installed`
-core-bootstrap override nor the destination has its own transcript
-field. Add both as an explicit override note directly below the
-embedded transcript:
+installed`). This bootstrap issue always defers those files (see "do
+not draft a companion-install follow-up" below) and, when the real
+choice is `installed`, also needs the confirmed native destination for
+the companion follow-up issue to read later — neither the forced `not
+installed` core-bootstrap override nor the destination has its own
+transcript field. Add both as an explicit override note directly below
+the embedded transcript:
 
 ```markdown
 Issue-authoring companion status (core-bootstrap, temporary): not
@@ -294,6 +297,44 @@ recording action rather than a pinned remote-fetch step:
 - Bootstrap execution mode: issue-mediated (this issue's own execution
   path)
 
+When recording these confirmed decisions from the transcript, use the
+issue-mediated mode so the generated policy document records the
+core-bootstrap companion as `not installed`, regardless of the operator's
+real companion choice. The separate companion target state above remains
+the value for the follow-up issue to read. This manual-patching
+prohibition addresses the observed issue-mediated bootstrap in
+`kurone-kito/kurone-kito#29` (the retrospective source for issue `#2985`):
+adopters had to patch the generated policy document after recording it.
+
+For a helper runtime profile, first materialize the embedded transcript JSON
+from this issue verbatim into an executor-local `$TRANSCRIPT_FILE`. The
+helper-assisted path requires a full `idd-skill` clone checked out at the
+reviewed pin used for this bootstrap; set `$CLONE_DIR` to that clone and
+`$TARGET_REPO` to the target repository at execution time. Run from that
+pinned clone, not from `$TARGET_REPO`, because only the clone is guaranteed
+to contain `scripts/idd-onboard.mjs`. Set `$POLICY_DOC` to the target's
+absolute policy-document path before running this command:
+
+```sh
+(
+  cd "$CLONE_DIR" &&
+  node scripts/idd-onboard.mjs --record-policy \
+    --transcript "$TRANSCRIPT_FILE" --target "$TARGET_REPO" \
+    --allow-root "$TARGET_REPO" \
+    --issue-mediated --apply \
+    --write-policy-doc "$POLICY_DOC"
+)
+```
+
+With `instructions-only`, or when the pinned clone or its working Node.js
+runtime is unavailable, follow the manual Step 3 procedure in `ONBOARDING.md`
+and the policy-decisions template: use the embedded transcript as the
+source, write the selected policy section into the target documentation,
+set the core-bootstrap companion status to `not installed`, and retain the
+transcript's real companion target state, including its native destination
+when installed, for the follow-up issue. Do not add an
+`issueAuthoringCompanion` config field for this docs-only override.
+
 This is a single, atomically-reviewable change: the core import,
 placeholder substitution, and agent-entry-file updates land together,
 and Step 6 verification confirms the result before merge. Worktree
@@ -338,6 +379,20 @@ not a skipped gate. This repository may already have its own CI,
 branch protection, or review bot from before choosing IDD; those keep
 gating this PR normally and are not affected by this note.
 
+**Expect template-internal review comments.** This PR's diff _is_ the
+imported template, so review bots will flag defects in the vendored
+files themselves. Treat import mistakes (missing files, leftover
+placeholders, unpinned fetches) as in-scope here. Do not fork-fix a
+template-internal finding in this PR. If a bot requests changes or
+leaves an unresolved thread, reply that it is template-internal and
+not an import defect, then follow this repository's own
+review/conversation-resolution policy (resolve the thread when that
+policy allows; otherwise wait for the required reviewer or maintainer
+acknowledgement). After merge, track a qualifying finding per
+[Onboarding Reference — Issue-Mediated
+Bootstrap](https://raw.githubusercontent.com/kurone-kito/idd-skill/<tag-or-sha>/idd-template/docs/onboarding/issue-mediated-bootstrap.md)
+(same `<tag-or-sha>` pin as the process reference).
+
 ## Acceptance criteria
 
 - Every file listed in `idd-template/ONBOARDING.md` Step 2's core
@@ -369,7 +424,7 @@ Replace `<marker-prefix>` in the marker with the confirmed marker-prefix
 value from the hearing before publishing — see the `PROJECT_MARKER_PREFIX`
 placeholder in
 [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/idd-template/docs/onboarding/placeholders.md)
+Values](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/placeholders.md)
 for how that value is derived. The suitability score of `1` reflects that
 Discover structurally cannot route this issue pre-import, not a quality
 judgment about the change itself; per the issue-authoring skill's
@@ -377,7 +432,7 @@ contract, a score of `1` carries the configured `blocked-by-human` label
 (default `status:blocked-by-human`), unless an
 `authoring-bucket: needs-decision` marker substitutes the
 configured needs-decision label instead (see
-[Authoring-bucket marker](https://github.com/kurone-kito/idd-skill/blob/main/skills/issue-authoring/references/contract.md#authoring-bucket-marker))
+[Authoring-bucket marker](https://github.com/kurone-kito/idd-skill/blob/<tag-or-sha>/skills/issue-authoring/references/contract.md#authoring-bucket-marker))
 — here the label applies, correctly signaling that this issue needs a
 human or a narrowly-scoped, pre-authorized agent rather than the
 ordinary autonomous loop. Use the operator-confirmed `labels.blockedByHumanLabelName`
@@ -447,7 +502,7 @@ examples ("start issue authoring to implement {inferred gap}", "run the
 IDD loop"). Derive `{inferred gap}` and the other prompt content using
 the same repository-evidence-read method the optional Dry-run readiness
 report already performs
-([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/main/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
+([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
 — detected package manager, missing prerequisites, and so on — rather
 than inventing a new inference mechanism. Run that read **fresh, after
 this merge**, not reused from the pre-import dry-run's stored output:
@@ -492,6 +547,13 @@ explicitly not the full autonomous Discover -> Claim -> Work loop:
   choosing IDD — those keep gating the bootstrap PR exactly as they did
   before, and this note is never grounds for disregarding them.
 
+On an active target repository, also expect
+[concurrent default-branch drift](#concurrent-base-branch-drift-during-the-bootstrap-pr)
+while this PR is open, and
+[template-internal review findings](#template-internal-review-findings)
+from bots reviewing the imported template as new code. Neither is
+handled by IDD's own loop — this PR is off that loop by design.
+
 Once this PR merges, the repository is IDD-operational and every
 subsequent change — including the optional add-ons above — runs through
 the normal claim -> work -> PR -> CI -> merge loop, with the one
@@ -504,3 +566,86 @@ has left a recorded acknowledgment — a comment or reaction on the
 issue. The agent's own judgment that the content has been
 "acknowledged" is not enough. Close it directly after that operator
 signal — no branch, PR, or merge.
+
+## Concurrent base-branch drift during the bootstrap PR
+
+This PR is explicitly off the Discover -> Claim -> Work loop, so IDD's
+D1 pre-push rebase and Esync post-push merge of `{development-branch}`
+never run for it. On an active target repository, other PRs can still
+merge to the bootstrap PR's confirmed base branch while that PR is
+open. Observed 2026-09-14 on `kurone-kito/kurone-kito#29` (tracked
+upstream as `kurone-kito/idd-skill#2984`): three unrelated PRs merged
+to the base branch mid-bootstrap and forced a manual rebase with no
+documented procedure.
+
+A target-repo up-to-date-head ruleset can independently require the
+same sync even though IDD's own automation is not running. Use the
+bootstrap PR's own base branch throughout — the confirmed
+`{development-branch}` from the hearing when that is the PR base, not
+the GitHub default branch by default.
+
+Reconcile it by hand against that confirmed base branch:
+
+1. Fetch it (`git fetch origin` plus that branch name).
+2. If the bootstrap branch has not been pushed yet, rebase onto that
+   tip **unless** `git merge-base HEAD origin/<base>` already equals
+   `origin/<base>` — then skip the rebase (a no-op rebase can detach
+   HEAD in a sibling worktree). Once it has been pushed — even if
+   `gh pr create` has not succeeded yet — merge `origin/<base>` into
+   the bootstrap branch instead. The first push is the publication
+   boundary: rebasing after that rewrites published remote history and
+   the next normal push is rejected. `<base>` here is the confirmed
+   base branch name.
+3. After rebase or merge, confirm `git branch --show-current` is
+   non-empty (HEAD is on the bootstrap branch, not detached) and that
+   the local commit is still in `origin/<base>..HEAD`. Then re-run
+   Step 6 verification, even when there were no conflicts.
+4. Publish the bootstrap branch with a normal push, never force: on
+   the first push use `git push -u origin HEAD` (the branch has no
+   upstream yet, so a bare `git push` fails under Git's default);
+   afterwards `git push` is enough. Wait for the remote PR's CI and
+   review gates before merging.
+
+Do not wait for D1 or Esync to do this.
+
+## Template-internal review findings
+
+Because this PR's diff _is_ the imported template, review bots review
+that vendored text as new code in the adopter repository. A large
+share of comments will describe defects or gaps in the template
+itself, not mistakes in this import. Observed 2026-09-14 on
+`kurone-kito/kurone-kito#29` (tracked upstream as
+`kurone-kito/idd-skill#2984`): of 43 review-bot comments, roughly
+two-thirds were template-internal.
+
+Disposition:
+
+- **Import mistakes stay in this PR** — missing files, leftover
+  placeholders, unpinned fetches, or the wrong helper-runtime files.
+- **Do not fork-fix a template-internal finding in this PR.** If a
+  bot requests changes or leaves an unresolved thread, reply on that
+  thread that the finding is template-internal, will be tracked after
+  merge, and is not an import defect. Then follow the target
+  repository's own review and conversation-resolution policy — some
+  repos require the thread itself to be resolved, and the strict
+  review profile requires a reviewer or maintainer resolution, not
+  merely an approval. Do not patch the vendored copy just to silence
+  the comment.
+- **After merge, qualify before escalating.**
+  [Upstream-candidate escalation][upstream-candidate] is opt-in
+  (`upstreamEscalation.enabled`, default `false`) and only accepts
+  high-confidence cases where the template's own stated logic is
+  self-contradictory or cannot produce the outcome it claims — never
+  a subjective wording complaint or a finding local to the adopter
+  repository. A qualifying finding becomes a local issue with the
+  `status:upstream-candidate` label and the hidden
+  `<!-- {marker-prefix}-upstream-candidate: true -->`
+  marker (substitute the confirmed hearing prefix; a bare
+  `upstream-candidate` token is not recognized). That path never
+  writes to `kurone-kito/idd-skill`; whether to report the local
+  issue upstream is a human decision. Everything else — including
+  every finding when the toggle is still `false` — is recorded on
+  this bootstrap issue or the welcome/next-steps issue instead of
+  silently patching the vendored copy.
+
+[upstream-candidate]: ../../.github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation
