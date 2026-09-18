@@ -7,8 +7,11 @@ name: IDD advisory-convergence comment refresh
 # an in-flight required run.
 #
 # Compared against both of kurone-kito/idd-skill's copies of this file
-# at pin 1f90787ebf4021673ce6e5eb69741df331fd2037 (v0.11.0; #424 bumped
-# from the prior v0.9.0 pin, #384's own adoption round): its own root
+# at pin 11105d705820e50be0a14fcc174587abbaf62b30 (v0.12.0; #459 bumped
+# from the prior v0.11.0 pin set by #424. The file is unchanged versus
+# upstream v0.12.0, so this bump is the invocation pin only; #384's
+# adoption round remains the source of the simplified ephemeral-npx
+# shape): its own root
 # `.github/workflows/idd-advisory-convergence-comment.yml` (the simpler
 # dogfooded original -- a single, non-branching `node scripts/*.mjs`
 # call per step, no profile-resolution scaffolding) and the
@@ -28,7 +31,8 @@ name: IDD advisory-convergence comment refresh
 # or package-manager-detection scaffolding, having already committed to
 # one helper profile (see docs/idd-policy.md "Helper Runtime Profile").
 # #424 keeps that same simplified shape while merging in v0.11.0's
-# structural changes below.
+# structural changes below. #459 keeps that shape and only rebases the
+# packaged CLI pin onto v0.12.0.
 #
 # When the comment is IDD-originated (reply-identity stamp,
 # disposition prefix, or an operational marker the required check
@@ -273,7 +277,7 @@ jobs:
           # content classification.
           COMMENT_BODY: ${{ github.event.review.body || github.event.comment.body }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
             idd-review-comment-origin
       - name: Check for newer qualifying event
         id: debounce
@@ -320,7 +324,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
             idd-advisory-comment-debounce --pr "$PR_NUMBER" --triggered-at "$TRIGGERED_AT"
       - name: Rerun required HEAD check
         # The explicit `success() &&` on the comment-family branch is
@@ -369,5 +373,5 @@ jobs:
           fi
           # shellcheck disable=SC2086 # REFRESH_FLAG is a single trusted
           # word ("--refresh-latest" or empty); see env: above.
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
             idd-rerun-advisory-convergence --pr "$PR_NUMBER" $REFRESH_FLAG --apply
