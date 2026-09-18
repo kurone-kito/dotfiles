@@ -35,7 +35,7 @@ final-verification track (#425). Roadmap #446's five resync tracks
 (#449, PR #457), CI workflow + helper-runtime pin (#450, PR #455), and
 companion skills (#451, PR #453) -- with no sixth consumer-only track
 this round. This final-verification track (#452) then confirmed the
-pin and swept the Divergence Register and deferred-upstream-issues
+pin and swept the Divergence Register and upstream-issue disposition
 ledger below.
 The `v0.11.0` pin (`1f90787ebf4021673ce6e5eb69741df331fd2037`,
 abbreviated `1f90787`; tag `v0.11.0`, superseded) was itself audited by
@@ -1679,7 +1679,7 @@ the `copilot-pull-request-reviewer` actor. The default
 `copilot-advisory` profile is therefore satisfiable here; the earlier
 "confirm Copilot Code Review is enabled" needs-decision is closed.
 
-### Upstream template issues deferred to the next re-import
+### Upstream template issue ledger
 
 The `v0.11.0` round (dotfiles#425) filed
 [`kurone-kito/idd-skill#2956`](https://github.com/kurone-kito/idd-skill/issues/2956)
@@ -1687,10 +1687,13 @@ through
 [`kurone-kito/idd-skill#2972`](https://github.com/kurone-kito/idd-skill/issues/2972)
 and carried their long-form origin notes in this ledger. This round
 (`v0.12.0`, #452) **stops presenting those CLOSED items as deferred**.
-Each was checked against `11105d705820e50be0a14fcc174587abbaf62b30`
-via `git merge-base --is-ancestor <closing-merge> v0.12.0` on the
-local `idd-skill` clone (do not assume working-tree SHA; `git show`
-that pin).
+Each COMPLETED row was checked against
+`11105d705820e50be0a14fcc174587abbaf62b30` via
+`git merge-base --is-ancestor <closing-merge> v0.12.0` on the local
+`idd-skill` clone (do not assume working-tree SHA; `git show` that
+pin). The two NOT_PLANNED residuals (#2959, #2967) have no closing
+merge; those were verified by reading the pinned files at `v0.12.0`
+directly.
 
 | Upstream | Closing | In `v0.12.0`? | Disposition |
 | --- | --- | --- | --- |
@@ -1738,11 +1741,11 @@ Local-policy slugs (`master-branch`, `claim-timing`, `signing-ladder`,
 **Local pin leftover (not expanded here)**: Track D (#450) left
 `.github/workflows/idd-advisory-convergence-comment.yml` out of scope
 (unchanged at `v0.12.0` versus upstream). That file still contains
-live `npx` tarball URLs pinned to
-`1f90787ebf4021673ce6e5eb69741df331fd2037`. This track does not add
-that workflow to its candidate-file list. Recorded so the
-`git grep -n '1f90787ebf4021673ce6e5eb69741df331fd2037'` acceptance
-rule is not silently claimed clean.
+live `npx` tarball URLs pinned to the superseded `v0.11.0` commit
+named in the historical pin paragraph above. This track does not add
+that workflow to its candidate-file list. Recorded so the acceptance
+grep for that prior-round SHA is not silently claimed clean (sibling
+hits remain; hold rather than expand this track's candidate files).
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
