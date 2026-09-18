@@ -48,9 +48,9 @@ model.
   here.
 - **Reference-only inputs** (read for R2/R4, never a finding target):
   `docs/idd-concept-ownership.md` (R2's closed concept-index seed) and
-  `docs/idd-autonomy-contract.md` (R4's reversible/irreversible source
-  of truth), both at `docs/` in an installed repository. Both are read
-  in full every pass.
+  `docs/idd-autonomy-contract.md` (R4's reversible/irreversible
+  classification baseline), both at `docs/` in an installed repository.
+  Both are read in full every pass.
 <!-- dotfiles-divergence: installed-bundle-reference-routing -->
 - **Out of scope as an audit target / finding source**: this skill's
   own bundle at its actual installed location
@@ -197,6 +197,6 @@ re-derive it.
 - [references/report-template.md](references/report-template.md) for
   the report shape.
 - IDD Autonomy Contract (`docs/idd-autonomy-contract.md`) — R4's
-  closed source of truth.
+  comparison baseline; instruction files win on disagreement.
 - IDD — Concept Ownership Matrix (`docs/idd-concept-ownership.md`) —
   R2's concept-index seed.
