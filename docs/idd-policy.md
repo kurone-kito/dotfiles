@@ -771,6 +771,48 @@ field name in checked-in code.
 | `token-cost-snapshot.schema.json` | `toolCallCount`, `turnCount` (aggregated) | No local consumer |
 | `advisory-convergence.schema.json` | `waiver.autoWaiverValid` (kurone-kito/idd-skill#2657; unconditional bootstrap-auto-waiver disjunct) | No local consumer |
 
+## New 0.12.0 Schema Keys
+
+Audited by roadmap #446's schema/config-audit track
+([`#447`](https://github.com/kurone-kito/dotfiles/issues/447)): a
+direct diff of `schemas/policy.schema.json` between the `v0.11.0` pin
+(`1f90787ebf4021673ce6e5eb69741df331fd2037`) and `v0.12.0`
+(`11105d705820e50be0a14fcc174587abbaf62b30`), re-verified against the
+fetched schema text. `policy.schema.json` gained **no new properties**.
+The only schema edit is the `critiqueLoop.deferAfterRounds`
+description: the documented default moved from `15` to `12` after a
+month of review-fix-loop data.
+
+`.github/idd/config.json` was updated by this track: `iddVersion` now
+reads `"0.12.0"`, and `helperRuntime.packageSpec` is explicit (see
+below). The file was re-validated with `ajv-cli validate
+--spec=draft2020` against the fetched `v0.12.0` schema (passed) and
+with a pinned `idd-doctor` run from the `v0.12.0` tarball itself
+(`result: passed`, the same two `WARN`s already documented in
+[`idd-doctor` findings](#idd-doctor-findings) -- no new finding).
+`critiqueLoop.deferAfterRounds` remains absent so the new default
+applies. See the [0.10.0/0.11.0](#new-01000110-schema-keys) section
+above for the same convention.
+
+### No genuinely new keys in 0.12.0
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `critiqueLoop.deferAfterRounds` | default: unset (now `12`) | Owner-confirmed (roadmap #446 hearing, 2026-09-18) to stay unset so the recalibrated distributed default applies. Previously documented as unset meaning `15` in the 0.10.0/0.11.0 section; that historical row is unchanged. |
+| `helperRuntime.packageSpec` | **explicit: `v0.12.0` tarball URL** | Set to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30` so ephemeral-npx remediations do not fall back to the mutable `main` archive. The 0.5.0/0.6.0 row above still records the earlier "left unset" decision; this status flip lives here. `idd-onboard --verify` emits a non-blocking package-pin advisory when the key is missing. |
+
+This round intentionally does **not** update the **Pinned upstream commit**
+paragraph near the top of this page -- that remains Track G. That
+paragraph still names `1f90787ebf4021673ce6e5eb69741df331fd2037`
+(`v0.11.0`) until Track G runs. Track A's edit surface is
+`.github/idd/config.json` and this section alone. Workflow YAML pins
+and Helper Runtime Profile invocation snippets stay Track D.
+
+**Known, accepted transitional window.** `helperRuntime.packageSpec`
+points at `v0.12.0` before instructions and workflow pins catch up.
+Unlike the 0.11.0 round, this cannot fail `additionalProperties` (no
+new keys). Do not block the merge on that window.
+
 ## Divergence Register
 
 Every intentional deviation from the pinned upstream template carries
