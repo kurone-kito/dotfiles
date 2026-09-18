@@ -1,6 +1,6 @@
 {
   "$schema": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
-  "iddVersion": "0.11.0",
+  "iddVersion": "0.12.0",
   "markerPrefix": "dotfiles",
   "developmentBranch": "master",
   "mergePolicy": "fully_autonomous_merge",
@@ -30,7 +30,8 @@
     "post-fix-validate": "tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c \"Invoke-Pester tests/powershell/ -Output Detailed -CI\""
   },
   "helperRuntime": {
-    "profile": "ephemeral-npx"
+    "profile": "ephemeral-npx",
+    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30"
   },
   "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",

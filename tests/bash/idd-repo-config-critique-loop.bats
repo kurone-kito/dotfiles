@@ -13,6 +13,12 @@
 #   labels.untrustedLabelerLogins, and upstreamEscalation.enabled
 #   (issue #420, roadmap #419 Track A): requested by a Copilot review
 #   on PR #427.
+# - iddVersion 0.12.0 plus helperRuntime.packageSpec, with
+#   critiqueLoop.deferAfterRounds still absent (issue #447, roadmap
+#   #446 Track A): the same lockstep pin, updated when Track A bumped
+#   the config. The issue's Candidate files named only config.json and
+#   docs/idd-policy.md; this test is the required companion so the
+#   version bump cannot land while still asserting 0.11.0.
 
 bats_require_minimum_version 1.5.0
 
@@ -39,7 +45,7 @@ assert delegate.get('mode') == 'combined', delegate
 " "$CONFIG_PATH"
 }
 
-@test ".github/idd/config.json declares the v0.11.0 iddVersion and its adopted schema keys" {
+@test ".github/idd/config.json declares the v0.12.0 iddVersion and its adopted schema keys" {
   assert_file_exists "$CONFIG_PATH"
 
   python3 -c "
@@ -48,7 +54,16 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 
-assert config.get('iddVersion') == '0.11.0', config.get('iddVersion')
+assert config.get('iddVersion') == '0.12.0', config.get('iddVersion')
+
+package_spec = config.get('helperRuntime', {}).get('packageSpec')
+assert package_spec == (
+    'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
+    '11105d705820e50be0a14fcc174587abbaf62b30'
+), package_spec
+
+assert 'deferAfterRounds' not in config.get('critiqueLoop', {}), \
+    config.get('critiqueLoop')
 
 telemetry_hook = config.get('critiqueLoop', {}).get('telemetryHook')
 assert telemetry_hook is not None, 'critiqueLoop.telemetryHook is missing'
