@@ -216,52 +216,33 @@ header comment — not present in the portable stub this template
 ships). For a stuck or stale rollup entry, rerun the _existing_
 PR-linked run (`gh run rerun <run-id>`) instead of `workflow_dispatch`.
 
-<!-- dotfiles-divergence: ci-companion-topology -->
-**Topology (as of `v0.11.0`, `#424`)**: the required check itself now
-registers only `pull_request`/`pull_request_target` — `pull_request_review`
-and `pull_request_review_comment` moved entirely to the non-required
-companion `idd-advisory-convergence-comment.yml` (there is no
-`pull_request_review_target` variant, so keeping either trigger on the
-required workflow would leave it PR-editable). A review submission or
-review-thread reply no longer creates or cancels an
-`idd-advisory-convergence` check-run instance directly; the companion
-workflow instead reruns/refreshes the existing `pull_request`-family
-instance for the current HEAD (`idd-rerun-advisory-convergence
---refresh-latest`, per the plan below). Regular PR comments
-(`issue_comment`) land on the same companion, but only an
-IDD-originated one (reply-identity stamp, disposition prefix, or a
-recognized operational marker) actually triggers a refresh.
-
-A bot-triggered run (e.g. Copilot's own `pull_request_review`
-submission) still gates to `action_required` regardless of which
-workflow it lands on — this now affects the companion's run, not the
-required check directly — and the bot event alone never refreshes the
-check. Recover by rerunning the _existing_ non-bot `pull_request`-family
-run for this HEAD (subject to `ciWait.rerunPolicy`) — never the gated
-bot run itself, which keeps the original actor's privileges and
-re-enters `action_required` (approve via `POST
-/repos/{owner}/{repo}/actions/runs/{run_id}/approve` if it must run).
-The check also self-heals on the next non-bot trigger: a push runs the
-required `pull_request`/`pull_request_target` workflow directly via its
-own `synchronize` event, while a **review-thread** reply or an
-IDD-originated regular PR comment (`issue_comment`) is what the
-companion workflow picks up instead.
+A second cause: GitHub gates bot-triggered runs to `action_required`
+(for example, the non-required
+`idd-advisory-convergence-comment.yml` companion run for Copilot's
+`pull_request_review`/`pull_request_review_comment` event), so the
+companion cannot refresh the required check. Rerun the existing non-bot
+required `pull_request`- or `pull_request_target`-triggered run for
+this HEAD (subject to `ciWait.rerunPolicy`), never the gated bot run
+itself (approve it via `POST
+/repos/{owner}/{repo}/actions/runs/{run_id}/approve` only if needed).
+The required check self-heals on a push or companion refresh from
+IDD-originated review-thread replies or qualifying PR comments. Ordinary
+comments are filtered, although `issue_comment` is subscribed.
 
 **If rerunning the passing non-bot instance alone does not clear the
-rollup (`#1745`)**: a HEAD can carry several `idd-advisory-convergence`
-check-run instances — from the transition-period overlap between
-`pull_request` and `pull_request_target` (see the workflow's own
-header), or left over from before this topology change — and
-`cancel-in-progress` cancels most of them. GitHub's own required-check
-rollup can stay pinned to a bot-triggered instance whose **conclusion** is
-`CANCELLED`. Unlike `action_required`, a `CANCELLED`-conclusion
-bot-triggered instance is **not** gated: rerunning it completes
-normally and does not re-enter `action_required` (confirmed by direct
-experiment, `#1745`). If the
-non-bot rerun above does not clear the block, rerun every
-`CANCELLED`-conclusion bot-triggered sibling instance for the same HEAD
-next (`gh run rerun <run-id>` on each, per the plan below) — only an
-`action_required`-conclusion instance stays withheld from rerun.
+rollup (`#1745`)**: a HEAD can carry several
+`idd-advisory-convergence` check-run instances: required
+`pull_request`/`pull_request_target` runs can coexist with companion
+reruns of those instances. Review submissions use
+`--refresh-latest --apply`; comment paths use plain `--apply`.
+`cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
+instance (see `#1745`). If it leaves the block,
+rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible` (`gh run
+rerun <run-id>`). For the ordinary plan, hold `action_required`,
+`pending`, `unresolved`, `awaiting-fresh-review`, and
+`rerun-budget-held` instances; the review exception
+`--refresh-latest --apply` may rerun a budget-held pull_request-family
+instance unless `ciWait.rerunPolicy` is `hold`.
 
 Note: this is a known Rulesets platform behavior, not an `idd-skill`
 dedup bug — GitHub can require every same-named instance non-failing,
@@ -275,6 +256,9 @@ applies), waits for each to reach a terminal state before starting the
 next, and stops early as soon as the rollup resolves — never a
 `bot-gated-skip` or rerun-budget-held instance.
 
+**Self-referential wait (`#2994`)**: exclude your sibling before
+zero-pending checks; see helper docs.
+
 ```sh
 # source repo / vendored-node profile
 node scripts/rerun-advisory-convergence.mjs --pr <n> [--apply]
@@ -283,12 +267,9 @@ node scripts/rerun-advisory-convergence.mjs --pr <n> [--apply]
 <profile-selected-rerun-advisory-convergence-command> --pr <n> [--apply]
 ```
 
-Resolve `<profile-selected-rerun-advisory-convergence-command>` from
-`docs/idd-helper-scripts.md`; do not hardcode `node scripts/...` for
-non-vendored profiles. On `instructions-only` (no helper runtime), fall
-back to the manual sequence: run the diagnostic, then `gh run rerun
-<run-id>` on each plan entry, waiting for each to finish before the
-next.
+On `instructions-only` (no helper runtime), fall back to the manual
+sequence: run the diagnostic, then `gh run rerun <run-id>` on each plan
+entry, waiting for each to finish before the next.
 
 **Terminal-waiver recheck (`#1570`)**: once a maintainer waives a proven
 `COPILOT_UNAVAILABLE` state
@@ -328,6 +309,9 @@ in, never rebase — see the E-phase branch-sync check in
 Treat this as reachable at D4/pre-review, not only after E8 — the
 ordering dependency a shared check-definition change creates is
 invisible to disjoint-file-set track planning.
+
+**Code-scanning-alerts lookup**: an unscoped call hides a PR-only
+alert, even one failing this PR's own check. Pass `pr=<n>` explicitly.
 
 ## Interpretation
 
