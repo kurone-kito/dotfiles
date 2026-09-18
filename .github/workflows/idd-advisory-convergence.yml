@@ -4,10 +4,10 @@ name: IDD advisory-convergence gate
 # workflow is proven green -- see #149). Adapted from
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# 1f90787ebf4021673ce6e5eb69741df331fd2037 (v0.11.0; reconciled from the
-# prior v0.9.0 pin by #424, which also keeps this file's helper pin in
-# sync with the rest of the repository's ephemeral-npx invocations --
-# see docs/idd-policy.md "Helper Runtime Profile"). The
+# 11105d705820e50be0a14fcc174587abbaf62b30 (v0.12.0; #450 bumped from
+# the prior v0.11.0 pin set by #424, which also keeps this file's helper
+# pin in sync with the rest of the repository's ephemeral-npx
+# invocations -- see docs/idd-policy.md "Helper Runtime Profile"). The
 # maintainer-authorized waiver escape is already configured in
 # `.github/idd/config.json` `ciGate.*`; see docs/idd-policy.md "CI Gate
 # External Check Waivers" for the waiver path.
@@ -297,7 +297,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
             idd-advisory-convergence --pr "$PR_NUMBER" --assert
 
   # kurone-kito/idd-skill#2657: optional companion job -- a PR that fixes
@@ -308,7 +308,7 @@ jobs:
   # `idd-external-check-waiver` marker for exactly that case. See
   # kurone-kito/idd-skill's `idd-template/docs/idd-helper-scripts.md`
   # "Automated self-referential-bootstrap-auto waiver" section (at this
-  # file's own pin, 1f90787ebf4021673ce6e5eb69741df331fd2037) for the
+  # file's own pin, 11105d705820e50be0a14fcc174587abbaf62b30) for the
   # full trust model and the seven acceptance conditions -- this
   # repository's own docs/idd-helper-scripts.md does not carry that
   # section yet under the `ephemeral-npx` profile (no vendored `docs/`
@@ -348,19 +348,23 @@ jobs:
     # the load-bearing grant -- to actually post the marker below) and
     # `issues: write` (to post the marker, and to read the linked
     # issue's own comment stream to resolve its active claim).
-    # kurone-kito/idd-skill#2951 (fixed by #2954, landed AFTER this
-    # file's own `1f90787` pin -- #424 backports the fix here rather
-    # than re-pinning the whole tarball for one job's permission grant):
-    # with only `pull-requests: read` (this file's original value,
-    # matching the pinned commit exactly), the marker POST failed with
-    # HTTP 403 "Resource not accessible by integration" on 11/11 real
-    # invocations upstream. Do not narrow `pull-requests` back to `read`
-    # without re-running an equivalent live test (Copilot review,
+    # kurone-kito/idd-skill#2951 (fixed by #2954; #424 backported the
+    # write grant ahead of this pin, and v0.12.0 now ships it in the
+    # template): with only `pull-requests: read`, the marker POST failed
+    # with HTTP 403 "Resource not accessible by integration" on 11/11
+    # real invocations upstream. Do not narrow `pull-requests` back to
+    # `read` without re-running an equivalent live test (Copilot review,
     # PR #429).
+    # `checks: read` / `statuses: read` (kurone-kito/idd-skill#2995): the
+    # `--auto-bootstrap` path also reads `pr.statusCheckRollup`, which
+    # needs both scopes explicitly -- see the source repository's own
+    # copy of this file for the full investigation and evidence.
     permissions:
       contents: read
       pull-requests: write
       issues: write
+      checks: read
+      statuses: read
     steps:
       # Pinned commit SHA, matching the verdict job above (both pinned
       # since #424 -- see its own comment for why a required check's
@@ -402,7 +406,26 @@ jobs:
             ".github/workflows/idd-advisory-convergence.yml"
             ".github/workflows/idd-advisory-convergence-comment.yml"
           )
+          # kurone-kito/idd-skill#3104: this raw `gh api` call always
+          # targeted `github.com` regardless of the runner's actual host --
+          # `GH_ENTERPRISE_TOKEN` above only covers auth, not host
+          # targeting. Mirror `gh-exec.mts`'s `resolveGhApiHostname` (#1962)
+          # in shell: respect an already-set `GH_HOST`; otherwise derive the
+          # host from the Actions-provided `GITHUB_SERVER_URL`, and only
+          # pass `--hostname` when that host is non-empty and not
+          # `github.com`, so this repository's own GitHub.com-hosted runs
+          # keep their existing argv unchanged.
+          GH_API_HOSTNAME_ARGS=()
+          if [ -z "${GH_HOST:-}" ]; then
+            SERVER_HOST=$(printf '%s' "$GITHUB_SERVER_URL" \
+              | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#/+$##' \
+              | tr '[:upper:]' '[:lower:]')
+            if [ -n "$SERVER_HOST" ] && [ "$SERVER_HOST" != "github.com" ]; then
+              GH_API_HOSTNAME_ARGS=(--hostname "$SERVER_HOST")
+            fi
+          fi
           CHANGED=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" \
+            "${GH_API_HOSTNAME_ARGS[@]}" \
             --paginate --jq '.[] | .filename, (.previous_filename // empty)')
           TOUCHED=false
           for FILE in "${ALLOWLIST[@]}"; do
@@ -428,7 +451,7 @@ jobs:
           GH_ENTERPRISE_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/1f90787ebf4021673ce6e5eb69741df331fd2037 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
             idd-external-check-waiver --pr "$PR_NUMBER" --check idd-advisory-convergence \
             --reason self-referential-bootstrap-auto --run-id "$GITHUB_RUN_ID" \
             --auto-bootstrap --apply --yes | tee /tmp/idd-waiver-report.json
