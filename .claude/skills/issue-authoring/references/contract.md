@@ -4,7 +4,7 @@
 This file keeps the `issue-authoring` bundle usable when it is installed
 or copied outside its source repository. It mirrors the canonical
 contract maintained upstream at
-[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/1f90787ebf4021673ce6e5eb69741df331fd2037/docs/issue-authoring-skill.md).
+[`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/docs/issue-authoring-skill.md).
 
 ## Target marker prefix
 
@@ -1048,8 +1048,9 @@ Binding rules:
   content like `roadmap-id`; it must never be added to
   `OPERATIONAL_MARKERS` in `scripts/protocol-helpers.mjs` or
   subjected to F4 minimization.
-- **One source of truth.** A score of `1` must agree with
-  `status:blocked-by-human`; never publish a contradiction.
+- **One source of truth.** A score of `1` must agree with the configured
+  `blocked-by-human` label (default `status:blocked-by-human`); never
+  publish a contradiction.
 - **Advisory, never a gate.** The score only ranks/routes
   candidates. The A4.5 suitability gate and A5 claim safety checks
   still run unchanged on whatever issue is selected; a high score
@@ -1137,7 +1138,8 @@ readiness bucket (see [Readiness buckets](#readiness-buckets)) carries a
 hidden, machine-readable **authoring-bucket marker** recording which of
 those two axes applies, so `audit-authored-issue.mts` can mechanically
 enforce the matching label the same way it already enforces
-`status:blocked-by-human` for a suitability score of `1`
+the configured `blocked-by-human` label (default `status:blocked-by-human`)
+for a suitability score of `1`
 (`checkSuitabilityBlockedByHuman`) — see
 [Mechanical pre-publish gate](#mechanical-pre-publish-gate)'s
 `--expect-bucket` flag for the enforcement path. `ready` and other
@@ -1156,7 +1158,8 @@ Binding rules:
 - **Folds the existing suitability-1 check.** When present, this marker
   decides `suitability-blocked-by-human`'s applicability instead of the
   suitability score: `blocked-by-human` requires
-  `status:blocked-by-human` regardless of score; `needs-decision` means
+  the configured `blocked-by-human` label (default `status:blocked-by-human`)
+  regardless of score; `needs-decision` means
   that check does not apply, even at a suitability score of `1`. Absent
   or malformed, `checkSuitabilityBlockedByHuman` falls back to the
   pre-existing suitability-1-only rule — no backfill onto issues
@@ -1230,15 +1233,29 @@ only approval boundary.
   the authoring label atomically and carries an exact hidden publication token
   for target, anchor, set, and session. If the target runtime cannot provide
   that operation, stop before creation. Before the create, generate the
-  opaque target/anchor IDs and token because issue numbers are not yet known,
-  and carry this exact HTML-first body line:
+  opaque `target` id and token for both markers below -- the new issue's
+  own number is not yet known. `anchor` in **both** markers depends on
+  the new issue's role in the set, not on a blanket "not yet known"
+  rule: when this new issue is itself the set anchor, `anchor` reuses
+  that same opaque `target` value (self-reference, since the anchor's
+  own number is equally unknown at this point) -- the template's
+  `<opaque-anchor-id>` placeholder below depicts this self-anchor case
+  only. For a **non-anchor child**, `anchor` is instead the set
+  anchor's **already-resolved real** `<owner>/<repo>#<number>`
+  reference, not an opaque id, since the anchor already exists with a
+  known number by the time a child is created. See also the CLI
+  `--help` text's `authoring-owner`/`authoring-publication-intent`
+  shape notes (`bin/idd-post-idd-marker.mjs --help`) for the related,
+  but not identical, per-marker-type distinction those two carry.
+  Carry this exact HTML-first body line:
 
   ```html
   <!-- <marker-prefix>-authoring-publication: target=<opaque-target-id>; anchor=<opaque-anchor-id>; set=<opaque-set-id>; session=<opaque-session-id>; token=<opaque-publication-token> -->
   ```
 
   The originating Stage 1 hold uses this append-only publication-intent
-  record:
+  record, whose `anchor` field follows the same self-anchor/non-anchor-child
+  rule above:
 
   ```html
   <!-- <marker-prefix>-authoring-publication-intent: target=<opaque-target-id>; anchor=<opaque-anchor-id>; set=<opaque-set-id>; session=<opaque-session-id>; token=<opaque-publication-token>; journal=<owner>/<repo>#<number>; issue=<owner>/<repo>#<number>|none; actor=<trusted-marker-actor>; state=<pending|member|cleanup|abandoned> -->
@@ -1357,9 +1374,28 @@ only approval boundary.
   `body-sha256=none`, while anchor-only `release-complete` carries the required
   canonical set snapshot digest. Persist the per-target body digests and
   snapshot inputs in the originating hold and re-fetch/recompute them before
-  accepting completion. New markers missing these fields are not valid for a
-  new generation; treat legacy markers only as migration input and fail closed
-  when the required snapshot cannot be verified.
+  accepting completion. For `snapshot-sha256`, compute the SHA-256 digest over
+  the UTF-8 bytes of the whole target set's
+  `<owner>/<repo>#<number>:<body-sha256>` lines. Normalize each `<owner>` and
+  `<repo>` component with
+  `NFC(Unicode-default-lowercase(NFC(component)))`, join them with `/`, and
+  serialize each line with that normalized identity. Sort by the identity's
+  unsigned UTF-8 byte sequence (shorter equal prefixes first), then issue
+  number ascending, and join with a single `\n` and no trailing newline. New
+  markers missing these fields are not valid for a new generation; legacy
+  markers are migration input only. A legacy marker cannot prove completion
+  until its target body and required snapshot are re-fetched and recomputed
+  with the canonical algorithm. For this migration check, that algorithm is
+  the SHA-256 digest of the UTF-8 bytes of
+  `<owner>/<repo>#<number>:<body-sha256>` lines after normalizing each
+  owner/repository component with
+  `NFC(Unicode-default-lowercase(NFC(component)))`, joining the normalized
+  components with `/`, sorting by unsigned UTF-8 identity bytes (shorter
+  equal prefixes first) and then issue number ascending, joining with one
+  `\n`, and omitting a trailing newline. When the stored snapshot digest
+  matches that recomputation, the current verification may accept it.
+  Missing, mismatched, or otherwise unverifiable evidence fails closed.
+  This legacy-marker behavior is preventive; no observed incident yet.
 
   Append this HTML-first body with a direct JSON `POST` to the issue-comments
   endpoint; do not rely on `gh issue comment` or `gh api -f body=` for the
@@ -1709,7 +1745,23 @@ only approval boundary.
   retries, requiring the exact current owner, set, anchor, session, and marker
   body. If that guard is not found conclusively, leave all labels in place and
   stop. The guard suppresses Discover for the whole set during the provisional
-  label-removal window; it does not close the set. Then,
+  label-removal window; it does not close the set. When this release is
+  proceeding under the narrow review-fix-loop-cutoff auto-release
+  exception below instead of an explicit human release request, also
+  verify here -- immediately before the first label removal below,
+  whether that removal is a non-anchor target's or the anchor's own --
+  that the marked target is the sole member of its authoring set: it
+  carries no `<marker-prefix>-roadmap-id` marker (never a roadmap
+  anchor), and a repository-wide paginated issue-comment scan for
+  trusted owner markers whose exact `set` matches finds no sibling
+  target -- the same repository-wide, fail-closed enumeration the
+  resume procedure above requires, since a sibling's marker lives on
+  the sibling's own issue and never appears in the marked target's own
+  comment log; block on incomplete or inconclusive enumeration the
+  same way. If either condition fails, or the scan cannot be
+  completed, the exception does not authorize removing any label for
+  this release; fall back to the ordinary explicit human
+  release-request precondition for the whole set instead. Then,
   immediately before each label removal, append and verify the set anchor's
   `mode=heartbeat` first (or reuse one per the heartbeat-coalescing rule
   above), re-fetching it and requiring its current owner, set, anchor, and
