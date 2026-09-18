@@ -50,10 +50,11 @@ The template has three distribution surfaces:
 1. **Core template files** copied from `idd-template/` into the adopter
    repository. These include `.github/idd/`, `.github/instructions/`,
    `docs/`, and `profiles/`.
-2. **Optional issue-authoring companion files** read from the canonical
-   `skills/issue-authoring/` source bundle and installed under one selected
-   runtime-native destination only when the operator explicitly opts into
-   pre-execution issue drafting.
+2. **Optional companion files** (`issue-authoring`, `idd-spec-audit`) read
+   from their canonical `skills/*/` source bundles and installed under one
+   selected runtime-native destination per companion, only when the
+   operator explicitly opts into pre-execution issue drafting or
+   instruction-corpus auditing.
 3. **Local-copy installs** where an agent copies the full
    `idd-template/` directory from a cloned `idd-skill` checkout instead
    of fetching individual files.
@@ -64,12 +65,17 @@ surfaces (see [Remote fetch examples](#remote-fetch-examples) and
 `idd-template/ONBOARDING.md` Option A/B point here for the exact
 commands instead of inlining them.
 
-The companion generated block describes canonical source paths relative to
-the idd-skill checkout. It is not a target installation path: the onboarding
-examples use a separate `SKILL_DEST` value, with
-`.agents/skills/issue-authoring/` as the Codex example. Record the selected
-destination in the onboarding policy and do not add a second same-named
-runtime mirror by default (preventive; no observed incident yet).
+Each companion's generated block describes canonical source paths relative
+to the idd-skill checkout. Neither is a target installation path: the
+[Remote fetch examples](#remote-fetch-examples) below use a separate
+`SKILL_DEST` value per companion, with `.agents/skills/issue-authoring/`
+and `.agents/skills/idd-spec-audit/` as the Codex examples.
+[Local-copy installs](#local-copy-installs) currently ships only the
+`issue-authoring` companion's copy recipe; add the equivalent
+`idd-spec-audit` recipe separately if local-copy parity is wanted.
+Record the selected destination in the onboarding policy and do not add
+a second same-named runtime mirror by default (preventive; no observed
+incident yet).
 
 ## Generated file lists
 
@@ -78,12 +84,15 @@ The authoritative generated lists are configured in
 
 - `generatedBlocks[].id == "idd-template-core-files"` owns the core
   template file list.
-- `generatedBlocks[].id == "issue-authoring-companion-files"` owns the
-  optional issue-authoring companion list.
+- `generatedBlocks[].id == "issue-authoring-companion-files"` and
+  `"idd-spec-audit-companion-files"` each own one optional companion
+  list.
 - `shellFileLists` ties each generated list to the `gh api` and `curl`
-  loops in [Remote fetch examples](#remote-fetch-examples) below.
-- `generatedBlocks[].id == "idd-template-readme-core-files"` and
-  `"idd-template-readme-issue-authoring-files"` own the descriptive
+  loops in [Remote fetch examples](#remote-fetch-examples) below — one
+  `gh api`/`curl` pair per companion.
+- `generatedBlocks[].id == "idd-template-readme-core-files"`,
+  `"idd-template-readme-issue-authoring-files"`, and
+  `"idd-template-readme-idd-spec-audit-files"` own the descriptive
   file inventory in `idd-template/README.md`'s "Files" section. This is
   a **fourth, broader inventory surface** — not one of the three
   distribution surfaces above, since it documents the shipped file set
@@ -102,20 +111,20 @@ The authoritative generated lists are configured in
   the readme inventory block has no `paths` list, adding a new
   `idd-template/` file never requires a manual edit here — running
   `node scripts/sync-docs.mjs --apply` picks it up automatically. Keep
-  the issue-authoring companion
-  half's `paths` in sync with `issue-authoring-companion-files`'s own
-  list by hand (both are short, curated, and rarely change) — the
-  audit's `paths`/`sourceGlobs` cross-check still catches drift on that
-  one.
+  each companion half's `paths` in sync with its own
+  `*-companion-files` block's list by hand (both companion lists are
+  short, curated, and rarely change) — the audit's `paths`/`sourceGlobs`
+  cross-check still catches drift on either one.
 
 When adding a core template file, update both `sourceGlobs` and `paths`
 for `idd-template-core-files` when the new path is not already covered.
 The docs audit compares those entries with the repository files and
 fails if the generated block or shell loops are stale.
 
-When adding an optional issue-authoring companion file, update both the
-`issue-authoring-companion-files` block and the
-`idd-template-readme-issue-authoring-files` block above. Do not put optional
+When adding an optional companion file, update both that companion's
+`*-companion-files` block (`issue-authoring-companion-files` or
+`idd-spec-audit-companion-files`) and its matching
+`idd-template-readme-*-files` block above. Do not put optional
 companion files in the core template list unless the execution loop
 requires every adopter to receive them.
 
@@ -196,36 +205,33 @@ under `pnpm run lint`'s full test suite (`node --test`), which
 `audit-docs.mjs --check` can still break `idd-onboard.mjs`. This needs a
 maintainer decision, not a mechanical file-list edit.
 
-## `.gitattributes` linguist-generated convention (`vendored-node`)
+## `.gitattributes` linguist-vendored convention (`vendored-node`)
 
-Review bots (Copilot/CodeRabbit/etc.) read both a vendored `.mts`
-source file and its generated `.mjs` build output independently,
-producing duplicate findings for the same defect. The `idd-skill`
-source repository solves this for itself with a `.gitattributes`
-stanza marking every vendored `scripts/` file individually (plus a
-`bin/**/*.mjs` glob for the `bin/` shim directory)
-`linguist-generated=true` (see the root `.gitattributes`) — but
+The copied `vendored-node` helper files are third-party code, not
+first-party build output. Mark them `linguist-vendored` in the
+adopter's `.gitattributes` — the same recommendation as
+[Optional — mark the vendored helper bundle `linguist-vendored`](optional-host-setup.md#optional--mark-the-vendored-helper-bundle-linguist-vendored).
+Do **not** mark that copied set `linguist-generated=true`; that
+attribute is for first-party generated output (the `idd-skill` source
+repository uses it for its own `scripts/*.mjs` built from `.mts`
+sources — see the root `.gitattributes`; observed 2026-09-13,
+issue `#2958`, when this page previously recommended the
+generated-output stanza for the same copied files).
+
 `idd-template/` ships no `.gitattributes` file, since an adopter's own
 `.gitattributes` (if any) is theirs to own, and the import mechanism
 above has no safe way to merge into a file the adopter may already
 maintain (`resolveImportFiles`'s `new`/`unchanged`/`overwrite`/
 `blocked-non-file` classification would treat a pre-existing
 `.gitattributes` as a blocked overwrite, or silently clobber one with
-`--force`).
+`--force`). Append the exact lines from the helper-runtime manifest
+instead of a hand-written `scripts/*.mjs` glob (a target `scripts/`
+directory may also contain hand-written `.mjs` files):
 
-Adopters who vendor the `vendored-node` helper bundle should instead
-add an equivalent stanza to their own `.gitattributes` by hand, listing
-each vendored generated file individually rather than a bare
-`scripts/*.mjs` glob — a target repository's `scripts/` directory may
-also contain hand-written `.mjs` files that must not be mis-marked as
-generated:
-
-```gitattributes
-# Generated from TypeScript sources by `pnpm run build`; see
-# https://github.com/kurone-kito/idd-skill/blob/main/docs/typescript-sources.md
-scripts/advisory-convergence.mjs linguist-generated=true
-scripts/claim-approval-gate.mjs linguist-generated=true
-# ... one line per vendored helper file actually present in this repo
+```sh
+node scripts/helper-runtime-manifest.mjs --profile vendored-node \
+  | node -e 'const m=JSON.parse(require("node:fs").readFileSync(0,"utf8"));process.stdout.write(m.profiles["vendored-node"].recommendedGitattributes.join("\n")+"\n")' \
+  >> .gitattributes
 ```
 
 `idd-template/ONBOARDING.md`'s vendored-node profile guidance links
@@ -356,6 +362,29 @@ do
 done
 ```
 
+If the operator also opts into the `idd-spec-audit` companion, fetch its
+canonical source files the same way, writing them to a separate selected
+native destination:
+
+<!-- audit:shell-list id=idd-spec-audit-companion-gh-api-loop -->
+
+```sh
+DEST="."  # root of the target repository
+SKILL_DEST="${DEST}/.agents/skills/idd-spec-audit"  # Codex example; choose one native destination
+
+mkdir -p "${SKILL_DEST}/references"
+
+for FILE in \
+  "SKILL.md" \
+  "references/report-template.md"
+do
+  mkdir -p "$(dirname "${SKILL_DEST}/${FILE}")"
+  gh api -H "Accept: application/vnd.github.raw+json" \
+    "repos/kurone-kito/idd-skill/contents/skills/idd-spec-audit/${FILE}" \
+    > "${SKILL_DEST}/${FILE}" || { echo "Failed: ${FILE}" >&2; exit 1; }
+done
+```
+
 Alternatively, use `curl` (no authentication required — idd-skill is a public
 repository):
 
@@ -462,6 +491,27 @@ do
 done
 ```
 
+If the operator opts into the `idd-spec-audit` companion with `curl`, fetch
+the same canonical source files to the selected native skill destination:
+
+<!-- audit:shell-list id=idd-spec-audit-companion-curl-loop -->
+
+```sh
+BASE="https://raw.githubusercontent.com/kurone-kito/idd-skill/main/skills/idd-spec-audit"
+DEST="."  # root of the target repository
+SKILL_DEST="${DEST}/.agents/skills/idd-spec-audit"  # Codex example; choose one native destination
+
+mkdir -p "${SKILL_DEST}/references"
+
+for FILE in \
+  "SKILL.md" \
+  "references/report-template.md"
+do
+  mkdir -p "$(dirname "${SKILL_DEST}/${FILE}")"
+  curl -fsSL "${BASE}/${FILE}" -o "${SKILL_DEST}/${FILE}" || { echo "Failed: ${FILE}" >&2; exit 1; }
+done
+```
+
 For a new core file, ensure that both loops include the path after the
 generated list is updated. The audit checks the shell lists against the
 same generated block, so a path that appears in one loop but not the
@@ -513,10 +563,13 @@ Before merging a distribution-surface change, verify:
   the new path.
 - the `gh api` and `curl` loops in [Remote fetch examples](#remote-fetch-examples)
   above include the same path.
-- optional issue-authoring files remain in the optional companion list.
-- a new issue-authoring companion file is also added to the
-  `idd-template-readme-issue-authoring-files` `paths` list (its
-  `sourceGlobs` cross-check catches an omission, but only after running
+- optional `issue-authoring` and `idd-spec-audit` files remain in their
+  respective optional companion lists.
+- a new companion file is also added to that companion's matching
+  `idd-template-readme-*-files` `paths` list
+  (`idd-template-readme-issue-authoring-files` or
+  `idd-template-readme-idd-spec-audit-files`; the `sourceGlobs`
+  cross-check catches an omission, but only after running
   `node scripts/sync-docs.mjs --apply` to regenerate
   `idd-template/README.md`).
 - `node scripts/sync-docs.mjs --apply` has run so `idd-template/README.md`'s
@@ -524,5 +577,10 @@ Before merging a distribution-surface change, verify:
   `idd-template/` path (its core half needs no manifest edit — a new
   `idd-template/**/*` path is picked up automatically).
 - `node scripts/audit-docs.mjs --check` passes.
-- the policy record names the selected companion destination when the
-  optional issue-authoring bundle is installed.
+- the policy record names the selected companion destination for each
+  optional companion bundle (`issue-authoring`, `idd-spec-audit`) that
+  is installed. The canonical Step 1B / `idd-onboard --hear` policy
+  templates (`hearing-catalog.json`, `policy-decisions.md`) currently
+  define this field only for `issue-authoring`; until a follow-up
+  extends them for `idd-spec-audit`, record its destination as
+  free-form policy prose instead.

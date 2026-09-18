@@ -49,14 +49,17 @@ Three guards keep it safe:
   candidates but keeps others.
 - **At most once per pass.** A0-O runs at most once as the
   roadmap-first fallback per Discover pass. Once spent (via trigger
-  (a), (b), or (c)), any later A4 Step 1 / Step 1.5 exhaustion —
-  reachable only after trigger (b) — reports and stops (not an abort)
-  without re-entering A0-O. A **trigger (a)** or **trigger (c)** A0-O
+  (a), (b), (c), or (d)), any later A4 Step 1 / Step 1.5 exhaustion —
+  reachable after trigger (b) or (d), once either one's own A0-O run
+  yields orphan candidates that later fail A4 — reports and stops (not
+  an abort) without re-entering A0-O. A **trigger (a)** or **trigger (c)** A0-O
   run that finds no orphan routes to the A3 decision tree (both paths
-  genuinely empty); a **trigger (b)** one reports and stops instead,
-  because roadmap candidates reached A4 — an exhaustion the A3 tree's
-  A2/A3-empty cases do not describe. This prevents an
-  A1 ↔ A0-O or A4 ↔ A0-O loop.
+  genuinely empty); a **trigger (b)** or **trigger (d)** one reports
+  and stops instead — (b) because roadmap candidates reached A4, an
+  exhaustion the A3 tree's A2/A3-empty cases do not describe; (d)
+  because A1.5 already reported its own specific blocker, which the A3
+  tree's generic wording would misdescribe or duplicate. This prevents
+  an A1 ↔ A0-O or A4 ↔ A0-O loop.
 
 When **trigger (a)** (zero A3.5-reaching candidates) and the orphan
 fallback both yield nothing, discovery lands in the A3 decision tree,
@@ -89,9 +92,34 @@ absent, since there is no roadmap candidate for it to run on — A0-O's
 own A3.5 pass on any orphan candidates it finds still runs and can
 still produce its own approval-needed bucket. Because
 (a)/(b) require A1 to have found a roadmap and (c) requires it to have
-found none, the three triggers are mutually exclusive within one
-Discover pass — so "at most once per pass" holds automatically across
-all three, not only within the (a)/(b) pair.
+found none, triggers (a)/(b)/(c) are mutually exclusive within one
+Discover pass — so "at most once per pass" already held across all
+three before trigger (d) below extends the same property to a fourth.
+
+**Trigger (d)** closes a fourth gap, this one downstream of A1 but
+upstream of A2. `idd-roadmap-audit.instructions.md`'s A1.5 (Audit
+completed roadmaps) can itself stop before A2 for two human-input
+outcomes — the roadmap-level blocked-by-human/needs-decision label
+check, and the "Non-autonomous gaps found" outcome — and both stopped
+unconditionally, with no `roadmap-first` fallback at all. Under
+`roadmap-first`, when either fires, A1 has already found a roadmap (so
+trigger (c) cannot fire) and A2 never runs (so triggers (a)/(b), which
+both presuppose A2 ran, cannot fire either) — the whole Discover pass
+simply stopped even when unrelated, claimable orphan issues existed in
+the repository, the exact situation `roadmap-first` exists to avoid.
+Trigger (d) fires strictly between A1 and A2 — after A1 finds a
+roadmap, before A2 ever runs — which is disjoint by construction from
+trigger (c) (A1 finds zero roadmaps) and from triggers (a)/(b) (both
+presuppose A2 already ran): all four triggers remain mutually
+exclusive within one Discover pass, and "at most once per pass"
+continues to hold automatically. Trigger (d) is scoped to A1.5's
+outcome reached via the normal A1 roadmap-selection path only — never
+A0-T's own scoped A1.5 invocation, which already governs its own
+outcome unconditionally and with no fallback. Preventive; no observed
+incident yet — kurone-kito/idd-skill#3090 identified the gap by
+inspection of A1.5's two stop outcomes against the triggers already
+defined here, not from a reproduced session that actually hit the
+stop.
 
 The `orphan-first` symmetric case — orphan candidates all failing A4,
 which would fall back to the roadmap path — is a separate concern and
@@ -505,7 +533,8 @@ rather than assuming it still matches the last-known worktree.
 
 A Grok Build session's file-read and file-edit tools resolve relative
 paths against the session's launch workspace — the primary clone,
-whose HEAD B1 keeps on `main` — not the shell's current directory, so
+<!-- dotfiles-divergence: master-branch -->
+whose HEAD B1 keeps on `master` — not the shell's current directory, so
 a `cd` into the sibling worktree does not rebind them. Reproduced by
 creating a sibling worktree, writing a unique marker only into that
 worktree's uncommitted `README.md`, then running Grok's
@@ -758,9 +787,34 @@ only step that requests a fresh primary-advisory-bot review) entirely,
 so a PR whose Copilot findings were all Rejected in a given pass could
 reach F2's advisory-convergence check with the bot never having
 reviewed the resulting HEAD. The gate closes that gap by running E14's
-Primary advisory bot procedure at the now-stable HEAD whenever the last
-non-empty snapshot this episode zeroed out on a completed-review PATH B
-disposition, before proceeding to F1.
+Primary advisory bot procedure at the now-stable HEAD whenever a
+durable marker records that the last non-empty snapshot at the current
+HEAD zeroed out on a completed-review PATH B disposition (condition
+(a)), before proceeding to F1.
+
+Condition (b) — the current HEAD's eligibility for AW3-S's
+settled-window (non-pending) entry — is a defense-in-depth backstop
+for a narrower subset of cases: D4 and F2 each already consult AW3-S
+independently for this same settled-window entry, but a true-virgin
+empty snapshot (one that never satisfies condition (a) on its own)
+otherwise never runs E14 through this gate specifically. Condition (b)
+guarantees that path also reaches the stale-request recovery cycle
+(and its route to `COPILOT_UNAVAILABLE`), rather than depending solely
+on D4/F2 revisits eventually accumulating enough AW3-S cycles on their
+own.
+
+The gate's own state was originally tracked only in the current
+session's in-memory recollection of its last E1-E3 pass ("this
+episode"), with no durable, GitHub-visible record: a session that
+crashed, restarted, or resumed after that pass had no way to
+reconstruct whether the gate should have fired for the current HEAD.
+A dedicated `zero-accepted-path-a-gate` marker (see
+`idd-review-triage.instructions.md`) now persists which condition
+fired and the HEAD SHA it was evaluated against, read back on every
+evaluation instead of relying on session-local memory; a marker
+recorded against a HEAD SHA that no longer matches the PR's current
+HEAD — for example, after a sync-path merge advances HEAD — is stale
+and does not satisfy the gate for the new HEAD.
 
 ### An advisory bot's embedded-but-unthreaded findings: mirror the detection scope, not the gate scope
 
@@ -847,6 +901,29 @@ marker-scoped rule: when a candidate's body carries the
 marker, its `Refs #<N>` reference is resolved the same way an ordinary
 `Blocked by #<N>` line is — excluded from Discover while `#<N>` stays
 open. An unmarked issue's `Refs` lines are completely unaffected.
+
+#### 2026-09-15 recalibration to 12, using a month of real data (kurone-kito/idd-skill#2999)
+
+After a month of historical review-fix-loop data accumulated in this
+repository — distinct from the `15` default's own much shorter live
+track record — a full sample of this repository's own merged PRs
+(rather than the small, cherry-picked set that originally motivated
+`15`) showed a p95 in the single digits and fewer than 3% of PRs
+reaching a round count anywhere near the configured threshold, albeit
+with a rising trend over that month as this repository's own IDD
+concurrency and throughput grew. The default was lowered to `12` —
+still comfortably above ordinary usage, but tightened in response to
+that trend rather than left on its original starting-point value
+indefinitely. A same-day PR review also caught, and this recalibration
+corrected, a pagination bug that had silently undercounted the busiest
+outlier PRs in the initial sample; the percentiles this recalibration
+actually turns on were unaffected, but adopters reproducing this kind
+of analysis should paginate the full result set, not just its first
+page. See kurone-kito/idd-skill#2999 for the full methodology and
+figures behind this recalibration; adopters without an equivalent
+history of their own should keep tuning this value from their own
+observed data rather than adopting either number as a universal
+constant.
 
 ### review-ack worked example
 
@@ -980,6 +1057,22 @@ proof the caller's own token carries the scope the endpoint requires).
 This is why `idd-ci.instructions.md`'s Required-check discovery step 4
 treats every `404` on these reads exactly like a `403` unless the
 repository opts out via `ciGate.trustEmptyProtectionReads: true`.
+
+### Rulesets-API write-side 404 for `gh`-CLI-default-OAuth-App tokens
+
+A separate, write-side finding from the read-side ambiguity documented
+above: `PATCH /repos/{owner}/{repo}/rulesets/{id}` can 404 for a
+`gh`-CLI-default-OAuth-App-authenticated token even with confirmed
+`admin: true` permission and a successful `GET` on the identical
+resource immediately before the `PATCH`. The classic
+`PUT /repos/{owner}/{repo}/branches/{branch}/protection` endpoint
+remains a working fallback for the equivalent write with the same
+token. This was observed with the `gh` CLI's default OAuth App token
+specifically; whether a fine-grained PAT or a GitHub App installation
+token behaves differently was not tested, and is left as an open
+question rather than asserted either way. A repository that ships no
+helper or documented procedure writing a ruleset via the REST API has
+no functional gap here — this is a defensive documentation note.
 
 ## Pre-merge
 

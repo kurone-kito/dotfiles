@@ -549,9 +549,33 @@ export function computeExitCode(report) {
 function printTable(report) {
   console.log(`mode: ${report.mode}  classifier: ${report.classifier}`);
   const c = report.counts;
-  console.log(
-    `counts: eligible=${c.eligible} applied=${c.applied} failed=${c.failed} already=${c.alreadyMinimized} blocked=${c.cannotMinimize} untrusted=${c.untrusted} unsupported=${c.unsupportedType}`,
-  );
+  // #2962: deadlineSkipped is appended, not spliced between the other
+  // columns -- it is both the last-declared field on MinimizeReport's
+  // `counts` interface and the last key JSON.stringify(report, ...)
+  // would emit for it, so appending here is what actually "matches the
+  // existing --format json shape" (the issue's own acceptance
+  // criterion), not just a safe default position. The `undefined` guard
+  // (rather than `> 0`) also matches that JSON shape exactly:
+  // runMinimize() unconditionally seeds counts.deadlineSkipped = 0
+  // regardless of whether --deadline-ms was ever passed, so this prints
+  // "deadlineSkipped=0" on essentially every real CLI run, not only a
+  // deadline-triggering one -- a `> 0` guard would silently diverge from
+  // the JSON output again for that common all-zero case.
+  const countsLine = [
+    `eligible=${c.eligible}`,
+    `applied=${c.applied}`,
+    `failed=${c.failed}`,
+    `already=${c.alreadyMinimized}`,
+    `blocked=${c.cannotMinimize}`,
+    `untrusted=${c.untrusted}`,
+    `unsupported=${c.unsupportedType}`,
+    c.deadlineSkipped === undefined
+      ? ''
+      : `deadlineSkipped=${c.deadlineSkipped}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  console.log(`counts: ${countsLine}`);
   for (const item of report.items) {
     const url = item.url ?? '(no url)';
     const reason = item.reason ?? '';
@@ -570,7 +594,18 @@ function runGh(argv, timeoutMs = GH_TIMEOUT_MS) {
     const e = error;
     return {
       ok: false,
-      stderr: String(e.stderr?.toString?.() ?? e.message ?? 'unknown error'),
+      // `??` only falls through on null/undefined, but execFileSync can
+      // throw with a *defined, empty* e.stderr (e.g. a bare timeout that
+      // kills the child before it writes anything) -- `''` is not
+      // nullish, so a `??` chain here would short-circuit on it and
+      // silently discard the actually-useful e.message (the
+      // ETIMEDOUT/"Command failed" diagnostic). Use `||` for both
+      // fallback steps instead, so an empty string is treated the same
+      // as absent. The outer String(...) stays: e.message is typed
+      // `unknown` above, and TypeScript's strict mode rejects an
+      // `unknown`-typed value assigned directly to GhResult's
+      // `stderr: string` field. See kurone-kito/idd-skill#2957.
+      stderr: String(e.stderr?.toString?.() || e.message || 'unknown error'),
     };
   }
 }
