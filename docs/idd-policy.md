@@ -830,10 +830,14 @@ paragraph near the top of this page for the current, reconciled
 `.github/idd/config.json` and this section alone. Workflow YAML pins
 and Helper Runtime Profile invocation snippets stay Track D.
 
-**Known, accepted transitional window.** `helperRuntime.packageSpec`
-points at `v0.12.0` before instructions and workflow pins catch up.
-Unlike the 0.11.0 round, this cannot fail `additionalProperties` (no
-new keys). Do not block the merge on that window.
+**Historical transitional window (Track A, closed).** At Track A's
+merge, `helperRuntime.packageSpec` pointed at `v0.12.0` before
+instructions and workflow pins caught up. Unlike the 0.11.0 round, that
+window could not fail `additionalProperties` (no new keys). Issues
+448 and 450 have since landed. The only remaining leftover pin is
+Track D's out-of-scope companion workflow, still on the superseded
+`v0.11.0` commit and recorded in the ledger below -- not an active
+Track A transition.
 
 ## Divergence Register
 
@@ -1040,8 +1044,14 @@ deltas are accounted for by the live slugs in the table (local-policy
 substitutions such as `master-branch` / `claim-timing`,
 installed-bundle routing, onboarding-doc-trim pin links, vendored
 header, helper-profile facade notes, and the six still-ahead
-corrections filed upstream this round). No new unmarked rewrite class
-was found.
+corrections filed upstream this round). One unmarked local hunk
+remains in Track B's
+[`.github/instructions/idd-claim.instructions.md`](../.github/instructions/idd-claim.instructions.md)
+(PR #456): the forced-handoff adopt-verbatim path skips posting
+`claimed-by` (local lines 287-293). That delta is outside the 17
+registered slugs. This track records it here and does **not** add a
+register row or point-of-use marker (that would expand this track's
+candidate-file list). A later instruction-resync can mark it.
 
 **Retired this round (upstream equivalence at `v0.12.0`)**:
 
