@@ -834,10 +834,10 @@ and Helper Runtime Profile invocation snippets stay Track D.
 merge, `helperRuntime.packageSpec` pointed at `v0.12.0` before
 instructions and workflow pins caught up. Unlike the 0.11.0 round, that
 window could not fail `additionalProperties` (no new keys). Issues
-448 and 450 have since landed. The only remaining leftover pin is
-Track D's out-of-scope companion workflow, still on the superseded
-`v0.11.0` commit and recorded in the ledger below -- not an active
-Track A transition.
+448 and 450 have since landed. The companion-workflow leftover pin
+Track D left out of scope was closed by
+[`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
+active Track A transition.
 
 ## Divergence Register
 
@@ -1748,14 +1748,13 @@ Local-policy slugs (`master-branch`, `claim-timing`, `signing-ladder`,
 `vendored-file-header`, `helper-profile-ephemeral-npx`,
 `worktree-guard-wiring-note`, `local-docs-index`) were not filed.
 
-**Local pin leftover (not expanded here)**: Track D (#450) left
+**Resolved leftover pin (#459)**: Track D (#450) left
 `.github/workflows/idd-advisory-convergence-comment.yml` out of scope
-(unchanged at `v0.12.0` versus upstream). That file still contains
-live `npx` tarball URLs pinned to the superseded `v0.11.0` commit
-named in the historical pin paragraph above. This track does not add
-that workflow to its candidate-file list. Recorded so the acceptance
-grep for that prior-round SHA is not silently claimed clean (sibling
-hits remain; hold rather than expand this track's candidate files).
+(unchanged at `v0.12.0` versus upstream). That file's live `npx`
+tarball URLs were still on the superseded `v0.11.0` commit named in
+the historical pin paragraph above until
+[`#459`](https://github.com/kurone-kito/dotfiles/issues/459) bumped
+them to `11105d705820e50be0a14fcc174587abbaf62b30`.
 
 **Resolved this round**: the `docs/idd-concept-ownership.md` vs.
 `.github/instructions/idd-overview-appendix.instructions.md`
