@@ -3,8 +3,9 @@
 # Detects Homebrew in standard locations and sets up the shell environment.
 
 find_brew() {
-  if command -v brew >/dev/null 2>&1; then
-    command -v brew
+  _brew_path=$(command -v brew 2>/dev/null || :)
+  if [ -n "$_brew_path" ]; then
+    printf '%s\n' "$_brew_path"
     return 0
   fi
   for p in \
