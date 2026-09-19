@@ -93,6 +93,32 @@ make_mock_command_at() {
   assert_failure
 }
 
+@test "preserves first PATH match for wt with spaces in its path" {
+  make_mock_command_at 'WindowsApps Package/wt'
+  make_mock_command_at 'fallback/wt'
+  export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps Package:$BATS_TEST_TMPDIR/bin/fallback:$BATS_TEST_TMPDIR/bin"
+
+  . "$ALIASES_PATH"
+
+  run command -v wt
+  assert_success
+  assert_output "$BATS_TEST_TMPDIR/bin/WindowsApps Package/wt"
+  run alias git-wt
+  assert_failure
+}
+
+@test "rechecks optional commands in a fresh process after PATH changes" {
+  make_mock_command git-wt
+
+  run /bin/bash -c 'PATH="$1"; . "$2"; alias wt' _ "$BATS_TEST_TMPDIR/bin" "$ALIASES_PATH"
+  assert_success
+  assert_output "alias wt='git-wt'"
+
+  make_mock_command wt
+  run /bin/bash -c 'PATH="$1"; . "$2"; alias git-wt' _ "$BATS_TEST_TMPDIR/bin" "$ALIASES_PATH"
+  assert_failure
+}
+
 @test "creates batcat alias when bat exists and batcat is missing" {
   make_mock_command bat
 
@@ -121,4 +147,34 @@ make_mock_command_at() {
 
   run alias bat
   assert_failure
+}
+
+@test "resolves each optional command once" {
+  LOOKUP_LOG="$BATS_TEST_TMPDIR/command-lookups"
+  : > "$LOOKUP_LOG"
+  command() {
+    if [ "$1" = "-v" ]; then
+      printf '%s\n' "$2" >> "$LOOKUP_LOG"
+    fi
+    builtin command "$@"
+  }
+  export LOOKUP_LOG
+
+  . "$ALIASES_PATH"
+
+  unset -f command
+  lookup_count=0
+  while IFS= read -r _lookup; do
+    lookup_count=$((lookup_count + 1))
+  done < "$LOOKUP_LOG"
+  assert_equal "$lookup_count" "4"
+  for command_name in wt git-wt batcat bat; do
+    command_count=0
+    while IFS= read -r lookup; do
+      if [ "$lookup" = "$command_name" ]; then
+        command_count=$((command_count + 1))
+      fi
+    done < "$LOOKUP_LOG"
+    assert_equal "$command_count" "1"
+  done
 }
