@@ -79,25 +79,22 @@ MOCK
 }
 
 @test "uses a standard Homebrew location when PATH has no brew" {
-  standard_brew=''
-  for candidate in \
-    /home/linuxbrew/.linuxbrew/bin/brew \
-    /opt/homebrew/bin/brew \
-    /usr/local/bin/brew
-  do
-    if [ -x "$candidate" ]; then
-      standard_brew=$candidate
-      break
-    fi
-  done
-  if [ -z "$standard_brew" ]; then
-    skip "no standard Homebrew installation is available"
-  fi
-  if ! PATH="/usr/bin:/bin" "$standard_brew" shellenv >/dev/null 2>&1; then
-    skip "the standard Homebrew installation is not runnable"
-  fi
+  fixture_brew="$BATS_TEST_TMPDIR/fallback/bin/brew"
+  mkdir -p "${fixture_brew%/brew}"
+  cat > "$fixture_brew" << 'MOCK'
+#!/bin/sh
+if [ "$1" = "shellenv" ]; then
+  echo 'export HOMEBREW_PREFIX=fallback'
+fi
+MOCK
+  chmod +x "$fixture_brew"
+  fixture_script="$BATS_TEST_TMPDIR/40-homebrew-fallback.sh"
+  sed \
+    -e "s|/home/linuxbrew/.linuxbrew/bin/brew|$fixture_brew|g" \
+    -e "s|/opt/homebrew/bin/brew|$fixture_brew|g" \
+    -e "s|/usr/local/bin/brew|$fixture_brew|g" \
+    "$SCRIPT_PATH" > "$fixture_script"
 
-  expected_prefix=${standard_brew%/bin/brew}
   export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
   unset HOMEBREW_PREFIX
   command() {
@@ -107,10 +104,10 @@ MOCK
     builtin command "$@"
   }
 
-  . "$SCRIPT_PATH"
+  . "$fixture_script"
 
   unset -f command
-  assert_equal "$HOMEBREW_PREFIX" "$expected_prefix"
+  assert_equal "$HOMEBREW_PREFIX" "fallback"
 }
 
 @test "keeps all supported standard Homebrew fallback locations" {

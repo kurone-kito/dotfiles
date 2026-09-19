@@ -168,4 +168,13 @@ make_mock_command_at() {
     lookup_count=$((lookup_count + 1))
   done < "$LOOKUP_LOG"
   assert_equal "$lookup_count" "4"
+  for command_name in wt git-wt batcat bat; do
+    command_count=0
+    while IFS= read -r lookup; do
+      if [ "$lookup" = "$command_name" ]; then
+        command_count=$((command_count + 1))
+      fi
+    done < "$LOOKUP_LOG"
+    assert_equal "$command_count" "1"
+  done
 }
