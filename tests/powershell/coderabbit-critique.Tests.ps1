@@ -704,15 +704,33 @@ param(
   [Parameter(Mandatory)] [string] $BarrierDir,
   [Parameter(Mandatory)] [string] $WorkerId
 )
+$ErrorActionPreference = 'Stop'
 $env:XDG_STATE_HOME = $StateHome
 $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
-. $SubjectPath
-New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.ready") |
-  Out-Null
-while (-not (Test-Path -LiteralPath (Join-Path $BarrierDir 'release'))) {
-  Start-Sleep -Milliseconds 25
+try {
+  New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.started") |
+    Out-Null
+  . $SubjectPath
+  New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.ready") |
+    Out-Null
+  while (-not (Test-Path -LiteralPath (Join-Path $BarrierDir 'release'))) {
+    Start-Sleep -Milliseconds 25
+  }
+  Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
+} catch {
+  $diagnostic = ($_ | Out-String).Trim()
+  try {
+    [System.IO.File]::WriteAllText(
+      (Join-Path $BarrierDir "$WorkerId.error"),
+      $diagnostic,
+      [System.Text.UTF8Encoding]::new($false)
+    )
+  } catch [System.Exception] {}
+  [Console]::Error.WriteLine(
+    "worker $WorkerId setup failed: $diagnostic"
+  )
+  exit 1
 }
-Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
 '@
       [System.IO.File]::WriteAllText(
         $childScript,
@@ -721,7 +739,9 @@ Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
       )
 
       $workerCount = 12
+      $readinessTimeoutSeconds = 60
       $processes = @()
+      $launchErrors = @()
       $releasePath = Join-Path $barrierDir 'release'
       try {
         for ($i = 0; $i -lt $workerCount; $i++) {
@@ -740,28 +760,93 @@ Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
           }
           $psi.UseShellExecute = $false
           $psi.CreateNoWindow = $true
-          $processes += [Diagnostics.Process]::Start($psi)
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.EnvironmentVariables['XDG_STATE_HOME'] = $script:FallbackStateHome
+          $psi.EnvironmentVariables['DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN'] = '1'
+          try {
+            $process = [Diagnostics.Process]::Start($psi)
+            $processes += [pscustomobject]@{
+              WorkerId = $i
+              Process = $process
+              StdoutTask = $process.StandardOutput.ReadToEndAsync()
+              StderrTask = $process.StandardError.ReadToEndAsync()
+            }
+          } catch {
+            $launchErrors += "worker $i launch failed: $(($_ | Out-String).Trim())"
+          }
         }
 
-        $readyDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        $readyDeadline = [DateTime]::UtcNow.AddSeconds($readinessTimeoutSeconds)
         do {
           $readyCount = @(Get-ChildItem -LiteralPath $barrierDir -Filter '*.ready').Count
-          if ($readyCount -eq $workerCount) { break }
+          $errorCount = @(Get-ChildItem -LiteralPath $barrierDir -Filter '*.error').Count
+          if (
+            $readyCount -eq $workerCount -or
+            $launchErrors.Count -gt 0 -or
+            $errorCount -gt 0
+          ) {
+            break
+          }
           Start-Sleep -Milliseconds 25
         } while ([DateTime]::UtcNow -lt $readyDeadline)
-        $readyCount | Should -Be $workerCount
-        New-Item -ItemType File -Force -Path $releasePath | Out-Null
 
-        foreach ($process in $processes) {
-          $process.WaitForExit(30000) | Should -BeTrue
-          $process.ExitCode | Should -Be 0
+        $readinessDiagnostics = @("ready markers: $readyCount/$workerCount")
+        $readinessDiagnostics += $launchErrors
+        foreach ($workerId in 0..($workerCount - 1)) {
+          $readyPath = Join-Path $barrierDir "$workerId.ready"
+          if (Test-Path -LiteralPath $readyPath) {
+            continue
+          }
+
+          $errorPath = Join-Path $barrierDir "$workerId.error"
+          if (Test-Path -LiteralPath $errorPath) {
+            $errorText = (Get-Content -LiteralPath $errorPath -Raw).Trim()
+            $readinessDiagnostics += "worker $workerId setup error: $errorText"
+            continue
+          }
+
+          $entry = @($processes | Where-Object WorkerId -eq $workerId)
+          if ($entry.Count -eq 0) {
+            $readinessDiagnostics += "worker $workerId was not started"
+          } elseif ($entry[0].Process.HasExited) {
+            $readinessDiagnostics += (
+              "worker $workerId exited before readiness with code " +
+              $entry[0].Process.ExitCode
+            )
+          } else {
+            $readinessDiagnostics += "worker $workerId is still running without readiness"
+          }
+        }
+        New-Item -ItemType File -Force -Path $releasePath | Out-Null
+        $readyCount | Should -Be $workerCount -Because (
+          $readinessDiagnostics -join [Environment]::NewLine
+        )
+
+        foreach ($entry in $processes) {
+          $waited = $entry.Process.WaitForExit(60000)
+          if ($waited) {
+            $stdout = $entry.StdoutTask.GetAwaiter().GetResult().Trim()
+            $stderr = $entry.StderrTask.GetAwaiter().GetResult().Trim()
+          } else {
+            $stdout = '<process did not exit before the 60-second deadline>'
+            $stderr = '<process did not exit before the 60-second deadline>'
+          }
+          $processDiagnostics = "worker $($entry.WorkerId) stdout: $stdout; stderr: $stderr"
+          $waited | Should -BeTrue -Because $processDiagnostics
+          if ($waited) {
+            $entry.Process.ExitCode | Should -Be 0 -Because $processDiagnostics
+          }
         }
       } finally {
-        foreach ($process in $processes) {
-          if (-not $process.HasExited) {
-            try { $process.Kill() } catch [System.Exception] {}
+        if (-not (Test-Path -LiteralPath $releasePath)) {
+          New-Item -ItemType File -Force -Path $releasePath | Out-Null
+        }
+        foreach ($entry in $processes) {
+          if (-not $entry.Process.HasExited) {
+            try { $entry.Process.Kill() } catch [System.Exception] {}
           }
-          $process.Dispose()
+          $entry.Process.Dispose()
         }
       }
 
