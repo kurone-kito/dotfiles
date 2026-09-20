@@ -849,6 +849,7 @@ try {
         New-Item -ItemType File -Force -Path $releasePath | Out-Null
         $processDiagnostics = @()
         $processFailures = @()
+        $completionTimedOut = @{}
         $processDeadline = [DateTime]::UtcNow.AddSeconds($completionTimeoutSeconds)
         foreach ($entry in $processes) {
           $remainingMilliseconds = [int][Math]::Max(
@@ -856,19 +857,88 @@ try {
             ($processDeadline - [DateTime]::UtcNow).TotalMilliseconds
           )
           $waited = $entry.Process.WaitForExit($remainingMilliseconds)
-          if ($waited) {
-            $stdout = $entry.StdoutTask.GetAwaiter().GetResult().Trim()
-            $stderr = $entry.StderrTask.GetAwaiter().GetResult().Trim()
-          } else {
-            $stdout = "<process did not exit before the $completionTimeoutSeconds-second deadline>"
-            $stderr = "<process did not exit before the $completionTimeoutSeconds-second deadline>"
+          if (-not $waited) {
+            $completionTimedOut[$entry.WorkerId] = $true
+            try {
+              if (-not $entry.Process.HasExited) {
+                $entry.Process.Kill()
+              }
+            } catch [System.Exception] {
+              if (-not $entry.Process.HasExited) {
+                $processFailures += (
+                  "worker $($entry.WorkerId) timeout kill failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            }
           }
+        }
+
+        $captureDeadline = [DateTime]::UtcNow.AddSeconds($cleanupTimeoutSeconds)
+        foreach ($entry in $processes) {
+          $remainingMilliseconds = [int][Math]::Max(
+            0,
+            ($captureDeadline - [DateTime]::UtcNow).TotalMilliseconds
+          )
+          if (-not $entry.Process.HasExited -and $remainingMilliseconds -gt 0) {
+            try {
+              $entry.Process.WaitForExit($remainingMilliseconds) | Out-Null
+            } catch [System.Exception] {
+              $processFailures += (
+                "worker $($entry.WorkerId) capture wait failed: " +
+                ($_ | Out-String).Trim()
+              )
+            }
+          }
+
+          $streamOutput = @{}
+          foreach ($streamName in @('StdoutTask', 'StderrTask')) {
+            $streamTask = $entry.$streamName
+            if (-not $streamTask.IsCompleted) {
+              $remainingMilliseconds = [int][Math]::Max(
+                0,
+                ($captureDeadline - [DateTime]::UtcNow).TotalMilliseconds
+              )
+              if ($remainingMilliseconds -gt 0) {
+                try {
+                  $streamTask.Wait($remainingMilliseconds) | Out-Null
+                } catch [System.Exception] {
+                  $processFailures += (
+                    "worker $($entry.WorkerId) $streamName capture failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+            if ($streamTask.IsCompleted) {
+              try {
+                $streamText = $streamTask.GetAwaiter().GetResult()
+                $streamOutput[$streamName] = ([string] $streamText).Trim()
+              } catch [System.Exception] {
+                $streamOutput[$streamName] = (
+                  "<$streamName failed while capturing worker output>"
+                )
+                $processFailures += (
+                  "worker $($entry.WorkerId) $streamName capture failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            } else {
+              $streamOutput[$streamName] = (
+                "<$streamName was not captured before the " +
+                "$cleanupTimeoutSeconds-second capture deadline>"
+              )
+            }
+          }
+
+          $stdout = $streamOutput['StdoutTask']
+          $stderr = $streamOutput['StderrTask']
           $processDiagnostic = (
             "worker $($entry.WorkerId) stdout: $stdout; " +
             "stderr: $stderr"
           )
           $processDiagnostics += $processDiagnostic
-          if (-not $waited) {
+          if ($completionTimedOut.ContainsKey($entry.WorkerId)) {
             $processFailures += "worker $($entry.WorkerId) did not exit before the deadline"
           } elseif ($entry.Process.ExitCode -ne 0) {
             $processFailures += "worker $($entry.WorkerId) exited with code $($entry.Process.ExitCode)"
