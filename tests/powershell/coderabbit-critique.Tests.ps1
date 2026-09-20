@@ -740,8 +740,11 @@ try {
 
       $workerCount = 12
       $readinessTimeoutSeconds = 60
+      $completionTimeoutSeconds = 60
+      $cleanupTimeoutSeconds = 5
       $processes = @()
       $launchErrors = @()
+      $cleanupFailures = @()
       $releasePath = Join-Path $barrierDir 'release'
       try {
         for ($i = 0; $i -lt $workerCount; $i++) {
@@ -788,6 +791,22 @@ try {
           ) {
             break
           }
+          $unreadyProcessExited = $false
+          foreach ($entry in $processes) {
+            $readyPath = Join-Path $barrierDir "$($entry.WorkerId).ready"
+            $errorPath = Join-Path $barrierDir "$($entry.WorkerId).error"
+            if (
+              -not (Test-Path -LiteralPath $readyPath) -and
+              -not (Test-Path -LiteralPath $errorPath) -and
+              $entry.Process.HasExited
+            ) {
+              $unreadyProcessExited = $true
+              break
+            }
+          }
+          if ($unreadyProcessExited) {
+            break
+          }
           Start-Sleep -Milliseconds 25
         } while ([DateTime]::UtcNow -lt $readyDeadline)
 
@@ -799,6 +818,16 @@ try {
             continue
           }
 
+          $entry = @($processes | Where-Object WorkerId -eq $workerId)
+          if (
+            $entry.Count -gt 0 -and
+            -not (Test-Path -LiteralPath (Join-Path $barrierDir "$workerId.started"))
+          ) {
+            $readinessDiagnostics += (
+              "worker $workerId did not reach the child start marker"
+            )
+          }
+
           $errorPath = Join-Path $barrierDir "$workerId.error"
           if (Test-Path -LiteralPath $errorPath) {
             $errorText = (Get-Content -LiteralPath $errorPath -Raw).Trim()
@@ -806,7 +835,6 @@ try {
             continue
           }
 
-          $entry = @($processes | Where-Object WorkerId -eq $workerId)
           if ($entry.Count -eq 0) {
             $readinessDiagnostics += "worker $workerId was not started"
           } elseif ($entry[0].Process.HasExited) {
@@ -821,14 +849,19 @@ try {
         New-Item -ItemType File -Force -Path $releasePath | Out-Null
         $processDiagnostics = @()
         $processFailures = @()
+        $processDeadline = [DateTime]::UtcNow.AddSeconds($completionTimeoutSeconds)
         foreach ($entry in $processes) {
-          $waited = $entry.Process.WaitForExit(60000)
+          $remainingMilliseconds = [int][Math]::Max(
+            0,
+            ($processDeadline - [DateTime]::UtcNow).TotalMilliseconds
+          )
+          $waited = $entry.Process.WaitForExit($remainingMilliseconds)
           if ($waited) {
             $stdout = $entry.StdoutTask.GetAwaiter().GetResult().Trim()
             $stderr = $entry.StderrTask.GetAwaiter().GetResult().Trim()
           } else {
-            $stdout = '<process did not exit before the 60-second deadline>'
-            $stderr = '<process did not exit before the 60-second deadline>'
+            $stdout = "<process did not exit before the $completionTimeoutSeconds-second deadline>"
+            $stderr = "<process did not exit before the $completionTimeoutSeconds-second deadline>"
           }
           $processDiagnostic = (
             "worker $($entry.WorkerId) stdout: $stdout; " +
@@ -852,11 +885,79 @@ try {
         if (-not (Test-Path -LiteralPath $releasePath)) {
           New-Item -ItemType File -Force -Path $releasePath | Out-Null
         }
+        $cleanupDeadline = [DateTime]::UtcNow.AddSeconds($cleanupTimeoutSeconds)
         foreach ($entry in $processes) {
-          if (-not $entry.Process.HasExited) {
-            try { $entry.Process.Kill() } catch [System.Exception] {}
+          try {
+            if (-not $entry.Process.HasExited) {
+              try {
+                $entry.Process.Kill()
+              } catch [System.Exception] {
+                if (-not $entry.Process.HasExited) {
+                  $cleanupFailures += (
+                    "worker $($entry.WorkerId) kill failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+
+            $remainingMilliseconds = [int][Math]::Max(
+              0,
+              ($cleanupDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+            if (-not $entry.Process.HasExited -and $remainingMilliseconds -gt 0) {
+              try {
+                $entry.Process.WaitForExit($remainingMilliseconds) | Out-Null
+              } catch [System.Exception] {
+                $cleanupFailures += (
+                  "worker $($entry.WorkerId) wait failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            }
+            if (-not $entry.Process.HasExited) {
+              $cleanupFailures += "worker $($entry.WorkerId) still running after cleanup deadline"
+            }
+
+            foreach ($streamName in @('StdoutTask', 'StderrTask')) {
+              $streamTask = $entry.$streamName
+              if (-not $streamTask.IsCompleted) {
+                $remainingMilliseconds = [int][Math]::Max(
+                  0,
+                  ($cleanupDeadline - [DateTime]::UtcNow).TotalMilliseconds
+                )
+                if ($remainingMilliseconds -gt 0) {
+                  try {
+                    $streamTask.Wait($remainingMilliseconds) | Out-Null
+                  } catch [System.Exception] {
+                    $cleanupFailures += (
+                      "worker $($entry.WorkerId) $streamName wait failed: " +
+                      ($_ | Out-String).Trim()
+                    )
+                  }
+                }
+              }
+              if (-not $streamTask.IsCompleted) {
+                $cleanupFailures += (
+                  "worker $($entry.WorkerId) $streamName did not drain before cleanup deadline"
+                )
+              } else {
+                try {
+                  $streamTask.GetAwaiter().GetResult() | Out-Null
+                } catch [System.Exception] {
+                  $cleanupFailures += (
+                    "worker $($entry.WorkerId) $streamName drain failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+          } finally {
+            $entry.Process.Dispose()
           }
-          $entry.Process.Dispose()
+        }
+        if ($cleanupFailures.Count -gt 0) {
+          throw "Worker cleanup failed: $($cleanupFailures -join [Environment]::NewLine)"
         }
       }
 
