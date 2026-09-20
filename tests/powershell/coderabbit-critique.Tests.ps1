@@ -704,15 +704,33 @@ param(
   [Parameter(Mandatory)] [string] $BarrierDir,
   [Parameter(Mandatory)] [string] $WorkerId
 )
+$ErrorActionPreference = 'Stop'
 $env:XDG_STATE_HOME = $StateHome
 $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
-. $SubjectPath
-New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.ready") |
-  Out-Null
-while (-not (Test-Path -LiteralPath (Join-Path $BarrierDir 'release'))) {
-  Start-Sleep -Milliseconds 25
+try {
+  New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.started") |
+    Out-Null
+  . $SubjectPath
+  New-Item -ItemType File -Force -Path (Join-Path $BarrierDir "$WorkerId.ready") |
+    Out-Null
+  while (-not (Test-Path -LiteralPath (Join-Path $BarrierDir 'release'))) {
+    Start-Sleep -Milliseconds 25
+  }
+  Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
+} catch {
+  $diagnostic = ($_ | Out-String).Trim()
+  try {
+    [System.IO.File]::WriteAllText(
+      (Join-Path $BarrierDir "$WorkerId.error"),
+      $diagnostic,
+      [System.Text.UTF8Encoding]::new($false)
+    )
+  } catch [System.Exception] {}
+  [Console]::Error.WriteLine(
+    "worker $WorkerId setup failed: $diagnostic"
+  )
+  exit 1
 }
-Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
 '@
       [System.IO.File]::WriteAllText(
         $childScript,
@@ -721,7 +739,12 @@ Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
       )
 
       $workerCount = 12
+      $readinessTimeoutSeconds = 60
+      $completionTimeoutSeconds = 60
+      $cleanupTimeoutSeconds = 5
       $processes = @()
+      $launchErrors = @()
+      $cleanupFailures = @()
       $releasePath = Join-Path $barrierDir 'release'
       try {
         for ($i = 0; $i -lt $workerCount; $i++) {
@@ -740,28 +763,271 @@ Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
           }
           $psi.UseShellExecute = $false
           $psi.CreateNoWindow = $true
-          $processes += [Diagnostics.Process]::Start($psi)
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.EnvironmentVariables['XDG_STATE_HOME'] = $script:FallbackStateHome
+          $psi.EnvironmentVariables['DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN'] = '1'
+          try {
+            $process = [Diagnostics.Process]::Start($psi)
+            $processes += [pscustomobject]@{
+              WorkerId = $i
+              Process = $process
+              StdoutTask = $process.StandardOutput.ReadToEndAsync()
+              StderrTask = $process.StandardError.ReadToEndAsync()
+            }
+          } catch {
+            $launchErrors += "worker $i launch failed: $(($_ | Out-String).Trim())"
+          }
         }
 
-        $readyDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        $readyDeadline = [DateTime]::UtcNow.AddSeconds($readinessTimeoutSeconds)
         do {
           $readyCount = @(Get-ChildItem -LiteralPath $barrierDir -Filter '*.ready').Count
-          if ($readyCount -eq $workerCount) { break }
+          $errorCount = @(Get-ChildItem -LiteralPath $barrierDir -Filter '*.error').Count
+          if (
+            $readyCount -eq $workerCount -or
+            $launchErrors.Count -gt 0 -or
+            $errorCount -gt 0
+          ) {
+            break
+          }
+          $unreadyProcessExited = $false
+          foreach ($entry in $processes) {
+            $readyPath = Join-Path $barrierDir "$($entry.WorkerId).ready"
+            $errorPath = Join-Path $barrierDir "$($entry.WorkerId).error"
+            if (
+              -not (Test-Path -LiteralPath $readyPath) -and
+              -not (Test-Path -LiteralPath $errorPath) -and
+              $entry.Process.HasExited
+            ) {
+              $unreadyProcessExited = $true
+              break
+            }
+          }
+          if ($unreadyProcessExited) {
+            break
+          }
           Start-Sleep -Milliseconds 25
         } while ([DateTime]::UtcNow -lt $readyDeadline)
-        $readyCount | Should -Be $workerCount
-        New-Item -ItemType File -Force -Path $releasePath | Out-Null
 
-        foreach ($process in $processes) {
-          $process.WaitForExit(30000) | Should -BeTrue
-          $process.ExitCode | Should -Be 0
-        }
-      } finally {
-        foreach ($process in $processes) {
-          if (-not $process.HasExited) {
-            try { $process.Kill() } catch [System.Exception] {}
+        $readinessDiagnostics = @("ready markers: $readyCount/$workerCount")
+        $readinessDiagnostics += $launchErrors
+        foreach ($workerId in 0..($workerCount - 1)) {
+          $readyPath = Join-Path $barrierDir "$workerId.ready"
+          if (Test-Path -LiteralPath $readyPath) {
+            continue
           }
-          $process.Dispose()
+
+          $entry = @($processes | Where-Object WorkerId -eq $workerId)
+          if (
+            $entry.Count -gt 0 -and
+            -not (Test-Path -LiteralPath (Join-Path $barrierDir "$workerId.started"))
+          ) {
+            $readinessDiagnostics += (
+              "worker $workerId did not reach the child start marker"
+            )
+          }
+
+          $errorPath = Join-Path $barrierDir "$workerId.error"
+          if (Test-Path -LiteralPath $errorPath) {
+            $errorText = (Get-Content -LiteralPath $errorPath -Raw).Trim()
+            $readinessDiagnostics += "worker $workerId setup error: $errorText"
+            continue
+          }
+
+          if ($entry.Count -eq 0) {
+            $readinessDiagnostics += "worker $workerId was not started"
+          } elseif ($entry[0].Process.HasExited) {
+            $readinessDiagnostics += (
+              "worker $workerId exited before readiness with code " +
+              $entry[0].Process.ExitCode
+            )
+          } else {
+            $readinessDiagnostics += "worker $workerId is still running without readiness"
+          }
+        }
+        New-Item -ItemType File -Force -Path $releasePath | Out-Null
+        $processDiagnostics = @()
+        $processFailures = @()
+        $completionTimedOut = @{}
+        $processDeadline = [DateTime]::UtcNow.AddSeconds($completionTimeoutSeconds)
+        foreach ($entry in $processes) {
+          $remainingMilliseconds = [int][Math]::Max(
+            0,
+            ($processDeadline - [DateTime]::UtcNow).TotalMilliseconds
+          )
+          $waited = $entry.Process.WaitForExit($remainingMilliseconds)
+          if (-not $waited) {
+            $completionTimedOut[$entry.WorkerId] = $true
+            try {
+              if (-not $entry.Process.HasExited) {
+                $entry.Process.Kill()
+              }
+            } catch [System.Exception] {
+              if (-not $entry.Process.HasExited) {
+                $processFailures += (
+                  "worker $($entry.WorkerId) timeout kill failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            }
+          }
+        }
+
+        $captureDeadline = [DateTime]::UtcNow.AddSeconds($cleanupTimeoutSeconds)
+        foreach ($entry in $processes) {
+          $remainingMilliseconds = [int][Math]::Max(
+            0,
+            ($captureDeadline - [DateTime]::UtcNow).TotalMilliseconds
+          )
+          if (-not $entry.Process.HasExited -and $remainingMilliseconds -gt 0) {
+            try {
+              $entry.Process.WaitForExit($remainingMilliseconds) | Out-Null
+            } catch [System.Exception] {
+              $processFailures += (
+                "worker $($entry.WorkerId) capture wait failed: " +
+                ($_ | Out-String).Trim()
+              )
+            }
+          }
+
+          $streamOutput = @{}
+          foreach ($streamName in @('StdoutTask', 'StderrTask')) {
+            $streamTask = $entry.$streamName
+            if (-not $streamTask.IsCompleted) {
+              $remainingMilliseconds = [int][Math]::Max(
+                0,
+                ($captureDeadline - [DateTime]::UtcNow).TotalMilliseconds
+              )
+              if ($remainingMilliseconds -gt 0) {
+                try {
+                  $streamTask.Wait($remainingMilliseconds) | Out-Null
+                } catch [System.Exception] {
+                  $processFailures += (
+                    "worker $($entry.WorkerId) $streamName capture failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+            if ($streamTask.IsCompleted) {
+              try {
+                $streamText = $streamTask.GetAwaiter().GetResult()
+                $streamOutput[$streamName] = ([string] $streamText).Trim()
+              } catch [System.Exception] {
+                $streamOutput[$streamName] = (
+                  "<$streamName failed while capturing worker output>"
+                )
+                $processFailures += (
+                  "worker $($entry.WorkerId) $streamName capture failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            } else {
+              $streamOutput[$streamName] = (
+                "<$streamName was not captured before the " +
+                "$cleanupTimeoutSeconds-second capture deadline>"
+              )
+            }
+          }
+
+          $stdout = $streamOutput['StdoutTask']
+          $stderr = $streamOutput['StderrTask']
+          $processDiagnostic = (
+            "worker $($entry.WorkerId) stdout: $stdout; " +
+            "stderr: $stderr"
+          )
+          $processDiagnostics += $processDiagnostic
+          if ($completionTimedOut.ContainsKey($entry.WorkerId)) {
+            $processFailures += "worker $($entry.WorkerId) did not exit before the deadline"
+          } elseif ($entry.Process.ExitCode -ne 0) {
+            $processFailures += "worker $($entry.WorkerId) exited with code $($entry.Process.ExitCode)"
+          }
+        }
+        $failureDiagnostics = @($readinessDiagnostics + $processDiagnostics + $processFailures)
+        $readyCount | Should -Be $workerCount -Because (
+          $failureDiagnostics -join [Environment]::NewLine
+        )
+        $processFailures.Count | Should -Be 0 -Because (
+          $failureDiagnostics -join [Environment]::NewLine
+        )
+      } finally {
+        if (-not (Test-Path -LiteralPath $releasePath)) {
+          New-Item -ItemType File -Force -Path $releasePath | Out-Null
+        }
+        $cleanupDeadline = [DateTime]::UtcNow.AddSeconds($cleanupTimeoutSeconds)
+        foreach ($entry in $processes) {
+          try {
+            if (-not $entry.Process.HasExited) {
+              try {
+                $entry.Process.Kill()
+              } catch [System.Exception] {
+                if (-not $entry.Process.HasExited) {
+                  $cleanupFailures += (
+                    "worker $($entry.WorkerId) kill failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+
+            $remainingMilliseconds = [int][Math]::Max(
+              0,
+              ($cleanupDeadline - [DateTime]::UtcNow).TotalMilliseconds
+            )
+            if (-not $entry.Process.HasExited -and $remainingMilliseconds -gt 0) {
+              try {
+                $entry.Process.WaitForExit($remainingMilliseconds) | Out-Null
+              } catch [System.Exception] {
+                $cleanupFailures += (
+                  "worker $($entry.WorkerId) wait failed: " +
+                  ($_ | Out-String).Trim()
+                )
+              }
+            }
+            if (-not $entry.Process.HasExited) {
+              $cleanupFailures += "worker $($entry.WorkerId) still running after cleanup deadline"
+            }
+
+            foreach ($streamName in @('StdoutTask', 'StderrTask')) {
+              $streamTask = $entry.$streamName
+              if (-not $streamTask.IsCompleted) {
+                $remainingMilliseconds = [int][Math]::Max(
+                  0,
+                  ($cleanupDeadline - [DateTime]::UtcNow).TotalMilliseconds
+                )
+                if ($remainingMilliseconds -gt 0) {
+                  try {
+                    $streamTask.Wait($remainingMilliseconds) | Out-Null
+                  } catch [System.Exception] {
+                    $cleanupFailures += (
+                      "worker $($entry.WorkerId) $streamName wait failed: " +
+                      ($_ | Out-String).Trim()
+                    )
+                  }
+                }
+              }
+              if (-not $streamTask.IsCompleted) {
+                $cleanupFailures += (
+                  "worker $($entry.WorkerId) $streamName did not drain before cleanup deadline"
+                )
+              } else {
+                try {
+                  $streamTask.GetAwaiter().GetResult() | Out-Null
+                } catch [System.Exception] {
+                  $cleanupFailures += (
+                    "worker $($entry.WorkerId) $streamName drain failed: " +
+                    ($_ | Out-String).Trim()
+                  )
+                }
+              }
+            }
+          } finally {
+            $entry.Process.Dispose()
+          }
+        }
+        if ($cleanupFailures.Count -gt 0) {
+          throw "Worker cleanup failed: $($cleanupFailures -join [Environment]::NewLine)"
         }
       }
 
