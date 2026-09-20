@@ -819,10 +819,8 @@ try {
           }
         }
         New-Item -ItemType File -Force -Path $releasePath | Out-Null
-        $readyCount | Should -Be $workerCount -Because (
-          $readinessDiagnostics -join [Environment]::NewLine
-        )
-
+        $processDiagnostics = @()
+        $processFailures = @()
         foreach ($entry in $processes) {
           $waited = $entry.Process.WaitForExit(60000)
           if ($waited) {
@@ -832,12 +830,24 @@ try {
             $stdout = '<process did not exit before the 60-second deadline>'
             $stderr = '<process did not exit before the 60-second deadline>'
           }
-          $processDiagnostics = "worker $($entry.WorkerId) stdout: $stdout; stderr: $stderr"
-          $waited | Should -BeTrue -Because $processDiagnostics
-          if ($waited) {
-            $entry.Process.ExitCode | Should -Be 0 -Because $processDiagnostics
+          $processDiagnostic = (
+            "worker $($entry.WorkerId) stdout: $stdout; " +
+            "stderr: $stderr"
+          )
+          $processDiagnostics += $processDiagnostic
+          if (-not $waited) {
+            $processFailures += "worker $($entry.WorkerId) did not exit before the deadline"
+          } elseif ($entry.Process.ExitCode -ne 0) {
+            $processFailures += "worker $($entry.WorkerId) exited with code $($entry.Process.ExitCode)"
           }
         }
+        $failureDiagnostics = @($readinessDiagnostics + $processDiagnostics + $processFailures)
+        $readyCount | Should -Be $workerCount -Because (
+          $failureDiagnostics -join [Environment]::NewLine
+        )
+        $processFailures.Count | Should -Be 0 -Because (
+          $failureDiagnostics -join [Environment]::NewLine
+        )
       } finally {
         if (-not (Test-Path -LiteralPath $releasePath)) {
           New-Item -ItemType File -Force -Path $releasePath | Out-Null
