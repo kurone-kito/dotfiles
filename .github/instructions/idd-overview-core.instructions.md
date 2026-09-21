@@ -267,8 +267,8 @@ enabled and default approval actors to
 | Name | Commands |
 | --- | --- |
 | **fix-validate** | `npx markdownlint-cli2 --fix && npx markdownlint-cli2 && npx cspell lint "**" --no-progress` |
-| **pre-push-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed -CI"` |
-| **post-fix-validate** | `tests/bash/helpers/bats-core/bin/bats tests/bash/ && pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed -CI"` |
+| **pre-push-validate** | `scripts/run-validate.sh` |
+| **post-fix-validate** | `scripts/run-validate.sh` |
 | **install-deps** | `git submodule update --init --recursive` |
 | **issue-scope** | `roadmap-first` |
 | **orphan-first-policy** | `none` |

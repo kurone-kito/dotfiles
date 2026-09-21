@@ -341,6 +341,10 @@ On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
 authoritative full PowerShell run remains Windows local execution and
 Windows CI.
 
+`scripts/run-validate.sh` runs both suites, but skips the PowerShell
+one when the current branch's diff touches no PowerShell-relevant
+path — this is what `pre-push-validate`/`post-fix-validate` invoke.
+
 ### Validating Windows-only logic on Linux
 
 A skipped Pester scope proves nothing about the logic inside it — use
