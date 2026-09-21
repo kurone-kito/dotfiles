@@ -326,12 +326,12 @@ MOCK
   assert_output --partial 'allow_builds = ["@anthropic-ai/claude-code"]'
 }
 
-@test "pins playwright/cli away from the untrusted 0.1.19 release" {
+@test "tracks playwright/cli at latest now that upstream OIDC trust is restored, unpinned" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
   run grep '^"npm:@playwright/cli"' "$config"
   assert_success
-  assert_output --partial '"0.1.18"'
+  assert_output --partial '"latest"'
 }
 
 @test "allows low downloads for inshellisense past aube's reputation gate, unpinned" {
