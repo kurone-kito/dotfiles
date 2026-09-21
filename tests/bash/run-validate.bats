@@ -63,6 +63,75 @@ setup() {
   assert_output --partial 'would run: bats, Pester'
 }
 
+@test "decides skip-pester for a nested .ps1 file outside the designated directories" {
+  mkdir -p "$REPO/docs"
+  echo x >"$REPO/docs/example.ps1"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit -q -m "add unrelated nested ps1"
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would skip: Pester'
+}
+
+@test "decides run-pester for a top-level .ps1 file" {
+  echo x >"$REPO/top-level.ps1"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit -q -m "add top-level ps1"
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would run: bats, Pester'
+}
+
+@test "decides run-pester for an unstaged PowerShell change" {
+  mkdir -p "$REPO/tests/powershell"
+  echo x >"$REPO/tests/powershell/foo.Tests.ps1"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit -q -m "add pwsh test"
+  echo y >"$REPO/tests/powershell/foo.Tests.ps1"
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would run: bats, Pester'
+}
+
+@test "decides run-pester for a staged-but-uncommitted PowerShell change" {
+  mkdir -p "$REPO/tests/powershell"
+  echo x >"$REPO/tests/powershell/bar.Tests.ps1"
+  git -C "$REPO" add -A
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would run: bats, Pester'
+}
+
+@test "decides run-pester for an untracked PowerShell file" {
+  mkdir -p "$REPO/tests/powershell"
+  echo x >"$REPO/tests/powershell/untracked.Tests.ps1"
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would run: bats, Pester'
+}
+
+@test "fails safe to run-pester when .github/idd/config.json is malformed" {
+  mkdir -p "$REPO/home/dot_config/mise"
+  echo x >"$REPO/home/dot_config/mise/config.toml"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit -q -m "touch mise config"
+  # Malformed JSON makes `jq` fail, which must be treated the same as
+  # an undeterminable diff -- never silently default to "master" and
+  # risk resolving the wrong origin ref.
+  printf 'not valid json' >"$REPO/.github/idd/config.json"
+  git -C "$REPO" add -A
+  git -C "$REPO" commit -q -m "corrupt config.json"
+
+  run bash -c "cd '$REPO' && bash '$SCRIPT' --dry-run"
+  assert_success
+  assert_output --partial 'would run: bats, Pester'
+}
+
 @test "fails safe to run-pester when the diff cannot be determined" {
   UNDETERMINABLE="$BATS_TEST_TMPDIR/repo-no-origin"
   git init -q -b master "$UNDETERMINABLE"

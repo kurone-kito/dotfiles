@@ -12,7 +12,7 @@
 # Usage: scripts/run-validate.sh [--dry-run]
 #   --dry-run   Print the run/skip decision (and why) without invoking
 #               either suite. Exits 0 regardless of the decision --
-#               used by tests/bash/70-run-validate.bats to exercise the
+#               used by tests/bash/run-validate.bats to exercise the
 #               decision logic against fixture git repos without
 #               paying for a real Pester run.
 #
@@ -30,21 +30,36 @@ set -euo pipefail
 # fixture repository by `cd`-ing into it first.
 
 development_branch() {
-  local branch=""
-  if [ -f .github/idd/config.json ]; then
-    branch="$(jq -r '.developmentBranch // empty' .github/idd/config.json 2>/dev/null || true)"
+  # File absent, or the field itself absent, legitimately defaults to
+  # "master" -- but a parse/availability failure (malformed JSON, no
+  # `jq`) must NOT silently default too, or an undeterminable diff
+  # could resolve against the wrong origin ref and wrongly skip
+  # Pester. Only the explicit-absence case below prints a value
+  # without a possible failing command in between.
+  if [ ! -f .github/idd/config.json ]; then
+    printf '%s' master
+    return 0
   fi
-  printf '%s' "${branch:-master}"
+  local branch
+  branch="$(jq -r '.developmentBranch // "master"' .github/idd/config.json 2>/dev/null)" || return 1
+  [ -n "$branch" ] || return 1
+  printf '%s' "$branch"
 }
 
-# Prints one changed path per line on success; prints nothing and
-# returns non-zero when the diff cannot be determined.
+# Prints one changed path per line on success (committed-since-merge-base,
+# staged, unstaged, and untracked-but-not-ignored paths alike); prints
+# nothing and returns non-zero when the diff cannot be determined.
 changed_files() {
   local dev_branch merge_base
-  dev_branch="$(development_branch)"
+  dev_branch="$(development_branch)" || return 1
   merge_base="$(git merge-base HEAD "origin/$dev_branch" 2>/dev/null)" || return 1
   [ -n "$merge_base" ] || return 1
-  git diff --name-only "$merge_base" HEAD 2>/dev/null
+  # A single ref (no second ref) diffs against the working tree, so
+  # this also covers staged and unstaged changes to tracked files --
+  # committed-only (`... "$merge_base" HEAD`) would miss a PowerShell
+  # edit not yet committed when a developer runs this locally.
+  git diff --name-only "$merge_base" 2>/dev/null || return 1
+  git ls-files --others --exclude-standard 2>/dev/null || return 1
 }
 
 # Reads changed paths on stdin (one per line); prints "run-pester" or
@@ -56,7 +71,18 @@ decide_pester() {
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     case "$path" in
-      home/dot_config/powershell/* | tests/powershell/* | *.ps1 | *.psm1)
+      home/dot_config/powershell/* | tests/powershell/*)
+        echo "run-pester"
+        return 0
+        ;;
+      # A bash `case` pattern's `*` matches `/` too, so an unscoped
+      # `*.ps1 | *.psm1` branch here would also catch an unrelated
+      # nested file (e.g. `docs/example.ps1`). Fall through any other
+      # path containing a `/` before the top-level-only suffix check
+      # below, so only a bare top-level `*.ps1`/`*.psm1` file matches.
+      */*)
+        ;;
+      *.ps1 | *.psm1)
         echo "run-pester"
         return 0
         ;;
@@ -99,7 +125,9 @@ main() {
   tests/bash/helpers/bats-core/bin/bats tests/bash/
 
   if [ "$decision" = "run-pester" ]; then
-    pwsh -c "Invoke-Pester tests/powershell/ -Output Detailed -CI"
+    # Match CI's explicit version pin (test.yml) so a locally installed
+    # newer/older Pester can't silently diverge from what CI runs.
+    pwsh -c "Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 -Force; Invoke-Pester tests/powershell/ -Output Detailed -CI"
   else
     echo "skipping PowerShell Pester suite: no path under home/dot_config/powershell/, tests/powershell/, or matching *.ps1/*.psm1 changed against $(development_branch)"
   fi
