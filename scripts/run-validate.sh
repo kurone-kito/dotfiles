@@ -30,18 +30,21 @@ set -euo pipefail
 # fixture repository by `cd`-ing into it first.
 
 development_branch() {
-  # File absent, or the field itself absent, legitimately defaults to
-  # "master" -- but a parse/availability failure (malformed JSON, no
-  # `jq`) must NOT silently default too, or an undeterminable diff
-  # could resolve against the wrong origin ref and wrongly skip
-  # Pester. Only the explicit-absence case below prints a value
-  # without a possible failing command in between.
-  if [ ! -f .github/idd/config.json ]; then
-    printf '%s' master
-    return 0
+  # Per docs/policy-constants.md's Branch Synchronization Defaults, an
+  # absent `developmentBranch` resolves to the repository's live
+  # default branch, not a hardcoded guess -- matching
+  # idd-work.instructions.md's B1 Step 2 fallback. A parse/availability
+  # failure (malformed JSON, no `jq`) must fail the whole lookup
+  # (return 1) rather than silently defaulting, or an undeterminable
+  # diff could resolve against the wrong origin ref and wrongly skip
+  # Pester.
+  local branch=""
+  if [ -f .github/idd/config.json ]; then
+    branch="$(jq -r '.developmentBranch // empty' .github/idd/config.json 2>/dev/null)" || return 1
   fi
-  local branch
-  branch="$(jq -r '.developmentBranch // "master"' .github/idd/config.json 2>/dev/null)" || return 1
+  if [ -z "$branch" ]; then
+    branch="$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null)" || return 1
+  fi
   [ -n "$branch" ] || return 1
   printf '%s' "$branch"
 }
@@ -58,7 +61,12 @@ changed_files() {
   # this also covers staged and unstaged changes to tracked files --
   # committed-only (`... "$merge_base" HEAD`) would miss a PowerShell
   # edit not yet committed when a developer runs this locally.
-  git diff --name-only "$merge_base" 2>/dev/null || return 1
+  # `--no-renames` is required: this repository's global git config
+  # sets `diff.renames = copies`, under which a rename out of a
+  # PowerShell-designated directory (e.g. `tests/powershell/x.ps1` ->
+  # `docs/x.txt`) is reported under its new name only, hiding the old
+  # PowerShell path from this scan entirely.
+  git diff --no-renames --name-only "$merge_base" 2>/dev/null || return 1
   git ls-files --others --exclude-standard 2>/dev/null || return 1
 }
 
