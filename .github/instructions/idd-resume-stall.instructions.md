@@ -169,8 +169,9 @@ treat a missed heartbeat as shortening the wait or as quiet-window
 evidence.
 
 Before continuing to S4, apply the local-worktree safety gate. With helpers,
-run `node scripts/resume-claim-routing.mjs --issue <N>` against a fresh
-snapshot and continue only when it still reports `state: stale` with
+run `node scripts/resume-claim-routing.mjs --issue <N>` (resolve the
+exact command from `docs/idd-helper-scripts.md` if unsure) against a
+fresh snapshot and continue only when it still reports `state: stale` with
 `action: takeover` and `evidence.local_worktree.status: absent` for the
 claimed branch. `local_worktree_occupied` / `stop` (including `occupied`,
 `unreadable`, or unknown worktree evidence), missing evidence, or contradictory

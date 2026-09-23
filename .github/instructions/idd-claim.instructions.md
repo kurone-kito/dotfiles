@@ -284,7 +284,13 @@ First record `{agent-id}`/`{claim-id}` via
 way as A5(a) above); then post the claim comment using the exact
 format and posting mechanics already defined in
 [Claim format](idd-overview-core.instructions.md#claim-format) — do not
-re-derive them here.
+re-derive them here. **Exception**: forced-handoff
+recovery's adopt-verbatim path skips this record/post entirely — no
+`claimed-by` marker at all, only its own activation-nonce (see Claim
+verification's adopt-verbatim guidance below); the already-posted,
+verified `forced-handoff` marker is itself the claim evidence (rule 7),
+so posting a new `claimed-by` here would contest or overwrite the
+sticky successor claim.
 
 **Nothing appended after the note.** A `claimed-by` / `unclaimed-by`
 marker body must be exactly the HTML comment token followed by, at

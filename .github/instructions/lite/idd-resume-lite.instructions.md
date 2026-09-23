@@ -154,8 +154,9 @@ the issue branch.
 ## Step 3 — PR / CI / review route (helper-first)
 
 On helper-enabled profiles, run `resume-route-selection.mjs --issue <N>`
-(and stop-and-ask on failure — do not use the written table). Map
-`route`:
+(resolve the exact command from `docs/idd-helper-scripts.md` if
+unsure) (and stop-and-ask on failure — do not use the written table).
+Map `route`:
 
 - `D1` → `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open
   PR)
