@@ -106,5 +106,18 @@ forced_handoff = config.get('forcedHandoff', {})
 assert forced_handoff.get('mode') == 'human-gated', forced_handoff
 assert forced_handoff.get('authorityPolicy') == 'owners-and-maintainers-only', \
     forced_handoff
+
+# The three ciGate defaults the hearing made explicit: each equals its
+# own schema default, so omitting them would still pass schema/idd-doctor
+# validation -- a future re-import could silently drop them back to
+# implicit without this assertion catching it (Copilot review, PR #478).
+ci_gate = config.get('ciGate', {})
+waivable = ci_gate.get('externalChecks', {}).get('waivable', [])
+assert len(waivable) == 1 and waivable[0].get('matchMode') == 'exact', waivable
+
+external_check_waivers = ci_gate.get('externalCheckWaivers', {})
+assert external_check_waivers.get('authorityPolicy') == 'owners-and-maintainers-only', \
+    external_check_waivers
+assert external_check_waivers.get('maxValidity') == 'PT24H', external_check_waivers
 " "$CONFIG_PATH"
 }
