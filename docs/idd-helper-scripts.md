@@ -21,7 +21,10 @@ functioning flag on several other helpers -- required outright on
 required as one of a small set of mutually exclusive input flags on
 `discover-viability-gate.mjs` (or `--issues`) and
 `suitability-triage.mjs` (or `--body-file` / `--stdin`) -- which primes
-the instinct to reach for it elsewhere. `audit-authored-issue.mjs` also
+the instinct to reach for it elsewhere. `discover-shared-file-overlap.mjs`
+now accepts the same canonical `--issue` / `--issues` vocabulary while
+retaining its legacy `--candidate` / `--candidates` aliases.
+`audit-authored-issue.mjs` also
 accepts a genuine, functioning `--issue`: normally optional (it only
 sharpens the `authoring-owner-marker-trail` check's target match), but
 required once `--new-issue` and `--journal-comments-file` are both
@@ -283,12 +286,22 @@ in this preamble, since the fallback differs per helper.
   (every one still containing the case-insensitive
   `<marker-prefix>-authoring-owner:` token, whether or not it parses),
   taken in deterministic comment order. If ANY of those comments was
-  edited after posting (`updatedAt` differs from `createdAt`), the whole
-  log is rejected up front, before a first candidate is even chosen — an
-  editor cannot make the true Stage 1 acquire vanish from consideration
-  by editing it into something unparseable or retargeting it, letting a
-  later acquire silently win instead (PR #2901 review round 6, Copilot;
-  contract.md: owner comments are append-only). Past that check, the
+  body-edited after posting (GraphQL `IssueComment.lastEditedAt` is a
+  timestamp, not JSON null), the whole log is rejected up front, before
+  a first candidate is even chosen — an editor cannot make the true
+  Stage 1 acquire vanish from consideration by editing it into something
+  unparseable or retargeting it, letting a later acquire silently win
+  instead (PR #2901 review round 6, Copilot; contract.md: owner comments
+  are append-only). Do not use `updatedAt !== createdAt` as that signal:
+  GitHub `minimizeComment` advances `updatedAt` while leaving the body
+  byte-identical and `lastEditedAt` null (issue `#3173`, observed on
+  issue `#3163` comment 5758891385). Omitted, empty, or unparseable
+  `lastEditedAt` is also a reject (incomplete evidence, never treated as
+  "never edited"). The live CLI fetches this pool via GraphQL (selecting
+  `lastEditedAt` and `databaseId`), paginated to completion, then reads
+  and hashes the issue body; it never derives `lastEditedAt` from REST
+  `updated_at`, and a failed GraphQL read reports `not-found`. Past that
+  check, the
   _first_ candidate in comment order is scrutinized whatever its shape —
   not merely the first one that happens to parse and match this target —
   and must itself parse, name this issue as its target, and be a valid
@@ -559,7 +572,17 @@ default below is unchanged.
     byte-stable and make no extra API call). `--with-claim-state` adds
     `activeClaim` (always an object: `{ present, stale, claimId, agentId,`
     `heartbeatOverdue }`, plus `ownedByCurrentSession` when
-    `--current-claim-id` is passed) and `claimEligible: boolean` on each
+    `--current-claim-id` is passed; it is true only when that id matches and
+    the current worktree's claim lock plus generated-tokens record confirm the
+    same claim and agent identity. A trusted legacy marker is represented as
+    `present: true` with `claimId: null` and its non-null legacy `agentId`, so
+    consumers must check `claimId` when they need a reusable new-format id.
+    A stale-claim occupancy bypass additionally requires the canonical current
+    worktree path and symbolic branch to match the occupied path and active
+    branch; stale or released claims may also carry
+    `localWorktree: {status, paths, reason}` and
+    `claimEligible: boolean` on
+    each
     open leaf. Both `discover-roadmap-graph.mjs` and
     `discover-orphan-filter.mjs` emit this exact shape under
     `--with-claim-state`. `heartbeatOverdue` (#1433) is `true` when the
@@ -567,14 +590,12 @@ default below is unchanged.
     configured <!-- dotfiles-divergence: claim-timing -->
     `claimTiming.heartbeatInterval` (`PT6H` in this repository;
     upstream distributed default `PT12H`), with no later trusted
-    heartbeat; `false` otherwise,
-    including whenever `present` is `false`. It is **purely
-    diagnostic**: unlike `stale`, it never feeds `claimEligible` or
-    `readiness.startable` below, and it never changes the
-    `claimTiming.staleAge` <!-- dotfiles-divergence: claim-timing -->
-    stale-takeover threshold (`PT12H` in this repository; upstream
-    distributed default `PT24H`; `idd-resume-stall.instructions.md`
-    S3). `--with-readiness` adds
+    heartbeat; `false` otherwise, including whenever `present` is
+    `false`. It is **purely diagnostic**: unlike `stale`, it never
+    feeds `claimEligible` or `readiness.startable` below, and it never
+    changes the <!-- dotfiles-divergence: claim-timing --> stale-takeover
+    threshold (`PT12H` in this repository; upstream distributed default
+    `24h`/`PT24H`; `idd-resume-stall.instructions.md` S3). `--with-readiness` adds
     `readiness: { ready: boolean, reasons: string[], authoringHeld: boolean,`
     `startable: boolean }` — the A3 startability of each open leaf (dependency
     resolution across visible `Blocked by #N` / `Depends on #N` / task-list refs
@@ -587,8 +608,10 @@ default below is unchanged.
     reports label **presence** only — `--with-readiness` does not compute the
     stale-authoring warning (it would cost a discarded per-leaf timeline fetch
     and does not change startability). `--with-claim-state` itself is not
-    forced-handoff-aware — it intentionally excludes forced-handoff and
-    legacy markers as a best-effort **soft signal**; a discovery-time survey
+    fully forced-handoff-aware — it intentionally excludes forced-handoff and
+    legacy active-claim takeover rules as a best-effort **soft signal**, but
+    retains a branch released by either new-format or legacy markers for
+    local-worktree collision protection; a discovery-time survey
     across many candidates must either loop the single-issue
     `resume-claim-routing.mjs --fresh-claim-gate` resolver per candidate or
     apply `idd-claim.instructions.md`'s full parsing rules manually to catch
@@ -749,8 +772,10 @@ files each would touch (parsed from its `## Candidate files` section) and
 whether any overlap an actively-claimed or open-PR issue, and it emits the soft
 A4 Step 2 de-prioritization order. Evidence-only: it claims nothing.
 
-- **Inputs**: `--candidate <number>` (repeatable) or `--candidates <n1,n2>`,
-  with optional `--owner <owner>`, `--repo <repo>`, `--policy <path>`,
+- **Inputs**: canonical `--issue <number>` (repeatable) or `--issues
+  <n1,n2>`. Compatibility aliases `--candidate <number>` (repeatable) and
+  `--candidates <n1,n2>` remain accepted. Optional flags are
+  `--owner <owner>`, `--repo <repo>`, `--policy <path>`,
   `--manifest <path>` (default `audit/sync-manifest.json`), `--bundles
   <id1,id2,...>` (default
   `bundle-core,bundle-review-triage-phase,bundle-review-fix-phase,bundle-merge-phase`),
@@ -1110,6 +1135,47 @@ The adopted helper boundaries are intentionally narrow:
 - it creates or updates only the single current digest comment and
   refuses duplicate marked digests with repair URLs instead of choosing
   one, deleting, or minimizing audit history
+- `--repair-duplicate --retain-comment-id <id>` is a separate maintainer
+  repair mode for an already-duplicate current-digest set; it requires an
+  authenticated owner/maintainer permission check and, in apply mode, all
+  three `--claim-issue`, `--claim-id`, and `--agent-id` flags for the active
+  writer-coordination lease. Repair mode rejects `--skip-claim-check` and
+  binds the lease to the digest target (the same issue, or, for a PR
+  target, the single issue in its `closingIssuesReferences`) and never
+  makes an implicit selection; a PR that links zero or more than one issue
+  has no unique lease to bind to and fails closed rather than accepting any
+  one of several independently claimable issues (kurone-kito/idd-skill#3158
+  review)
+- repair dry-run output includes the complete current-digest ID/body-hash
+  snapshot; apply additionally requires the exact
+  `--expected-current-digest-ids` and
+  `--expected-current-digest-sha256` values from that fresh dry-run
+- repair re-fetches the target state and complete paginated comments before
+  every retirement, revalidates the active claim immediately before every
+  retirement and evidence write, and verifies the PATCH response body before
+  reporting success. It changes only non-retained first-line markers to the
+  historical marker, preserves the rest of each body, and verifies exactly
+  one current digest afterward. Retirement and evidence bodies use JSON stdin
+  rather than `-f body=...` so HTML-comment-first content is preserved. An
+  ambiguous retirement response is reconciled by re-reading the comment and
+  target; an ambiguous evidence response is reconciled only to a newly
+  observed exact marker/body authored by the authenticated repair actor, and
+  is never blindly retried. The recovery path uses the fresh postflight
+  snapshot when recording an ambiguous retirement. If completion evidence
+  remains unobserved after reconciliation, it reports a recovery hold without
+  a contradictory compensating POST. GitHub does not generally guarantee
+  unsafe-method conditional requests, so an ETag or `If-Match` header is not
+  treated as a compare-and-swap authority; the active claim coordinates
+  compliant writers, while fresh reads and the postcondition surface
+  out-of-band drift through the recovery-hold path.
+- successful repairs post structured evidence with
+  `<!-- idd-live-status-repair: v1 -->`; preflight read, planning, and
+  authorization failures emit only a `repair-recovery-hold` JSON report,
+  while drift, partial mutation, and failed postconditions after the apply
+  path begins attempt a recovery-hold evidence POST before reporting the hold;
+  an ambiguous completion-evidence response is reconciled first and remains a
+  JSON-only hold when the exact evidence is not observed, to avoid a
+  contradictory compensating POST
 - digest text remains non-authoritative UI state; phase decisions still
   come from trusted markers and GitHub state
 
@@ -2119,6 +2185,9 @@ close.
   `claimable` verdict, a `stale-reclaimable` verdict, or an
   `already-claimed` verdict whose `winning_claim_id` matches a
   `claim-id` the caller has already independently verified as its own).
+  A released new-format claim with a matching local worktree retains
+  `winning_claim_id` for owner release-then-fresh; unrelated sessions cannot
+  take over. Legacy releases have no claim id and require operator recovery.
   A `holder`
   snapshot of the previous occupant is reported on **both** a plain
   `collision` and an authorized takeover, not only on takeover.
@@ -2769,8 +2838,13 @@ close.
   `warnings`, and `evidence`
 - Stable enums:
   - `state`:
-    `unclaimed|already_owned|stale|non_inheritable|disputed`
+    `unclaimed|already_owned|stale|local_worktree_occupied|non_inheritable|disputed`
   - `action`: `re_claim|takeover|keep|stop`
+- When a stale or released claim is inspected against the current clone, the
+  helper adds `evidence.local_worktree` with `{status, paths, reason}`.
+  `occupied` and `unreadable` are fail-closed stop states; an owner resume or
+  authorized forced handoff must be verified before reusing the worktree
+  (#3141).
 - Optional `--nonce <token>` (kurone-kito/idd-skill#1522): when `--claim-id`
   matches the active claim, also requires it to equal the winning trusted
   `activation-nonce` marker for that claim-id (`evidence.activation_nonce_winner`);
@@ -4282,8 +4356,8 @@ same as `AW4`/`AW5`.
 
 ## Signed-Commit Merge Wrapper (Shared Git Procedure)
 
-`idd-review-triage.instructions.md`'s E-phase sync path and
 <!-- dotfiles-divergence: master-branch -->
+`idd-review-triage.instructions.md`'s E-phase sync path and
 `idd-review-fix.instructions.md`'s E11 both merge `master` into the
 feature branch with `git fetch origin master && git merge origin/master`.
 On a repo

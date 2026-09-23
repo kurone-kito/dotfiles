@@ -197,7 +197,7 @@ When a lightweight-tier model runs any part of this loop:
   the merge-policy recommendation for weak-model sessions in
   <!-- dotfiles-divergence: onboarding-doc-trim -->
   [Onboarding Reference — Policy
-  Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md#merge-policy)
+  Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md#merge-policy)
   (not vendored locally; this repository links the pinned upstream copy,
   matching `docs/idd-policy.md`'s own reference).
 - This is additional to, not a replacement for, the uniform C-phase
@@ -1461,25 +1461,12 @@ above, this hook never supplies critique findings and never gates
 C-phase control flow — it is a pure observability side channel.
 
 The hook is invoked at two points in the C-phase loop, documented in
-`.github/instructions/idd-work.instructions.md`'s C2 and C4: at the end
-of C4, once the round's Accept/Reject decision is final (before C5,
-`idd-pr-submit.instructions.md`, or a hold); and at C2's zero-issue
-exit, so a clean round that skips C3/C4 entirely still emits a record
-(with zero findings/accepted/rejected counts).
-
-The lite work profile (`lite/idd-work-lite.instructions.md`) does not
-invoke this hook -- per-round telemetry is a full-profile-only feature
-for now.
-<!-- dotfiles-divergence: lite-telemetry-parity -->
-**This repository is the exception**: `lite/idd-work-lite.instructions.md`'s
-own C1/C2/C4 steps do invoke `critiqueLoop.telemetryHook`, added during
-this repository's own issue 421 review-fix round, since this repository
-actually configures the hook and a lite-profile session dropping every
-telemetry record silently was a real gap, not a stock-upstream behavior
-this repository chose not to enable. Treat the "full-profile-only"
-framing above as
-the stock-template default this repository has locally overridden, not
-as this repository's own current behavior.
+both the full-profile work file (C2 and C4) and the lite work file
+(`lite/idd-work-lite.instructions.md`, matching steps): at the end of
+C4, once the round's Accept/Reject decision is final (before C5, PR
+submission, or a hold); and at C2's zero-issue exit, so a clean round
+that skips C3/C4 entirely still emits a record (with zero
+findings/accepted/rejected counts).
 
 The JSON payload written to the hook command's stdin:
 
