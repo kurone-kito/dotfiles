@@ -172,7 +172,9 @@ Before any mutating action in F3, apply the
    - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
      been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
      that landed between F2 and this final gate, for example a
-     required `{development-branch}` sync. Before running them,
+     required `{development-branch}` sync.
+     <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
+     Before running them,
      confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
      exactly: require empty `git status --porcelain` and
      `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`;

@@ -426,7 +426,8 @@ turns an operator-visible failure into a silent stall.
   rollup. The signal never changes `route` itself; any other blocking
   cause makes it `false`, and the gate still routes to E1/E4. Fails
   closed: an unusable check makes this condition unmet.
-- **Closing-set and impact-checklist re-verification**:
+- <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
+  **Closing-set and impact-checklist re-verification**:
   after fetch, require empty `git status --porcelain` and
   `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`; else hold. For
   paths in `git ls-tree --full-tree -r --name-only "$PR_HEAD_SHA"`, run
