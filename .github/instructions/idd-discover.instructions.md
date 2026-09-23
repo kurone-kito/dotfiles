@@ -556,8 +556,9 @@ ascending issue-number order:
 - For each candidate, fetch the issue and parse comments per the shared
   claim-state rules in `idd-claim.instructions.md`, including
   forced-handoff and legacy markers. Loop the single-issue
-  `resume-claim-routing.mjs --fresh-claim-gate` resolver, or apply those
-  rules manually.
+  `resume-claim-routing.mjs --fresh-claim-gate` resolver (resolve the
+  exact command from `docs/idd-helper-scripts.md` if unsure), or apply
+  those rules manually.
   <!-- dotfiles-divergence: claim-timing -->
   A candidate is **ineligible** when the latest valid
   `claimed-by` is non-stale (`created_at > now - claim-stale-age`; this

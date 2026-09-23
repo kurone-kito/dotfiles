@@ -50,7 +50,10 @@ in the snapshot/ReviewItems_snapshot and report them as suspicious
 context when they affect a decision.
 
 When helper runtime is enabled, prefer the read-only helper
-`node scripts/review-activity-snapshot.mjs --pr {pr-number}` to collect
+`node scripts/review-activity-snapshot.mjs --pr {pr-number}` (the
+source-repo/vendored-node form; resolve the profile-selected
+equivalent from `docs/idd-helper-scripts.md` for `package-manager` /
+`ephemeral-npx`) to collect
 `{head-SHA}`, `{max-activity-updatedAt}`, `{total-item-count}`, and CI
 completion timestamps. Pass trusted marker actors with
 `--trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"`.

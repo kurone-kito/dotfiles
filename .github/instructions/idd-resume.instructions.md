@@ -128,6 +128,10 @@ When helper runtime is enabled, you may collect Step 1 evidence with:
 node scripts/resume-claim-routing.mjs --issue {issue-number}
 ```
 
+This is the source-repo/vendored-node form; for `package-manager` /
+`ephemeral-npx` profiles, resolve the profile-selected equivalent from
+`docs/idd-helper-scripts.md`.
+
 Use helper output as evidence mapped to this table, not as an
 authoritative replacement:
 
@@ -235,6 +239,10 @@ with:
 ```sh
 node scripts/resume-route-selection.mjs --issue {issue-number}
 ```
+
+This is the source-repo/vendored-node form; for `package-manager` /
+`ephemeral-npx` profiles, resolve the profile-selected equivalent from
+`docs/idd-helper-scripts.md`.
 
 Map helper `route` to the Step 3 table outcomes:
 

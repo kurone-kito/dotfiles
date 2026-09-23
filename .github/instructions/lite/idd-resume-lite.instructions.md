@@ -84,7 +84,9 @@ Else stall-lite. Steps 1-2 are pre-claim (stall windows do not apply).
 ## Step 1 — Claim state (helper-first)
 
 On helper-enabled profiles, run `resume-claim-routing.mjs --issue <N>`
-(and stop-and-ask on failure — do not use the written table). Map:
+(resolve the exact command from `docs/idd-helper-scripts.md` if
+unsure) (and stop-and-ask on failure — do not use the written table).
+Map:
 
 | Helper `state` / `action`  | Action                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------- |

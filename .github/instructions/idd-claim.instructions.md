@@ -79,6 +79,10 @@ canonical A5(c) evidence collector:
 node scripts/resume-claim-routing.mjs --issue <number> --fresh-claim-gate
 ```
 
+For `package-manager` / `ephemeral-npx` profiles, resolve the
+profile-selected equivalent from `docs/idd-helper-scripts.md` instead
+of the bare `node scripts/...` form above.
+
 It reuses the shared `resolveActiveClaim` / `evaluateResumeClaimRouting`
 resolver and returns a `fresh_claim_gate.verdict` of `claimable |
 already-claimed | stale-reclaimable` with the winning `{claim-id}`:
@@ -594,7 +598,9 @@ alongside every later pre-mutation check:
 
 A matching `{claim-id}` re-acquires as a read-only check; a different
 `{claim-id}` is always a collision, regardless of lock age. Run
-`resume-claim-routing.mjs --issue <n> --fresh-claim-gate`: `already-claimed`
+`resume-claim-routing.mjs --issue <n> --fresh-claim-gate` (resolve
+the exact command from `docs/idd-helper-scripts.md` if unsure):
+`already-claimed`
 for a different active claim means the claim is lost (stop); if the
 active claim's `{claim-id}` is the current claim, retry the local lock
 with `--takeover`; `claimable`/`stale-reclaimable` also retries with
