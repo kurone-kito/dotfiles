@@ -56,8 +56,8 @@
 # Adapted from kurone-kito/idd-skill's
 # .github/workflows/post-merge-cleanup.yml (upstream's own dogfooded
 # copy, not the idd-template/ adopter-facing template) at pin
-# 11105d705820e50be0a14fcc174587abbaf62b30 (v0.12.0; #450 bumped from
-# the prior v0.11.0 pin set by #424, adopting the #2979
+# c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2; #473 bumped from
+# the prior v0.12.0 pin set by #450, which adopted the #2979
 # workflow_dispatch checkout `ref:` pin and merged-PR guard). This
 # repository runs the ephemeral-npx helper profile (no vendored
 # scripts/ directory), so this invokes the packaged idd-audit-pr-cleanup
@@ -215,7 +215,7 @@ jobs:
             exit 1
           fi
           set +e
-          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+          JSON=$(npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
             idd-audit-pr-cleanup \
             --pr "$PR_NUMBER" \
             --apply \
