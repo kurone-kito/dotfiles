@@ -1,7 +1,8 @@
 # IDD — Resume Phase (Lite)
 
 Lite profile for weak/local models. Same semantics as
-`idd-resume.instructions.md`. Open the repository overview instruction
+`idd-resume.instructions.md`. Open `idd-overview-core.instructions.md`
+(shared definitions: claim format, stale threshold, abort, hold)
 alongside this routed phase file as the current step changes; do not
 load this file alone.
 

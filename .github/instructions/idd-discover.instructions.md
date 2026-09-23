@@ -565,9 +565,9 @@ ascending issue-number order:
   `claimed-by` is non-stale (`created_at > now - claim-stale-age`; this
   repository's configured `claim-stale-age` is `12 h`; see
   `docs/policy-constants.md`), or when a stale or released claim's same-clone
-  worktree probe finds a live match or is unreadable without verified owner
-  resume or authorized handoff (#3141, Round 21 report). Otherwise it
-  **remains eligible**.
+  worktree probe finds a live match, is unreadable, or is unknown, without
+  verified owner resume or authorized handoff (#3141, Round 21 report).
+  Otherwise it **remains eligible**.
 
 After scanning the current batch:
 
