@@ -1,10 +1,7 @@
 # IDD — Resume Phase (Lite)
 
-Lite profile for weak / local models. Same semantics as
-`idd-resume.instructions.md`. Prefer helpers over prose.
-
-**Load this file alone** for resume routing. Do not open the standard
-resume file in the same turn.
+Lite profile for weak/local models. Same semantics as
+`idd-resume.instructions.md`; load it alone for resume routing.
 
 ## Helper runtime contract
 
@@ -16,16 +13,7 @@ resume file in the same turn.
 2. **When the repository is `instructions-only`** (no helper runtime
    shipped): skip the helper commands and use the written tables only.
 
-Never invent forced-handoff markers. Unattended sessions only
-**consume** already-recorded human-gated forced-handoff evidence.
-
 ## Always run helpers first (helper-enabled profiles)
-
-The bare `node scripts/*.mjs` forms below are the `vendored-node` /
-source-repo invocation. For `package-manager` / `ephemeral-npx`, resolve
-each to its profile-selected `idd-*` facade command instead — the bare
-script name is not a runnable command on those profiles; see
-`docs/idd-helper-scripts.md` for the exact per-command mapping.
 
 ```sh
 # Claim state (required before any mutation)
@@ -42,20 +30,14 @@ Map helper fields to actions below.
 
 ## Required signals (collect once)
 
-1. Active claim: `{claim-id}`, agent, branch, latest trusted `claimed-by`
-   `created_at` — or unclaimed. Ignore untrusted marker authors.
-2. Forced-handoff evidence (when present): approving human actor,
-   displaced `{claim-id}`, branch, linked PR, evidence URL — only if
-   `forced-handoff: human-gated` is recorded and authored by a trusted
-   actor. When an open PR exists, require issue-plus-PR approval naming
-   that PR. Record mismatches against live claim/branch/PR as Step 0
-   STOP. Never invent or post forced-handoff markers from this session.
-3. Open PR number + HEAD SHA, or claim-branch remote tip, or
-   `none`.
-4. Latest activity `updatedAt` on issue/PR (comments, reviews, threads).
-5. CI states for PR HEAD (or `none`).
-6. `git worktree list`, local branch existence, worktree `git status`,
-   unpushed commits, local HEAD SHA.
+Collect once: active `{claim-id}`/agent/branch from trusted markers (or
+unclaimed); trusted `forced-handoff: human-gated` proof (actor, displaced
+claim, branch, PR, URL; mismatches are Step 0 STOP); open PR+HEAD or
+`none`; latest issue/PR activity; PR-HEAD CI; and local worktree/branch/
+status/HEAD. When an open PR backs the claim, the proof must also have
+`contextScope: issue-plus-pr` with `linkedPr` naming that live PR; an
+issue-only handoff is insufficient. Never invent or post forced-handoff
+markers.
 
 <!-- dotfiles-divergence: claim-timing -->
 Use GitHub **server** timestamps only. Stale age default: **12 h**
@@ -104,9 +86,13 @@ On helper-enabled profiles, run `resume-claim-routing.mjs --issue <N>`
 | `non_inheritable` / `stop` | Forced-handoff: retry below; else STOP — live competitor claim                         |
 | `disputed` / `stop`        | STOP — contested claim                                                                 |
 
+`local_worktree_occupied` / `stop` → STOP — recover; verify claim-id
+against occupied, unreadable, or unknown local worktree state
+(#3141, Round 21 report).
+
 Forced-handoff: pass `new_claim_id` into Step 1. On
-`non_inheritable`/`stop` or `stale`/`takeover` with
-`evidence.forced_handoff`, retry
+`non_inheritable`/`stop`, `stale`/`takeover`, or
+`local_worktree_occupied`/`stop` with `evidence.forced_handoff`, retry
 `--claim-id <evidence.forced_handoff.new_claim_id>` before STOP.
 Retry `already_owned`: STOP if `new_agent_id` is not this
 session or `old_claim_id` is this session's claim (displaced).
@@ -118,6 +104,8 @@ worktree; child issues are not locked).
 
 Written table (`instructions-only` profile only): first matching row.
 
+A stale or released claim with a local worktree is STOP — verify claim-id.
+
 <!-- dotfiles-divergence: claim-timing -->
 
 | Claim state                                                                                 | Action                                                        |
@@ -127,6 +115,7 @@ Written table (`instructions-only` profile only): first matching row.
 | Active claim = this session's verified `{claim-id}`                                         | → Step 2                                                      |
 | Forced-handoff names this session's verified `{claim-id}` as displaced                      | STOP — displaced; no push/comment/resolve/merge               |
 | Forced-handoff recovery confirmed for this session                                          | A5 re-claim after GitHub shows handoff → Step 2               |
+| Stale/released + local worktree occupied or unreadable                                      | STOP — recover; verify owner                                  |
 | No active claim                                                                             | A5 re-claim → Step 2                                          |
 | Active non-stale claim (other session, < 12 h)                                              | STOP                                                          |
 | Active stale claim (other session, ≥ 12 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |
@@ -156,12 +145,8 @@ the issue branch.
 
 ## Step 3 — PR / CI / review route (helper-first)
 
-On helper-enabled profiles, run the profile-selected `resume-route-selection`
-helper (`node scripts/resume-route-selection.mjs --issue <N>` for
-vendored-node/source-repo; resolve the package-manager/`ephemeral-npx`
-facade command from `docs/idd-helper-scripts.md` if unsure — see the
-"Always run helpers first" note above) (and stop-and-ask on failure —
-do not use the written table). Map
+On helper-enabled profiles, run `resume-route-selection.mjs --issue <N>`
+(and stop-and-ask on failure — do not use the written table). Map
 `route`:
 
 - `D1` → `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open

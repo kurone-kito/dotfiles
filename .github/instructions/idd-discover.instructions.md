@@ -1,16 +1,14 @@
 # IDD — Discover Phase (A0-T–A4)
 
-Read this file when starting a new task: finding and selecting the next
-issue to work on, including an operator-provided exact issue target,
-roadmap-audit handoff, candidate selection, and handoff to A4.5 and
-claim. After A4 selects a viable candidate, run suitability triage via
-`idd-suitability.instructions.md` (A4.5), then proceed to
+Read this file to select the next issue, including explicit targets,
+roadmap-audit handoff, and A4.5/Claim routing. After A4 selects a viable
+candidate, run `idd-suitability.instructions.md` (A4.5), then
 `idd-claim.instructions.md` to claim it.
 
-When helper support is enabled, use helper scripts from
-`docs/idd-helper-scripts.md` first for A0-O/A3/A3.5/A4/A4.5 evidence.
-Written decision tables remain authoritative when helper output is
-missing or disagrees.
+With helpers, run first from `docs/idd-helper-scripts.md` for
+A0-O/A3/A3.5/A4/A4.5; tables win if absent/disagrees.
+`discover-viability-gate`/`discover-shared-file-overlap`: `--issue`/`--issues`;
+overlap aliases `--candidate`/`--candidates`.
 
 **Abort conditions**: A0-T, A1 (`orphan-first`/`roadmap` scope only —
 see A0), A3 (default; see decision tree).
@@ -71,7 +69,7 @@ routing:
    check runs first and applies whether the target turns out to be an
    execution leaf or a roadmap node in step 2 below, so an
    authoring-held roadmap is never routed into step 2's traversal.
-2. If the target issue carries the configured roadmap label or an
+2. If the target issue carries the configured roadmap label or a
    `dotfiles-roadmap-id` marker — the same test
    **A2**'s roadmap-node/execution-leaf classification rule uses (an
    unmarked legacy umbrella isn't recognized here — retro-label it
@@ -130,10 +128,11 @@ above).
 
 If all checks pass, the target is selected. Continue to
 [`idd-suitability.instructions.md`](idd-suitability.instructions.md)
-for suitability triage. A4.5 follows the same standards as roadmap
-paths. If A4.5 passes, proceed to `idd-claim.instructions.md` A5.
-A5 claim-state, open-PR, takeover, branch-collision, and
-claim-verification rules remain unchanged.
+for A4.5, then `idd-claim.instructions.md` A5. Before Claim, a
+context-pressure exit after fresh selection must report the candidate for
+handoff and not claim it (issue #3144; preventive). A5's claim-state,
+open-PR, takeover, branch-collision, and verification rules remain
+unchanged.
 
 ## A0 — Check issue-scope setting
 
@@ -280,7 +279,7 @@ referenced issues. Collect only **open** issues.
   explicit task, sub-issue, or dependency relationship
 
 Traverse referenced issues regardless of open/closed state. Issues
-carrying the configured roadmap label or an
+carrying the configured roadmap label or a
 `<!-- dotfiles-roadmap-id: ... -->` marker are
 **roadmap nodes**; any other issue is an **execution leaf**. Include
 only open execution leaves in the candidate set; never advance roadmap
@@ -548,26 +547,25 @@ If **no issue** survives the gate:
 ### Step 1.5 — Active-claim pre-scan
 
 Before selecting from the surviving viable issues, eliminate candidates
-carrying a concurrent active non-stale claim, in ascending issue-number
-order:
+with a concurrent active non-stale claim or an unsafe stale takeover, in
+ascending issue-number order:
 
 - Scan the **top N** survivors (ordered by ascending issue number),
   where `N` is `.github/idd/config.json`
   `discover.activeClaimPreScanBatchSize` (distributed default: `10`).
-- For each candidate, fetch the issue and parse comments per the
-  shared claim-state rules in `idd-claim.instructions.md`, including
-  forced-handoff and legacy markers, not just
-  `claimed-by`/`unclaimed-by`. No current bulk helper's
-  `--with-claim-state` flag is forced-handoff-aware, so loop the
-  single-issue `resume-claim-routing.mjs --fresh-claim-gate` resolver
-  per candidate, or apply the full parsing rules manually.
+- For each candidate, fetch the issue and parse comments per the shared
+  claim-state rules in `idd-claim.instructions.md`, including
+  forced-handoff and legacy markers. Loop the single-issue
+  `resume-claim-routing.mjs --fresh-claim-gate` resolver, or apply those
+  rules manually.
   <!-- dotfiles-divergence: claim-timing -->
-  A candidate
-  is **ineligible** when parsing yields an active claim whose latest
-  valid `claimed-by` comment has GitHub `created_at` within
-  `claim-stale-age` of now (equivalently, `created_at > now -
-  claim-stale-age`; `docs/policy-constants.md`; distributed default:
-  `12 h`); otherwise it **remains eligible**.
+  A candidate is **ineligible** when the latest valid
+  `claimed-by` is non-stale (`created_at > now - claim-stale-age`; this
+  repository's configured `claim-stale-age` is `12 h`; see
+  `docs/policy-constants.md`), or when a stale or released claim's same-clone
+  worktree probe finds a live match or is unreadable without verified owner
+  resume or authorized handoff (#3141, Round 21 report). Otherwise it
+  **remains eligible**.
 
 After scanning the current batch:
 
@@ -613,7 +611,8 @@ the tie: an explicit author judgment outranks a default fallback. See
 [rationale](../../docs/idd-design-rationale.md#a4--scored-vs-unscored-floor-tie-breaker-what-still-ties-afterward)
 for how the remaining tie-breakers below apply after this rule.
 
-**Concurrent-selection desync (opt-in, off by default).** When
+**Concurrent-selection desync (opt-in, off by default; this repository
+configures `session-offset`).** When
 `discover.selectionDesync` is `session-offset` (default `off`) and the
 highest-score tie band has more than one eligible candidate, pick the
 band entry at index `selectDesyncedIndex(session-token, band-size)`

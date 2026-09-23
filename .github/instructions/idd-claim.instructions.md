@@ -33,6 +33,13 @@ conflicts with live approval state, ignore it and use the written A5(a)
 path below. If fallback still cannot prove safe approval, treat
 approval as missing.
 
+## Context-pressure stop
+
+Fresh candidate: before claim, if context pressure prevents completing Claim
+through F4, report for handoff; stop; do not claim. Recovery unchanged.
+Make no claim-stage event/marker, branch/worktree, or issue-state change.
+(#3144; preventive)
+
 ## Pre-checks (all five must pass)
 
 Re-fetch the issue before checks. A5 is target-local except child release:
@@ -78,9 +85,9 @@ already-claimed | stale-reclaimable` with the winning `{claim-id}`:
 
 - `claimable` → proceed to the claim write below.
 - `stale-reclaimable` → proceed with takeover (the stale path below).
-- `already-claimed` → the issue is held by a live competitor, or a later
-  competing / same-second claim raced in: do not post a claim. Apply the
-  **already-claimed routing** defined here for the rest of this file:
+- `already-claimed` → a live competitor, raced claim, or occupied stale/
+  released branch: use lock takeover only if `winning_claim_id` matches
+  this session's verified claim; otherwise apply the routing below:
   return to Discover using the same selection mode that produced this
   target (orphan-first: continue the A0-O capable path; roadmap mode:
   continue the A3-ready path) and select the next eligible issue; for an
@@ -198,56 +205,49 @@ issue (different slug variants).
    git worktree list --porcelain -z
    ```
 
-   Match `branch refs/heads/issue/<number>-…`; for `detached`, resolve
-   `head-name` under `git -C <worktree> rev-parse --git-path
-   rebase-merge`/`rebase-apply` first.
+   Match `branch refs/heads/issue/<number>-…`; detached: require
+   `git -C <worktree> rev-parse --show-toplevel` to canonicalize to the
+   recorded root before reading `head-name`/`BISECT_START`; failure/mismatch
+   → occupied/unreadable, never read an enclosing repository; proven
+   unrelated → absent; missing/unknown state, malformed, unreadable, or
+   target → occupied/unreadable (PR #3154 review).
 
 2. **Remote branch scan** (scoped Refs API, not repo-wide):
-   Query the Refs API with the issue-number prefix only, to stay within
-   the scope invariant defined in idd-overview-appendix.instructions.md:
+   Query only the issue-number prefix (scoped Refs API):
 
    ```sh
    gh api "repos/{owner}/{repo}/git/matching-refs/heads/issue/<number>-" \
      --jq '.[].ref | sub("^refs/heads/"; "")'
    ```
 
-   The Refs API returns fully-qualified `refs/heads/issue/<number>-…`
-   refs; `sub("^refs/heads/"; "")` strips that prefix so results compare
-   directly against a claim's `branch` field — otherwise an inheritable
-   branch reads as non-corresponding and trips a false hold below.
+   Strip `refs/heads/` before comparing results with the claim's `branch`.
 
 3. **Collision action tree**:
 
-   - **If no local worktree or remote branch matches `issue/<number>-*`**:
-     Proceed to claim posting (the safe, single-session path).
-
-   - **If a match is found and corresponds to an inheritable claim or
-     trusted forced-handoff evidence** (its `branch` matches one of the
-     branches allowed in (d) above): proceed to claim posting — the
+   - **No local worktree or remote branch matches `issue/<number>-*`**:
+     proceed to claim posting.
+   - **A matching live local worktree exists for a stale/inheritable
+     claim**: stop unless this session proves owner resume or an authorized
+     forced handoff. With helpers, `resume-claim-routing.mjs
+     --fresh-claim-gate` reports `local_worktree_occupied` (including an
+     `evidence.local_worktree.status` of `unreadable`); route to operator
+     recovery unless the documented forced-handoff path is authorized
+     (#3141, Round 21 report).
+   - **A matching branch corresponds to an inheritable claim or trusted
+     forced-handoff evidence, with no live local worktree**: proceed — the
      branch is expected.
-
-   - **If a match is found, does NOT correspond to an inheritable claim,
-     AND an active non-stale claim on this issue references that branch**:
-     Treat as **claimed by a concurrent session** running in parallel —
-     apply the **already-claimed routing** above. This is the scale-out
-     path that lets multiple sessions work different issues when one has
-     concurrent claims.
-
-   - **If a match is found, does NOT correspond to an inheritable claim,
-     AND no active claim references that branch**:
-     Document the branch name and post a **hold note** to the issue: "_A5
+   - **A non-corresponding match has an active non-stale claim**: apply
+     already-claimed routing for a concurrent session.
+   - **Otherwise**: document the branch and post a hold note: "_A5
      pre-check (e) detected an unexpected branch `issue/<number>-*`
      without an active claim. Possible orphaned branch from a crashed or
-     stale session. Stopping for operator review._" Stop and wait for
-     operator input. Do not post a claim or continue the workflow.
+     stale session. Stopping for operator review._" Stop and await operator
+     input; do not post a claim.
 
 ## Claim execution
 
-Skip the claim-posting steps below if pre-check (c) classified the
-issue as already claimed by this current session: keep the previously
-recorded `{claim-id}` and branch, and post no new claim. The Heartbeat
-posting rules below still apply whenever you extend the active claim's
-stale clock; then proceed to Claim verification.
+If (c) found this session's claim, post none; keep its token/branch,
+heartbeat as needed; verify.
 
 Determine `{branch-name}`:
 
@@ -284,13 +284,7 @@ First record `{agent-id}`/`{claim-id}` via
 way as A5(a) above); then post the claim comment using the exact
 format and posting mechanics already defined in
 [Claim format](idd-overview-core.instructions.md#claim-format) — do not
-re-derive them here. **Exception**: forced-handoff
-recovery's adopt-verbatim path skips this record/post entirely — no
-`claimed-by` marker at all, only its own activation-nonce (see Claim
-verification's adopt-verbatim guidance below); the already-posted,
-verified `forced-handoff` marker is itself the claim evidence (rule 7),
-so posting a new `claimed-by` here would contest or overwrite the
-sticky successor claim.
+re-derive them here.
 
 **Nothing appended after the note.** A `claimed-by` / `unclaimed-by`
 marker body must be exactly the HTML comment token followed by, at
@@ -662,7 +656,9 @@ chronologically and apply these rules:
      `all-write-permission-actors` additionally accepts
      `role_name == write` or `permission == write` so custom write-base
      roles still satisfy the loose policy;
-   - `forcedHandoff.mode` is `human-gated` (default `disabled`);
+   - `forcedHandoff.mode` is `human-gated` (default `disabled`; this
+     repository sets `human-gated` with `authorityPolicy:
+     owners-and-maintainers-only`);
    - `oldAgentId` / `oldClaimId` / `branch` all match the active claim;
    - when an open PR backs the active claim: an `issue-plus-pr`
      marker's `linkedPr` must name that PR; only an `issue-only` marker

@@ -203,14 +203,12 @@ namespace and F4 removal behavior as above.
 **Step 3 — Install deps**: after worktree creation, ensure dependencies
 are installed:
 
-- <!-- dotfiles-divergence: worktrunk-noop-hook-cd -->
-  **WorkTrunk with a pre-start install hook** (e.g.,
+- **WorkTrunk with a pre-start install hook** (e.g.,
   `[pre-start].install` in `.config/wt.toml`): The hook must acquire the
   lock before installing, as described above; after the hook succeeds,
-  skip this step. `-x <noop>` never changes the caller's directory (see
-  above), so explicitly `cd` into the new sibling worktree path now —
-  do not rely on WorkTrunk having done it, or B1's self-check below
-  fails on the primary worktree and forces an avoidable hold.
+  skip this step. `-x <noop>` never changes the caller's directory —
+  `cd` into the new sibling (from `git worktree list`) before later
+  steps.
 - **Manual `git worktree add`, WorkTrunk without a hook, or a
   compliant pinned harness-native tool**: `cd` into the newly created
   worktree, then run **install-deps**.
@@ -384,6 +382,11 @@ Implement the plan, running **fix-validate** before each atomic commit
 the [signed-commit merge wrapper](../../docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure)
 instead.
 
+**Validate.** Run it without a pipe; if shortening output, rerun
+through `tail`/`head`. A filter cannot prove success (see
+kurone-kito/idd-skill#3139). In Bash, use
+`status=${PIPESTATUS[0]}; ((status == 0))` or `set -o pipefail`.
+
 **Verify a commit actually landed before trusting a subsequent push.**
 A `commit-msg` hook (e.g. commitlint's body-max-line-length) can
 silently reject a long single-line body, so no commit is created but
@@ -506,16 +509,8 @@ local runtime's user-global config file apply. A repository may also
 configure `critiqueLoop.telemetryHook` for a separate fire-and-forget
 per-round JSON record (round, repo, issue, PR,
 findings/severity/accepted/rejected counts, delegate usage, timestamp)
-that C2/C4 below invoke but that never gates control flow. Invoke it by
-piping that JSON payload (compact or pretty-printed; either is
-accepted) as stdin to the configured `command` — this repository's own
-`critiqueLoop.telemetryHook.command` is the repo-local PATH binary
-`idd-critique-telemetry` (`home/dot_local/bin/`, applied via chezmoi;
-not an `idd-skill` package facade, so no ephemeral-npx/package-manager
-resolution applies here), which appends one compacted JSONL line to
-its own log and never blocks or fails the round on a write error. See
-`docs/idd-workflow.md`'s "Critique pass invocation" section for
-`critiqueLoop.delegate`.
+that C2/C4 below invoke but that never gates control flow; see
+`docs/idd-workflow.md`'s "Critique pass invocation" section for both.
 
 **Objective diff validation floor**: neither C2 nor C4 below may skip to
 `idd-pr-submit.instructions.md` unless **fix-validate** — the same

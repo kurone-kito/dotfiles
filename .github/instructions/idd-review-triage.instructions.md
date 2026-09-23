@@ -20,34 +20,15 @@ and note any explicit out-of-scope statement in it, trusted for the
 scope fence below only if it predates the B2 plan
 (`idd-work.instructions.md`) — an author keeps edit rights throughout
 the claim and could otherwise time an edit to force-reject a legitimate
-finding.
-<!-- dotfiles-divergence: review-triage-usercontent-reconstruction -->
-Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
-unrelated activity, so it will not do), paginating until
-`pageInfo.hasNextPage` is `false` — a successfully returned but
-truncated connection can select an older qualifying entry and apply
-scope decisions to the wrong plan-time body, and is not itself an
-"unavailable or failed" read, so the fail-closed rule below must be
-applied explicitly when pagination cannot be confirmed complete. Each
-entry's `diff` is the full
-body text as it stood immediately after that specific edit — verified
-directly against live GraphQL data; despite GitHub's schema describing
-it generically as "a summary of the changes for this edit," it is not a
-line-level patch, so no replay or accumulation across entries is
-needed. Reconstruct the body as it stood at or before the plan's post
-time by taking the entry with the latest `editedAt` at or before that
-time and reading its `diff` directly as that state. If no entry
-qualifies: zero edits exist at all, so the current body already is
-that state; or at least one edit exists but every one postdates the
-plan, so the pre-first-edit (creation) content is not obtainable from
-this API at all — no entry captures state before the earliest edit.
-Treat that second case, an unavailable, failed, or incompletely-paginated
-`userContentEdits` read, or any reconstruction that cannot be completed
-with confidence,
-the same way: fail closed, never assume no post-plan edit occurred. A
-statement absent from the reconstructed (or, in the zero-edit case,
-current) state — added later, or present now but not there — needs
-independent corroboration (a maintainer comment, not another edit).
+finding. Fetch `userContentEdits` (GraphQL; `updatedAt` also moves on
+unrelated activity, so it will not do). Paginate until
+`pageInfo.hasNextPage` is false. Treat each `diff` as the full
+post-edit body, not a line patch. Use the latest `editedAt` at or
+before the plan's post time; that `diff` (or the creation-time body —
+never the live current body — if none predates the plan) is the
+trusted snapshot. A statement absent from it — added later, or
+present now but not there — needs a maintainer comment, not another
+edit. A missing, failed, or incomplete pagination fails closed.
 
 For each item in ReviewItems_snapshot, first classify it:
 
@@ -186,13 +167,15 @@ state of its own, but can still match a prior resolved thread's claim.
   at current HEAD, or the new occurrence carries genuinely new
   information the prior thread did not address.
 
-**Round-count cutoff (`critiqueLoop.deferAfterRounds`, default `12`).**
-Once the claim's `review-watermark` post count (paginated,
-including minimized ones and this pass's own E1 post) reaches the
-threshold, disposition an undispositioned Low-severity (E4) PATH A
-item **Reject (defer)** instead of the normal judgment — never an
-already-Accepted item mid-fix (`e10NoProgressHoldAfter` unaffected) nor
-a CODEOWNER/required-reviewer item (E6's AMD exception applies). Reply
+**Round-count cutoff (`critiqueLoop.deferAfterRounds`, default `12`;
+this repository configures `5`).**
+Once the PR's total, paginated
+`copilot-pull-request-reviewer[bot]` review count (PR-wide, not
+per-claim; never one page's `length`) hits the threshold, disposition
+an undispositioned Low-severity (E4) PATH A item **Reject (defer)**
+instead of normal judgment — never an Accepted item mid-fix
+(`e10NoProgressHoldAfter` unaffected) nor a CODEOWNER/required-reviewer
+item (E6's AMD exception). Reply
 `**Rejected** — deferred to follow-up issue #<n> (round
 <round>/<threshold>): {reason}`, resolve normally, and bundle every
 item from this cutoff into one follow-up issue per E6's
