@@ -436,7 +436,10 @@ turns an operator-visible failure into a silent stall.
   output holds. Use `git switch {branch-name}` (not
   detached) to reattach a detached worktree, then confirm `git branch
   --show-current` is `{branch-name}` — hold only if reattachment fails;
-  reset on pass
+  after switching, require `git merge-base --is-ancestor HEAD
+  "$PR_HEAD_SHA"` again (the branch just switched to can carry
+  different commits than the detached HEAD the first ancestry check
+  ran against) — hold if it fails; reset on pass
   — D3.5/D3.7 read local state, not the remote PR. Then re-run
   `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the

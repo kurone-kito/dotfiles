@@ -184,7 +184,11 @@ Before any mutating action in F3, apply the
      output holds. Use `git switch {branch-name}` (not
      detached) to reattach a detached worktree, then confirm
      `git branch --show-current` is `{branch-name}` — hold only if
-     reattachment fails; reset on pass — D3.5/D3.7 read local state, not
+     reattachment fails; after switching, require `git merge-base
+     --is-ancestor HEAD "${PR_HEAD_SHA_F3}"` again (the branch just
+     switched to can carry different commits than the detached HEAD
+     the first ancestry check ran against) — hold if it fails; reset
+     on pass — D3.5/D3.7 read local state, not
      the remote PR. Skip
      D3.5 steps 6-7 under the
      same non-default-`{development-branch}` exemption D3.5 itself
