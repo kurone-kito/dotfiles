@@ -151,7 +151,7 @@ node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
 | --- | --- |
 | `claimable` | Proceed to Claim execution (fresh) |
 | `stale-reclaimable` | Proceed to Claim execution (takeover) |
-| `already-claimed` | **STOP** unless `winning_claim_id` matches your verified released id |
+| `already-claimed` | **STOP** unless `winning_claim_id` matches a `{claim-id}` this session already recorded (`--read-tokens`) as its own prior, voluntarily-released claim for this issue -- never a `winning_claim_id` merely read from this helper response |
 <!-- dprint-ignore-end -->
 
 Written fallback (`instructions-only` profile only — per the Helper
