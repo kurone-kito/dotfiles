@@ -897,7 +897,7 @@ was deferred from actually lands, yet nothing stopped Discover from
 picking up the follow-up immediately. Rather than changing `Refs`'s
 general semantics, `discover-readiness-check.mts` adds a narrow,
 marker-scoped rule: when a candidate's body carries the
-`<!-- {{PROJECT_MARKER_PREFIX}}-authoring-defer-source: review-fix-loop-cutoff -->`
+`<!-- dotfiles-authoring-defer-source: review-fix-loop-cutoff -->`
 marker, its `Refs #<N>` reference is resolved the same way an ordinary
 `Blocked by #<N>` line is — excluded from Discover while `#<N>` stays
 open. An unmarked issue's `Refs` lines are completely unaffected.
@@ -924,6 +924,18 @@ figures behind this recalibration; adopters without an equivalent
 history of their own should keep tuning this value from their own
 observed data rather than adopting either number as a universal
 constant.
+
+#### 2026-09-21 correction: count Copilot reviews, not watermark posts (kurone-kito/idd-skill#3162)
+
+An audit of PRs merged in this repository during a six-day window found
+`Reject (defer)` never fired, because the cutoff compared against the
+claim-scoped `review-watermark` post count instead of the actual
+`copilot-pull-request-reviewer[bot]` review-submission count the
+original calibration above was based on — the two counters diverge
+sharply once a session handoff/resume resets the claim-scoped count.
+The round-count cutoff now compares against the pull request's total
+review-submission count, PR-wide and fully paginated, instead. See
+kurone-kito/idd-skill#3162 for the observed counts.
 
 ### review-ack worked example
 

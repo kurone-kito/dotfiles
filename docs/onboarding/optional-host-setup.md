@@ -8,7 +8,7 @@ tags: [onboarding, host-setup]
 # Onboarding Reference — Optional Host Setup
 
 Use this reference alongside
-[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md)
+[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md)
 when you want to enable one of the optional host-level integrations it
 mentions but does not walk through inline. None of these steps are
 required to finish the hearing or the core import.
@@ -325,7 +325,7 @@ resolve the helper command one-shot instead. Replace
 `<reviewed-helper-spec>` with the same reviewed spec the repository's
 other helper invocations use (see
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md#helper-runtime-profile)):
+Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md#helper-runtime-profile)):
 
 ```yaml
 name: IDD doctor health gate
@@ -578,7 +578,7 @@ enable **Dismiss stale pull request approvals when new commits are
 pushed** (or its equivalent) so approval applies to the workflow
 revision that will merge. Without those settings, CODEOWNERS only
 requests or routes a review and does not make approval a merge gate.
-The [dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md#dry-run--readiness-assessment)
+The [dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md#dry-run--readiness-assessment)
 report's `CODEOWNERS present` item checks only that a CODEOWNERS file
 exists; it does not verify workflow-path coverage, producer binding, or
 these required-review settings (preventive; no observed incident yet).

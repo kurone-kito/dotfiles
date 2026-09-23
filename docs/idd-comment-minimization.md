@@ -7,7 +7,7 @@ tags: [comment-minimization, cleanup]
 
 # IDD Comment Minimization
 
-<!-- cspell:words AAAAB Unminimize Wpaqs unminimized -->
+<!-- cspell:words AAAAB Unminimize Wpaqs unminimized upserts -->
 
 This note defines the safe path for hiding completed IDD review feedback
 and stale operational marker comments after a pull request has merged.
@@ -64,6 +64,78 @@ comments exist, do not delete, minimize, or guess which one is
 authoritative during an unattended run; preserve the audit history,
 report the duplicate URLs, and use trusted markers and GitHub state for
 all workflow decisions until a repair path selects one current digest.
+
+### Maintainer-gated duplicate repair
+
+The ordinary digest helper remains fail-closed when it finds multiple current
+digest markers. A maintainer may repair that state only through the separate
+explicit repair mode; routine claim ownership and normal `--apply` upserts
+never select a digest implicitly.
+
+Start with a fresh dry-run and choose the exact current comment to retain:
+
+```sh
+node scripts/live-status-digest.mjs --issue <issue-number> \
+  --repair-duplicate --retain-comment-id <comment-id> --dry-run
+```
+
+The dry-run reports the complete paginated current-digest set and a
+SHA-256 snapshot. Apply only with the exact IDs and snapshot hash from that
+fresh output:
+
+```sh
+node scripts/live-status-digest.mjs --issue <issue-number> \
+  --repair-duplicate --retain-comment-id <comment-id> --apply \
+  --expected-current-digest-ids "<id>,<id>" \
+  --expected-current-digest-sha256 "<snapshot-sha256>" \
+  --claim-issue <repair-claim-issue> \
+  --claim-id <active-claim-id> \
+  --agent-id <claim-agent-id>
+```
+
+The authenticated `gh` viewer must be an owner or maintainer, verified through
+the repository collaborator-permission endpoint. Missing or inconclusive
+permission data fails closed; configured trusted marker actors and issue
+authors do not authorize this repair. For an issue target, the claim issue
+must equal the target issue; for a PR target, the PR must link exactly one
+issue in its `closingIssuesReferences` and the claim issue must equal that
+issue. A PR that links zero or more than one issue fails closed, because no
+unique repair lease exists. Before every mutation the helper
+re-fetches the complete comment set and target state and compares the exact
+current-digest IDs, target state, and per-comment body hashes with the latest
+expected snapshot. Apply also requires the active IDD claim named by
+`--claim-issue`, `--claim-id`, and `--agent-id`; that claim is revalidated
+immediately before each retirement and evidence write so compliant repair
+writers are serialized. Any drift, selected-comment change, lost claim, or
+inconclusive read stops the operation without claiming success.
+
+Every non-retained current digest is retired by changing only its first-line
+marker to `<!-- idd-live-status: historical -->`. The full table and any
+suffix content remain recoverable; comments are never deleted or minimized.
+A fresh postcondition read must prove that exactly one current digest remains
+and that every selected duplicate has the planned historical body. Retirement
+and evidence bodies are sent as JSON through stdin so an HTML-comment-first
+body cannot be truncated by `gh api -f body=...`. If a mutation response is
+ambiguous, the helper re-reads the affected comment and target before
+recording whether the planned retirement landed and uses that fresh
+postflight snapshot in recovery evidence; if an evidence response is
+ambiguous, it reconciles only a newly observed exact marker/body authored by
+the authenticated repair actor and never blindly retries the POST. The helper
+then posts structured evidence with marker
+`<!-- idd-live-status-repair: v1 -->`, naming the actor, retained and retired
+comment IDs, pre/post entry hashes, target state, and snapshot hashes. A
+partial mutation, failed postcondition, or failed evidence write is reported
+as `repair-recovery-hold` and requires manual recovery. GitHub does not
+generally guarantee conditional requests for unsafe methods such as PATCH, so
+the helper does not treat an ETag or `If-Match` header as a compare-and-swap
+authority. The active IDD claim coordinates compliant writers; fresh reads,
+the verified PATCH response, and the postcondition still surface any
+out-of-band drift through the recovery-hold path rather than claiming success.
+
+This preventive maintainer path is grounded in the observed duplicate-digest
+incident recorded by issue #3158: dantalion issue #216 closed after its
+handoff recorded eleven current digest comments and the normal helper refused
+to apply with `action=duplicate, canApply=false`.
 
 ## Live Status Digest Helper
 
@@ -262,38 +334,35 @@ comment already records a successful outcome (`applied` or `clean`;
 posted by `github-actions[bot]` or a configured `trustedMarkerActors`
 login — an untrusted commenter's marker-prefixed comment never
 counts) **and this run's own outcome is also `applied`/`clean`**
-(`#2213`'s both-converged rule — a prior success alone must never
-suppress this run's own non-success evidence), and the agent F4 step
-skips its own post under that same both-converged rule — including
-when the workflow itself posted the prior success record. A trusted
-comment recording any other status (`failed`, `incomplete`,
-`permission-blocked`, `rescan-failed`) does not suppress either side,
+(issue `#2213`'s both-converged rule — a prior success alone must
+never suppress this run's own non-success evidence), and the agent F4
+step skips its own post under that same both-converged rule —
+including when the workflow itself posted the prior success record. A
+trusted comment recording any other status (`failed`, `incomplete`,
+`permission-blocked`, `rescan-failed`, `recheck-failed`) does not
+suppress either side,
 so a `workflow_dispatch` rerun after a `rescan-failed` post still
-posts fresh evidence (preventive; no observed incident yet — #2043).
-The workflow's PR-keyed `concurrency` group only serializes workflow
-runs against each other; it does not gate the agent's local F4.
+posts fresh evidence (preventive; no observed incident yet — issue
+`#2043`). The workflow's PR-keyed `concurrency` group only serializes
+workflow runs against each other; it does not gate the agent's local
+F4.
 
-<!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-**Local correction, not an upstream sync** (#397): the paragraph above
-is otherwise a byte-identical mirror of the pinned `idd-skill` `v0.11.0`
-template at this section, but its "prevented by" framing understated a
-real gap — the read-then-post check just described happens once per
-side, and nothing tied that read to the moment right before the POST
-call, so an entire workflow run or agent F4 pass could elapse between
-the two, wide enough for both sides to observe "no success record" and
-both post (CodeRabbit, PR #396). Double-posting is now narrowed by
-**double-checked locking**, not prevented outright: each side still
-starts from the record above, but must additionally run a **second,
-freshly-fetched re-check immediately before its own POST call** — with
-no other GitHub-mutating call in between, and never reusing a comment
-list gathered earlier in the same run — and skip only when that fresh
-read's latest trusted record **and** this run's own outcome are both
-in `applied`/`clean` (the same both-converged condition `#2213`
-already applies on the workflow side). This shrinks the race window
-from "an entire workflow/agent run" to the gap between that final
-re-check and the POST call actually landing on GitHub, for each side
-independently. It does not close the window: **GitHub's REST API for
-issue/PR comments has no atomic create-if-absent / compare-and-swap
+That first read-then-post is not itself atomic. Observed 2026-09-09 on
+`kurone-kito/dotfiles#396`: a CodeRabbit review caught duplicate
+`idd-cleanup-evidence` comments because each side's check ran once
+early in the pass, with enough wall-clock in between for both to
+observe "no success record" and both post. Double-posting is therefore
+narrowed by **double-checked locking**, not prevented outright: each
+side still starts from the record above, but must additionally run a
+**second, freshly-fetched re-check immediately before its own POST
+call** — with no other GitHub-mutating call in between, and never
+reusing a comment list gathered earlier in the same run — and skip
+only when that fresh read's latest trusted record **and** this run's
+own outcome are both in `applied`/`clean`. This shrinks the race
+window from "an entire workflow/agent run" to the gap between that
+final re-check and the POST call actually landing on GitHub, for each
+side independently. It does not close the window: **GitHub's REST API
+for issue/PR comments has no atomic create-if-absent / compare-and-swap
 primitive**, so two independent processes can still both observe "no
 success record" if their fresh reads interleave inside that narrowed
 gap. A GitHub Data API ref-creation lock (`POST .../git/refs`, which
@@ -309,16 +378,13 @@ already recorded for the claim protocol
 via re-check, then live with the remainder — and, in the same
 underlying "no compare-and-swap" limitation but a different,
 post-hoc-reconciliation mechanism, for the external-check-waiver
-helper (see the [External-check waiver
-contract](idd-helper-scripts.md#external-check-waiver-helper), which
-tolerates a duplicate write and reconciles by re-reading after the
-fact rather than narrowing the pre-write window). See
-`docs/idd-policy.md`'s Divergence Register
-(`cleanup-evidence-dedup-recheck`) for this repository's record of the
-deviation, and
+helper. See the
+[waiver helper](idd-helper-scripts.md#external-check-waiver-helper),
+which tolerates a duplicate write and reconciles by re-reading after
+the fact rather than narrowing the pre-write window. See
 [idd-merge.instructions.md's F4](../.github/instructions/idd-merge.instructions.md#f4--cleanup)
-for the literal re-check command both the agent F4 step and (already,
-unchanged) `post-merge-cleanup.yml` run.
+for the literal re-check command both the agent F4 step and
+`post-merge-cleanup.yml` run.
 
 **In-flight cleanup-run wait (#2846).** Before the agent's F4 step
 decides whether to post its own evidence comment (the
@@ -467,6 +533,7 @@ wait, or review-currency checks. Candidate prefixes are:
 - `<!-- unclaimed-by:`
 - `<!-- review-watermark:`
 - `<!-- review-baseline:`
+- `<!-- zero-accepted-path-a-gate:`
 - `advisory-wait:`
 - `advisory-wait-recovery:`
 - `<!-- advisory-wait:`
@@ -592,16 +659,18 @@ cleanup candidates are detected.
 After the dry-run, evaluate the `status` field and follow the
 corresponding path:
 
-| Dry-run `status`     | Action                                                        |
-| -------------------- | ------------------------------------------------------------- |
-| `clean`              | No candidates and no permission-blocked items. Proceed to F4  |
-|                      | step 3.                                                       |
-| `needs-apply`        | Run apply (mandatory). Post a cleanup evidence comment.       |
-| `permission-blocked` | Post a cleanup-permission-blocked comment, then proceed to F4 |
-|                      | step 3.                                                       |
+| Dry-run `status`     | Action                                                       |
+| -------------------- | ------------------------------------------------------------ |
+| `clean`              | No candidates and no permission-blocked items. Proceed to F4 |
+|                      | step 3.                                                      |
+| `needs-apply`        | Run apply (mandatory). Re-check, then post cleanup evidence. |
+| `permission-blocked` | Re-check, then post cleanup-permission-blocked, then F4      |
+|                      | step 3.                                                      |
 
 After apply, if `status` is `failed`, `incomplete`, or `rescan-failed`,
-post a cleanup-failure comment. A cleanup failure after a successful F3
+run the same pre-POST re-check and act on `RECHECK_RESULT`:
+`FETCH_FAILED` → post `recheck-failed`, `POST` → post a cleanup-failure
+comment, `SKIP` → do not post. A cleanup failure after a successful F3
 merge does not re-block the merge; it is an explicit record only.
 
 ### Cleanup evidence comment
@@ -615,26 +684,25 @@ runs first, delaying only until any in-flight `post-merge-cleanup.yml`
 run finishes (or the wait bound elapses) — this marker-based rule is
 what actually adjudicates ownership once that run, if any, has had its
 chance to post. Both
-the **agent-side** F4 step and the `post-merge-cleanup` workflow key on the
-prior **success** record.
-<!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-**Skip the post only when both a fresh, immediate
-re-check (see [the double-checked-locking re-check under Server-side
-fallback](#server-side-fallback-optional)) finds the latest
-trusted `<!-- idd-cleanup-evidence:` comment recording a successful
-outcome (`applied` / `clean`) and this run's own outcome is also
-`applied`/`clean`** (`#2213`'s both-converged rule) — narrowing, not
-fully preventing, duplicate success records; a prior success record
-alone must never suppress this run's own `failed`/`incomplete`/
-`rescan-failed` evidence, even when this run's own apply returned
-`applied` for residual markers the other side already minimized
-first; still post when no
-prior success record exists, or to correct an existing `failed` /
-`incomplete` / `permission-blocked` / `rescan-failed` record — a
-`rescan-failed` record in particular invites a retry, so a later
-`workflow_dispatch` rerun (or agent F4 re-run) must post fresh evidence
-for its own outcome rather than leave stale non-success evidence as the
-PR's only record (preventive; no observed incident yet — #2043):
+the **agent-side** F4 step and the `post-merge-cleanup` workflow then
+key on the prior **success** record. **Skip the post only when both a
+fresh, immediate re-check (see [the double-checked-locking re-check
+under Server-side fallback](#server-side-fallback-optional)) finds the
+latest trusted `<!-- idd-cleanup-evidence:` comment recording a
+successful outcome (`applied` / `clean`) and this run's own outcome is
+also `applied`/`clean`** (issue `#2213`'s both-converged rule) —
+narrowing, not fully preventing, duplicate success records; a prior
+success record alone must never suppress this run's own
+`failed`/`incomplete`/`rescan-failed`/`recheck-failed` evidence, even
+when this run's own apply returned `applied` for residual markers the
+other side already minimized first; still post when no prior success
+record exists, or to correct an existing `failed` / `incomplete` /
+`permission-blocked` / `rescan-failed` / `recheck-failed` record — a
+`rescan-failed`
+record in particular invites a retry, so a later `workflow_dispatch`
+rerun (or agent F4 re-run) must post fresh evidence for its own
+outcome rather than leave stale non-success evidence as the PR's only
+record (preventive; no observed incident yet — issue `#2043`):
 
 ```markdown
 <!-- idd-cleanup-evidence: {status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} retry-attempts:{N} retry-bound-exhausted:{true|false} -->
@@ -691,9 +759,8 @@ manually: `node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check
 
 ### Re-check-fetch-failure comment
 
-<!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-Agent-side F4 only (#397): post this comment when the [double-checked
-re-check](#server-side-fallback-optional) immediately before posting
+Agent-side F4 only: post this comment when the
+[re-check](#server-side-fallback-optional) immediately before posting
 prints `RECHECK_RESULT=FETCH_FAILED` — the apply itself may have fully
 converged, but the pre-post duplicate-record fetch (`gh api`) failed
 (auth, rate limit, transient network error), so this run cannot safely
@@ -712,22 +779,22 @@ whole step under the workflow's own `bash -eo pipefail` before any
 comment is attempted, rather than reaching a posting decision at all:
 
 ```markdown
-<!-- idd-cleanup-evidence: recheck-failed apply-status:{applied|clean|failed|incomplete} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
+<!-- idd-cleanup-evidence: recheck-failed apply-status:{applied|clean|failed|incomplete|rescan-failed} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
 
 **F4 Re-check Fetch Failure**
 
 The duplicate-record re-check itself failed immediately before
 posting; the apply outcome below may still be fully converged.
 
-| Field               | Value                                  |
-| ------------------- | --------------------------------------- |
-| Status               | recheck-failed                         |
-| Apply status (actual) | applied / clean / failed / incomplete |
-| Applied              | N                                       |
-| Failed               | N                                       |
-| Skipped              | N                                       |
-| Permission-blocked   | N                                       |
-| Notes                | re-check `gh api` fetch failure reason (auth / rate-limit / network) |
+| Field                 | Value                                                                |
+| --------------------- | -------------------------------------------------------------------- |
+| Status                | recheck-failed                                                       |
+| Apply status (actual) | applied / clean / failed / incomplete / rescan-failed                |
+| Applied               | N                                                                    |
+| Failed                | N                                                                    |
+| Skipped               | N                                                                    |
+| Permission-blocked    | N                                                                    |
+| Notes                 | re-check `gh api` fetch failure reason (auth / rate-limit / network) |
 
 This does not re-block the merge. A maintainer or a later F4/workflow
 pass may re-run the re-check to confirm convergence.

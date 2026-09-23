@@ -8,7 +8,7 @@ tags: [onboarding, bootstrap]
 # Onboarding Reference — Issue-Mediated Bootstrap
 
 Use this reference alongside
-[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md)
+[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md)
 when the operator wants an audited bootstrap trail instead of the
 distributed default direct-import ("theirs-flow") path. This page is
 the detailed companion for the pointer subsection between Step 1C and
@@ -39,7 +39,7 @@ an operator who simply prefers not to grant an agent a direct-commit
 path even for the first action. Treat this as an explicit operator
 choice made alongside the other Step 1B policy decisions (see
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md)),
+Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)),
 not an automatic upgrade applied whenever a review bot happens to be
 available.
 If the operator does not state a preference, propose theirs-flow (the
@@ -66,13 +66,13 @@ there is no `.github/idd/config.json` yet in the target repository for
 an executing session to read those values from — the target repository
 is still pre-import. Embed the confirmed values for the placeholders
 listed in [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/placeholders.md)
+Values](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/placeholders.md)
 directly in the issue body (the resolved values themselves, not a
 reference to where they live), together with
 the confirmed Step 1B decisions (merge policy, PR review profile,
 review-thread resolution policy, and the rest of the list in
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md)).
+Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)).
 
 **Pin the process reference.** The issue's process section must point
 at idd-skill's own canonical `idd-template/ONBOARDING.md` Steps 2
@@ -424,7 +424,7 @@ Replace `<marker-prefix>` in the marker with the confirmed marker-prefix
 value from the hearing before publishing — see the `PROJECT_MARKER_PREFIX`
 placeholder in
 [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/placeholders.md)
+Values](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/placeholders.md)
 for how that value is derived. The suitability score of `1` reflects that
 Discover structurally cannot route this issue pre-import, not a quality
 judgment about the change itself; per the issue-authoring skill's
@@ -502,7 +502,7 @@ examples ("start issue authoring to implement {inferred gap}", "run the
 IDD loop"). Derive `{inferred gap}` and the other prompt content using
 the same repository-evidence-read method the optional Dry-run readiness
 report already performs
-([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.0/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
+([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
 — detected package manager, missing prerequisites, and so on — rather
 than inventing a new inference mechanism. Run that read **fresh, after
 this merge**, not reused from the pre-import dry-run's stored output:
