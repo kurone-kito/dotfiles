@@ -263,6 +263,11 @@ other GitHub side effect, confirm all of the following:
    which commits fixed it and how.
 2. Start every reply with:
    `**Accepted** — fixed in {commit-sha or comma-separated list}: {brief explanation}`
+   After that visible prefix, include the reply-identity stamp exactly
+   as `idd-review-triage.instructions.md`'s E6 defines it
+   (`<!-- {markerPrefix}-review-reply -->`) — same stamp mechanics and
+   constraints, applied here to the `**Accepted**`-only prefix this
+   phase posts.
    Citing a commit that did not fix this item in the current round
    requires it to have already passed the file-path-touch check (E9
    item 7, or `idd-review-snapshot-lite.instructions.md`'s Cold-start

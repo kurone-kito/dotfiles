@@ -1,7 +1,9 @@
 # IDD — Resume Phase (Lite)
 
 Lite profile for weak/local models. Same semantics as
-`idd-resume.instructions.md`; load it alone for resume routing.
+`idd-resume.instructions.md`. Open the repository overview instruction
+alongside this routed phase file as the current step changes; do not
+load this file alone.
 
 ## Helper runtime contract
 
@@ -125,7 +127,7 @@ A stale or released claim with a local worktree is STOP — verify claim-id.
 | Active claim = this session's verified `{claim-id}`                                         | → Step 2                                                      |
 | Forced-handoff names this session's verified `{claim-id}` as displaced                      | STOP — displaced; no push/comment/resolve/merge               |
 | Forced-handoff recovery confirmed for this session                                          | A5 re-claim after GitHub shows handoff → Step 2               |
-| Stale/released + local worktree occupied or unreadable                                      | STOP — recover; verify owner                                  |
+| Stale/released + local worktree occupied, unreadable, or unknown                            | STOP — recover; verify owner                                  |
 | No active claim                                                                             | A5 re-claim → Step 2                                          |
 | Active non-stale claim (other session, < 12 h)                                              | STOP                                                          |
 | Active stale claim (other session, ≥ 12 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |

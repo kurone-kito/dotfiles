@@ -336,7 +336,9 @@ pass asks, never a separate pass to run on top of the one that ran.
    in it, nor one that failed but still emitted a readable list, is this case:
    both are genuine results, so continue to step 3.
 3. Otherwise, if the critique pass reports zero issues, invoke
-   `critiqueLoop.telemetryHook` (C1) with zero findings/accepted/rejected
+   `critiqueLoop.telemetryHook` (C1; see `docs/idd-workflow.md`'s
+   "Critique pass invocation" section for the JSON-on-stdin payload and
+   fire-and-forget contract) with zero findings/accepted/rejected
    counts — fire-and-forget — then check the `fix-validate` floor. A round
    that continues to C5 for the floor only is still a zero-finding round
    and must not lose its record.
@@ -361,10 +363,12 @@ pass asks, never a separate pass to run on top of the one that ran.
 5. Otherwise continue to C5.
 
 Once the exit above is chosen (before C5, PR submission, or a C4 hold),
-invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
+invoke `critiqueLoop.telemetryHook` (C1; see `docs/idd-workflow.md`'s
+"Critique pass invocation" section for the JSON-on-stdin payload and
+fire-and-forget contract) with this round's findings,
 severity, accepted/rejected counts, and delegate usage — fire-and-forget.
-A delegate's own fail-closed hold (C2 step 2) stops before C2 and has no
-telemetry record.
+A delegate's own fail-closed hold (`docs/idd-workflow.md`) stops before
+C2 and has no telemetry record.
 
 ### C5 — Fix accepted issues
 

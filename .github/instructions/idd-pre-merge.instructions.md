@@ -427,16 +427,16 @@ turns an operator-visible failure into a silent stall.
   cause makes it `false`, and the gate still routes to E1/E4. Fails
   closed: an unusable check makes this condition unmet.
 - **Closing-set and impact-checklist re-verification**:
-  after fetch, the claim gate must confirm
-  `git branch --show-current` is `{branch-name}`; else hold.
-  Require empty `git status --porcelain` and
+  after fetch, require empty `git status --porcelain` and
   `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`; else hold. For
   paths in `git ls-tree --full-tree -r --name-only "$PR_HEAD_SHA"`, run
   `git ls-files -o --exclude-standard -- ":(top)$path"` and again with
   `-i` added (`git ls-files -o -i --exclude-standard --
   ":(top)$path"` — `-i` alone is invalid without `-o`/`-c`); either
   output holds. Use `git switch {branch-name}` (not
-  detached), recheck; reset on pass)
+  detached) to reattach a detached worktree, then confirm `git branch
+  --show-current` is `{branch-name}` — hold only if reattachment fails;
+  reset on pass
   — D3.5/D3.7 read local state, not the remote PR. Then re-run
   `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the
