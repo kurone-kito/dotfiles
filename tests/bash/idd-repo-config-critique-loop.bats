@@ -19,6 +19,13 @@
 #   the config. The issue's Candidate files named only config.json and
 #   docs/idd-policy.md; this test is the required companion so the
 #   version bump cannot land while still asserting 0.11.0.
+# - iddVersion 0.12.2 plus helperRuntime.packageSpec,
+#   critiqueLoop.deferAfterRounds == 5, and the adopted advisoryWait
+#   (convergenceScope/convergenceDeadline/secondaryQuietWindow),
+#   discover.selectionDesync, and forcedHandoff (mode/authorityPolicy)
+#   values (issue #470): the 2026-09-22 hearing's (roadmap #469)
+#   config update. Same lockstep-companion rationale as the 0.12.0 row
+#   above.
 
 bats_require_minimum_version 1.5.0
 
@@ -45,7 +52,7 @@ assert delegate.get('mode') == 'combined', delegate
 " "$CONFIG_PATH"
 }
 
-@test ".github/idd/config.json declares the v0.12.0 iddVersion and its adopted schema keys" {
+@test ".github/idd/config.json declares the v0.12.2 iddVersion and its adopted schema keys" {
   assert_file_exists "$CONFIG_PATH"
 
   python3 -c "
@@ -54,15 +61,15 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 
-assert config.get('iddVersion') == '0.12.0', config.get('iddVersion')
+assert config.get('iddVersion') == '0.12.2', config.get('iddVersion')
 
 package_spec = config.get('helperRuntime', {}).get('packageSpec')
 assert package_spec == (
     'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
-    '11105d705820e50be0a14fcc174587abbaf62b30'
+    'c11c3642319b3283293e4e681861bf7899c32ed3'
 ), package_spec
 
-assert 'deferAfterRounds' not in config.get('critiqueLoop', {}), \
+assert config.get('critiqueLoop', {}).get('deferAfterRounds') == 5, \
     config.get('critiqueLoop')
 
 telemetry_hook = config.get('critiqueLoop', {}).get('telemetryHook')
@@ -85,5 +92,19 @@ assert config.get('labels', {}).get('untrustedLabelerLogins') == ['coderabbitai[
 
 assert config.get('upstreamEscalation', {}).get('enabled') is True, \
     config.get('upstreamEscalation')
+
+advisory_wait = config.get('advisoryWait', {})
+assert advisory_wait.get('convergenceScope') == 'idd-claimed', advisory_wait
+assert advisory_wait.get('convergenceDeadline') == 'PT9H', advisory_wait
+assert advisory_wait.get('secondaryQuietWindow') == 'PT1H', advisory_wait
+assert advisory_wait.get('secondaryBotLogin') == 'coderabbitai[bot]', advisory_wait
+
+assert config.get('discover', {}).get('selectionDesync') == 'session-offset', \
+    config.get('discover')
+
+forced_handoff = config.get('forcedHandoff', {})
+assert forced_handoff.get('mode') == 'human-gated', forced_handoff
+assert forced_handoff.get('authorityPolicy') == 'owners-and-maintainers-only', \
+    forced_handoff
 " "$CONFIG_PATH"
 }
