@@ -298,9 +298,9 @@ needs-decision, blocked-by-human, and out-of-scope.
 - This is an installed companion bundle, not the source-repository
   copy. When the upstream bundle changes, re-import from the canonical
   maintenance docs in
-  [`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/docs/issue-authoring-skill.md)
+  [`kurone-kito/idd-skill:docs/issue-authoring-skill.md`](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/docs/issue-authoring-skill.md)
   and
-  [`kurone-kito/idd-skill:docs/idd-workflow.md`](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/docs/idd-workflow.md);
+  [`kurone-kito/idd-skill:docs/idd-workflow.md`](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/docs/idd-workflow.md);
   the corresponding in-repo copy of the workflow doc is at
   [`../../../docs/idd-workflow.md`](../../../docs/idd-workflow.md).
 
