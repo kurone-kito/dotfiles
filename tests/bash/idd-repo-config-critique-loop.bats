@@ -63,7 +63,13 @@ with open(sys.argv[1], encoding='utf-8') as f:
 
 assert config.get('iddVersion') == '0.12.2', config.get('iddVersion')
 
-package_spec = config.get('helperRuntime', {}).get('packageSpec')
+helper_runtime = config.get('helperRuntime', {})
+# helperRuntime.profile determines how packageSpec is actually consumed
+# (ephemeral-npx vs package-manager vs source-repo); asserting the pin
+# alone would still pass if a future re-import silently changed the
+# profile out from under it (Copilot review, PR #478).
+assert helper_runtime.get('profile') == 'ephemeral-npx', helper_runtime
+package_spec = helper_runtime.get('packageSpec')
 assert package_spec == (
     'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
     'c11c3642319b3283293e4e681861bf7899c32ed3'
