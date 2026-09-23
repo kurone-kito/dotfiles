@@ -75,9 +75,15 @@ and `src/scripts/advisory-convergence.mts` computes the report's
 `review-clause.mts` alone computes.
 
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
-is now `0.12.0` — roadmap #446's schema/config-audit track
-([`#447`](https://github.com/kurone-kito/dotfiles/issues/447)) bumped
-it from `0.11.0` (see [New 0.12.0 Schema
+is now `0.12.2` — the 2026-09-22 hearing (roadmap
+[`#469`](https://github.com/kurone-kito/dotfiles/issues/469), tracked
+by [`#470`](https://github.com/kurone-kito/dotfiles/issues/470)) bumped
+it from `0.12.0` (see [New 0.12.2 Policy
+Alignment](#new-0122-policy-alignment) below for that round's own
+verification detail). It had previously read `0.12.0`, bumped by
+roadmap #446's schema/config-audit track
+([`#447`](https://github.com/kurone-kito/dotfiles/issues/447)) from
+`0.11.0` (see [New 0.12.0 Schema
 Keys](#new-0120-schema-keys) below for that round's own verification
 detail). It had previously read `0.11.0`, bumped by
 roadmap #419's schema/config-audit track
@@ -459,10 +465,22 @@ was confirmed on
 [PR #374](https://github.com/kurone-kito/dotfiles/pull/374), which
 received a Codex usage-limit notice from that login. Settle/wait
 ([`idd-advisory-wait.instructions.md`](../.github/instructions/idd-advisory-wait.instructions.md))
-stays Copilot-only regardless of this list — **`advisoryWait.primaryBotLogin`**
-and **`advisoryWait.secondaryBotLogin`** are left unset, so every
+stays Copilot-only for its primary, gating check regardless of this
+list — **`advisoryWait.primaryBotLogin`** is left unset, so every
 configured login here (including a non-review notice) is dispositioned
 on arrival but never gates the advisory-wait clock.
+**`advisoryWait.secondaryBotLogin`** is explicitly `coderabbitai[bot]`
+(reconfirmed unchanged by the 2026-09-22 hearing, see
+[New 0.12.2 Policy Alignment](#new-0122-policy-alignment)) -- per
+[Advisory Review Defaults](./policy-constants.md#advisory-review-defaults)
+this remains a non-gating supplement, requested once per HEAD only
+while the primary is cap-exhausted or stalled. This corrects an
+earlier "left unset" framing of this same key still visible in the
+[0.5.0/0.6.0 section's own historical
+row](#new-050060-schema-keys-left-at-default), which accurately
+described the state as of that round but was never updated when
+roadmap #380's opt-in feature-adoption track (#385, 2026-09-09) later
+set this key explicitly.
 
 ## Autopilot Suitability
 
@@ -484,9 +502,18 @@ directory).
 
 **`ciGate.externalCheckWaivers.mode`**: `maintainer-authorized`.
 **`ciGate.externalChecks.waivable`**:
-`[{ "selector": "idd-advisory-convergence" }]`. **`authorityPolicy`**
-and **`maxValidity`** are left unset (distributed defaults
-`owners-and-maintainers-only` and `PT24H`).
+`[{ "selector": "idd-advisory-convergence", "matchMode": "exact" }]`.
+**`ciGate.externalCheckWaivers.authorityPolicy`**:
+`owners-and-maintainers-only`. **`ciGate.externalCheckWaivers.maxValidity`**:
+`PT24H`. The 2026-09-22 hearing (roadmap #469,
+[`#470`](https://github.com/kurone-kito/dotfiles/issues/470)) made all
+three explicit in `.github/idd/config.json`; before that hearing
+`authorityPolicy` and `maxValidity` were left unset and `waivable[0]`
+carried no `matchMode`, all at the same distributed defaults
+(`owners-and-maintainers-only`, `PT24H`, and `exact` respectively) --
+see [New 0.12.2 Policy Alignment](#new-0122-policy-alignment). None of
+the three changes waiver behavior, since each explicit value equals
+its own schema default.
 
 This prepares the waiver path for roadmap #144's #149 (hosting the
 `idd-advisory-convergence` workflow as a required status check) and is
@@ -498,8 +525,16 @@ matches anything, so no waiver can be issued or consumed.
 Confirmed at their distributed defaults rather than given an explicit
 `.github/idd/config.json` entry (roadmap #144), except where the
 Status column below records an explicit override. Each key's row
-(Status and, where relevant, Notes) is the single place a future
-status flip needs to change.
+(Status and, where relevant, Notes) is the primary place a future
+status flip is recorded -- unless a later round instead supersedes it
+via a dedicated section of its own, in which case the row here stays
+as an unedited historical record and the newer section's own row is
+authoritative (see, for example, how the
+[0.12.0 section's](#new-0120-schema-keys) `critiqueLoop.deferAfterRounds`
+row supersedes the [0.10.0/0.11.0 section's](#new-01000110-schema-keys)
+row the same way, and how the
+[0.12.2 section's](#new-0122-policy-alignment) `advisoryWait.convergenceScope`
+row supersedes this section's own row below).
 
 | Key | Status | Notes |
 | --- | --- | --- |
@@ -838,6 +873,119 @@ window could not fail `additionalProperties` (no new keys). Issues
 Track D left out of scope was closed by
 [`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
 active Track A transition.
+
+## New 0.12.2 Policy Alignment
+
+Confirmed by the 2026-09-22 hearing (roadmap
+[`#469`](https://github.com/kurone-kito/dotfiles/issues/469), tracked
+by [`#470`](https://github.com/kurone-kito/dotfiles/issues/470)):
+adopting dogfood's operational knobs that are not tied to this
+repository's CI size, helper profile, or solo-maintainer gates, and
+leaving the rest in place. `schemas/policy.schema.json` is
+byte-identical between the `v0.12.0` pin
+(`11105d705820e50be0a14fcc174587abbaf62b30`) and `v0.12.2`
+(`c11c3642319b3283293e4e681861bf7899c32ed3`) -- re-verified with a
+direct diff of the fetched schema text at both commits (`diff` exit
+`0`, no output) -- so every value below sets an existing key; none is
+a newly-added schema property. A repository-wide grep of every
+`dotfiles-divergence: <slug>` marker (see the
+[Divergence Register](#divergence-register) below) found no existing
+row for any of the keys adopted this round -- that register tracks
+instruction-file-level rewrites, not policy value choices, so nothing
+there needed updating. See the [0.12.0](#new-0120-schema-keys) section
+above for the same overall convention.
+
+`.github/idd/config.json` was updated by this track: `iddVersion` now
+reads `"0.12.2"`, and `helperRuntime.packageSpec` moved to the
+`v0.12.2` tarball URL (this repository's own key only). The general
+`ephemeral-npx` pin used by `.github/workflows/` was a separate,
+disjoint retarget landed by
+[`#473`](https://github.com/kurone-kito/dotfiles/issues/473)
+(merged as [`#477`](https://github.com/kurone-kito/dotfiles/pull/477),
+touching `.github/workflows/idd-advisory-convergence.yml`,
+`.github/workflows/idd-advisory-convergence-comment.yml`,
+`.github/workflows/post-merge-cleanup.yml`, and
+`docs/customization.md`). That track did **not** cover this page's own
+[Helper Runtime Profile](#helper-runtime-profile) snippet, which still
+invokes the `v0.12.0` tarball below (Copilot review, PR #478) -- an
+accepted, still-open skew window with no track currently claiming it,
+the same kind of transitional gap the [0.11.0](#new-01000110-schema-keys)
+and [0.12.0](#new-0120-schema-keys) rounds above each recorded for
+their own pin bumps, until a future track retargets it.
+
+The file was re-validated with `ajv-cli validate
+--spec=draft2020` against the fetched `v0.12.2` schema (`valid`) and
+with a pinned `idd-doctor` run from the `v0.12.2` tarball itself
+(`result: passed`, the same three warnings already documented in
+[`idd-doctor` findings](#idd-doctor-findings) -- no new finding).
+
+### Adopted this round
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `iddVersion` | **explicit: `"0.12.2"`** (was `"0.12.0"`) | See the `iddVersion` narrative paragraph near the top of this page for the full bump chain. |
+| `helperRuntime.packageSpec` | **explicit: `v0.12.2` tarball URL** (was the `v0.12.0` tarball URL) | Set to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3`. `helperRuntime.profile` (`ephemeral-npx`) is unchanged. |
+| `critiqueLoop.deferAfterRounds` | **explicit: `5`** (was unset, meaning the `v0.12.0`-recalibrated distributed default `12`) | Owner-confirmed (2026-09-22 hearing) to adopt dogfood's shorter review-fix-loop Low-severity defer threshold. Supersedes, without editing, the [0.12.0 section's own row](#new-0120-schema-keys) (which in turn superseded the [0.10.0/0.11.0 section's row](#new-01000110-schema-keys)) -- both left as historical record. `critiqueLoop.delegate` (`coderabbit-critique` / `combined`) and `critiqueLoop.telemetryHook` (`idd-critique-telemetry`) are unchanged. |
+| `advisoryWait.convergenceScope` | **explicit: `idd-claimed`** (was unset, meaning the distributed default `all-prs`) | Scopes advisory convergence to verified IDD-claimed PRs only. Supersedes, without editing, the [0.4.0 section's own row](#new-040-schema-keys-left-at-default), left as historical record. |
+| `advisoryWait.convergenceDeadline` | **explicit: `PT9H`** (was unset, meaning the distributed default `PT24H`) | Shortens the deadlock deadline before a maintainer external-check waiver becomes the only pass path -- see [Advisory Review Defaults](./policy-constants.md#advisory-review-defaults) for the mechanism. |
+| `advisoryWait.secondaryQuietWindow` | **explicit: `PT1H`** (was unset, meaning off) | Requires 1 h of settle time after E-phase convergence before pre-merge readiness treats the review as settled, covering a slower secondary bot's late finding. |
+| `advisoryWait.secondaryBotLogin` | unchanged: `coderabbitai[bot]` | Already recorded in [Advisory Bot Logins](#advisory-bot-logins). |
+| `discover.selectionDesync` | **explicit: `session-offset`** (was unset, meaning the distributed default `off`) | Spreads concurrent autopilot sessions across a same-score A4 tie band -- see [Concurrent Session Defaults](./policy-constants.md#concurrent-session-defaults). |
+| `forcedHandoff.mode` | **explicit: `human-gated`** (was unset, meaning the distributed default `disabled`) | Enables the human-verified stuck-claim transfer exception ahead of this repository's effective 12 h stale takeover (`claimTiming.staleAge`, shortened from the distributed 24 h default — see [Claim Timing](#claim-timing)). |
+| `forcedHandoff.authorityPolicy` | **explicit: `owners-and-maintainers-only`** (matches the schema default; recorded explicitly rather than left implicit) | Matches this repository's existing `maintainerApprovalActorPolicy` and `ciGate.externalCheckWaivers.authorityPolicy` (below) authority scope. |
+| `ciGate.externalChecks.waivable[0].matchMode` | **explicit: `exact`** on the existing `idd-advisory-convergence` selector (matches the schema default) | See [CI Gate External Check Waivers](#ci-gate-external-check-waivers). |
+| `ciGate.externalCheckWaivers.authorityPolicy` | **explicit: `owners-and-maintainers-only`** (matches the schema default) | See [CI Gate External Check Waivers](#ci-gate-external-check-waivers). |
+| `ciGate.externalCheckWaivers.maxValidity` | **explicit: `PT24H`** (matches the schema default) | See [CI Gate External Check Waivers](#ci-gate-external-check-waivers). |
+
+The last three `ciGate` rows match dogfood's explicit form. Because
+each value equals its own schema default, none changes actual waiver
+behavior -- they only make the decision explicit in the
+machine-readable config rather than implicit.
+`ciGate.trustSourcePinnedRequiredChecks` and
+`ciGate.trustEmptyProtectionReads` stay `true`, unchanged.
+
+### Left unchanged
+
+Every key not named above stayed at its existing value, per the
+hearing's own scoping: `commands`, `claimTiming`, `ciWait`,
+`helperRuntime.profile`, `skipIssueAuthorApprovalGate`,
+`advisoryBotLogins`, `worktreeGuard`, `markerPrefix`,
+`developmentBranch`, `authoringLanguage`,
+`issueAuthoring.journalIssue`, `workshop`, `providerOutage`,
+`upstreamEscalation`, `labels`, `mergePolicy`/`mergePolicyAck`,
+`reviewPolicy`, and `threadResolutionPolicy` (the merge, review, and
+thread-resolution policies).
+
+### Doc-update convention for this round
+
+This page uses two different conventions for a table row whose
+confirmed status later changes: edit-in-place-with-annotation (for
+example, `ciGate.trustEmptyProtectionReads` in the
+[0.4.0 section](#new-040-schema-keys-left-at-default)) versus leaving
+the earlier row as an unedited historical record while a later
+section's own row supersedes it (how the
+[0.12.0 section's](#new-0120-schema-keys) `critiqueLoop.deferAfterRounds`
+row superseded the
+[0.10.0/0.11.0 section's](#new-01000110-schema-keys) row without
+touching it). This round follows the second, more specific precedent
+for the historical "Left at Default" table rows it supersedes
+(`advisoryWait.convergenceScope`, `critiqueLoop.deferAfterRounds`
+above) -- neither historical row is edited; this section's own table
+is the current, authoritative status. The
+[CI Gate External Check Waivers](#ci-gate-external-check-waivers)
+section is current-state prose, not a historical snapshot, so it was
+edited in place with the new explicit values plus an appended note,
+the same way the `iddVersion` narrative paragraph near the top of this
+page already layers each round's bump forward without deleting the
+prior text.
+
+This round intentionally did **not** update the **Pinned upstream
+commit** paragraph near the top of this page -- Track F's job, per the
+issue's own instruction. It also did **not** touch
+[Helper Runtime Profile](#helper-runtime-profile)'s own pin narrative
+or code snippet, or any `.github/workflows/` file -- retargeting those
+is [`#473`](https://github.com/kurone-kito/dotfiles/issues/473)'s
+disjoint scope, even though both issues touch this same page.
 
 ## Divergence Register
 
