@@ -13,6 +13,14 @@ Lite profile for weak/local models. Same semantics as
 2. **When the repository is `instructions-only`** (no helper runtime
    shipped): skip the helper commands and use the written tables only.
 
+Every `node scripts/<name>.mjs` command below is the **source-repo /
+vendored-node** invocation form. Under `package-manager` /
+`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
+command's profile-selected equivalent from
+`docs/idd-helper-scripts.md`. A helper missing on the active profile
+is a missing-helper case under rule 1 (stop and ask), not a reason to
+fall through.
+
 ## Always run helpers first (helper-enabled profiles)
 
 ```sh

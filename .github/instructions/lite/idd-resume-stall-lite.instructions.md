@@ -17,6 +17,14 @@ takeover, return to resume lite Step 1.
 - **`instructions-only`**: use the written S1–S5 steps without helpers,
   still with a server-anchored `now` for the quiet window.
 
+Every `node scripts/<name>.mjs` command below is the **source-repo /
+vendored-node** invocation form. Under `package-manager` /
+`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
+command's profile-selected equivalent from
+`docs/idd-helper-scripts.md`. A helper missing on the active profile
+is a missing-helper case under the rule above (hold and stop), not a
+reason to fall through.
+
 ## Helper-first commands (helper-enabled profiles)
 
 ```sh
