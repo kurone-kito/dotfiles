@@ -93,6 +93,12 @@
   precomposeUnicode = true
   quotepath = false
   safecrlf = warn
+[credential "https://github.com"]
+  helper =
+  helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+  helper =
+  helper = !gh auth git-credential
 [delta]
   features = side-by-side line-numbers decorations
 [diff]

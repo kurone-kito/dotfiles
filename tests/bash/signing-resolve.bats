@@ -142,6 +142,65 @@ JSON
   refute_output --partial 'excludesfile'
 }
 
+@test "config: credential helper sections render unconditionally with no credential data" {
+  echo '{ "data": {} }' > "$TMP_CFG"
+  run _render "$CONFIG_TMPL"
+  assert_success
+  assert_output --partial '[credential "https://github.com"]'
+  assert_output --partial '[credential "https://gist.github.com"]'
+  assert_output --partial 'helper = !gh auth git-credential'
+  refute_output --partial '[credential "https://dev.azure.com"]'
+}
+
+@test "config: github.com credential helper resolves to gh via git config" {
+  echo '{ "data": {} }' > "$TMP_CFG"
+  run _render "$CONFIG_TMPL"
+  assert_success
+  local rendered="$BATS_TEST_TMPDIR/rendered-config"
+  echo "$output" > "$rendered"
+
+  # The leading empty `helper =` line resets whatever unscoped
+  # credential.helper (GCM's `manager` on Windows) git would otherwise
+  # still consult for this host; git stores it as a real empty entry,
+  # so `--get-all` must report 2 entries (empty, then the gh helper) --
+  # that reset entry being present is the actual bypass mechanism, not
+  # a defect. `--get` (last-wins) confirms the effective value used at
+  # credential-resolution time and that the syntax parses as valid.
+  run git config -f "$rendered" --get credential.https://github.com.helper
+  assert_success
+  assert_output '!gh auth git-credential'
+
+  # bats' own `$lines` array splitting drops leading empty lines, so
+  # count entries via `mapfile` on the raw `$output` instead.
+  run git config -f "$rendered" --get-all credential.https://github.com.helper
+  assert_success
+  local -a helper_entries
+  mapfile -t helper_entries <<< "$output"
+  assert_equal "${#helper_entries[@]}" 2
+  assert_equal "${helper_entries[0]}" ""
+  assert_equal "${helper_entries[1]}" '!gh auth git-credential'
+}
+
+@test "config: gist.github.com credential helper resolves to gh via git config" {
+  echo '{ "data": {} }' > "$TMP_CFG"
+  run _render "$CONFIG_TMPL"
+  assert_success
+  local rendered="$BATS_TEST_TMPDIR/rendered-config"
+  echo "$output" > "$rendered"
+
+  run git config -f "$rendered" --get credential.https://gist.github.com.helper
+  assert_success
+  assert_output '!gh auth git-credential'
+
+  run git config -f "$rendered" --get-all credential.https://gist.github.com.helper
+  assert_success
+  local -a helper_entries
+  mapfile -t helper_entries <<< "$output"
+  assert_equal "${#helper_entries[@]}" 2
+  assert_equal "${helper_entries[0]}" ""
+  assert_equal "${helper_entries[1]}" '!gh auth git-credential'
+}
+
 @test "config: legacy primary_signing field is rejected with rename hint" {
   cat > "$TMP_CFG" <<'JSON'
 { "data": { "secret": { "ssh": { "keys": {
