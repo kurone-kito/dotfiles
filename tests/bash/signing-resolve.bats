@@ -171,14 +171,11 @@ JSON
   assert_output '!gh auth git-credential'
 
   # bats' own `$lines` array splitting drops leading empty lines, so
-  # count entries via `mapfile` on the raw `$output` instead.
+  # assert the exact 2-entry multi-line output directly instead
+  # (portable across bash 3.2+, no array/mapfile dependency).
   run git config -f "$rendered" --get-all credential.https://github.com.helper
   assert_success
-  local -a helper_entries
-  mapfile -t helper_entries <<< "$output"
-  assert_equal "${#helper_entries[@]}" 2
-  assert_equal "${helper_entries[0]}" ""
-  assert_equal "${helper_entries[1]}" '!gh auth git-credential'
+  assert_output $'\n!gh auth git-credential'
 }
 
 @test "config: gist.github.com credential helper resolves to gh via git config" {
@@ -194,11 +191,7 @@ JSON
 
   run git config -f "$rendered" --get-all credential.https://gist.github.com.helper
   assert_success
-  local -a helper_entries
-  mapfile -t helper_entries <<< "$output"
-  assert_equal "${#helper_entries[@]}" 2
-  assert_equal "${helper_entries[0]}" ""
-  assert_equal "${helper_entries[1]}" '!gh auth git-credential'
+  assert_output $'\n!gh auth git-credential'
 }
 
 @test "config: legacy primary_signing field is rejected with rename hint" {
