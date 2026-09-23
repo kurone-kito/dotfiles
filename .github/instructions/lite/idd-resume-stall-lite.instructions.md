@@ -101,7 +101,11 @@ Before S4/posting, rerun helper; require `stale`/`takeover`,
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
 2. Re-run `resume-claim-routing.mjs --issue <N>` (resolve the exact
-   command from `docs/idd-helper-scripts.md` if unsure).
+   command from `docs/idd-helper-scripts.md` if unsure). Same
+   fail-closed requirement as the pre-S4 check above: the result must
+   still show `state: stale`, `action: takeover`, and
+   `evidence.local_worktree.status: absent`; occupied, unreadable,
+   unknown, missing, or contradictory evidence means STOP.
 3. Active claim still the same non-owned `{claim-id}`.
 4. <!-- dotfiles-divergence: claim-timing --> Still stale (≥ 12 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not

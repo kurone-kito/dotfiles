@@ -180,8 +180,10 @@ Before any mutating action in F3, apply the
      `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`;
      else hold. For paths in
      `git ls-tree --full-tree -r --name-only "${PR_HEAD_SHA_F3}"`, run
-     `git ls-files -o --exclude-standard -- ":(top)$path"` and the same with
-     `-i`; either output holds. Use `git switch {branch-name}` (not
+     `git ls-files -o --exclude-standard -- ":(top)$path"` and again
+     with `-i` added (`git ls-files -o -i --exclude-standard --
+     ":(top)$path"` — `-i` alone is invalid without `-o`/`-c`); either
+     output holds. Use `git switch {branch-name}` (not
      detached), recheck; reset on pass) — D3.5/D3.7 read local state, not
      the remote PR. Skip
      D3.5 steps 6-7 under the
