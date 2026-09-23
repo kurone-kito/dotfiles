@@ -4,8 +4,8 @@ name: IDD advisory-convergence gate
 # workflow is proven green -- see #149). Adapted from
 # kurone-kito/idd-skill's
 # idd-template/.github/workflows/idd-advisory-convergence.yml at pin
-# 11105d705820e50be0a14fcc174587abbaf62b30 (v0.12.0; #450 bumped from
-# the prior v0.11.0 pin set by #424, which also keeps this file's helper
+# c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2; #473 bumped from
+# the prior v0.12.0 pin set by #450, which also keeps this file's helper
 # pin in sync with the rest of the repository's ephemeral-npx
 # invocations -- see docs/idd-policy.md "Helper Runtime Profile"). The
 # maintainer-authorized waiver escape is already configured in
@@ -297,7 +297,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
             idd-advisory-convergence --pr "$PR_NUMBER" --assert
 
   # kurone-kito/idd-skill#2657: optional companion job -- a PR that fixes
@@ -308,7 +308,7 @@ jobs:
   # `idd-external-check-waiver` marker for exactly that case. See
   # kurone-kito/idd-skill's `idd-template/docs/idd-helper-scripts.md`
   # "Automated self-referential-bootstrap-auto waiver" section (at this
-  # file's own pin, 11105d705820e50be0a14fcc174587abbaf62b30) for the
+  # file's own pin, c11c3642319b3283293e4e681861bf7899c32ed3) for the
   # full trust model and the seven acceptance conditions -- this
   # repository's own docs/idd-helper-scripts.md does not carry that
   # section yet under the `ephemeral-npx` profile (no vendored `docs/`
@@ -451,7 +451,7 @@ jobs:
           GH_ENTERPRISE_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
             idd-external-check-waiver --pr "$PR_NUMBER" --check idd-advisory-convergence \
             --reason self-referential-bootstrap-auto --run-id "$GITHUB_RUN_ID" \
             --auto-bootstrap --apply --yes | tee /tmp/idd-waiver-report.json

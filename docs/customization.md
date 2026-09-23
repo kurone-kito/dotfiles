@@ -137,13 +137,13 @@ the chosen profile:
 
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
 The tarball URL is pinned to the same upstream commit used as
 the import baseline for this repository's IDD helpers
-(`11105d705820e50be0a14fcc174587abbaf62b30`, tag `v0.12.0`).
+(`c11c3642319b3283293e4e681861bf7899c32ed3`, tag `v0.12.2`).
 Bump it deliberately whenever the IDD helpers are re-imported.
 This repository also runs the manifest under
 `--profile ephemeral-npx` rather than upstream's own
