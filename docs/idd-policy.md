@@ -13,30 +13,44 @@ This page records the policy decisions confirmed during the
 onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), the
 0.5.0/0.6.0 re-import (roadmap #239), the 0.7.0 re-import
 (roadmap #292), the 0.9.0 re-import (roadmap #380), the 0.11.0
-re-import (roadmap #419), and the 0.12.0 re-import
-(roadmap #446). The machine-readable mirror lives at
+re-import (roadmap #419), the 0.12.0 re-import
+(roadmap #446), and the 0.12.2 re-import (roadmap #469). The
+machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/11105d705820e50be0a14fcc174587abbaf62b30/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Pinned upstream commit**: `11105d705820e50be0a14fcc174587abbaf62b30`
-(abbreviated `11105d7`; tag `v0.12.0`), confirmed as the current latest
-tag and audited by roadmap #446's final-verification track
+**Pinned upstream commit**: `c11c3642319b3283293e4e681861bf7899c32ed3`
+(abbreviated `c11c364`; tag `v0.12.2`), confirmed as the current latest
+tag and audited by roadmap #469's final-verification track
+([`#475`](https://github.com/kurone-kito/dotfiles/issues/475)), which
+supersedes the `v0.12.0`-round pin recorded by roadmap #446's
+final-verification track (#452). Roadmap #469's five resync tracks
+(#470-#474) each brought their own file scope from `v0.12.0` to
+`v0.12.2` -- schema/config (#470, PR #478),
+`.github/instructions/`/`lite/` (#471, PR #481), docs (#472, PR #480),
+CI workflow + helper-runtime pin (#473, PR #477), and companion skills
+(#474, PR #479) -- with no sixth consumer-only track this round. This
+final-verification track (#475) then confirmed the pin and swept the
+Divergence Register and upstream-issue disposition ledger below.
+The `v0.12.0` pin (`11105d705820e50be0a14fcc174587abbaf62b30`,
+abbreviated `11105d7`; tag `v0.12.0`, superseded) was itself audited by
+roadmap #446's final-verification track
 ([`#452`](https://github.com/kurone-kito/dotfiles/issues/452)), which
-supersedes the `v0.11.0`-round pin recorded by roadmap #419's
+superseded the `v0.11.0`-round pin recorded by roadmap #419's
 final-verification track (#425). Roadmap #446's five resync tracks
 (#447-#451) each brought their own file scope from `v0.11.0` to
 `v0.12.0` -- schema/config (#447, PR #454),
 `.github/instructions/`/`lite/` (#448, PR #456), docs/githooks/scripts
 (#449, PR #457), CI workflow + helper-runtime pin (#450, PR #455), and
 companion skills (#451, PR #453) -- with no sixth consumer-only track
-this round. This final-verification track (#452) then confirmed the
-pin and swept the Divergence Register and upstream-issue disposition
-ledger below.
+this round. That final-verification track (#452) then confirmed the
+then-current pin and swept the Divergence Register and
+upstream-issue disposition ledger as of that round.
 The `v0.11.0` pin (`1f90787ebf4021673ce6e5eb69741df331fd2037`,
 abbreviated `1f90787`; tag `v0.11.0`, superseded) was itself audited by
 roadmap #419's final-verification track
@@ -221,7 +235,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/11105d705820e50be0a14fcc174587abbaf62b30 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -907,17 +921,21 @@ touching `.github/workflows/idd-advisory-convergence.yml`,
 `.github/workflows/post-merge-cleanup.yml`, and
 `docs/customization.md`). That track did **not** cover this page's own
 [Helper Runtime Profile](#helper-runtime-profile) snippet, which still
-invokes the `v0.12.0` tarball below (Copilot review, PR #478) -- an
-accepted, still-open skew window with no track currently claiming it,
-the same kind of transitional gap the [0.11.0](#new-01000110-schema-keys)
-and [0.12.0](#new-0120-schema-keys) rounds above each recorded for
-their own pin bumps, until a future track retargets it.
+invoked the `v0.12.0` tarball at Track A's own merge (Copilot review,
+PR #478) -- an accepted, then-open skew window with no track claiming
+it yet, the same kind of transitional gap the
+[0.11.0](#new-01000110-schema-keys) and [0.12.0](#new-0120-schema-keys)
+rounds above each recorded for their own pin bumps. **Closed by
+Track F** (#475): that snippet's example command now names the
+`v0.12.2` tarball too, so no open skew remains as of this round.
 
 The file was re-validated with `ajv-cli validate
 --spec=draft2020` against the fetched `v0.12.2` schema (`valid`) and
 with a pinned `idd-doctor` run from the `v0.12.2` tarball itself
 (`result: passed`, the same three warnings already documented in
-[`idd-doctor` findings](#idd-doctor-findings) -- no new finding).
+[`idd-doctor` findings](#idd-doctor-findings) for a **fresh clone** --
+no new finding; #475's own re-run below was against an already-wired
+worktree instead, so it reports that section's two-warning case).
 
 ### Adopted this round
 
@@ -999,7 +1017,6 @@ Current slugs:
 | Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233, #294, #295, #382, #383, #421, #422 |
-| `cleanup-evidence-dedup-recheck`     | The corrected "Double-posting is prevented by..." paragraph in `docs/idd-comment-minimization.md` (double-checked locking: a mandatory, freshly-fetched re-check of the trusted-author `idd-cleanup-evidence` record immediately before each side's own POST call, not a single early check) and the matching literal re-check command added to `idd-merge.instructions.md`'s F4 step. Upstream's `v0.12.0` template still describes the single-check "prevented by" framing (filed upstream as [`kurone-kito/idd-skill#3130`](https://github.com/kurone-kito/idd-skill/issues/3130)) | #397, #421, #422, #424, #452 |
 | `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233, #295, #383, #424                   |
 | `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297, #386, #423                   |
 | `local-docs-index`                   | The "Local pages" table `docs/index.md` appends below upstream's generated OKF table, covering this repository's own locally-authored, non-upstream `docs/` pages upstream's generator has no knowledge of. The row's original retirement trigger -- the synced pages gaining OKF frontmatter of their own -- held as of the `v0.7.0` baseline already; the `v0.9.0` round (#383) adopted the generated table itself, so this row now marks only the residual local-page extension, not a whole-file exclusion | #283, #383                                     |
@@ -1009,12 +1026,8 @@ Current slugs:
 | `signing-ladder`                     | The GPG -> SSH -> unsigned commit-signing fallback ladder, a dotfiles-specific addition with no upstream equivalent                                                                                                                                                                                                                                                                                                     | #145, #232, #294, #382, #421                   |
 | `vendored-file-header`               | The corrected header on `scripts/minimize-superseded-markers.mjs`, since this repository has no build step to regenerate it from a TypeScript source                                                                                                                                                                                                                                                                    | #196, #233, #383, #422                         |
 | `worktree-guard-wiring-note`         | Documents that this repository ships every Worktree Guard enforcing component together (opt-in config surface, `.githooks/` hook set, `idd-doctor`'s enabled-but-inert check) instead of upstream's generic "config surface only" framing, since `core.hooksPath` wiring is still a required per-clone step                                                                                                             | #233, #295, #383, #424                         |
-| `lite-telemetry-parity`              | `lite/idd-work-lite.instructions.md`'s own C2/C4 `critiqueLoop.telemetryHook` call sites (its actual point of use), plus `docs/idd-workflow.md`'s note that the lite profile actually invokes the hook there, unlike the stock-template's "lite profile does not invoke this hook" framing (still true of `v0.12.0`; filed upstream as [`kurone-kito/idd-skill#3127`](https://github.com/kurone-kito/idd-skill/issues/3127)) -- the hook call itself was added to the lite file during #421's own review-fix round | #421, #422, #425, #452 |
-| `pre-merge-reset-guard`              | The same dirty-worktree/non-ancestor `git reset --hard` guard and detached-`HEAD`-avoiding `git switch {branch-name}` (instead of `git checkout <SHA>`, so the claim-revalidation gate's `git branch --show-current` check still works), rewritten into **both** of its two independent copies: `idd-pre-merge.instructions.md`'s F2 D3.5/D3.7 re-verification bullet and `idd-merge.instructions.md`'s F3 counterpart bullet -- both real data-loss guards upstream's own `v0.12.0` text still lacks (filed upstream as [`kurone-kito/idd-skill#3125`](https://github.com/kurone-kito/idd-skill/issues/3125)) | #421, #425, #452 |
-| `review-triage-usercontent-reconstruction` | `idd-review-triage.instructions.md`'s E4 issue-body reconstruction: paginating `userContentEdits` to `pageInfo.hasNextPage: false` (a truncated read can silently select the wrong pre-plan body state) and reading each entry's `diff` as full post-edit body text directly (not a line patch), failing closed on an unavailable, failed, or incompletely-paginated read -- upstream's own `v0.12.0` text still has no pagination handling (filed upstream as [`kurone-kito/idd-skill#3126`](https://github.com/kurone-kito/idd-skill/issues/3126)) | #421, #425, #452 |
+| `review-triage-usercontent-reconstruction` | `idd-review-triage.instructions.md`'s E4 issue-body reconstruction: paginating `userContentEdits` to `pageInfo.hasNextPage: false` (a truncated read can silently select the wrong pre-plan body state) and reading each entry's `diff` as full post-edit body text directly (not a line patch), failing closed on an unavailable, failed, or incompletely-paginated read -- upstream's `v0.12.2` template (closed as COMPLETED at [`kurone-kito/idd-skill#3126`](https://github.com/kurone-kito/idd-skill/issues/3126), PR #3133, merge `818974b`) still treats "the creation-time body" as available whenever no edit predates the plan, which is narrower than this local guard's coverage of the sub-case where at least one edit exists and every one postdates the plan (verified again this round, #471/#475: `userContentEdits` exposes only each entry's post-edit state, so "the creation-time body" is not actually obtainable there) | #421, #425, #452, #471, #475 |
 | `blocked-by-human-staleness`         | `idd-suitability.instructions.md`'s A4.5 standing-rejection staleness check for a `blocked-by-human` rejection specifically: since `.github/workflows/strip-untrusted-labels.yml` auto-strips that label from any untrusted-bot apply, label state alone cannot distinguish a genuine maintainer resolution from a strip cycle, so this repository instead requires a post-rejection comment from a maintainer approval actor that **explicitly affirms the blocker is resolved** (an unrelated remark or status update from the same actor does not qualify, per Codex review of this PR, dotfiles#432), **replacing** (not supplementing) the general edit-postdates-rejection rule for this one outcome -- an ordinary title/body edit by the issue's own author must never by itself reset staleness while the external human coordination remains unresolved -- a repository-specific workaround for this repository's own label-stripping automation, with no upstream counterpart | #421, #425                                     |
-| `worktrunk-noop-hook-cd`             | `idd-work.instructions.md`'s B1 Step 3 WorkTrunk-with-pre-start-hook branch: an explicit note that `-x <noop>` never changes the caller's working directory, so the agent must `cd` into the new sibling worktree itself rather than assuming WorkTrunk already did -- a real correctness trap (B1's own self-check otherwise fails against the primary worktree) that upstream's `v0.12.0` text still does not warn about (filed upstream as [`kurone-kito/idd-skill#3128`](https://github.com/kurone-kito/idd-skill/issues/3128)) | #421, #425, #452 |
-| `lite-critique-delegate-parity`      | `lite/idd-review-fix-lite.instructions.md`'s E10 delegate-verdict resolution steps (mode/command/fallback handling, union of delegate + per-agent findings), mirroring `idd-review-fix.instructions.md`'s own stock logic that upstream's own `lite/` template still lacks entirely at `v0.12.0` (filed upstream as [`kurone-kito/idd-skill#3129`](https://github.com/kurone-kito/idd-skill/issues/3129)) | #421, #425, #452 |
 | `post-switch-ancestry-reset-guard`   | A second `git merge-base --is-ancestor` re-check immediately after `git switch {branch-name}` reattaches a detached worktree, before running `git reset --hard` to the PR head -- the branch just switched to can carry different commits than the detached HEAD the first (pre-switch) ancestry check ran against, so a first-check-only pass could reset onto the wrong tree; also states the reset itself explicitly (`git reset --hard "$PR_HEAD_SHA"` / `"${PR_HEAD_SHA_F3}"`) rather than leaving it as unexecutable "reset on pass" prose. Two copies: `idd-pre-merge.instructions.md`'s F2 D3.5/D3.7 re-verification bullet and `idd-merge.instructions.md`'s F3 counterpart bullet -- beyond what upstream's `v0.12.2` template's own reattachment step covers | #471 |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
@@ -1234,6 +1247,86 @@ Tracks A (#447, PR #454) touched `.github/idd/config.json` and this
 page (no live instruction-file marker). `local-docs-index` and
 `worktree-guard-wiring-note` were not in any sibling's merged file
 list; both still have a live point-of-use marker.
+
+**Reaffirmed this round (v0.12.2, 2026-09-24, #475)**: the required
+check from the `v0.12.0` round was re-run against the merged tree of
+issues 470-474.
+
+`git grep -hoE 'dotfiles-divergence: [a-z-]+'` over tracked files,
+deduplicated, found **13** live slugs after the five retirements
+above. Every remaining registered slug has at least one point-of-use
+marker for its file type. `blocked-by-human-staleness`,
+`local-docs-index`, `signing-ladder`, and `vendored-file-header` were
+not in any of this round's five tracks' merged file lists; all four
+still have a live point-of-use marker (unaffected by this resync). A
+direct file-list diff for Track B (#471) specifically is not repeated
+here: that track's own 8-round Copilot/CodeRabbit review-fix cycle
+already served as an exhaustive diff-based check of its 17-file
+scope, surfacing and fixing every unmarked local delta it found (the
+ancestry/reset ordering bug, the claim-provenance gap, and the two
+retirement/registration follow-ups above) rather than leaving them for
+this track to rediscover.
+
+**Retired this round (upstream equivalence at `v0.12.2`, #475)**: each
+closing merge below was independently confirmed an ancestor of the
+`v0.12.2` pin (`c11c3642319b3283293e4e681861bf7899c32ed3`) via
+`gh api repos/kurone-kito/idd-skill/compare/<merge>...c11c3642319b3283293e4e681861bf7899c32ed3`
+reporting `ahead` (the merge precedes the pin), then re-verified by
+reading the pinned `idd-template/` files directly, matching Track B's
+own resync diff (#471):
+
+- `cleanup-evidence-dedup-recheck` --
+  [`kurone-kito/idd-skill#3130`](https://github.com/kurone-kito/idd-skill/issues/3130)
+  (PR #3132, merge `115455d`). Upstream's `post-merge-cleanup.yml` and
+  `idd-merge.instructions.md` F4 step both now perform the same
+  immediate, freshly-fetched re-check right before POST; the local
+  `docs/idd-comment-minimization.md` correction and the explanatory
+  marker comment in `.github/workflows/post-merge-cleanup.yml` (which
+  only ever cross-referenced this slug, never diverged from upstream
+  itself) are both removed.
+- `lite-telemetry-parity` --
+  [`kurone-kito/idd-skill#3127`](https://github.com/kurone-kito/idd-skill/issues/3127)
+  (PR #3136, merge `5c2704a`). `lite/idd-work-lite.instructions.md`'s
+  own C2/C4 now invoke `critiqueLoop.telemetryHook` natively upstream.
+- `worktrunk-noop-hook-cd` --
+  [`kurone-kito/idd-skill#3128`](https://github.com/kurone-kito/idd-skill/issues/3128)
+  (PR #3134, merge `a4ec8d7`). `idd-work.instructions.md`'s B1 Step 3
+  now carries the same `-x <noop>`-never-changes-cwd warning upstream.
+- `lite-critique-delegate-parity` --
+  [`kurone-kito/idd-skill#3129`](https://github.com/kurone-kito/idd-skill/issues/3129)
+  (PR #3135, merge `30cfe1f`). `lite/idd-review-fix-lite.instructions.md`'s
+  E10 now carries the same delegate-verdict resolution logic upstream.
+- `pre-merge-reset-guard` --
+  [`kurone-kito/idd-skill#3125`](https://github.com/kurone-kito/idd-skill/issues/3125)
+  (PR #3137, merge `9405f9a`). The dirty-worktree/non-ancestor guard
+  and detached-`HEAD`-avoiding `git switch` are both now native
+  upstream in both `idd-pre-merge.instructions.md` and
+  `idd-merge.instructions.md`. Resyncing to that fixed upstream text
+  surfaced a **new**, narrower gap in upstream's own reattachment
+  step (the branch-name hold check ran before the only step that
+  could repair a detached worktree, and the post-switch tree was
+  never re-validated before reset) -- fixed locally and tracked by
+  the new `post-switch-ancestry-reset-guard` row above instead of this
+  retiring slug.
+
+`review-triage-usercontent-reconstruction` is **not** retired --
+upstream's `v0.12.2` fix (closed COMPLETED, PR #3133, merge
+`818974b`, confirmed an ancestor of the pin the same way as the five
+above) is narrower than this local guard; see the table row above for
+the specific sub-case it still misses.
+
+The Register now carries **13** slugs.
+
+Sibling-track attribution for this round's file lists: Track B (#471,
+PR #481) touched `claim-timing`, `master-branch`,
+`needs-triage-label`, `post-switch-ancestry-reset-guard`, and
+`review-triage-usercontent-reconstruction`; Track C (#472, PR #480)
+touched `claim-timing`, `master-branch`, and `onboarding-doc-trim`;
+Track D (#473, PR #477) touched `helper-profile-ephemeral-npx`,
+`master-branch`, and `worktree-guard-wiring-note`; Track E (#474,
+PR #479) touched `installed-bundle-reference-routing`. Track A (#470,
+PR #478) touched `.github/idd/config.json` and this page (no live
+instruction-file marker).
 
 ## Open follow-ups
 
@@ -1586,6 +1679,25 @@ npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/111
   idd-doctor
 ```
 
+**Reaffirmed this round (v0.12.2, 2026-09-24, #475)**: a fresh
+`idd-doctor` run under the now-pinned `c11c364` (`v0.12.2`) tarball
+against this track's own worktree (siblings #470-#474 already merged
+at `eae9387`) reports `result: passed (2 warning(s))` with exactly
+the same two `markdownlint-cli2` toolchain-residue `WARN`s quoted
+above and no new finding -- no regression and no new gap introduced
+by roadmap #469's five tracks. This worktree already had
+`core.hooksPath` wired, so it reports this section's own two-warning
+case; [New 0.12.2 Policy Alignment](#new-0122-policy-alignment)'s own
+run above was against a fresh clone (three warnings, including the
+`core.hooksPath`-unset one) -- the two counts describe the same
+environment split this section already documents, not a regression
+between rounds.
+
+```sh
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
+  idd-doctor
+```
+
 ### `idd-onboard --verify` findings
 
 A full `idd-onboard --verify` run (originally pinned `v0.6.0` source
@@ -1896,6 +2008,26 @@ Local-policy slugs (`master-branch`, `claim-timing`, `signing-ladder`,
 `installed-bundle-reference-routing`, `onboarding-doc-trim`,
 `vendored-file-header`, `helper-profile-ephemeral-npx`,
 `worktree-guard-wiring-note`, `local-docs-index`) were not filed.
+
+**Checked this round (v0.12.2, 2026-09-24, #475)**: all six issues
+filed by the `v0.12.0` round are `CLOSED COMPLETED` on
+`kurone-kito/idd-skill`. Each closing PR's merge commit was confirmed
+an ancestor of `c11c3642319b3283293e4e681861bf7899c32ed3` via
+`gh api repos/kurone-kito/idd-skill/compare/<merge>...c11c3642319b3283293e4e681861bf7899c32ed3`
+reporting `ahead`, then re-verified by reading the pinned
+`idd-template/` files directly, matching Track B's own resync diff
+(#471):
+
+| Upstream | Closing | In `v0.12.2`? | Disposition |
+| --- | --- | --- | --- |
+| [#3125](https://github.com/kurone-kito/idd-skill/issues/3125) | PR #3137 `9405f9a` COMPLETED | yes | landed; drop (`pre-merge-reset-guard` retired above) |
+| [#3126](https://github.com/kurone-kito/idd-skill/issues/3126) | PR #3133 `818974b` COMPLETED | partial | landed but narrower than this repository's guard; kept as a local fail-closed override (`review-triage-usercontent-reconstruction`, not retired) |
+| [#3127](https://github.com/kurone-kito/idd-skill/issues/3127) | PR #3136 `5c2704a` COMPLETED | yes | landed; drop (`lite-telemetry-parity` retired above) |
+| [#3128](https://github.com/kurone-kito/idd-skill/issues/3128) | PR #3134 `a4ec8d7` COMPLETED | yes | landed; drop (`worktrunk-noop-hook-cd` retired above) |
+| [#3129](https://github.com/kurone-kito/idd-skill/issues/3129) | PR #3135 `30cfe1f` COMPLETED | yes | landed; drop (`lite-critique-delegate-parity` retired above) |
+| [#3130](https://github.com/kurone-kito/idd-skill/issues/3130) | PR #3132 `115455d` COMPLETED | yes | landed; drop (`cleanup-evidence-dedup-recheck` retired above) |
+
+No new still-ahead local corrections were filed this round.
 
 **Resolved leftover pin (#459)**: Track D (#450) left
 `.github/workflows/idd-advisory-convergence-comment.yml` out of scope
