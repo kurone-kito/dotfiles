@@ -921,17 +921,21 @@ touching `.github/workflows/idd-advisory-convergence.yml`,
 `.github/workflows/post-merge-cleanup.yml`, and
 `docs/customization.md`). That track did **not** cover this page's own
 [Helper Runtime Profile](#helper-runtime-profile) snippet, which still
-invokes the `v0.12.0` tarball below (Copilot review, PR #478) -- an
-accepted, still-open skew window with no track currently claiming it,
-the same kind of transitional gap the [0.11.0](#new-01000110-schema-keys)
-and [0.12.0](#new-0120-schema-keys) rounds above each recorded for
-their own pin bumps, until a future track retargets it.
+invoked the `v0.12.0` tarball at Track A's own merge (Copilot review,
+PR #478) -- an accepted, then-open skew window with no track claiming
+it yet, the same kind of transitional gap the
+[0.11.0](#new-01000110-schema-keys) and [0.12.0](#new-0120-schema-keys)
+rounds above each recorded for their own pin bumps. **Closed by
+Track F** (#475): that snippet's example command now names the
+`v0.12.2` tarball too, so no open skew remains as of this round.
 
 The file was re-validated with `ajv-cli validate
 --spec=draft2020` against the fetched `v0.12.2` schema (`valid`) and
 with a pinned `idd-doctor` run from the `v0.12.2` tarball itself
 (`result: passed`, the same three warnings already documented in
-[`idd-doctor` findings](#idd-doctor-findings) -- no new finding).
+[`idd-doctor` findings](#idd-doctor-findings) for a **fresh clone** --
+no new finding; #475's own re-run below was against an already-wired
+worktree instead, so it reports that section's two-warning case).
 
 ### Adopted this round
 
@@ -1681,7 +1685,13 @@ against this track's own worktree (siblings #470-#474 already merged
 at `eae9387`) reports `result: passed (2 warning(s))` with exactly
 the same two `markdownlint-cli2` toolchain-residue `WARN`s quoted
 above and no new finding -- no regression and no new gap introduced
-by roadmap #469's five tracks.
+by roadmap #469's five tracks. This worktree already had
+`core.hooksPath` wired, so it reports this section's own two-warning
+case; [New 0.12.2 Policy Alignment](#new-0122-policy-alignment)'s own
+run above was against a fresh clone (three warnings, including the
+`core.hooksPath`-unset one) -- the two counts describe the same
+environment split this section already documents, not a regression
+between rounds.
 
 ```sh
 npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
