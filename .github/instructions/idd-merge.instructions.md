@@ -169,34 +169,33 @@ Before any mutating action in F3, apply the
      not paraphrased here;
    - all required CI checks pass for the current head;
    - claim ownership still uses your `{claim-id}`;
-   - <!-- dotfiles-divergence: pre-merge-reset-guard -->
-     D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
+   - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
      been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
      that landed between F2 and this final gate, for example a
-     required `{development-branch}` sync. Before running them,
+     required `{development-branch}` sync.
+     <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
+     Before running them,
      confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
-     exactly (`git fetch`, then, if a resumed or external-push session
-     left it stale, `git switch {branch-name}` — never a detaching
-     `git checkout <SHA>`, which would break the claim revalidation
-     gate's `git branch --show-current` check — followed by
-     `git reset --hard "${PR_HEAD_SHA_F3}"` so the worktree lands
-     exactly there while staying attached to the claimed branch). First
-     confirm the worktree is clean (`git status --porcelain`); a
-     resumed or externally-touched worktree can hold uncommitted local
-     changes unrelated to the stale HEAD, and `git reset --hard`
-     discards them irrecoverably. If dirty, stop and post a hold note
-     rather than discarding local work; only an operator-confirmed
-     discard may proceed. Even when clean, confirm local `HEAD` is an
-     ancestor of (or equal to) `${PR_HEAD_SHA_F3}`
-     (`git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`) before
-     resetting: `git status --porcelain` never reports
-     committed-but-unpushed local commits, which `git reset --hard`
-     would silently drop from the branch's reachable history. If local
-     `HEAD` is not an ancestor (diverged or strictly ahead), stop and
-     post a hold note the same way instead of resetting.
-     D3.5 step 7's
-     `git log` and D3.7's inherited `git diff` both read local git
-     state, not the remote PR directly. Skip D3.5 steps 6-7 under the
+     exactly: require empty `git status --porcelain` and
+     `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`;
+     else hold. For paths in
+     `git ls-tree --full-tree -r --name-only "${PR_HEAD_SHA_F3}"`, run
+     `git ls-files -o --exclude-standard -- ":(top)$path"` and again
+     with `-i` added (`git ls-files -o -i --exclude-standard --
+     ":(top)$path"` — `-i` alone is invalid without `-o`/`-c`); either
+     output holds. Use `git switch {branch-name}` (not
+     detached) to reattach a detached worktree, then confirm
+     `git branch --show-current` is `{branch-name}` — hold only if
+     reattachment fails; after switching, require `git merge-base
+     --is-ancestor HEAD "${PR_HEAD_SHA_F3}"` again (the branch just
+     switched to can carry different commits than the detached HEAD
+     the first ancestry check ran against) — hold if it fails; on
+     pass, run `git reset --hard "${PR_HEAD_SHA_F3}"` (an ancestry
+     pass alone leaves the worktree at whatever ancestor commit it
+     was already on, not necessarily this SHA) — D3.5/D3.7 read local
+     state, not
+     the remote PR. Skip
+     D3.5 steps 6-7 under the
      same non-default-`{development-branch}` exemption D3.5 itself
      carries. On a mismatch, fix it per D3.5/D3.7's own documented
      handling. Any fix here — whether or not it changes HEAD, since a
@@ -381,32 +380,11 @@ Before any mutating action in F3, apply the
    unchanged: it reads whatever that run may have posted and decides
    ownership from the marker's own recorded status.
 
-   **Duplicate-success-record skip rule**: before posting any evidence
-   comment below, skip it if the PR already carries a
-   `<!-- idd-cleanup-evidence:` comment recording a successful outcome
-   (`applied` or `clean`) **whose author is a trusted marker actor**
-   (`github-actions[bot]`, the identity `post-merge-cleanup.yml` posts
-   under, or a configured `trustedMarkerActors` login) — for example one
-   the `post-merge-cleanup` workflow posted within seconds of the merge —
-   to avoid a duplicate success record. An untrusted commenter's
-   marker-prefixed comment never counts as evidence and must not suppress
-   this post — the same trust-scoping every other IDD operational marker
-   already applies (see the shared
-   [Trusted marker actors](idd-overview-core.instructions.md#trusted-marker-actors)
-   rule). Otherwise post (a fresh success record, or a correction of an
-   existing `failed` / `incomplete` / `permission-blocked` record, or a
-   correction of an untrusted-author record).
-
-   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-   The `post-merge-cleanup.yml` workflow and this agent F4 step are two
-   independent processes; each one's own read-then-post is not atomic
-   against the other one's. **Do not treat awareness of the rule above
-   as satisfying it.** Immediately before executing the actual post
-   command below — with no other GitHub-mutating call in between, and
-   never reusing a comment list gathered during dry-run or apply — run
-   this fresh re-check (mirrors `post-merge-cleanup.yml`'s own dedup
-   logic, including its `#2213` both-converged rule; requires `bash`,
-   like that workflow's own `defaults.run.shell: bash`):
+   **Duplicate-success-record skip rule**: do not treat an earlier
+   dry-run or apply-time read as the skip. Immediately before the
+   actual POST — no other GitHub-mutating call in between — run this
+   fresh re-check (mirrors `post-merge-cleanup.yml` including issue
+   `#2213`; `bash`):
 
    ```sh
    TRUSTED_LOGINS=$(
@@ -441,88 +419,17 @@ Before any mutating action in F3, apply the
    fi
    ```
 
-   `{owner}`/`{repo}` are `gh api`'s own auto-templated placeholders
-   (filled from the current repository context, like `gh pr view`'s
-   own implicit repo resolution); `<pr-number>` is not one of them —
-   `gh api` only auto-fills `{owner}`/`{repo}`/`{branch}` — so it stays
-   in this file's angle-bracket convention for an already-resolved
-   value the agent substitutes itself, matching the node-script
-   examples earlier in this same F4 section. `<this-run-status>` is
-   likewise agent-substituted: the apply `status` this F4 pass already
-   computed earlier in this section (`applied`/`clean`/`failed`/
-   `incomplete`). The `if ! COMMENTS_TSV=$(…)` guard is deliberate: a
-   normal Bash invocation of this snippet has no implicit `-e`, so an
-   unguarded assignment on a failed `gh api` call (auth, rate limit,
-   transient network error) would silently leave `COMMENTS_TSV` empty
-   and read as "no prior record" — precisely the false negative this
-   whole re-check exists to prevent.
-
-   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-   **Read the printed `RECHECK_RESULT` line, not the shell variables
-   above it, as the durable answer.** This snippet is commonly run as
-   its own standalone tool invocation, and shell state — including
-   `EXISTING_STATUS` and `COMMENTS_FETCH_FAILED` — does not survive
-   past the shell process that set it once that invocation ends; a
-   later, separate step cannot read them back. The script's own last
-   line of output carries the decision instead, so it stays available
-   in this call's own recorded result. Act on it as your very next
-   step, with no other GitHub-mutating call in between:
-   `RECHECK_RESULT=FETCH_FAILED` → stop, do not post the success
-   evidence comment (an empty result from a **failed** fetch is
-   unknown state, never the same as an empty result from a
-   **successful** one). **Do not relabel a genuinely successful apply
-   as `failed`/`incomplete` here** — those are apply-level outcomes
-   with their own established meaning elsewhere in this contract
-   (notably: they never suppress a later run's post, unlike
-   `applied`/`clean`), so reusing either for a re-check-only failure
-   would misrepresent what actually happened to any later reader of
-   this PR's evidence trail and could itself skew that later run's own
-   both-converged decision. Post a **`recheck-failed`** record instead
-   — distinct from `failed`/`incomplete`/`rescan-failed`, and
-   preserving `<this-run-status>` (the real apply outcome) alongside
-   it — using the format in
-   [docs/idd-comment-minimization.md](../../docs/idd-comment-minimization.md#re-check-fetch-failure-comment):
-
-   ```text
-   <!-- idd-cleanup-evidence: recheck-failed apply-status:{this-run-status} applied:{N} failed:{N} skipped:{N} viewer-cannot-minimize:{N} -->
-   ```
-
-   plus a Notes line naming the re-check fetch failure. This still
-   gives F4 a recorded reason per the Mandatory F4 Cleanup Contract,
-   without terminating the agent's shell outright (which would abandon
-   F4 with no recorded outcome at all — worse than the duplicate this
-   re-check exists to prevent) and without falsely reporting a
-   converged apply as failed.
-   `RECHECK_RESULT=SKIP` → do not post.
-   `RECHECK_RESULT=POST` → construct and send the evidence comment now.
-
-   The API returns comments in creation-ascending order and the loop
-   never `break`s, so `EXISTING_STATUS` ends up holding the **latest**
-   trusted record, not merely the first one found — the same "latest
-   wins" reading `post-merge-cleanup.yml` uses. `RECHECK_RESULT` is
-   `SKIP` only when **both** `EXISTING_STATUS` and
-   `THIS_RUN_STATUS` are in `applied`/`clean` (the `#2213`
-   both-converged rule: a prior success alone must never suppress this
-   run's own non-success evidence, and a prior non-success alone must
-   never suppress this run's own success evidence). This narrows the
-   race window from "an entire workflow/agent run" to the gap between
-   this re-check and the POST call actually landing — it does not
-   close the race: GitHub's REST
-   API for issue/PR comments has no atomic create-if-absent /
-   compare-and-swap primitive, so two independent processes can still
-   both observe "no success record" if their fresh reads interleave
-   inside that narrowed gap. This is the same accepted, bounded
-   limitation already documented for the claim protocol (`GitHub
-   comments lack compare-and-swap`,
-   [idd-claim.instructions.md](idd-claim.instructions.md#pre-checks-all-five-must-pass),
-   [idd-resume.instructions.md](idd-resume.instructions.md#step-1--identify-claim-state))
-   and for the external-check-waiver helper
-   ([idd-helper-scripts.md](../../docs/idd-helper-scripts.md#external-check-waiver-helper)).
-   See
-   [docs/idd-comment-minimization.md](../../docs/idd-comment-minimization.md#server-side-fallback-optional)
-   for the corrected mechanism description and the residual-risk record
-   in `docs/idd-policy.md`'s Divergence Register
-   (`cleanup-evidence-dedup-recheck`).
+   Substitute `<pr-number>` and `<this-run-status>`. Guard the `gh api`
+   assignment (`if ! …`) or a failed fetch reads as "no prior record".
+   Do not POST from this print. Re-run at each evidence POST below and
+   act on `RECHECK_RESULT`: `FETCH_FAILED` → post `recheck-failed`
+   (never relabel the apply) per
+   [docs/idd-comment-minimization.md](../../docs/idd-comment-minimization.md#re-check-fetch-failure-comment);
+   `SKIP` → do not post; `POST` → that branch's evidence. Residual REST
+   TOCTOU is accepted — see that same doc's server-side fallback
+   section. SKIP requires the latest record **whose author is a
+   trusted marker actor**. An untrusted commenter's marker-prefixed
+   comment never counts as evidence.
 
    Evaluate the dry-run `status` field (this is a dry-run status; apply
    mode emits different values and is never invoked unless dry-run
@@ -543,37 +450,21 @@ Before any mutating action in F3, apply the
      After apply, record the outcome by the apply `status`. See
      `docs/idd-comment-minimization.md` for the exact formats:
 
-     <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-     If the apply `status` is `applied` (residual candidates minimized)
-     or `clean` (no-op, nothing left to minimize): run the fresh
-     re-check above **now, immediately before posting**, with
-     `<this-run-status>` substituted as this apply `status`, and act on
-     its printed `RECHECK_RESULT` (`FETCH_FAILED` / `SKIP` / `POST`);
-     on `POST`, send the evidence comment (`status`, `applied`,
-     `failed`, `skipped`, `viewer-cannot-minimize` counts for
-     `applied`, or a converged `clean` record) so this run's work is
-     recorded. Proceed to step 4.
+     If the apply `status` is `applied` or `clean`: run the fresh
+     re-check above **now** and act on `RECHECK_RESULT`. Proceed
+     to step 4.
 
-     The helper internally retries a whole scan-and-minimize pass, bounded,
-     when a fresh rescan still reports candidates after applying (a
-     candidate that only became eligible after the previous pass, e.g.
-     GraphQL read-after-write lag) — the common case still converges to
-     `applied`/`clean` within this one invocation. If the output also
-     reports `retryBoundExhausted: true` (visible as
-     `retryBoundExhausted=true` in table format), the retry bound was
-     reached while a rescan still found candidates. Route by the apply
-     `status` exactly as above, even then: if `status` is still
-     `applied`/`clean`, follow that evidence-comment path and note the
-     `retryAttempts` count as an informational, non-blocking
-     residual-lag signal rather than a defect; if `status` came back
-     `incomplete` (the fresh rescan found a genuine permission-blocked
-     remainder) or `failed`, follow the `failed`/`incomplete`
-     cleanup-failure path below instead — `retryBoundExhausted: true`
-     never overrides a non-success `status`.
+     The helper may retry a scan-and-minimize pass, bounded, when a
+     rescan still reports candidates (read-after-write lag). Route by
+     apply `status` even when `retryBoundExhausted: true`:
+     `applied`/`clean` still post evidence (`retryAttempts` is
+     informational); `incomplete`/`failed` still take the
+     cleanup-failure path below.
 
      If the apply `status` is `failed`, `incomplete`, or
-     `rescan-failed`: post the cleanup-failure comment format instead,
-     including the `viewer-cannot-minimize` count when non-zero.
+     `rescan-failed`: re-check, then post cleanup-failure (or
+     `recheck-failed`) as above, including the
+     `viewer-cannot-minimize` count when non-zero.
      `rescan-failed` means the confirming rescan itself errored after a
      mutation (already-applied work is preserved in the report but
      convergence was never confirmed) — note that distinction in the
@@ -583,20 +474,16 @@ Before any mutating action in F3, apply the
 
    - **`permission-blocked`**: skipped items exist with
      `viewerCanMinimize: false` and no apply-eligible candidates found.
-     Post a cleanup-permission-blocked comment listing the blocked
-     candidates and the count, then proceed to step 4.
+     Re-check, then post cleanup-permission-blocked (or
+     `recheck-failed`) listing the blocked candidates and the count,
+     then proceed to step 4.
 
    For the GraphQL fallback (helper unavailable): check
    `viewerCanMinimize` and `isMinimized` before minimizing; skip
    already-minimized comments and ones the viewer cannot minimize.
-   Re-validate the active claim before each mutation.
-   <!-- dotfiles-divergence: cleanup-evidence-dedup-recheck -->
-   Afterward, run
-   the fresh re-check above **now, immediately before posting**, with
-   `<this-run-status>` substituted as this fallback pass's own outcome
-   status, and act on its printed `RECHECK_RESULT`; on `POST`, post an
-   evidence comment summarizing the outcome (status, applied/skipped
-   counts with reasons). If the viewer cannot minimize any detected
+   Re-validate the active claim before each mutation. Before every
+   evidence POST (success or permission-blocked), re-check and act on
+   `RECHECK_RESULT`. If the viewer cannot minimize any detected
    candidates, post a cleanup-permission-blocked comment instead of
    exiting silently.
 
@@ -655,20 +542,22 @@ Before any mutating action in F3, apply the
      --porcelain --ignored --untracked-files=normal; git stash list;
      git rev-list --all --not --remotes --count'`
 
-   Generated output is disposable only if a configured project
-   command can reproduce it. Preserve anything else first. Copy
-   secrets (e.g. `.env`) out only — never commit or push them.
-   Non-secret work may go to a **different** ref or be copied out —
-   not to `<branch-name>` itself, which this step deletes next.
-   Immediately before each `worktree remove`, re-validate this
-   session's claim and worktree lock (`idd-claim.instructions.md`);
-   stop if either is no longer ours.
-   Then delete the worktree, then the branch:
+   Generated output is disposable only when a configured command
+   reproduces it; preserve anything else. Copy secrets (e.g. `.env`)
+   out — never commit or push them. Copy other work to a different
+   ref or path; delete `<branch-name>` next.
+   Before each `git worktree remove`, `cd` to the surviving primary
+   worktree; keep that cwd for every removal and remaining F4 work
+   (branch/remote deletion, digest, revalidation, unclaim, and
+   `gh`/helper calls). Before each removal, revalidate the claim and
+   worktree lock (`idd-claim.instructions.md`); stop if either is not
+   ours. If it fails with `fatal: working trees containing submodules
+   cannot be moved or removed`, retry
+   `git worktree remove --force <path>` from that cwd only after
+   preserving anything worth keeping. Then remove the worktree, then
+   its branch:
 
-   - `git worktree remove <path>`. If it fails with `fatal: working
-     trees containing submodules cannot be moved or removed`, retry
-     with `git worktree remove --force <path>`. Use `--force` only
-     after that review finds nothing worth preserving.
+   - `git worktree remove <path>`.
    - `git branch -d <branch-name>` (the baseline permission profile
      denies `-D`; see `docs/permissions.md`). Local `{development-branch}`
      was already fast-forwarded to the merge commit by the previous
@@ -702,8 +591,8 @@ Before any mutating action in F3, apply the
 
 ## F5 — Loop
 
-Return to `idd-discover.instructions.md` and pick the next issue.
+Return to `idd-discover.instructions.md` only when continuing in-process.
 F4-complete/F5 is the **safe session-exit boundary**: under context
-pressure, exit here for a fresh Discover session rather than looping
-in-process — see the autopilot operating model in
+pressure, exit directly here; a fresh session re-enters Discover — see
+the autopilot operating model in
 [`docs/idd-workflow.md`](../../docs/idd-workflow.md).

@@ -72,13 +72,13 @@ cover the full activity universe (human reviewers plus advisory bot
 surfaces such as Copilot, CodeRabbit, Codex connectors, and CI bots).
 
 The advisory-wait window is Copilot-only
-(`idd-advisory-wait.instructions.md`) and does not cover any
-repository-configured non-Copilot `advisoryBotLogins` (e.g. CodeRabbit
-or a Codex connector). F2/F3 MUST NOT merge on a bare CI-green signal:
-the **Review currency** check below must confirm a fresh snapshot whose
-`review-watermark` covers the latest activity timestamp, so a
-non-Copilot finding landing shortly after CI still returns the
-workflow to E1 instead of merging over it.
+(`idd-advisory-wait.instructions.md`) and does not cover non-Copilot
+`advisoryBotLogins`. That is this window, not all of F2: configured
+`secondaryQuietWindow` is the quiet-window blocker below (until
+`elapsed: true`, not until `secondaryBotLogin` reviews HEAD).
+F2/F3 MUST NOT merge on bare CI-green: **Review currency** must
+confirm a fresh `review-watermark` covers latest activity, so a late
+non-Copilot finding still returns to E1.
 
 **Nonce passthrough**: when invoking the readiness collector below
 (directly, or via the documented merge-gate helper reference), pass
@@ -275,7 +275,8 @@ turns an operator-visible failure into a silent stall.
   [Terminal routing](idd-advisory-wait.instructions.md#terminal-routing-1570);
   an unwaived `copilot-terminal-unavailable` in `blockers[]` stops here
   with that section's hold regardless.
-- **Secondary advisory bot quiet window** (opt-in, off by default): when
+- **Secondary advisory bot quiet window** (opt-in, off by default; this
+  repository configures `PT1H`): when
   `advisoryWait.secondaryQuietWindow` (#2335) is configured, the readiness
   report's `secondaryQuietWindow.elapsed` must be `true` before this check
   is satisfied — a `secondary-quiet-window` entry in `blockers[]` means the
@@ -425,30 +426,26 @@ turns an operator-visible failure into a silent stall.
   rollup. The signal never changes `route` itself; any other blocking
   cause makes it `false`, and the gate still routes to E1/E4. Fails
   closed: an unusable check makes this condition unmet.
-- <!-- dotfiles-divergence: pre-merge-reset-guard -->
-  **Closing-set and impact-checklist re-verification** (D3.5/D3.7
-  re-run against current HEAD, #2749): confirm the local worktree is
-  checked out at the PR's current HEAD exactly (`git fetch`, then, if a
-  resumed or external-push session left it stale, `git switch
-  {branch-name}` — never a detaching `git checkout <SHA>`, which would
-  break the claim revalidation gate's `git branch --show-current`
-  check — followed by `git reset --hard` to the current PR HEAD SHA so
-  the worktree lands exactly there while staying attached to the
-  claimed branch). First confirm the worktree is clean
-  (`git status --porcelain`); a resumed or externally-touched worktree
-  can hold uncommitted local changes unrelated to the stale HEAD, and
-  `git reset --hard` discards them irrecoverably. If dirty, stop and
-  post a hold note rather than discarding local work; only an
-  operator-confirmed discard may proceed. Even when clean, confirm
-  local `HEAD` is an ancestor of (or equal to) the PR's current HEAD
-  SHA (`git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`) before
-  resetting: `git status --porcelain` never reports committed-but-unpushed
-  local commits, which `git reset --hard` would silently drop from the
-  branch's reachable history. If local `HEAD` is not an ancestor
-  (diverged or strictly ahead), stop and post a hold note the same way
-  instead of resetting. D3.5 step 7's `git log` and D3.7's
-  inherited `git diff` both read local git state, not the remote PR
-  directly. Then re-run `idd-pr-submit.instructions.md`'s D3.5 steps
+- <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
+  **Closing-set and impact-checklist re-verification**:
+  after fetch, require empty `git status --porcelain` and
+  `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`; else hold. For
+  paths in `git ls-tree --full-tree -r --name-only "$PR_HEAD_SHA"`, run
+  `git ls-files -o --exclude-standard -- ":(top)$path"` and again with
+  `-i` added (`git ls-files -o -i --exclude-standard --
+  ":(top)$path"` — `-i` alone is invalid without `-o`/`-c`); either
+  output holds. Use `git switch {branch-name}` (not
+  detached) to reattach a detached worktree, then confirm `git branch
+  --show-current` is `{branch-name}` — hold only if reattachment fails;
+  after switching, require `git merge-base --is-ancestor HEAD
+  "$PR_HEAD_SHA"` again (the branch just switched to can carry
+  different commits than the detached HEAD the first ancestry check
+  ran against) — hold if it fails; on pass, run `git reset --hard
+  "$PR_HEAD_SHA"` (an ancestry pass alone leaves the worktree at
+  whatever ancestor commit it was already on, not necessarily this
+  SHA)
+  — D3.5/D3.7 read local state, not the remote PR. Then re-run
+  `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the
   commit-message closing-keyword scan) and D3.7 (the
   IDD-impact-checklist re-derivation) against that HEAD. Skip D3.5

@@ -1,16 +1,16 @@
 # IDD — Claim Phase (Lite) A5
 
-Lite profile for weak / local models. Same semantics as
-`idd-claim.instructions.md`, except the forced-handoff bind below.
-Prefer helpers over prose.
+Lite profile; same semantics as `idd-claim.instructions.md`, except
+forced-handoff. Prefer helpers.
 
-**Load this file alone** for the claim phase. Do not open the standard
-claim file in the same turn.
+**Load alone** for Claim; do not open standard.
 
-**Scope note**: this file always covers a single, already-selected
-issue (the lite profile excludes open-ended Discover). Every "return
-to Discover and pick the next candidate" branch in the standard file
-collapses to a single outcome here: **STOP and report; do not claim**.
+**Scope**: one selected issue; no open-ended Discover. Standard
+"Return to Discover" branches mean **STOP and report; do not claim**.
+Fresh candidate: before claim, if context pressure prevents completing Claim
+through F4, report for handoff; stop; do not claim. Recovery unchanged.
+Make no claim-stage event/marker, branch/worktree, or issue-state change.
+(#3144; preventive)
 
 ## Helper runtime contract
 
@@ -47,8 +47,8 @@ Stop and ask the operator when:
 - an expected helper is missing, fails, or disagrees with live state;
 - pre-check (a)-(e) fails for any reason (see below) — no fallback
   candidate exists in lite scope;
-- the claim-state helper (`--fresh-claim-gate`) returns `already-claimed`,
-  or the written claim-state rules find a live non-stale competitor;
+- the fresh-claim gate returns `already-claimed` for a non-owner, or the
+  written rules find a non-stale competitor;
 - forced-handoff evidence exists but mismatches live claim/branch/PR
   state, or `forcedHandoff.mode` is not `human-gated`;
 - claim verification (below) fails any race-safe check;
@@ -139,9 +139,8 @@ activation-nonce for `newClaimId`) first, then Claim verification's
 **Forced-handoff adopt-verbatim** case (step 5's settle-delay + nonce
 recompute only).
 
-**Otherwise** (no recorded `{claim-id}` and no matching forced-handoff
-evidence), run the write-gate helper immediately before the claim
-write:
+**Otherwise** (no recorded `{claim-id}`, no forced-handoff evidence, or
+verified released-owner retry), run write-gate before claim write:
 
 ```sh
 node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
@@ -152,7 +151,7 @@ node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
 | --- | --- |
 | `claimable` | Proceed to Claim execution (fresh) |
 | `stale-reclaimable` | Proceed to Claim execution (takeover) |
-| `already-claimed` | **STOP** — live competitor or race |
+| `already-claimed` | **STOP** unless `winning_claim_id` matches a `{claim-id}` this session already recorded (`--read-tokens`) as its own prior, voluntarily-released claim for this issue -- never a `winning_claim_id` merely read from this helper response; when it matches, proceed to Claim execution as a fresh claim and use the authorized `--takeover` acquisition for the retained worktree-local lock |
 <!-- dprint-ignore-end -->
 
 Written fallback (`instructions-only` profile only — per the Helper
@@ -199,8 +198,10 @@ deliberately stricter bind than the full spec's opt-in
 (`requireAuthorMatchesForcedBy`) — this blocks a
 same-identity self-signed hijack where a displaced session spoofs a
 different `forcedBy` name while posting the marker itself; that author
-is authorized under `forcedHandoff.authorityPolicy`;
-`forcedHandoff.mode` is `human-gated`; `oldAgentId` / `oldClaimId` /
+is authorized under `forcedHandoff.authorityPolicy` (this repository:
+`owners-and-maintainers-only`);
+`forcedHandoff.mode` is `human-gated` (this repository's configured
+mode); `oldAgentId` / `oldClaimId` /
 `branch` all match the active claim; and, when an open PR already backs
 this claim, the marker's evidence has `contextScope` of
 `issue-plus-pr` with `linkedPr` naming that PR — an issue-only
@@ -214,14 +215,11 @@ failure, the active claim is unchanged; treat it under the rules above.
 
 ### (d) Open PR
 
-No helper. Re-check live GitHub state: no open PR may close or
-reference this issue unless its head branch matches the `branch` field
-of an inheritable claim — the already-verified active claim, the stale
-claim being taken over, the last voluntarily released claim, verified
-forced-handoff evidence (only when its branch and linked-PR fields
-match this live GitHub state), or a legacy migration source. Check
-both linked issues and PR-body closing keywords. A non-inheritable
-matching PR → **STOP**.
+No helper. Re-check live GitHub state: an open PR may close or reference
+this issue only when its head branch matches an inheritable claim — the
+verified active, stale, released, forced-handoff (matching branch and
+linked PR), or legacy migration source. Check linked issues and PR
+closing keywords. A non-inheritable match → **STOP**.
 
 ### (e) Branch collision
 
@@ -240,25 +238,27 @@ before 40 if the cut lands mid-token **and** a `-` exists there;
 otherwise keep the hard 40-char cut); strip trailing `-`; empty result
 → `task`.
 
-Then scan for collisions:
-
 ```sh
-git worktree list | grep "issue/<N>-"
+git worktree list --porcelain -z
 gh api "repos/{owner}/{repo}/git/matching-refs/heads/issue/<N>-" \
-  --jq '.[].ref | sub("^refs/heads/"; "")'
+--jq '.[].ref | sub("^refs/heads/"; "")'
 ```
+
+Parse NUL records; detached: before metadata, require
+`git -C <worktree> rev-parse --show-toplevel` to match the canonical
+recorded root; failure/mismatch → STOP as occupied/unreadable; then compare
+`head-name`/`BISECT_START`: invalid/target → STOP; unrelated → absent;
+prunable frees if unrelated (PR #3154 review).
 
 <!-- dprint-ignore-start -->
 | Match found? | Action |
 | --- | --- |
-| No local or remote match | Proceed to claim posting |
-| Match corresponds to an inheritable claim (per (d) above) | Proceed — expected branch |
-| Match does not correspond, but an active non-stale claim references it | **STOP** — concurrent session |
-| Match does not correspond, and no active claim references it | **STOP** — hold note, possible orphaned branch; operator review |
+| No local/remote match | Proceed |
+| Stale/released + live/unknown | **STOP** — owner/FH + id |
+| Inheritable match, no live local worktree | Proceed — expected |
+| Non-corresponding match + active claim | **STOP** — concurrent |
+| Non-corresponding match + no active claim | **STOP** — hold/orphan review |
 <!-- dprint-ignore-end -->
-
-No remote branch with the computed name may already exist unless it is
-inheritable per the table above.
 
 Before activation, re-fetch the authoring label and paginated owner
 log. A current/incomplete hold blocks; only exact

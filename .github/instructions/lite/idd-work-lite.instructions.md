@@ -113,6 +113,9 @@ worktree removal) behind the
     --claim-id <id> --nonce <nonce>` (same nonce value as the A5 write;
     omitting `--nonce` drops it, since the helper overwrites rather than
     merges) for this worktree's own copy, before it installs anything.
+    After the hook succeeds, `cd` into the new sibling (`-x <noop>` never
+    changes the caller's directory; resolve the path from
+    `git worktree list`) before steps 28-30.
 20. If the hook cannot acquire the lock or record tokens, create the
     worktree without the hook.
 21. <!-- dotfiles-divergence: master-branch --> If WorkTrunk is unavailable, use
@@ -332,22 +335,15 @@ pass asks, never a separate pass to run on top of the one that ran.
    Neither a delegate that succeeded and returned a readable list with no issues
    in it, nor one that failed but still emitted a readable list, is this case:
    both are genuine results, so continue to step 3.
-3. Otherwise, if the critique pass reports zero issues, check the `fix-validate`
-   floor.
-4. <!-- dotfiles-divergence: lite-telemetry-parity -->
-   Zero-issue round confirmed (either branch below is still a zero-finding
-   round and must not lose its record): invoke `critiqueLoop.telemetryHook`
-   (C1) with zero findings/accepted/rejected counts — fire-and-forget.
-   Invoke it (here and at C4) by piping the round's JSON payload as
-   stdin to the configured `command` — this repository's own
-   `critiqueLoop.telemetryHook.command` is the repo-local PATH binary
-   `idd-critique-telemetry` (`home/dot_local/bin/`, applied via
-   chezmoi; not an `idd-skill` package facade, so no
-   ephemeral-npx/package-manager resolution applies), which appends
-   one compacted JSONL line to its own log and never blocks or fails
-   the round on a write error.
-5. If the floor has not passed, continue to C5 to repair validation.
-6. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
+3. Otherwise, if the critique pass reports zero issues, invoke
+   `critiqueLoop.telemetryHook` (C1; see `docs/idd-workflow.md`'s
+   "Critique pass invocation" section for the JSON-on-stdin payload and
+   fire-and-forget contract) with zero findings/accepted/rejected
+   counts — fire-and-forget — then check the `fix-validate` floor. A round
+   that continues to C5 for the floor only is still a zero-finding round
+   and must not lose its record.
+4. If the floor has not passed, continue to C5 to repair validation.
+5. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
    now.
 
 ### C3 — Score issues
@@ -359,18 +355,20 @@ pass asks, never a separate pass to run on top of the one that ran.
 ### C4 — Accept / Reject and loop check
 
 1. Accept high issues.
-2. <!-- dotfiles-divergence: lite-telemetry-parity -->
-   Invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
-   severity, accepted/rejected counts, and delegate usage — fire-and-forget.
-   This fires once this round's Accept/Reject decision is final, regardless
-   of which step below is taken next. A delegate's own fail-closed hold
-   (`docs/idd-workflow.md`) stops before C2 and has no telemetry record.
-3. If accepted issues remain and the floor has not passed, continue to C5.
-4. Otherwise, if no accepted issues remain and the floor has passed, open and
+2. If accepted issues remain and the floor has not passed, continue to C5.
+3. Otherwise, if no accepted issues remain and the floor has passed, open and
    follow `idd-pr-submit-lite.instructions.md` now.
-5. Otherwise, if only low accepted issues remain after more than 3 loops and
+4. Otherwise, if only low accepted issues remain after more than 3 loops and
    the floor has passed, open and follow `idd-pr-submit-lite.instructions.md` now.
-6. Otherwise continue to C5.
+5. Otherwise continue to C5.
+
+Once the exit above is chosen (before C5, PR submission, or a C4 hold),
+invoke `critiqueLoop.telemetryHook` (C1; see `docs/idd-workflow.md`'s
+"Critique pass invocation" section for the JSON-on-stdin payload and
+fire-and-forget contract) with this round's findings,
+severity, accepted/rejected counts, and delegate usage — fire-and-forget.
+A delegate's own fail-closed hold (`docs/idd-workflow.md`) stops before
+C2 and has no telemetry record.
 
 ### C5 — Fix accepted issues
 

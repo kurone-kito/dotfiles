@@ -17,6 +17,14 @@ takeover, return to resume lite Step 1.
 - **`instructions-only`**: use the written S1–S5 steps without helpers,
   still with a server-anchored `now` for the quiet window.
 
+Every `node scripts/<name>.mjs` command below is the **source-repo /
+vendored-node** invocation form. Under `package-manager` /
+`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
+command's profile-selected equivalent from
+`docs/idd-helper-scripts.md`. A helper missing on the active profile
+is a missing-helper case under the rule above (hold and stop), not a
+reason to fall through.
+
 ## Helper-first commands (helper-enabled profiles)
 
 ```sh
@@ -85,11 +93,19 @@ Takeover only if latest valid trusted `claimed-by` `created_at` is
 `heartbeatOverdue` is **diagnostic only**. It does not shorten the 12 h
 gate.
 
+Before S4/posting, rerun helper; require `stale`/`takeover`,
+`evidence.local_worktree.status: absent`; fail → **STOP** (#3141).
+
 ## S4 — Race-safe recheck (immediately before write)
 
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
-2. Re-run `resume-claim-routing.mjs --issue <N>`.
+2. Re-run `resume-claim-routing.mjs --issue <N>` (resolve the exact
+   command from `docs/idd-helper-scripts.md` if unsure). Same
+   fail-closed requirement as the pre-S4 check above: the result must
+   still show `state: stale`, `action: takeover`, and
+   `evidence.local_worktree.status: absent`; occupied, unreadable,
+   unknown, missing, or contradictory evidence means STOP.
 3. Active claim still the same non-owned `{claim-id}`.
 4. <!-- dotfiles-divergence: claim-timing --> Still stale (≥ 12 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not

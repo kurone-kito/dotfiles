@@ -50,7 +50,10 @@ in the snapshot/ReviewItems_snapshot and report them as suspicious
 context when they affect a decision.
 
 When helper runtime is enabled, prefer the read-only helper
-`node scripts/review-activity-snapshot.mjs --pr {pr-number}` to collect
+`node scripts/review-activity-snapshot.mjs --pr {pr-number}` (the
+source-repo/vendored-node form; resolve the profile-selected
+equivalent from `docs/idd-helper-scripts.md` for `package-manager` /
+`ephemeral-npx`) to collect
 `{head-SHA}`, `{max-activity-updatedAt}`, `{total-item-count}`, and CI
 completion timestamps. Pass trusted marker actors with
 `--trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"`.
@@ -66,10 +69,11 @@ Additionally, fetch the **current CI state** for `{head-SHA}`:
 treated-as-passed) CI run as `{latest-ci-completed-at}`, or `none` if no
 CI pass exists yet for this HEAD.
 
-**Non-Copilot advisory safety net.** This E1 snapshot and Step 2's
-watermark are the only settle/wait coverage non-Copilot advisory bots
-get (`idd-advisory-wait.instructions.md`'s Scope section) — why Step 1
-fetches the full activity universe and Step 2 watermarks all of it.
+**Non-Copilot advisory safety net.** Snapshot and Step 2
+watermark cover non-Copilot bots in this phase. Not exclusive:
+configured F2 `secondaryQuietWindow` waits until `elapsed`
+since last substantive review activity, not until
+`secondaryBotLogin` reviews HEAD.
 
 **Step 2 — Record the watermark.** Using the `{head-SHA}` stored at the
 start of Step 1, compute `{max-activity-updatedAt}` as the highest
