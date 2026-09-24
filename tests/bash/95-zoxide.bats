@@ -28,7 +28,7 @@ setup() {
   # assertions below regardless of what this test mocks.
   SAFE_BIN_DIR="$BATS_TEST_TMPDIR/safe-bin"
   mkdir -p "$SAFE_BIN_DIR"
-  for tool in cat awk grep sed zsh sh bash env chmod; do
+  for tool in cat awk grep sed zsh sh bash env chmod cp mkdir; do
     tool_path="$(command -v "$tool" 2> /dev/null)" || continue
     ln -sf "$tool_path" "$SAFE_BIN_DIR/$tool"
   done
@@ -38,6 +38,30 @@ setup() {
 
 teardown() {
   export PATH="$_ORIG_PATH"
+}
+
+require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
+}
+
+# Copies the real dot_profile/dot_bash_profile/dot_bashrc chain into a
+# fresh $HOME, mirroring conf-d-double-sourcing.bats's setup, so a real
+# `bash -li` login+interactive startup exercises the actual files
+# rather than an extracted snippet.
+install_real_bash_rc_chain() {
+  REPO_HOME="$BATS_TEST_DIRNAME/../../home"
+  cp "$REPO_HOME/dot_profile" "$HOME/.profile"
+  cp "$REPO_HOME/dot_bash_profile" "$HOME/.bash_profile"
+  cp "$REPO_HOME/dot_bashrc" "$HOME/.bashrc"
+}
+
+# Same, for the zsh .zprofile/.zshrc chain.
+install_real_zsh_rc_chain() {
+  REPO_HOME="$BATS_TEST_DIRNAME/../../home"
+  ZDOTDIR="$HOME/.config/zsh"
+  mkdir -p "$ZDOTDIR"
+  cp "$REPO_HOME/dot_config/zsh/dot_zprofile" "$ZDOTDIR/.zprofile"
+  cp "$REPO_HOME/dot_config/zsh/dot_zshrc" "$ZDOTDIR/.zshrc"
 }
 
 # Extracts from the trailing "# Prompt" block through end of file, since
@@ -167,11 +191,22 @@ MOCK
   assert_equal "${_ZO_DOCTOR:-}" ""
 }
 
+@test "login+interactive bash startup ends with __zoxide_hook in PROMPT_COMMAND (real .profile/.bashrc chain)" {
+  make_starship_mock
+  make_zoxide_mock
+  install_real_bash_rc_chain
+
+  run bash -li -c 'echo "$PROMPT_COMMAND"'
+  assert_success
+  assert_output --partial "__zoxide_hook"
+}
+
 # ---------------------------------------------------------------------------
 # Functional — zsh (unaffected by the bug, kept symmetric)
 # ---------------------------------------------------------------------------
 
 @test "zsh chpwd_functions still contains __zoxide_hook after starship initializes" {
+  require_zsh
   make_starship_mock
   make_zoxide_mock
 
@@ -181,9 +216,21 @@ MOCK
 }
 
 @test "zsh skips zoxide init without error when zoxide is not in PATH" {
+  require_zsh
   make_starship_mock
 
   run zsh -fc "$(extract_zsh_prompt_and_zoxide_block); print -r -- \${_ZO_DOCTOR:-}"
   assert_success
   assert_output ""
+}
+
+@test "login+interactive zsh startup ends with __zoxide_hook in chpwd_functions (real .zprofile/.zshrc chain)" {
+  require_zsh
+  make_starship_mock
+  make_zoxide_mock
+  install_real_zsh_rc_chain
+
+  run env ZDOTDIR="$ZDOTDIR" zsh -li -c 'print -r -- ${chpwd_functions[*]}'
+  assert_success
+  assert_output --partial "__zoxide_hook"
 }
