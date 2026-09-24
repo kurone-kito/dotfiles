@@ -52,3 +52,12 @@ fi
 if command -v starship >/dev/null 2>&1; then
   eval "$(starship init bash)"
 fi
+
+# zoxide (smarter cd command) — must run after every earlier block that
+# can replace PROMPT_COMMAND (starship replaces it wholesale instead of
+# appending, which otherwise hides zoxide's own hook from its doctor
+# check). https://github.com/ajeetdsouza/zoxide
+if command -v zoxide >/dev/null 2>&1; then
+  _ZO_DOCTOR=0
+  eval "$(zoxide init bash)"
+fi

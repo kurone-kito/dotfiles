@@ -49,3 +49,12 @@ fi
 if (( $+commands[starship] )); then
   eval "$(starship init zsh)"
 fi
+
+# zoxide (smarter cd command) — kept after starship for symmetry with
+# dot_bashrc; zsh's independent precmd_functions/chpwd_functions arrays
+# avoid the bash-side false positive this ordering fixes there.
+# https://github.com/ajeetdsouza/zoxide
+if (( $+commands[zoxide] )); then
+  _ZO_DOCTOR=0
+  eval "$(zoxide init zsh)"
+fi
