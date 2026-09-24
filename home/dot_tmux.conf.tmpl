@@ -21,4 +21,12 @@ set -g history-limit 10000
 
 setw -g mouse on
 
+{{if eq .chezmoi.os "windows" -}}
+# psmux's source-file does not support/strip tmux's -q flag (unlike
+# real tmux), so this Windows branch guards the optional shared local
+# override's existence directly instead of relying on -q to skip it
+# silently.
+if-shell 'Test-Path $HOME\.tmux.conf.local' 'source-file ~/.tmux.conf.local'
+{{- else -}}
 source-file -q ~/.tmux.conf.local
+{{- end}}

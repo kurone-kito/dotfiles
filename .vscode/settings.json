@@ -19,7 +19,6 @@
     ".imgbotconfig": "json",
     "dot_curlrc": "shellscript",
     "dot_inputrc": "shellscript",
-    "dot_tmux.conf": "properties",
     "dot_vimrc": "viml",
     "dot_wgetrc": "shellscript",
     "pstoprc": "properties",
