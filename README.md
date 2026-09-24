@@ -183,6 +183,16 @@ That keeps PSReadLine inline predictions available inside `psmux` panes
 without putting the psmux-only `allow-predictions` option in the shared
 `~/.tmux.conf`, which standard tmux does not understand.
 
+`psmux`'s `source-file` command does not support or strip tmux's `-q`
+(quiet) flag, unlike real tmux — passing it produces a literal,
+un-expanded path and a startup config warning instead of silently
+skipping a missing file. Because of that, `~/.tmux.conf` is deployed
+from a chezmoi template (`home/dot_tmux.conf.tmpl`) whose Windows
+branch sources the optional `~/.tmux.conf.local` override through a
+`Test-Path`-guarded `if-shell` instead of `source-file -q`; every other
+platform keeps the plain `source-file -q ~/.tmux.conf.local` line,
+since real tmux handles `-q` correctly there.
+
 ### Zellij Web
 
 The shared Zellij config enables the built-in web server and session sharing
