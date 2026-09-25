@@ -26,20 +26,31 @@ in this repository.
 ## User-global instructions
 
 In addition to the project-level layer above, this repository ships
-a **user-global** instructions layer via chezmoi. Each supported AI
-CLI reads one file from the user's home directory before loading any
-repository-specific instructions:
+a **user-global** instructions layer via chezmoi. Deployed text comes
+from the shared template `home/.chezmoitemplates/ai-agent-user-global`,
+and each per-agent `*.tmpl` calls it.
 
-| Agent              | Chezmoi source                                 | Deployed to                          |
-| ------------------ | ---------------------------------------------- | ------------------------------------ |
-| GitHub Copilot CLI | `home/dot_copilot/copilot-instructions.md`     | `~/.copilot/copilot-instructions.md` |
-| Codex CLI          | `home/dot_codex/AGENTS.md`                     | `~/.codex/AGENTS.md`                 |
-| Claude Code        | `home/dot_claude/CLAUDE.md`                    | `~/.claude/CLAUDE.md`                |
-| Gemini CLI         | `home/dot_gemini/GEMINI.md`                    | `~/.gemini/GEMINI.md`                |
+| Agent              | Chezmoi source                                                          | Deployed to                                                                 |
+| ------------------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| GitHub Copilot CLI | `home/dot_copilot/copilot-instructions.md.tmpl`                         | `~/.copilot/copilot-instructions.md`                                        |
+| Codex CLI          | `home/dot_codex/AGENTS.md.tmpl`                                         | `~/.codex/AGENTS.md`                                                        |
+| Claude Code        | `home/dot_claude/CLAUDE.md.tmpl`                                        | `~/.claude/CLAUDE.md`                                                       |
+| Gemini CLI         | `home/dot_gemini/GEMINI.md.tmpl`                                        | `~/.gemini/GEMINI.md`                                                       |
+| Antigravity CLI    | `home/dot_gemini/GEMINI.md.tmpl` and `home/dot_gemini/AGENTS.md`        | `~/.gemini/GEMINI.md` (shared body) and `~/.gemini/AGENTS.md` (pointer)     |
+| OpenCode           | `home/dot_config/opencode/AGENTS.md.tmpl`                               | `~/.config/opencode/AGENTS.md`                                              |
+
+Grok Build has no dedicated source. Its `[compat.claude]` layer,
+enabled by default
+(<https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/05-configuration.md>),
+scans `~/.claude/CLAUDE*.md`, which `home/dot_claude/CLAUDE.md.tmpl`
+deploys, so it inherits the Claude Code baseline. See roadmap #491.
 
 **Precedence rule**: project-level instructions always take
 precedence over the user-global file. Each user-global file opens
 with an explicit deference paragraph stating this rule.
+
+Edit the shared template for cross-agent changes. Edit a single
+`.tmpl` only for agent-specific wording.
 
 The user-global layer is repository-independent and intentionally
 smaller than the canonical `.github/copilot-instructions.md`. It
@@ -54,8 +65,8 @@ ladder), Coding standards, and Guardrails.
   early.
 - Duplicate only the minimum guidance needed for non-Copilot agents to
   act safely and predictably.
-- Extract shared text into a neutral document only after benchmarks
-  show that the Copilot-first workflow does not regress.
+- Edit the shared template for cross-agent changes. Edit one `.tmpl`
+  only for agent-specific wording.
 - When a rule uses a Copilot-specific feature name, document the
   underlying intent so other agents can map it to their own interaction
   model.
@@ -66,6 +77,8 @@ ladder), Coding standards, and Guardrails.
   instruction file for any agent.
 - When updating AI guidance, review `README.md`,
   `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`,
-  `GEMINI.md`, and the four user-global source files under
-  `home/dot_copilot/`, `home/dot_codex/`, `home/dot_claude/`,
-  and `home/dot_gemini/` together.
+  `GEMINI.md`, `home/.chezmoitemplates/ai-agent-user-global`, and the
+  user-global sources under `home/dot_copilot/`, `home/dot_codex/`,
+  `home/dot_claude/`, `home/dot_gemini/`, and
+  `home/dot_config/opencode/` together. Those sources are `.tmpl`
+  files plus `home/dot_gemini/AGENTS.md`.
