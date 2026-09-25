@@ -1,8 +1,8 @@
 {{- template "ai-agent-user-global" (dict
-  "agent" "Gemini CLI"
+  "agent" "Gemini CLI and Antigravity CLI"
   "path" "~/.gemini/GEMINI.md"
-  "breakBeforeFrom" false
-  "precedenceTail" " If a repository\nprovides its own `GEMINI.md`, `.github/instructions/*.md`, or similar\nguidance, follow those rules wherever they differ from or extend this\nfile."
+  "breakBeforeFrom" true
+  "precedenceTail" " If a repository\nprovides its own `GEMINI.md`, `.github/instructions/*.md`, or similar\nguidance, follow those rules wherever they differ from or extend this\nfile. Antigravity CLI also reads `~/.gemini/AGENTS.md`, which points here."
   "memoryNote" false
   "copilotConversation" false
   "noTtyPrecheck" false
