@@ -56,19 +56,22 @@ the repository specifies a different convention.
      `commit.gpgsign`, but a project may also opt in to persistent
      SSH signing (e.g., `gpg.format = ssh` plus a path-style
      `user.signingkey`). Respect that configuration as-is.
-     - **No-TTY pre-check.** Skip the GPG attempt itself and treat
-       it as an immediate, pre-classified category (P) pinentry/TTY
-       failure — still consuming attempt 1 of the bounded ladder,
-       with no actual signing call made — only when **both** hold:
-       no TTY is attached to the current process (`tty -s` /
-       `[ -t 0 ]` fails), **and** non-interactive GPG signing is not
-       already explicitly configured (no `pinentry-mode loopback` in
-       the effective `gpg.conf`, and no `allow-loopback-pinentry` in
-       the effective `gpg-agent.conf`). This check only detects an
-       existing setup decision — it is not a recommendation to add
-       one; see the `pinentry-mode loopback` guidance below. If a
-       TTY is present, or loopback-mode signing is already
-       configured, still attempt GPG here as normal.
+     - **No-TTY pre-check (GPG only).** When the configured signing
+       method is GPG, skip the GPG attempt itself and treat it as an
+       immediate, pre-classified category (P) pinentry/TTY failure —
+       still consuming attempt 1 of the bounded ladder, with no
+       actual signing call made — only when **both** hold: no TTY is
+       attached to the current process (`tty -s` / `[ -t 0 ]` fails),
+       **and** non-interactive GPG signing is not already explicitly
+       configured (no `pinentry-mode loopback` in the effective
+       `gpg.conf`, and no `allow-loopback-pinentry` in the effective
+       `gpg-agent.conf`). This check only detects an existing setup
+       decision — it is not a recommendation to add one; see the
+       `pinentry-mode loopback` guidance below. If a TTY is present,
+       or loopback-mode signing is already configured, still attempt
+       GPG here as normal. When the configured method is already
+       persistent SSH signing instead, this pre-check does not
+       apply — attempt that configured SSH signer here as normal.
 
   2. **Classify the failure by category** (do not rely on exact
      English/locale strings — read the category from stderr):

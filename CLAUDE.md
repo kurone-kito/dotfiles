@@ -61,8 +61,9 @@ whole ladder is **at most three signing attempts**; each step is a
      attempt 1, no signing call made — only when **both** hold: no
      TTY is attached (`tty -s` / `[ -t 0 ]` fails), and
      non-interactive GPG signing is not already configured (no
-     `pinentry-mode loopback` in `gpg.conf`, no
-     `allow-loopback-pinentry` in `gpg-agent.conf`). Detects
+     `pinentry-mode loopback` in the effective `gpg.conf`, no
+     `allow-loopback-pinentry` in the effective `gpg-agent.conf`).
+     Detects
      existing config only — never configure loopback pinentry
      automatically. Otherwise (a TTY is present, or loopback signing
      is already configured), attempt GPG here as normal.
