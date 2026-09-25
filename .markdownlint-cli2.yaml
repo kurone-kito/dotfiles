@@ -11,3 +11,4 @@ ignores:
   - home/dot_codex/AGENTS.md.tmpl
   - home/dot_copilot/copilot-instructions.md.tmpl
   - home/dot_gemini/GEMINI.md.tmpl
+  - home/dot_config/opencode/AGENTS.md.tmpl
