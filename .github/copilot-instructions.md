@@ -408,16 +408,19 @@ CI runs both suites on every push and pull request
   chain into a fresh `$HOME`, not an `eval` of an extracted snippet.
   See `tests/bash/conf-d-double-sourcing.bats` for the canonical
   example.
-- **zsh availability guard.** Every zsh-specific test must skip (not
-  fail) when zsh is unavailable, via the `require_zsh()` helper
-  pattern. See `tests/bash/conf-d-double-sourcing.bats` for the
-  canonical example.
-- **Mocked-binary-on-`PATH` dependency mocking.** A test that depends
-  on a real external binary's presence, absence, or version-dependent
-  behavior should mock it via a fake executable prepended onto `PATH`,
-  rather than requiring the real tool to be installed. See
-  `tests/bash/70-fzf.bats` and `tests/bash/75-worktrunk.bats` for
-  canonical examples.
+- **zsh availability guard.** A zsh-specific test must skip (not fail)
+  when zsh is unavailable, via the `require_zsh()` helper pattern. See
+  `tests/bash/conf-d-double-sourcing.bats` for the canonical example.
+  `tests/bash/75-worktrunk.bats`'s zsh cases predate this convention
+  and do not yet apply it.
+- **Mocked-binary-on-`PATH` dependency mocking.** A test exercising a
+  real external binary's presence or version-dependent behavior
+  should mock it via a fake executable prepended onto `PATH`, rather
+  than requiring the real tool to be installed; a test exercising the
+  binary's absence should instead point `PATH` at a directory with no
+  matching executable, not a fake one. See `tests/bash/70-fzf.bats`
+  and `tests/bash/75-worktrunk.bats` for canonical examples of both
+  techniques.
 
 ## IDD Workflow
 
