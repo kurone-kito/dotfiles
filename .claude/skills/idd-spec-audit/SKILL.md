@@ -45,7 +45,10 @@ model.
   manifest and resyncs `.github/instructions/**` by hand instead) —
   this skill audits the corpus a worker session actually reads, not any
   upstream source, so being a regenerated target never exempts a file
-  here.
+  here. OpenCode (`home/dot_config/opencode/AGENTS.md.tmpl`) and
+  Antigravity CLI (`home/dot_gemini/GEMINI.md.tmpl` and
+  `home/dot_gemini/AGENTS.md`) are user-global sources, not IDD
+  installation entry files, and are not audit targets.
 - **Reference-only inputs** (read for R2/R4, never a finding target):
   `docs/idd-concept-ownership.md` (R2's closed concept-index seed) and
   `docs/idd-autonomy-contract.md` (R4's reversible/irreversible
