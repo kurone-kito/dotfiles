@@ -46,8 +46,10 @@ scans `~/.claude/CLAUDE*.md`, which `home/dot_claude/CLAUDE.md.tmpl`
 deploys, so it inherits the Claude Code baseline. See roadmap #491.
 
 **Precedence rule**: project-level instructions always take
-precedence over the user-global file. Each user-global file opens
-with an explicit deference paragraph stating this rule.
+precedence over the user-global file. Each shared-template body opens
+with an explicit deference paragraph stating this rule. The
+Antigravity pointer at `home/dot_gemini/AGENTS.md` does not repeat
+that paragraph; it only points at `~/.gemini/GEMINI.md`.
 
 Edit the shared template for cross-agent changes. Edit a single
 `.tmpl` only for agent-specific wording.
