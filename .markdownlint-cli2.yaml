@@ -4,3 +4,10 @@ ignores:
   - .github/CODE_OF_CONDUCT*
   - tests/bash/helpers/**
   - node_modules/**
+  # Chezmoi templates. Rendered output matches the previous Markdown;
+  # the source is Go template text, not a Markdown document.
+  - home/.chezmoitemplates/ai-agent-user-global
+  - home/dot_claude/CLAUDE.md.tmpl
+  - home/dot_codex/AGENTS.md.tmpl
+  - home/dot_copilot/copilot-instructions.md.tmpl
+  - home/dot_gemini/GEMINI.md.tmpl

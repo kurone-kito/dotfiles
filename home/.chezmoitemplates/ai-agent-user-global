@@ -1,17 +1,20 @@
 # User-global guidelines for AI agents
 
 These instructions apply as **default guidance** across all
-repositories and are loaded automatically by GitHub Copilot CLI
-from `~/.copilot/copilot-instructions.md`.
+repositories and are loaded automatically by {{ .agent }}{{ if .breakBeforeFrom }}
+from `{{ .path }}`.{{ else }} from
+`{{ .path }}`.{{ end }}
 
 **Repository-specific instructions and established repository
-conventions always take precedence over this file.** If a
-repository provides its own `.github/copilot-instructions.md`,
-`AGENTS.md`, or similar guidance, follow those rules wherever
-they differ from or extend this file.
-
+conventions always take precedence over this file.**{{ .precedenceTail }}
+{{ if .memoryNote }}
+_Note_: the auto-memory system (`~/.claude/projects/…/memory/`) is
+a separate per-project mechanism. This file is the static
+user-global memory, not auto-memory content.
+{{ end }}
 ## Conversation
 
+{{ if .copilotConversation -}}
 - The conversational language should match the user's language.
   For example, if the user speaks in Japanese, respond in Japanese.
 - However, comments and documentation should be written in English
@@ -25,7 +28,16 @@ they differ from or extend this file.
   pause and ask a concise question when uncertainty or hidden risk
   makes the next step unsafe. When that pause is needed, provide one
   or more recommended response options.
-
+{{ else -}}
+- The conversational language should match the user's language. For
+  example, if the user speaks in Japanese, respond in Japanese.
+- However, comments and documentation should be written in English
+  unless there is a clear context otherwise.
+- Continue autonomously for low-risk work, but pause and ask a
+  concise question when uncertainty or hidden risk makes the next
+  step unsafe. When that pause is needed, provide one or more
+  recommended response options.
+{{ end }}
 ## Commit rules
 
 Follow
@@ -56,7 +68,23 @@ the repository specifies a different convention.
      repository or user already configures — typically GPG via
      `commit.gpgsign`, but a project may also opt in to persistent
      SSH signing (e.g., `gpg.format = ssh` plus a path-style
-     `user.signingkey`). Respect that configuration as-is.
+     `user.signingkey`). Respect that configuration as-is.{{ if .noTtyPrecheck }}
+     - **No-TTY pre-check (GPG only).** When the configured signing
+       method is GPG, skip the GPG attempt itself and treat it as an
+       immediate, pre-classified category (P) pinentry/TTY failure —
+       still consuming attempt 1 of the bounded ladder, with no
+       actual signing call made — only when **both** hold: no TTY is
+       attached to the current process (`tty -s` / `[ -t 0 ]` fails),
+       **and** non-interactive GPG signing is not already explicitly
+       configured (no `pinentry-mode loopback` in the effective
+       `gpg.conf`, and no `allow-loopback-pinentry` in the effective
+       `gpg-agent.conf`). This check only detects an existing setup
+       decision — it is not a recommendation to add one; see the
+       `pinentry-mode loopback` guidance below. If a TTY is present,
+       or loopback-mode signing is already configured, still attempt
+       GPG here as normal. When the configured method is already
+       persistent SSH signing instead, this pre-check does not
+       apply — attempt that configured SSH signer here as normal.{{ end }}
 
   2. **Classify the failure by category** (do not rely on exact
      English/locale strings — read the category from stderr):
@@ -108,7 +136,7 @@ the repository specifies a different convention.
 
      Do **not** permanently change the user's signing
      configuration as part of this fallback.
-
+{{ if .copilotKeyDiscovery }}
   5. **SSH key discovery** — never assume a fixed key path such as
      `~/.ssh/id_ed25519`, and never invent one. Pick the key in
      this order, and skip the SSH fallback entirely if none of
@@ -130,7 +158,30 @@ the repository specifies a different convention.
      registered as a *signing* key on the user's GitHub profile.
      The agent typically cannot verify that, so the commit may show
      as **Unverified** even though it is cryptographically signed.
+{{ else }}
+  5. **SSH key discovery** — never assume a fixed key path, and
+     never invent one. Pick the key in this order, and skip the
+     SSH fallback entirely if none of these yield a usable key:
+     1. If `git config --get gpg.format` is already `ssh`, respect
+        the existing `user.signingkey` and
+        `gpg.ssh.defaultKeyCommand`.
+     2. Else if `git config --get gpg.ssh.defaultKeyCommand` is
+        set and produces a usable public key, use that key.
+     3. Else use the first non-certificate public key reported by
+        `ssh-add -L`. This works with hardware-backed keys and
+        agents (1Password, Secretive, `gpg-agent --enable-ssh-support`,
+        etc.) without needing a private key path.
+     - Pass the entire `ssh-add -L` line — public key plus
+       comment — as a single quoted value, since key comments
+       contain spaces.
 
+  6. **Treat SSH signing as best-effort.** GitHub only marks
+     SSH-signed commits as **Verified** when the public key is
+     registered as a {{ .signingMark }}signing{{ .signingMark }} key on the user's GitHub profile.
+     The agent typically cannot verify that, so the commit may
+     show as **Unverified** even though it is cryptographically
+     signed.
+{{ end }}
   7. **Unsigned commit is the accepted final fallback.** If both
      GPG (with or without an agent restart) and the bounded SSH
      attempt fail — no agent, no usable key, hardware-touch
@@ -150,7 +201,10 @@ the repository specifies a different convention.
   path: try the configured signing once, then a single SSH attempt
   if a fallback key is configured, then unsigned. Skip the
   gpg-agent restart entirely — `gpg-agent` in CI is rarely worth
-  reviving and may not even exist.
+  reviving and may not even exist.{{ if .noTtyPrecheck }} Step 1's no-TTY pre-check
+  typically fires immediately in this environment class; that still
+  satisfies "try the configured signing once" above, not a fourth
+  attempt.{{ end }}
 
   Do **not** recommend `pinentry-mode loopback` as part of
   automated recovery; it is a setup/policy decision that requires

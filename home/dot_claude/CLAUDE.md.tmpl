@@ -1,0 +1,10 @@
+{{- template "ai-agent-user-global" (dict
+  "agent" "Claude Code"
+  "path" "~/.claude/CLAUDE.md"
+  "breakBeforeFrom" false
+  "precedenceTail" " If a repository\nprovides its own `CLAUDE.md`, `.github/instructions/*.md`,\n`.claude/skills/`, or similar guidance, follow those rules wherever\nthey differ from or extend this file."
+  "memoryNote" true
+  "copilotConversation" false
+  "noTtyPrecheck" true
+  "copilotKeyDiscovery" false
+  "signingMark" "_") -}}
