@@ -398,6 +398,27 @@ This isolates tests from chezmoi's template engine and
 CI runs both suites on every push and pull request
 (`.github/workflows/test.yml`).
 
+### Bash test (bats) conventions
+
+- **Real login-shell invocation.** A test asserting on shell startup
+  behavior (RC-file ordering, exported variables, hooks) must exercise
+  a real `bash -li`/`zsh -li` (or non-interactive-but-real-startup, as
+  appropriate) invocation through the actual copied
+  `dot_profile`/`dot_bash_profile`/`dot_bashrc`/`dot_config/zsh/*`
+  chain into a fresh `$HOME`, not an `eval` of an extracted snippet.
+  See `tests/bash/conf-d-double-sourcing.bats` for the canonical
+  example.
+- **zsh availability guard.** Every zsh-specific test must skip (not
+  fail) when zsh is unavailable, via the `require_zsh()` helper
+  pattern. See `tests/bash/conf-d-double-sourcing.bats` for the
+  canonical example.
+- **Mocked-binary-on-`PATH` dependency mocking.** A test that depends
+  on a real external binary's presence, absence, or version-dependent
+  behavior should mock it via a fake executable prepended onto `PATH`,
+  rather than requiring the real tool to be installed. See
+  `tests/bash/70-fzf.bats` and `tests/bash/75-worktrunk.bats` for
+  canonical examples.
+
 ## IDD Workflow
 
 This project uses Issue-Driven Development (IDD) with parallel AI
