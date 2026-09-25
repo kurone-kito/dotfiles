@@ -408,11 +408,12 @@ CI runs both suites on every push and pull request
   chain into a fresh `$HOME`, not an `eval` of an extracted snippet.
   See `tests/bash/conf-d-double-sourcing.bats` for the canonical
   example.
-- **zsh availability guard.** A zsh-specific test must skip (not fail)
-  when zsh is unavailable, via the `require_zsh()` helper pattern. See
-  `tests/bash/conf-d-double-sourcing.bats` for the canonical example.
-  `tests/bash/75-worktrunk.bats`'s zsh cases predate this convention
-  and do not yet apply it.
+- **zsh availability guard.** A new or updated zsh-specific test must
+  skip (not fail) when zsh is unavailable, via the `require_zsh()`
+  helper pattern. See `tests/bash/conf-d-double-sourcing.bats` for the
+  canonical example. `tests/bash/75-worktrunk.bats`'s zsh cases predate
+  this convention and are a grandfathered exception, not evidence that
+  the guard is optional for new tests.
 - **Mocked-binary-on-`PATH` dependency mocking.** A test exercising a
   real external binary's presence or version-dependent behavior
   should mock it via a fake executable prepended onto `PATH`, rather
