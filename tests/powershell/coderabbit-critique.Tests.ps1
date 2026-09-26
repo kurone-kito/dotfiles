@@ -1476,6 +1476,9 @@ exit "${FAKE_REVIEW_EXIT:-0}"
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables.Remove(
+          'DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN'
+        )
 
         $proc = [Diagnostics.Process]::Start($psi)
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
