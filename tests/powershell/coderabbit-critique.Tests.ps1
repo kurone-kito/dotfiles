@@ -1459,6 +1459,9 @@ exit "${FAKE_REVIEW_EXIT:-0}"
 
   Context 'PowerShell guard as a real subprocess (Windows)' -Skip:($IsWindows -eq $false) {
     BeforeAll {
+      $script:EmptyPathDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:EmptyPathDir -Force | Out-Null
+
       function script:Invoke-DotfilesGuardAsSubprocess {
         param([string[]] $ArgumentList = @())
 
@@ -1476,6 +1479,7 @@ exit "${FAKE_REVIEW_EXIT:-0}"
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables['PATH'] = $script:EmptyPathDir
         $psi.EnvironmentVariables.Remove(
           'DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN'
         )
