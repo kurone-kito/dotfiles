@@ -469,8 +469,10 @@ number is a pull request.
 request's synthetic merge commit/ref before any job step can perform the
 trusted `main` checkout. That checkout protects the helper and
 configuration that the job runs, but it cannot protect a workflow
-definition changed in the pull request. This is preventive guidance; no
-observed incident is being claimed here.
+definition changed in the pull request. This repository's own workflow
+no longer uses a `pull_request` trigger (#501); it uses
+`pull_request_target`, so the definition comes from the base branch.
+This is preventive guidance; no observed incident is being claimed here.
 
 Add CODEOWNERS coverage for the workflow and for the active CODEOWNERS
 file itself. GitHub searches for `CODEOWNERS` in `.github/`, the
@@ -595,11 +597,11 @@ drives every live GitHub API call the script makes (reviews, threads,
 comments), independent of what is checked out locally, so pinning the
 checkout to the trusted branch costs nothing functionally.
 
-Two automatic trigger types keep the required verdict current:
-`pull_request` for the normal push case, and `pull_request_target` as
-its tamper-resistant counterpart (see Trusted-code checkout above --
-a same-repository PR cannot edit `pull_request_target`'s own copy of
-this workflow file, unlike `pull_request`). Review-thread comments are
+One automatic trigger type keeps the required verdict current:
+`pull_request_target` (see Trusted-code checkout above -- a
+same-repository PR cannot edit that trigger's own copy of this
+workflow file). #501 dropped the transitional `pull_request` trigger.
+Review-thread comments are
 **not** on that required job, and neither is Copilot's review
 submission (`pull_request_review`) — both instead refresh the
 existing HEAD-associated required run from the non-required companion
