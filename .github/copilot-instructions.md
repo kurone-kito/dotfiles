@@ -398,7 +398,7 @@ Each fixture mirrors the final rendered script with sample profile data.
 This isolates tests from chezmoi's template engine and
 `chezmoi.toml` configuration.
 
-CI runs both suites on every push and pull request
+CI runs both suites on pushes to `master` and on pull requests
 (`.github/workflows/test.yml`).
 
 ### Bash test (bats) conventions

@@ -5,7 +5,7 @@ name: Linting workflow
 on:
   push:
     branches:
-      - '**'
+      - master
   pull_request:
 permissions:
   contents: read
