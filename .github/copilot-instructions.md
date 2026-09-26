@@ -142,6 +142,17 @@ loop on hardware-touch prompts.
 1. **Attempt 1 — GPG.** Try `git commit` (or `git tag -s`,
    `git rebase`) with the configured GPG signing exactly once.
 
+   **No-TTY pre-check.** Skip this attempt and treat it as a
+   pre-classified category (P) failure — still counting as attempt 1,
+   with no signing call made — only when **both** hold: no TTY is
+   attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
+   signing is not already configured (neither `pinentry-mode loopback`
+   in the effective `gpg.conf` nor `allow-loopback-pinentry` in the
+   effective `gpg-agent.conf`). Detect existing configuration only —
+   never configure loopback pinentry automatically. Otherwise (a TTY
+   is present, or either loopback setting is configured), attempt GPG
+   here as normal.
+
 2. **On failure, classify the cause from stderr by category** —
    not by exact English/locale strings:
    - **(P) pinentry / TTY** — explicit mention of `pinentry`,
@@ -219,8 +230,11 @@ stops on a conflict, continue it with `git rebase-ssh --continue`
 `git rebase --continue` reverts to GPG-primary signing.
 
 In CI / clearly non-interactive automation, prefer the shortest
-path: try GPG once, then a single SSH attempt if a fallback key is
-configured, then unsigned. Skip the gpg-agent restart entirely.
+path: apply the no-TTY pre-check above; when both conditions hold, skip
+GPG as the pre-classified category (P) attempt 1, then make a single
+SSH attempt if a fallback key is configured, then use unsigned. When
+either condition does not hold, try GPG once, then make a single SSH
+attempt, then use unsigned. Skip the gpg-agent restart entirely.
 
 Do **not** recommend `pinentry-mode loopback` as part of automated
 recovery; it is a setup decision that requires non-interactive
