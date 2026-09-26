@@ -466,7 +466,7 @@ Windows CI.
 one when the current branch's diff touches no PowerShell-relevant
 path — this is what `pre-push-validate`/`post-fix-validate` invoke.
 
-CI runs both suites automatically on every push and pull request.
+CI runs both suites automatically on pushes to `master` and on pull requests.
 
 ## Contributing
 
