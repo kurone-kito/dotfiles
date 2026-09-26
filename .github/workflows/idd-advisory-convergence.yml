@@ -12,28 +12,22 @@ name: IDD advisory-convergence gate
 # `.github/idd/config.json` `ciGate.*`; see docs/idd-policy.md "CI Gate
 # External Check Waivers" for the waiver path.
 #
-# CI-check-identity-spoofing closure (#424, kurone-kito/idd-skill#2657):
-# `pull_request_target` resolves this workflow's own YAML from the base
-# branch (`master`), not the PR branch, so a same-repository PR can no
-# longer weaken this file's own triggers/permissions/concurrency by
-# editing it -- `pull_request` alone left that gap open even though the
+# CI-check-identity-spoofing closure (#424, kurone-kito/idd-skill#2657,
+# #501): `pull_request_target` resolves this workflow's own YAML from the
+# base branch (`master`), not the PR branch, so a same-repository PR can
+# no longer weaken this file's own triggers/permissions/concurrency by
+# editing it. `pull_request` alone left that gap open even though the
 # checkout step below already pinned `ref: master` for the *checked-out
 # logic*; the exposure was the workflow definition itself, evaluated
-# from the PR branch, not the script it runs. `pull_request` stays
-# registered alongside `pull_request_target` for now (transition state:
-# `pull_request_target` cannot fire on the PR that first adds this
-# trigger, only on PRs opened afterward, so dropping `pull_request`
-# immediately would leave that implementing PR unable to satisfy its
-# own required check) -- until that trigger is dropped, a same-
-# repository PR can still spoof this required check by relying solely
-# on its own PR-branch-controlled `pull_request` copy (Copilot review,
-# PR #429); accepted as a single-maintainer transitional risk, not a
-# closed gap. Drop `pull_request` in the immediately following IDD
-# cycle after this merges, once one post-merge PR has produced a
-# `pull_request_target`-triggered `idd-advisory-convergence` run
-# (verify with `gh run list --workflow=idd-advisory-convergence.yml
-# --event pull_request_target`) -- a concrete, checkable condition
-# rather than "a period". `pull_request_review` moved entirely
+# from the PR branch, not the script it runs. `pull_request` stayed
+# registered only while `pull_request_target` could not yet fire (it
+# cannot fire on the PR that first adds the trigger). That condition is
+# met: `gh run list --workflow=idd-advisory-convergence.yml --event
+# pull_request_target` includes successful runs 36166762668 and
+# 36169569391 (2026-09-25). #501 drops `pull_request`, so a
+# same-repository PR can no longer satisfy this required check from a
+# PR-branch-controlled copy of this file (the transitional risk recorded
+# by Copilot review on PR #429). `pull_request_review` moved entirely
 # to the non-required `idd-advisory-convergence-comment.yml` companion
 # (see its own header) for the identical reason: there is no
 # `pull_request_review_target` variant, so keeping it here would leave
@@ -46,7 +40,7 @@ name: IDD advisory-convergence gate
 # deliberate `ubuntu-latest` divergence recorded by #296/#303) as part
 # of roadmap #380's "adopt all opt-in features" decision -- no
 # `CI_RUNNER_LABEL` repository variable is configured, so ordinary
-# pull_request-triggered behavior now runs on `ubuntu-slim` instead of
+# pull_request_target-triggered behavior now runs on `ubuntu-slim` instead of
 # `ubuntu-latest`. `workflow_dispatch`'s `runner` input carries its own
 # default (also `ubuntu-slim` now), so a manual dispatch always
 # resolves the input before `CI_RUNNER_LABEL` is ever consulted --
@@ -68,14 +62,14 @@ name: IDD advisory-convergence gate
 # (the companion is just as PR-editable as this trigger previously was;
 # there is no `pull_request_review_target` variant), but so that this
 # workflow's own triggers are exclusively push-shaped
-# (`pull_request`/`pull_request_target`, plus `workflow_dispatch`/
-# `workflow_call`). Only the first two are pull-request-family events
-# the `pull_request_target` spoofing closure above actually applies to;
+# (`pull_request_target`, plus `workflow_dispatch`/`workflow_call`).
+# Only `pull_request_target` is a pull-request-family event the
+# spoofing closure above actually applies to;
 # `workflow_dispatch`/`workflow_call` are a separate, already-trusted
 # invocation path (manual dispatch requires write access; a call
 # requires an explicit caller reference), not additional beneficiaries
 # of that closure (Copilot review, PR #429). What actually stays
-# trusted, across all four trigger types, is this
+# trusted, across all three trigger types, is this
 # push-triggered gate; the companion's review/comment-triggered refresh
 # is deliberately best-effort on top of it -- a tampered companion copy
 # can only delay a fresh green, never force one, since this gate's own
@@ -83,7 +77,7 @@ name: IDD advisory-convergence gate
 # `gh run rerun`/`workflow_dispatch` recovery path below (or the
 # `idd-rerun-advisory-convergence` helper bin) remains available for any
 # case the companion's own debounce/classification does not cover.
-# Several pull_request/pull_request_target events can still fire in
+# Several pull_request_target events can still fire in
 # quick succession during review triage, so `concurrency:` below
 # debounces them to at most one active run per pull request per event
 # family instead of several stacked ones -- this exact multi-run pattern
@@ -113,38 +107,23 @@ name: IDD advisory-convergence gate
 # pull_request-family-triggered run over dispatching a fresh one
 # whenever one already exists for the current head SHA.
 on:
-  # Trigger-migration transition state: pull_request is evaluated against
-  # the pull request's own merge ref, so a same-repository PR could edit
-  # this file's copy to force its own required check green.
-  # pull_request_target closes that gap -- it is evaluated against the
-  # base branch's own workflow YAML instead -- but cannot fire against
-  # the PR that first adds or edits this trigger, only against PRs
-  # opened afterward, so both stay active together rather than a single-
-  # PR replacement that would leave the implementing PR unable to
-  # satisfy its own required check. Until pull_request is dropped, a
-  # same-repository PR can still satisfy this required check via its
-  # own PR-branch-controlled pull_request copy alone -- an accepted
-  # single-maintainer transitional risk, not a closed gap (see the
-  # top-of-file header for the concrete drop condition, tightened from
-  # upstream's "for a period" phrasing). pull_request_review moved to
-  # the companion idd-advisory-convergence-comment.yml workflow instead
-  # of staying here, for the identical reason.
+  # pull_request_target is evaluated against the base branch's own
+  # workflow YAML, so a same-repository PR cannot edit this file to
+  # force its own required check green. The transitional pull_request
+  # trigger was dropped in #501 once post-merge pull_request_target runs
+  # existed (36166762668 and 36169569391, 2026-09-25). pull_request_review
+  # stays on the companion idd-advisory-convergence-comment.yml workflow:
+  # there is no pull_request_review_target variant.
   #
   # Check-run binding note (recurring false-positive in automated
   # review): GitHub associates the check run this job produces with
-  # `github.event.pull_request.head.sha` automatically for any
-  # pull-request-family trigger -- independent of `github.sha` (which
-  # for pull_request_target resolves to the base branch tip, not the PR
-  # head) and independent of the checkout `ref:` below. This is the
-  # same mechanism the pre-existing `pull_request` trigger already
-  # relies on (its own `github.sha` is a synthetic merge commit, not
-  # the PR's real head, yet its checks have always shown up correctly
-  # on the PR). No explicit head-SHA parameterization is needed or
-  # possible here; the CI-check-identity-spoofing closure this trigger
-  # provides is about which copy of THIS WORKFLOW FILE gets evaluated,
-  # not which commit the resulting check attaches to.
-  pull_request:
-    types: [opened, reopened, synchronize]
+  # `github.event.pull_request.head.sha` automatically for a
+  # pull_request_target trigger -- independent of `github.sha` (which
+  # resolves to the base branch tip, not the PR head) and independent
+  # of the checkout `ref:` below. No explicit head-SHA parameterization
+  # is needed or possible here; the CI-check-identity-spoofing closure
+  # this trigger provides is about which copy of THIS WORKFLOW FILE gets
+  # evaluated, not which commit the resulting check attaches to.
   pull_request_target:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
@@ -191,16 +170,14 @@ concurrency:
   # this group. Isolate workflow_dispatch so a manual re-check cannot
   # cancel an in-flight PR-linked run.
   #
-  # kurone-kito/idd-skill#2657: also isolate pull_request from
-  # pull_request_target (previously grouped together) -- both fire on
-  # the same opened/synchronize PR event, so whichever instance started
-  # later could cancel the other mid-run, including the
-  # pull_request_target instance's own idd-advisory-convergence-self-waiver
-  # job, which would then never finish posting the bootstrap marker for
-  # that push (a cancelled run is not itself a new trigger, so recovery
-  # would need a manual rerun -- defeating the whole no-human-click point
-  # of that job). A new push still correctly cancels a STALE run of the
-  # SAME event type for the same PR.
+  # kurone-kito/idd-skill#2657 isolated pull_request from
+  # pull_request_target while both triggers existed, because both fired
+  # on the same opened/synchronize event and the later start could
+  # cancel the pull_request_target self-waiver job mid-run. #501 dropped
+  # pull_request. event_name stays in the group key so workflow_dispatch
+  # still cannot cancel an in-flight pull_request_target run. A new push
+  # still correctly cancels a STALE pull_request_target run for the same
+  # PR.
   group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}', inputs.pr_number) || format('{0}-{1}', github.event_name, github.event.pull_request.number || inputs.pr_number) }}
 jobs:
   # The job id `idd-advisory-convergence` is the exact check-run context
@@ -225,8 +202,8 @@ jobs:
     # click required" point of the bootstrap path. `if: ${{ !cancelled() }}`
     # overrides `needs:`'s own default (a skipped dependency job skips
     # its dependents too) -- this job must still run on every trigger,
-    # including workflow_dispatch/workflow_call or a pull_request run
-    # where the self-waiver job's own `if:` skips it outright, and a
+    # including workflow_dispatch/workflow_call, where the self-waiver
+    # job's own `if:` skips it outright, and a
     # non-allowlisted PR where it runs but posts nothing.
     needs: idd-advisory-convergence-self-waiver
     if: ${{ !cancelled() }}

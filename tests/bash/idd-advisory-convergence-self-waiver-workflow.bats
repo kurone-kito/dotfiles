@@ -157,12 +157,12 @@ checkout_step() {
   assert_output --partial '!cancelled()'
 }
 
-@test "the required triggers are exactly pull_request, pull_request_target, workflow_dispatch, and workflow_call" {
-  # Exact-match, not --partial: a future silent drop of pull_request (or
-  # pull_request_target) -- the whole point of the transitional
-  # trust-boundary tradeoff this workflow's header documents -- must be
-  # a deliberate edit to this test, not an unnoticed side effect of an
-  # unrelated change.
+@test "the required triggers are exactly pull_request_target, workflow_dispatch, and workflow_call" {
+  # Exact-match, not --partial: #501 dropped the transitional
+  # pull_request trigger once pull_request_target runs existed. A future
+  # silent reintroduction of pull_request, or a drop of
+  # pull_request_target, must be a deliberate edit to this test, not an
+  # unnoticed side effect of an unrelated change.
   #
   # Repeatedly flagged in automated review as "yq sorts keys
   # alphabetically" (PR #429) -- false for mikefarah/yq (this repo's
@@ -182,14 +182,10 @@ checkout_step() {
   # checks above first.
   run yq -o=json -I=0 '.on | keys' "$WORKFLOW"
   assert_success
-  assert_output '["pull_request","pull_request_target","workflow_dispatch","workflow_call"]'
+  assert_output '["pull_request_target","workflow_dispatch","workflow_call"]'
 }
 
-@test "pull_request and pull_request_target both trigger on opened, reopened, and synchronize only" {
-  run yq -o=json -I=0 '.on.pull_request.types' "$WORKFLOW"
-  assert_success
-  assert_output '["opened","reopened","synchronize"]'
-
+@test "pull_request_target triggers on opened, reopened, and synchronize only" {
   run yq -o=json -I=0 '.on.pull_request_target.types' "$WORKFLOW"
   assert_success
   assert_output '["opened","reopened","synchronize"]'
