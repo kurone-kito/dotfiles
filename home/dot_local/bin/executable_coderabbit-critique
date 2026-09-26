@@ -14,6 +14,19 @@
 # output must be parsed instead).
 set -eu
 
+usage() {
+  printf '%s\n' 'Usage: coderabbit-critique'
+}
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -eq 1 ] && { [ "$1" = '--help' ] || [ "$1" = '-h' ]; }; then
+    usage
+    exit 0
+  fi
+  usage >&2
+  exit 2
+fi
+
 # Record why this delegate is falling through to the per-agent critique
 # mechanism. This is deliberately a best-effort side channel: every
 # operation, including timestamp generation and redirection setup, is
