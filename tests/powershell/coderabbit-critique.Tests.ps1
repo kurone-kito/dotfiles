@@ -1207,7 +1207,7 @@ try {
       # output) never runs -- then applies $EnvironmentOverrides on top.
       function script:Invoke-DotfilesSubjectAsSubprocess {
         param(
-          [hashtable] $EnvironmentOverrides = @(),
+          [hashtable] $EnvironmentOverrides = @{},
           [string[]] $ArgumentList = @()
         )
 
@@ -1454,6 +1454,70 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
       Test-Path -LiteralPath $script:FallbackLogFile -PathType Container | Should -BeTrue
+    }
+  }
+
+  Context 'PowerShell guard as a real subprocess (Windows)' -Skip:($IsWindows -eq $false) {
+    BeforeAll {
+      function script:Invoke-DotfilesGuardAsSubprocess {
+        param([string[]] $ArgumentList = @())
+
+        $arguments = @('-NoProfile', '-File', $script:Subject) + $ArgumentList
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+        if ($psi.PSObject.Properties.Name -contains 'ArgumentList') {
+          foreach ($argument in $arguments) {
+            $psi.ArgumentList.Add($argument)
+          }
+        } else {
+          $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+            -ArgumentList $arguments
+        }
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+
+        $proc = [Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        if (-not $proc.WaitForExit(30000)) {
+          try { $proc.Kill() } catch [System.Exception] {}
+          throw 'Invoke-DotfilesGuardAsSubprocess: subject process did not exit within 30s -- killed'
+        }
+        return [pscustomobject]@{
+          ExitCode = $proc.ExitCode
+          Stdout   = $stdoutTask.GetAwaiter().GetResult()
+          Stderr   = $stderrTask.GetAwaiter().GetResult()
+        }
+      }
+    }
+
+    AfterAll {
+      Remove-Item 'Function:\Invoke-DotfilesGuardAsSubprocess' -ErrorAction SilentlyContinue
+    }
+
+    It 'prints usage for --help without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('--help')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'prints usage for -h without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('-h')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'rejects unexpected arguments without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('--unexpected')
+
+      $result.ExitCode | Should -Be 2
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr.Trim() | Should -Be 'Usage: coderabbit-critique'
     }
   }
 
