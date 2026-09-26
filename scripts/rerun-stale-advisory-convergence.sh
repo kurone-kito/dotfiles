@@ -64,9 +64,9 @@
 #      literally named `idd-advisory-convergence` that fails and prints
 #      the exact stale-rollup reason string naming the PR's current
 #      head. The path check alone is not enough either: this
-#      repository's own idd-advisory-convergence.yml still registers
+#      repository's own idd-advisory-convergence.yml registered
 #      `pull_request` alongside `pull_request_target` during a
-#      documented migration window, and `pull_request` resolves the
+#      migration window that #501 closed, and `pull_request` resolves the
 #      workflow *definition* from the PR branch itself, so a
 #      same-repository PR could edit that exact file to spoof a run at
 #      the same path. Only `pull_request_target` resolves the workflow
@@ -381,8 +381,8 @@ current_head() {
 # stale-rollup reason string naming the PR's current head, and app-id
 # filtering alone would accept it as genuine. The workflow-path check
 # alone is *also* not sufficient: this repository's own
-# idd-advisory-convergence.yml still registers `pull_request` alongside
-# `pull_request_target` during a documented migration window (see that
+# idd-advisory-convergence.yml registered `pull_request` alongside
+# `pull_request_target` during a migration window that #501 closed (see that
 # file's own header comment), and `pull_request` resolves the workflow
 # *definition* from the PR branch itself, so a same-repository PR could
 # edit that exact file to spoof a run at the same path. Only
