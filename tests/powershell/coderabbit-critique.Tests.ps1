@@ -90,6 +90,8 @@ Describe 'coderabbit-critique' {
     }
 
     foreach ($name in @(
+      'Write-DotfilesCoderabbitUsage'
+      'Write-DotfilesCoderabbitUsageError'
       'Write-DotfilesCoderabbitFallbackReason'
       'Get-DotfilesCoderabbitCommand'
       'Test-DotfilesCoderabbitAuthenticated'
@@ -1204,7 +1206,10 @@ try {
       # exit-guarded block (the only place that produces real process
       # output) never runs -- then applies $EnvironmentOverrides on top.
       function script:Invoke-DotfilesSubjectAsSubprocess {
-        param([hashtable] $EnvironmentOverrides = @{})
+        param(
+          [hashtable] $EnvironmentOverrides = @{},
+          [string[]] $ArgumentList = @()
+        )
 
         # The fake coderabbit fixture's own scenario-selector variables --
         # cleared unconditionally before every run (not just restored to
@@ -1233,7 +1238,7 @@ try {
 
           $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
           $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
-            -ArgumentList @('-NoProfile', '-File', $script:Subject)
+            -ArgumentList (@('-NoProfile', '-File', $script:Subject) + $ArgumentList)
           $psi.WorkingDirectory = $TestDrive
           $psi.UseShellExecute = $false
           $psi.RedirectStandardOutput = $true
@@ -1350,6 +1355,36 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
     }
 
+    It 'prints usage for --help without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('--help')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'prints usage for -h without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('-h')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'rejects unexpected arguments without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('--unexpected')
+
+      $result.ExitCode | Should -Be 2
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr.Trim() | Should -Be 'Usage: coderabbit-critique'
+    }
+
     It 'produces no stdout when the base branch cannot be resolved' {
       # No `git` on PATH (the fake bin dir holds only `coderabbit`) and no
       # CODERABBIT_CRITIQUE_BASE override: Get-Command git returns $null
@@ -1419,6 +1454,77 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
       Test-Path -LiteralPath $script:FallbackLogFile -PathType Container | Should -BeTrue
+    }
+  }
+
+  Context 'PowerShell guard as a real subprocess (Windows)' -Skip:($IsWindows -eq $false) {
+    BeforeAll {
+      $script:EmptyPathDir = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      New-Item -ItemType Directory -Path $script:EmptyPathDir -Force | Out-Null
+
+      function script:Invoke-DotfilesGuardAsSubprocess {
+        param([string[]] $ArgumentList = @())
+
+        $arguments = @('-NoProfile', '-File', $script:Subject) + $ArgumentList
+        $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
+        if ($psi.PSObject.Properties.Name -contains 'ArgumentList') {
+          foreach ($argument in $arguments) {
+            $psi.ArgumentList.Add($argument)
+          }
+        } else {
+          $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
+            -ArgumentList $arguments
+        }
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables['PATH'] = $script:EmptyPathDir
+        $psi.EnvironmentVariables.Remove(
+          'DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN'
+        )
+
+        $proc = [Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        if (-not $proc.WaitForExit(30000)) {
+          try { $proc.Kill() } catch [System.Exception] {}
+          throw 'Invoke-DotfilesGuardAsSubprocess: subject process did not exit within 30s -- killed'
+        }
+        return [pscustomobject]@{
+          ExitCode = $proc.ExitCode
+          Stdout   = $stdoutTask.GetAwaiter().GetResult()
+          Stderr   = $stderrTask.GetAwaiter().GetResult()
+        }
+      }
+    }
+
+    AfterAll {
+      Remove-Item 'Function:\Invoke-DotfilesGuardAsSubprocess' -ErrorAction SilentlyContinue
+    }
+
+    It 'prints usage for --help without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('--help')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'prints usage for -h without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('-h')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'rejects unexpected arguments without invoking the review flow' {
+      $result = Invoke-DotfilesGuardAsSubprocess -ArgumentList @('--unexpected')
+
+      $result.ExitCode | Should -Be 2
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr.Trim() | Should -Be 'Usage: coderabbit-critique'
     }
   }
 

@@ -47,6 +47,13 @@ assert_no_git_calls() {
   fi
 }
 
+assert_no_command_calls() {
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c . "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+}
+
 assert_fallback_reason() {
   expected_reason="$1"
   assert [ -f "$FALLBACK_LOG_FILE" ]
@@ -230,6 +237,42 @@ setup_git_repo_with_base() {
   assert_output --partial "coderabbit not found in PATH"
   assert_fallback_reason coderabbit-missing
   assert_no_git_calls
+}
+
+@test "prints usage for --help without invoking any command" {
+  make_mock coderabbit 'printf "coderabbit:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+  make_git_call_recorder
+  make_mock timeout 'printf "timeout:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+
+  run "$SCRIPT" --help
+
+  assert_success
+  assert_output "Usage: coderabbit-critique"
+  assert_no_command_calls
+}
+
+@test "prints usage for -h without invoking any command" {
+  make_mock coderabbit 'printf "coderabbit:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+  make_git_call_recorder
+  make_mock timeout 'printf "timeout:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+
+  run "$SCRIPT" -h
+
+  assert_success
+  assert_output "Usage: coderabbit-critique"
+  assert_no_command_calls
+}
+
+@test "rejects unexpected arguments without invoking any command" {
+  make_mock coderabbit 'printf "coderabbit:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+  make_git_call_recorder
+  make_mock timeout 'printf "timeout:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"'
+
+  run --separate-stderr "$SCRIPT" --unexpected
+
+  assert_failure
+  assert_stderr "Usage: coderabbit-critique"
+  assert_no_command_calls
 }
 
 @test "fails closed when no compatible timeout/gtimeout is found" {
