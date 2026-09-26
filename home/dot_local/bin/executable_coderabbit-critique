@@ -363,8 +363,7 @@ on_int() {
   fi
   signal_review_group INT
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
-    on_cancel_cleanup &
-    killer_pid=$!
+    on_cancel_cleanup
   fi
 }
 
@@ -375,8 +374,7 @@ on_hup() {
   fi
   signal_review_group HUP
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
-    on_cancel_cleanup &
-    killer_pid=$!
+    on_cancel_cleanup
   fi
 }
 
@@ -387,8 +385,7 @@ on_quit() {
   fi
   signal_review_group QUIT
   if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
-    on_cancel_cleanup &
-    killer_pid=$!
+    on_cancel_cleanup
   fi
 }
 
@@ -522,12 +519,14 @@ forward_review_signal() {
   signal=$1
   signal_status=$2
   if [ -n "$timeout_pid" ]; then
-    # Let GNU timeout/gtimeout forward cancellation to the wrapper first. If
-    # a compatible implementation does not forward it, use its dedicated
-    # process group so the wrapper still receives the signal and can run its
-    # bounded cleanup before this supervisor exits.
-    kill "-$signal" "$timeout_pid" 2>/dev/null || \
-      kill "-$signal" "-$timeout_pid" 2>/dev/null || true
+    # GNU timeout can inherit an ignored INT/QUIT disposition in the wrapper,
+    # so forwarding those signals to the timeout PID may leave the review
+    # group alive until --kill-after fires. TERM is the wrapper's portable
+    # cancellation path: it reaches the timeout process group and runs the
+    # same bounded descendant cleanup before this supervisor exits. Preserve
+    # the original signal's exit status for callers.
+    kill -TERM "-$timeout_pid" 2>/dev/null || \
+      kill -TERM "$timeout_pid" 2>/dev/null || true
     wait "$timeout_pid" 2>/dev/null || true
   fi
   exit "$signal_status"
