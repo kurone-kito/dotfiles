@@ -142,6 +142,17 @@ loop on hardware-touch prompts.
 1. **Attempt 1 — GPG.** Try `git commit` (or `git tag -s`,
    `git rebase`) with the configured GPG signing exactly once.
 
+   **No-TTY pre-check.** Skip this attempt and treat it as a
+   pre-classified category (P) failure — still counting as attempt 1,
+   with no signing call made — only when **both** hold: no TTY is
+   attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
+   signing is not already configured (no `pinentry-mode loopback` in
+   the effective `gpg.conf`, no `allow-loopback-pinentry` in the
+   effective `gpg-agent.conf`). Detect existing configuration only —
+   never configure loopback pinentry automatically. Otherwise (a TTY
+   is present, or loopback signing is already configured), attempt GPG
+   here as normal.
+
 2. **On failure, classify the cause from stderr by category** —
    not by exact English/locale strings:
    - **(P) pinentry / TTY** — explicit mention of `pinentry`,

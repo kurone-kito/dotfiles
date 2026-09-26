@@ -56,6 +56,16 @@ whole ladder is **at most three signing attempts**; each step is a
 **single bounded attempt**. Never loop on hardware-touch prompts.
 
 1. **GPG (attempt 1).** Try the configured GPG signing once.
+   - **No-TTY pre-check.** Skip this attempt and treat it as a
+     pre-classified category (P) failure — still counting as attempt 1,
+     with no signing call made — only when **both** hold: no TTY is
+     attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
+     signing is not already configured (no `pinentry-mode loopback` in
+     the effective `gpg.conf`, no `allow-loopback-pinentry` in the
+     effective `gpg-agent.conf`). Detect existing configuration only —
+     never configure loopback pinentry automatically. Otherwise (a TTY
+     is present, or loopback signing is already configured), attempt GPG
+     here as normal.
 2. **Classify the failure** by category, not by exact strings:
    **(P)** pinentry / TTY / passphrase prompt failure;
    **(C)** missing / unusable secret key (configuration);
