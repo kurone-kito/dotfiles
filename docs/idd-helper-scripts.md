@@ -1685,10 +1685,10 @@ needs a live per-marker run lookup no other consumer needs):
    the marker's `{head-sha}`, and `head_repository.full_name` equal to
    the current repository;
 4. that same response's `event` field is exactly `pull_request_target`,
-   never `pull_request` -- closing the gap where a same-repository PR
-   editing the workflow YAML can still trigger a `pull_request`-triggered
-   run of it during a `pull_request`/`pull_request_target` migration
-   window (kurone-kito/idd-skill#2764 Phase 1);
+   never `pull_request`. #501 dropped the transitional `pull_request`
+   trigger, so this workflow no longer creates that event. The check
+   remains so a `pull_request` event is never honored
+   (kurone-kito/idd-skill#2764 Phase 1);
 5. the PR's own changed files (fetched independently at consume time,
    never trusted from the posting job's own internal check) include at
    least one path from the trigger-file allowlist above
@@ -3546,7 +3546,7 @@ reflexively as any other CLI option.
   `DEFAULT_COPILOT_REVIEW_POLL_INTERVAL_MS`, default 7.5s, up to
   `DEFAULT_COPILOT_REVIEW_POLL_MAX_WAIT_MS`, default 60s) before its real
   `--assert`-driven exit, absorbing the common race where the hosting
-  workflow's `pull_request`/`pull_request_target` `synchronize` trigger
+  workflow's `pull_request_target` `synchronize` trigger
   fires before the primary bot's own review has landed. (Through
   Phase 1 of the shipped `idd-advisory-convergence.yml` template's own
   trigger topology, `#2764`, a review landing refreshed this same run

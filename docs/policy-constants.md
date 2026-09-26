@@ -347,8 +347,8 @@ to bind to and are effectively not waivable in practice -- see
 short, bounded poll `advisory-convergence.mjs` itself runs when the
 `idd-advisory-convergence` required check's only blocking reason is that
 the primary bot has not reviewed the pull request at all yet -- absorbing
-the common race between the `pull_request`/`pull_request_target:
-synchronize` trigger (fires immediately on push) and the primary bot's
+the common race between the `pull_request_target: synchronize` trigger
+(fires immediately on push) and the primary bot's
 own review landing shortly after. The bot's review submission
 (`pull_request_review`) does not trigger this required workflow directly
 -- it moved to the non-required companion

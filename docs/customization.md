@@ -505,7 +505,7 @@ once `ciGate.externalCheckWaivers.mode` is `maintainer-authorized`
 external check never silently makes this one waivable too. **Posting a
 waiver comment does not by itself turn the check green**: a waiver is
 a regular PR conversation comment, which is not one of the required
-workflow's triggers (`pull_request`/`pull_request_target` push --
+workflow's triggers (`pull_request_target` push --
 `pull_request_review` submission is not one either, since #2764 Phase
 1 moved it to the non-required companion), so after posting a waiver
 a maintainer must also

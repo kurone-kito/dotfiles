@@ -221,7 +221,7 @@ A second cause: GitHub gates bot-triggered runs to `action_required`
 `idd-advisory-convergence-comment.yml` companion run for Copilot's
 `pull_request_review`/`pull_request_review_comment` event), so the
 companion cannot refresh the required check. Rerun the existing non-bot
-required `pull_request`- or `pull_request_target`-triggered run for
+required `pull_request_target`-triggered run for
 this HEAD (subject to `ciWait.rerunPolicy`), never the gated bot run
 itself (approve it via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` only if needed).
@@ -231,9 +231,11 @@ comments are filtered, although `issue_comment` is subscribed.
 
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several
-`idd-advisory-convergence` check-run instances: required
-`pull_request`/`pull_request_target` runs can coexist with companion
-reruns of those instances. Review submissions use
+`idd-advisory-convergence` check-run instances: the required
+`pull_request_target` run can coexist with companion reruns of that
+instance. #501 dropped the transitional `pull_request` trigger, so a
+new push no longer creates a second required run from that event.
+Review submissions use
 `--refresh-latest --apply`; comment paths use plain `--apply`.
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
 instance (see `#1745`). If it leaves the block,
