@@ -90,6 +90,8 @@ Describe 'coderabbit-critique' {
     }
 
     foreach ($name in @(
+      'Write-DotfilesCoderabbitUsage'
+      'Write-DotfilesCoderabbitUsageError'
       'Write-DotfilesCoderabbitFallbackReason'
       'Get-DotfilesCoderabbitCommand'
       'Test-DotfilesCoderabbitAuthenticated'
@@ -1204,7 +1206,10 @@ try {
       # exit-guarded block (the only place that produces real process
       # output) never runs -- then applies $EnvironmentOverrides on top.
       function script:Invoke-DotfilesSubjectAsSubprocess {
-        param([hashtable] $EnvironmentOverrides = @{})
+        param(
+          [hashtable] $EnvironmentOverrides = @(),
+          [string[]] $ArgumentList = @()
+        )
 
         # The fake coderabbit fixture's own scenario-selector variables --
         # cleared unconditionally before every run (not just restored to
@@ -1233,7 +1238,7 @@ try {
 
           $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath)
           $psi.Arguments = ConvertTo-DotfilesQuotedArgumentString `
-            -ArgumentList @('-NoProfile', '-File', $script:Subject)
+            -ArgumentList (@('-NoProfile', '-File', $script:Subject) + $ArgumentList)
           $psi.WorkingDirectory = $TestDrive
           $psi.UseShellExecute = $false
           $psi.RedirectStandardOutput = $true
@@ -1348,6 +1353,36 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
+    }
+
+    It 'prints usage for --help without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('--help')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'prints usage for -h without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('-h')
+
+      $result.ExitCode | Should -Be 0
+      $result.Stdout.Trim() | Should -Be 'Usage: coderabbit-critique'
+      $result.Stderr | Should -BeNullOrEmpty
+    }
+
+    It 'rejects unexpected arguments without invoking coderabbit' {
+      $result = Invoke-DotfilesSubjectAsSubprocess `
+        -EnvironmentOverrides @{ PATH = $script:EmptyBinDir } `
+        -ArgumentList @('--unexpected')
+
+      $result.ExitCode | Should -Be 2
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr.Trim() | Should -Be 'Usage: coderabbit-critique'
     }
 
     It 'produces no stdout when the base branch cannot be resolved' {

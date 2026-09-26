@@ -14,6 +14,14 @@
 # output must be parsed instead).
 $ErrorActionPreference = 'Stop'
 
+function global:Write-DotfilesCoderabbitUsage {
+  [Console]::Out.WriteLine('Usage: coderabbit-critique')
+}
+
+function global:Write-DotfilesCoderabbitUsageError {
+  [Console]::Error.WriteLine('Usage: coderabbit-critique')
+}
+
 function global:Write-DotfilesCoderabbitFallbackReason {
   param(
     [Parameter(Mandatory)]
@@ -468,6 +476,16 @@ function global:Invoke-DotfilesCoderabbitCritique {
 }
 
 if ($env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ne '1') {
+  if ($args.Count -gt 0) {
+    if ($args.Count -eq 1 -and ($args[0] -eq '--help' -or $args[0] -eq '-h')) {
+      Write-DotfilesCoderabbitUsage
+      exit 0
+    }
+
+    Write-DotfilesCoderabbitUsageError
+    exit 2
+  }
+
   $result = Invoke-DotfilesCoderabbitCritique
   if ($result.Success) {
     Write-Output $result.Output
