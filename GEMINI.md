@@ -60,13 +60,12 @@ whole ladder is **at most three signing attempts**; each step is a
      pre-classified category (P) failure — still counting as attempt 1,
      with no signing call made — only when **both** hold: no TTY is
      attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
-     signing is not already configured (no `pinentry-mode loopback` in
-     the effective `gpg.conf`). `allow-loopback-pinentry` in the
-     effective `gpg-agent.conf` only permits a client to request
-     loopback; it does not select that mode. Detect existing
-     configuration only — never configure loopback pinentry
-     automatically. Otherwise (a TTY is present, or loopback signing
-     is already configured), attempt GPG here as normal.
+     signing is not already configured (neither `pinentry-mode loopback`
+     in the effective `gpg.conf` nor `allow-loopback-pinentry` in the
+     effective `gpg-agent.conf`). Detect existing configuration only —
+     never configure loopback pinentry automatically. Otherwise (a TTY
+     is present, or either loopback setting is configured), attempt GPG
+     here as normal.
 2. **Classify the failure** by category, not by exact strings:
    **(P)** pinentry / TTY / passphrase prompt failure;
    **(C)** missing / unusable secret key (configuration);
