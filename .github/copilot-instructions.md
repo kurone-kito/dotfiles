@@ -147,11 +147,12 @@ loop on hardware-touch prompts.
    with no signing call made — only when **both** hold: no TTY is
    attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
    signing is not already configured (no `pinentry-mode loopback` in
-   the effective `gpg.conf`, no `allow-loopback-pinentry` in the
-   effective `gpg-agent.conf`). Detect existing configuration only —
-   never configure loopback pinentry automatically. Otherwise (a TTY
-   is present, or loopback signing is already configured), attempt GPG
-   here as normal.
+   the effective `gpg.conf`). `allow-loopback-pinentry` in the
+   effective `gpg-agent.conf` only permits a client to request
+   loopback; it does not select that mode. Detect existing
+   configuration only — never configure loopback pinentry
+   automatically. Otherwise (a TTY is present, or loopback signing
+   is already configured), attempt GPG here as normal.
 
 2. **On failure, classify the cause from stderr by category** —
    not by exact English/locale strings:
@@ -230,8 +231,11 @@ stops on a conflict, continue it with `git rebase-ssh --continue`
 `git rebase --continue` reverts to GPG-primary signing.
 
 In CI / clearly non-interactive automation, prefer the shortest
-path: try GPG once, then a single SSH attempt if a fallback key is
-configured, then unsigned. Skip the gpg-agent restart entirely.
+path: apply the no-TTY pre-check above; when both conditions hold, skip
+GPG as the pre-classified category (P) attempt 1, then make a single
+SSH attempt if a fallback key is configured, then use unsigned. When
+either condition does not hold, try GPG once, then make a single SSH
+attempt, then use unsigned. Skip the gpg-agent restart entirely.
 
 Do **not** recommend `pinentry-mode loopback` as part of automated
 recovery; it is a setup decision that requires non-interactive
