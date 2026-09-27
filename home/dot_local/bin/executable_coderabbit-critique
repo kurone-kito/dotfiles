@@ -7,6 +7,11 @@
 # run it, or an action_required response (rate limit / usage confirmation)
 # that only the operator can resolve.
 #
+# `CODERABBIT_CRITIQUE_DEEP` is an opt-in experimental policy switch. Only
+# the exact truthy values 1, true, and yes (case-insensitive) enable
+# CodeRabbit's undocumented `--deep` mode; focus text is intentionally never
+# forwarded. The standard review remains the default.
+#
 # `coderabbit review --agent` does not fail fast when unauthenticated -- it
 # hangs waiting on an interactive browser OAuth flow instead of exiting, so
 # authentication is checked up front via `coderabbit auth status` (which
@@ -62,6 +67,11 @@ TIMEOUT_SECONDS="${CODERABBIT_CRITIQUE_TIMEOUT:-300}"
 case "$TIMEOUT_SECONDS" in
   '' | *[!0-9]*) TIMEOUT_SECONDS=300 ;;
   *) [ "$TIMEOUT_SECONDS" -gt 0 ] 2>/dev/null || TIMEOUT_SECONDS=300 ;;
+esac
+
+DEEP_REVIEW=false
+case "${CODERABBIT_CRITIQUE_DEEP:-}" in
+  1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss]) DEEP_REVIEW=true ;;
 esac
 
 if ! command -v coderabbit >/dev/null 2>&1; then
@@ -536,20 +546,31 @@ trap 'forward_review_signal INT 130' INT
 trap 'forward_review_signal HUP 129' HUP
 trap 'forward_review_signal QUIT 131' QUIT
 
+run_review() {
+  "$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
+    sh "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" "$SESSION_CMD" "$review_members_tmp" \
+    "$@" >"$stdout_tmp" 2>"$stderr_tmp" &
+  timeout_pid=$!
+  wait "$timeout_pid"
+}
+
 # A progress line for an operator watching the terminal during the
 # potentially multi-minute wait below (#388): stderr-only so it can never
 # leak into stdout's findings text, matching the stdout/stderr split
 # documented above.
-printf 'coderabbit-critique: invoking coderabbit review --agent --base %s (timeout %ss)\n' \
-  "$BASE_BRANCH" "$TIMEOUT_SECONDS" >&2
+review_mode_suffix=
+if [ "$DEEP_REVIEW" = true ]; then
+  review_mode_suffix=' --deep'
+fi
+printf 'coderabbit-critique: invoking coderabbit review --agent --base %s%s (timeout %ss)\n' \
+  "$BASE_BRANCH" "$review_mode_suffix" "$TIMEOUT_SECONDS" >&2
 
 set +e
-"$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
-  sh "$review_wrapper_tmp" "$review_status_tmp" "$deadline_tmp" "$SESSION_CMD" "$review_members_tmp" \
-  coderabbit review --agent --base "$BASE_BRANCH" \
-  >"$stdout_tmp" 2>"$stderr_tmp" &
-timeout_pid=$!
-wait "$timeout_pid"
+if [ "$DEEP_REVIEW" = true ]; then
+  run_review coderabbit review --agent --base "$BASE_BRANCH" --deep
+else
+  run_review coderabbit review --agent --base "$BASE_BRANCH"
+fi
 status=$?
 set -e
 stdout_output="$(cat "$stdout_tmp")"
