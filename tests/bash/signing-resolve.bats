@@ -20,8 +20,11 @@ setup() {
 
 _render() {
   local tmpl="$1"
+  local os="${2:-linux}"
+  printf '{"chezmoi":{"os":"%s"}}\n' "$os" > "$BATS_TEST_TMPDIR/chezmoi-override.json"
   chezmoi execute-template --file "$tmpl" \
     --config "$TMP_CFG" --config-format json \
+    --override-data-file "$BATS_TEST_TMPDIR/chezmoi-override.json" \
     --source "$REPO_HOME" --destination "$TMP_HOME"
 }
 
@@ -142,9 +145,9 @@ JSON
   refute_output --partial 'excludesfile'
 }
 
-@test "config: credential helper sections render unconditionally with no credential data" {
+@test "config: credential helper sections render on Windows" {
   echo '{ "data": {} }' > "$TMP_CFG"
-  run _render "$CONFIG_TMPL"
+  run _render "$CONFIG_TMPL" windows
   assert_success
   assert_output --partial '[credential "https://github.com"]'
   assert_output --partial '[credential "https://gist.github.com"]'
@@ -152,9 +155,27 @@ JSON
   refute_output --partial '[credential "https://dev.azure.com"]'
 }
 
+@test "config: credential helper sections are absent on Linux and macOS" {
+  echo '{ "data": {} }' > "$TMP_CFG"
+
+  for os in linux darwin; do
+    run _render "$CONFIG_TMPL" "$os"
+    assert_success
+    refute_output --partial '[credential "https://github.com"]'
+    refute_output --partial '[credential "https://gist.github.com"]'
+    refute_output --partial '!gh auth git-credential'
+
+    local rendered="$BATS_TEST_TMPDIR/rendered-$os-config"
+    echo "$output" > "$rendered"
+    run git config -f "$rendered" --get core.editor
+    assert_success
+    assert_output 'nvim'
+  done
+}
+
 @test "config: github.com credential helper resolves to gh via git config" {
   echo '{ "data": {} }' > "$TMP_CFG"
-  run _render "$CONFIG_TMPL"
+  run _render "$CONFIG_TMPL" windows
   assert_success
   local rendered="$BATS_TEST_TMPDIR/rendered-config"
   echo "$output" > "$rendered"
@@ -180,7 +201,7 @@ JSON
 
 @test "config: gist.github.com credential helper resolves to gh via git config" {
   echo '{ "data": {} }' > "$TMP_CFG"
-  run _render "$CONFIG_TMPL"
+  run _render "$CONFIG_TMPL" windows
   assert_success
   local rendered="$BATS_TEST_TMPDIR/rendered-config"
   echo "$output" > "$rendered"

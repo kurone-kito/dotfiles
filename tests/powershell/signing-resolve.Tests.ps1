@@ -14,12 +14,16 @@ BeforeAll {
   function Invoke-Render {
     param(
       [string] $TemplatePath,
-      [string] $ConfigJson
+      [string] $ConfigJson,
+      [string] $Os = 'linux'
     )
     $cfg = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}.json" -f [guid]::NewGuid())
     $dest = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-dest" -f [guid]::NewGuid())
+    $overrideDataFile = Join-Path ([IO.Path]::GetTempPath()) ("signing-{0}-override.json" -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     [System.IO.File]::WriteAllText($cfg, $ConfigJson, [System.Text.UTF8Encoding]::new($false))
+    $overrideJson = @{ chezmoi = @{ os = $Os } } | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText($overrideDataFile, $overrideJson, [System.Text.UTF8Encoding]::new($false))
     try {
       # Windows PowerShell 5.1 wraps a native process's redirected stderr
       # lines as ErrorRecord objects; GitHub Actions' powershell shell
@@ -34,6 +38,7 @@ BeforeAll {
         $ErrorActionPreference = 'Continue'
         & chezmoi execute-template --file $TemplatePath `
           --config $cfg --config-format json `
+          --override-data-file $overrideDataFile `
           --source $script:RepoHome --destination $dest 2>&1
       }
       [pscustomobject]@{
@@ -41,7 +46,7 @@ BeforeAll {
         Output   = ($output -join "`n")
       }
     } finally {
-      Remove-Item -Path $cfg, $dest -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path $cfg, $dest, $overrideDataFile -Recurse -Force -ErrorAction SilentlyContinue
     }
   }
 }
@@ -93,6 +98,24 @@ Describe 'signing-resolve' -Skip:(-not $script:HasChezmoi) {
       $r.Output   | Should -Match 'format = ssh'
       $r.Output   | Should -Match '/\.ssh/id\.pub"'
       $r.Output   | Should -Not -Match 'signingkey = "FPR"'
+    }
+
+    It 'renders GitHub credential helpers only on Windows' {
+      $json = '{ "data": {} }'
+      $windows = Invoke-Render $script:ConfigTmpl $json 'windows'
+      $windows.ExitCode | Should -Be 0
+      $windows.Output | Should -Match '\[credential "https://github\.com"\]'
+      $windows.Output | Should -Match '\[credential "https://gist\.github\.com"\]'
+      $windows.Output | Should -Match '!gh auth git-credential'
+
+      foreach ($os in @('linux', 'darwin')) {
+        $nonWindows = Invoke-Render $script:ConfigTmpl $json $os
+        $nonWindows.ExitCode | Should -Be 0
+        $nonWindows.Output | Should -Not -Match '\[credential "https://github\.com"\]'
+        $nonWindows.Output | Should -Not -Match '\[credential "https://gist\.github\.com"\]'
+        $nonWindows.Output | Should -Not -Match '!gh auth git-credential'
+        $nonWindows.Output | Should -Match '\[core\]'
+      }
     }
 
     It 'legacy primary_signing field is rejected with rename hint' {
