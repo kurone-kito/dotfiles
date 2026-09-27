@@ -22,7 +22,7 @@ setup() {
 
 teardown() {
   export PATH="$_ORIG_PATH"
-  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE
+  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_DEEP
 }
 
 make_mock() {
@@ -383,6 +383,40 @@ exit 0
   assert_success
   assert_output --partial '"type":"finding"'
   assert_no_git_calls
+}
+
+@test "keeps standard review arguments for unset, empty, and false deep switches" {
+  make_default_mocks
+
+  for value in unset '' 0 false no; do
+    if [ "$value" = unset ]; then
+      unset CODERABBIT_CRITIQUE_DEEP
+    else
+      export CODERABBIT_CRITIQUE_DEEP="$value"
+    fi
+    run "$SCRIPT"
+    assert_success
+  done
+
+  run grep -cF 'review:review --agent --base master' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "5"
+  run grep -cF -- '--deep' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "0"
+}
+
+@test "passes exactly one deep flag for each accepted truthy spelling" {
+  make_default_mocks
+
+  for value in 1 true TRUE yes YeS; do
+    export CODERABBIT_CRITIQUE_DEEP="$value"
+    run "$SCRIPT"
+    assert_success
+  done
+
+  run grep -cFx 'review:review --agent --base master --deep' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "5"
+  run grep -cF -- 'focus' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "0"
 }
 
 @test "waits for setsid to establish its process group before checking isolation" {

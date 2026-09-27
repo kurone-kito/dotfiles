@@ -7,6 +7,11 @@
 # action_required response (rate limit / usage confirmation) that only the
 # operator can resolve.
 #
+# `CODERABBIT_CRITIQUE_DEEP` is an opt-in experimental policy switch. Only
+# the exact truthy values 1, true, and yes (case-insensitive) enable
+# CodeRabbit's undocumented `--deep` mode; focus text is intentionally never
+# forwarded. The standard review remains the default.
+#
 # `coderabbit review --agent` does not fail fast when unauthenticated -- it
 # hangs waiting on an interactive browser OAuth flow instead of exiting, so
 # authentication is checked up front via `coderabbit auth status` (which
@@ -118,6 +123,10 @@ function global:Resolve-DotfilesCoderabbitTimeoutSeconds {
     return $parsed
   }
   return 300
+}
+
+function global:Test-DotfilesCoderabbitDeepReview {
+  return ($env:CODERABBIT_CRITIQUE_DEEP -match '^(1|true|yes)\z')
 }
 
 # A hardcoded default branch name would be wrong for any repository that
@@ -270,11 +279,16 @@ function global:Invoke-DotfilesCoderabbitReviewWithTimeout {
   param(
     [Parameter(Mandatory)] $CoderabbitCommand,
     [Parameter(Mandatory)] [string] $BaseBranch,
-    [Parameter(Mandatory)] [int] $TimeoutSeconds
+    [Parameter(Mandatory)] [int] $TimeoutSeconds,
+    [switch] $DeepReview
   )
 
+  $argumentList = @('review', '--agent', '--base', $BaseBranch)
+  if ($DeepReview) {
+    $argumentList += '--deep'
+  }
   return Start-DotfilesProcessWithTimeout -FilePath $CoderabbitCommand.Name `
-    -ArgumentList @('review', '--agent', '--base', $BaseBranch) `
+    -ArgumentList $argumentList `
     -TimeoutSeconds $TimeoutSeconds
 }
 
@@ -415,6 +429,7 @@ function global:Invoke-DotfilesCoderabbitCritique {
   }
 
   $timeoutSeconds = Resolve-DotfilesCoderabbitTimeoutSeconds
+  $deepReview = Test-DotfilesCoderabbitDeepReview
   $baseBranch = Resolve-DotfilesCoderabbitBaseBranch
   if (-not $baseBranch) {
     Write-DotfilesCoderabbitFallbackReason -Reason 'base-branch-unresolved'
@@ -426,13 +441,15 @@ function global:Invoke-DotfilesCoderabbitCritique {
   # potentially multi-minute wait below (#388): stderr-only, via the same
   # [Console]::Error mechanism as every other diagnostic in this function,
   # so it can never leak into Stdout's findings text.
+  $reviewModeSuffix = if ($deepReview) { ' --deep' } else { '' }
   [Console]::Error.WriteLine(
-    "coderabbit-critique: invoking coderabbit review --agent --base $baseBranch (timeout ${timeoutSeconds}s)")
+    ("coderabbit-critique: invoking coderabbit review --agent --base {0}{1} (timeout {2}s)" -f `
+      $baseBranch, $reviewModeSuffix, $timeoutSeconds))
 
   try {
     $result = Invoke-DotfilesCoderabbitReviewWithTimeout `
       -CoderabbitCommand $coderabbitCommand -BaseBranch $baseBranch `
-      -TimeoutSeconds $timeoutSeconds
+      -TimeoutSeconds $timeoutSeconds -DeepReview:$deepReview
   } catch {
     Write-DotfilesCoderabbitFallbackReason -Reason 'review-failed'
     [Console]::Error.WriteLine("coderabbit review could not be started: $($_.Exception.Message)")

@@ -44,6 +44,7 @@ Describe 'coderabbit-critique' {
     $script:OriginalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
     $script:OriginalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
     $script:OriginalBase = $env:CODERABBIT_CRITIQUE_BASE
+    $script:OriginalDeep = $env:CODERABBIT_CRITIQUE_DEEP
     $script:OriginalXdgStateHome = $env:XDG_STATE_HOME
     $script:FallbackStateHome = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
     $env:XDG_STATE_HOME = $script:FallbackStateHome
@@ -53,6 +54,7 @@ Describe 'coderabbit-critique' {
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
     Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
     Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
+    Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
     # Every diagnostic in Invoke-DotfilesCoderabbitCritique now goes through
     # [Console]::Error.WriteLine rather than Write-Warning -- deliberately,
     # so a non-interactive `pwsh -File` host can't reroute it onto real
@@ -83,6 +85,11 @@ Describe 'coderabbit-critique' {
     } else {
       $env:CODERABBIT_CRITIQUE_BASE = $script:OriginalBase
     }
+    if ($null -eq $script:OriginalDeep) {
+      Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
+    } else {
+      $env:CODERABBIT_CRITIQUE_DEEP = $script:OriginalDeep
+    }
     if ($null -eq $script:OriginalXdgStateHome) {
       Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue
     } else {
@@ -96,6 +103,7 @@ Describe 'coderabbit-critique' {
       'Get-DotfilesCoderabbitCommand'
       'Test-DotfilesCoderabbitAuthenticated'
       'Resolve-DotfilesCoderabbitTimeoutSeconds'
+      'Test-DotfilesCoderabbitDeepReview'
       'Resolve-DotfilesCoderabbitBaseBranch'
       'ConvertTo-DotfilesWindowsQuotedArgument'
       'ConvertTo-DotfilesQuotedArgumentString'
@@ -163,6 +171,24 @@ Describe 'coderabbit-critique' {
       $env:CODERABBIT_CRITIQUE_TIMEOUT = '0'
 
       Resolve-DotfilesCoderabbitTimeoutSeconds | Should -Be 300
+    }
+  }
+
+  Context 'Test-DotfilesCoderabbitDeepReview' {
+    It 'accepts the documented truthy spellings case-insensitively' {
+      foreach ($value in @('1', 'true', 'TRUE', 'yes', 'YeS')) {
+        $env:CODERABBIT_CRITIQUE_DEEP = $value
+        Test-DotfilesCoderabbitDeepReview | Should -BeTrue
+      }
+    }
+
+    It 'rejects unset, empty, and false values' {
+      foreach ($value in @('', "true`n", "yes`r`n", '0', 'false', 'no', 'true-ish')) {
+        $env:CODERABBIT_CRITIQUE_DEEP = $value
+        Test-DotfilesCoderabbitDeepReview | Should -BeFalse
+      }
+      Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
+      Test-DotfilesCoderabbitDeepReview | Should -BeFalse
     }
   }
 
@@ -362,7 +388,7 @@ Describe 'coderabbit-critique' {
   }
 
   Context 'Invoke-DotfilesCoderabbitReviewWithTimeout' {
-    It 'invokes the bounded primitive with the coderabbit review --agent --base arguments' {
+    It 'invokes the bounded primitive with the standard review arguments' {
       Mock Start-DotfilesProcessWithTimeout {
         [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{}'; Stderr = '' }
       }
@@ -375,6 +401,23 @@ Describe 'coderabbit-critique' {
         $FilePath -eq '/usr/bin/coderabbit' -and
         $TimeoutSeconds -eq 42 -and
         ($ArgumentList -join ' ') -eq 'review --agent --base main'
+      }
+    }
+
+    It 'adds exactly one --deep argument without focus text when enabled' {
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{}'; Stderr = '' }
+      }
+      $cmd = [pscustomobject]@{ Name = '/usr/bin/coderabbit' }
+
+      Invoke-DotfilesCoderabbitReviewWithTimeout -CoderabbitCommand $cmd `
+        -BaseBranch 'main' -TimeoutSeconds 42 -DeepReview | Out-Null
+
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -ParameterFilter {
+        $FilePath -eq '/usr/bin/coderabbit' -and
+        $TimeoutSeconds -eq 42 -and
+        ($ArgumentList -join ' ') -eq 'review --agent --base main --deep' -and
+        $ArgumentList -notcontains 'focus'
       }
     }
   }
@@ -691,6 +734,32 @@ Describe 'coderabbit-critique' {
         Should -BeLessThan $errorText.IndexOf('review-own-stderr-diagnostic')
       # Stream: the progress line never reaches stdout / the findings text.
       $result.Output | Should -Not -Match 'invoking coderabbit review'
+    }
+
+    It 'passes the opt-in deep switch to the review and progress line' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
+      Mock Resolve-DotfilesCoderabbitBaseBranch { 'develop' }
+      $env:CODERABBIT_CRITIQUE_DEEP = 'YeS'
+      $capturedError = [System.IO.StringWriter]::new()
+      [Console]::SetError($capturedError)
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout {
+        [pscustomobject]@{
+          TimedOut = $false; ExitCode = 0
+          Stdout   = '{"type":"finding"}'
+          Stderr   = ''
+        }
+      }
+
+      $result = Invoke-DotfilesCoderabbitCritique
+
+      $result.Success | Should -BeTrue
+      $capturedError.ToString() | Should -Match (
+        [regex]::Escape('coderabbit-critique: invoking coderabbit review --agent --base develop --deep (timeout 300s)')
+      )
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 1 -ParameterFilter {
+        $DeepReview -eq $true
+      }
     }
   }
 
@@ -1200,7 +1269,7 @@ try {
       # scenario-specific environment, and returns its captured
       # ExitCode/Stdout/Stderr. Always clears
       # DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN/CODERABBIT_CRITIQUE_BASE/
-      # CODERABBIT_CRITIQUE_TIMEOUT first -- the outer file-level BeforeEach
+      # CODERABBIT_CRITIQUE_TIMEOUT/CODERABBIT_CRITIQUE_DEEP first -- the outer file-level BeforeEach
       # sets the SKIP_MAIN one for every in-process test in this file, but
       # this child process must not inherit it, or its own top-level
       # exit-guarded block (the only place that produces real process
@@ -1218,17 +1287,19 @@ try {
         # the next scenario's run.
         $fakeVarNames = @(
           'FAKE_AUTH_SIGNED_OUT', 'FAKE_REVIEW_SLEEP', 'FAKE_REVIEW_STDOUT',
-          'FAKE_REVIEW_STDERR', 'FAKE_REVIEW_EXIT'
+          'FAKE_REVIEW_STDERR', 'FAKE_REVIEW_EXIT', 'FAKE_REVIEW_ARGS_FILE'
         )
 
         $originalPath = $env:PATH
         $originalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
         $originalBase = $env:CODERABBIT_CRITIQUE_BASE
         $originalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
+        $originalDeep = $env:CODERABBIT_CRITIQUE_DEEP
         try {
           Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
           Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
           Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
+          Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
           foreach ($name in $fakeVarNames) {
             Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
           }
@@ -1287,6 +1358,11 @@ try {
           } else {
             $env:CODERABBIT_CRITIQUE_TIMEOUT = $originalTimeout
           }
+          if ($null -eq $originalDeep) {
+            Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
+          } else {
+            $env:CODERABBIT_CRITIQUE_DEEP = $originalDeep
+          }
           foreach ($name in $fakeVarNames) {
             Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
           }
@@ -1312,6 +1388,9 @@ if [ "$1" = auth ] && [ "$2" = status ]; then
     echo "Account: fake-user"
   fi
   exit 0
+fi
+if [ -n "$FAKE_REVIEW_ARGS_FILE" ]; then
+  printf '%s\n' "$@" > "$FAKE_REVIEW_ARGS_FILE"
 fi
 if [ -n "$FAKE_REVIEW_SLEEP" ]; then
   sleep "$FAKE_REVIEW_SLEEP"
@@ -1441,6 +1520,38 @@ exit "${FAKE_REVIEW_EXIT:-0}"
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit review requires operator action'
+    }
+
+    It 'passes exactly one deep flag and no focus text to the CLI' {
+      $argsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        CODERABBIT_CRITIQUE_BASE = 'master'
+        CODERABBIT_CRITIQUE_DEEP = 'YeS'
+        FAKE_REVIEW_ARGS_FILE    = $argsFile
+        FAKE_REVIEW_STDOUT       = '{"type":"finding"}'
+      }
+
+      $result.ExitCode | Should -Be 0
+      @(Get-Content -LiteralPath $argsFile) | Should -Be @(
+        'review', '--agent', '--base', 'master', '--deep'
+      )
+    }
+
+    It 'keeps standard CLI arguments when deep mode is false' {
+      $argsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        CODERABBIT_CRITIQUE_BASE = 'master'
+        CODERABBIT_CRITIQUE_DEEP = 'false'
+        FAKE_REVIEW_ARGS_FILE    = $argsFile
+        FAKE_REVIEW_STDOUT       = '{"type":"finding"}'
+      }
+
+      $result.ExitCode | Should -Be 0
+      @(Get-Content -LiteralPath $argsFile) | Should -Be @(
+        'review', '--agent', '--base', 'master'
+      )
     }
 
     It 'keeps exit, stdout, and stderr unchanged when the fallback log is unwritable' {
