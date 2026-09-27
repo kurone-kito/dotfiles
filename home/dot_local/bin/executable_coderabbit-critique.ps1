@@ -126,7 +126,7 @@ function global:Resolve-DotfilesCoderabbitTimeoutSeconds {
 }
 
 function global:Test-DotfilesCoderabbitDeepReview {
-  return ($env:CODERABBIT_CRITIQUE_DEEP -match '^(1|true|yes)$')
+  return ($env:CODERABBIT_CRITIQUE_DEEP -match '^(1|true|yes)\z')
 }
 
 # A hardcoded default branch name would be wrong for any repository that

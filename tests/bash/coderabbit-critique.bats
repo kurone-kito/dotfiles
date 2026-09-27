@@ -413,7 +413,7 @@ exit 0
     assert_success
   done
 
-  run grep -cF 'review:review --agent --base master --deep' "$CODERABBIT_CRITIQUE_LOG"
+  run grep -cFx 'review:review --agent --base master --deep' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "5"
   run grep -cF -- 'focus' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"

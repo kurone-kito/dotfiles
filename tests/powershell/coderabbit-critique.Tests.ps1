@@ -183,7 +183,7 @@ Describe 'coderabbit-critique' {
     }
 
     It 'rejects unset, empty, and false values' {
-      foreach ($value in @('', '0', 'false', 'no', 'true-ish')) {
+      foreach ($value in @('', "true`n", "yes`r`n", '0', 'false', 'no', 'true-ish')) {
         $env:CODERABBIT_CRITIQUE_DEEP = $value
         Test-DotfilesCoderabbitDeepReview | Should -BeFalse
       }
