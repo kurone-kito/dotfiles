@@ -93,12 +93,14 @@
   precomposeUnicode = true
   quotepath = false
   safecrlf = warn
+{{- if eq .chezmoi.os "windows" }}
 [credential "https://github.com"]
   helper =
   helper = !gh auth git-credential
 [credential "https://gist.github.com"]
   helper =
   helper = !gh auth git-credential
+{{- end }}
 [delta]
   features = side-by-side line-numbers decorations
 [diff]
