@@ -22,6 +22,7 @@ setup() {
   export SYSTEMCTL_CREATES_ENTRY=0
   export SYSTEMCTL_STATUS=0
   export TEE_CREATES_ENTRY=0
+  export DOTFILES_WSL_INTEROP_ALLOW_PRIVILEGED_PATH_OVERRIDE=1
 
   printf '%s\n' enabled >"$DOTFILES_WSL_INTEROP_BINFMT_DIR/status"
   touch "$DOTFILES_WSL_INTEROP_BINFMT_DIR/register"
@@ -33,7 +34,8 @@ teardown() {
   export PATH="$_ORIG_PATH"
   unset DOTFILES_WSL_INTEROP_BINFMT_DIR DOTFILES_WSL_INTEROP_PROC_VERSION \
     DOTFILES_WSL_INTEROP_DROPIN DOTFILES_WSL_INTEROP_WARN SUDO_LOG \
-    GREP_LOG SYSTEMCTL_CREATES_ENTRY SYSTEMCTL_STATUS TEE_CREATES_ENTRY
+    GREP_LOG SYSTEMCTL_CREATES_ENTRY SYSTEMCTL_STATUS TEE_CREATES_ENTRY \
+    DOTFILES_WSL_INTEROP_ALLOW_PRIVILEGED_PATH_OVERRIDE
 }
 
 make_sudo_stub() {
@@ -48,12 +50,19 @@ case "$1" in
     exit "$SYSTEMCTL_STATUS"
     ;;
   tee)
-    cat >"$2"
     case "$2" in
       "$DOTFILES_WSL_INTEROP_BINFMT_DIR/status"|\
       "$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop"|\
-      "$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop-late")
-        printf '%s\n' enabled >"$2"
+      "$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop-late"|\
+      "$DOTFILES_WSL_INTEROP_BINFMT_DIR/register")
+        cat >"$2"
+        case "$2" in
+          "$DOTFILES_WSL_INTEROP_BINFMT_DIR/status"|\
+          "$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop"|\
+          "$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop-late")
+            printf '%s\n' enabled >"$2"
+            ;;
+        esac
         ;;
     esac
     if [ "$TEE_CREATES_ENTRY" = 1 ]; then
@@ -159,6 +168,15 @@ EOF
   assert_success
   assert_stderr --partial 'already registered'
   assert_file_not_exists "$SUDO_LOG"
+}
+
+@test "does not use an unapproved binfmt path override for sudo writes" {
+  make_sudo_stub
+  : >"$SUDO_LOG"
+  run --separate-stderr /bin/sh -c \
+    'unset DOTFILES_WSL_INTEROP_ALLOW_PRIVILEGED_PATH_OVERRIDE; . "$1"; wsl_interop_repair' \
+    _ "$SCRIPT_PATH"
+  assert_file_not_contains "$SUDO_LOG" "$DOTFILES_WSL_INTEROP_BINFMT_DIR"
 }
 
 @test "warns when a WSLInterop entry is disabled" {

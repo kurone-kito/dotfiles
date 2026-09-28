@@ -92,6 +92,9 @@ unset _dotfiles_wsl_interop_dropin
 
 wsl_interop_repair() (
   _dotfiles_wsl_interop_binfmt_dir="${DOTFILES_WSL_INTEROP_BINFMT_DIR:-/proc/sys/fs/binfmt_misc}"
+  if [ "${DOTFILES_WSL_INTEROP_ALLOW_PRIVILEGED_PATH_OVERRIDE:-0}" != 1 ]; then
+    _dotfiles_wsl_interop_binfmt_dir=/proc/sys/fs/binfmt_misc
+  fi
   _dotfiles_wsl_interop_proc_version="${DOTFILES_WSL_INTEROP_PROC_VERSION:-/proc/version}"
   _dotfiles_wsl_interop_dropin="${DOTFILES_WSL_INTEROP_DROPIN:-/run/systemd/generator/systemd-binfmt.service.d/override.conf}"
   _dotfiles_wsl_interop_register="$_dotfiles_wsl_interop_binfmt_dir/register"
