@@ -45,7 +45,11 @@ printf '%s\n' "$*" >> "$FZF_LOG"
 fzf-file-widget() { printf 'file:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_history__() { printf 'history:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_cd__() { printf 'cd -- %s\n' "$FZF_CD_TARGET"; }
-__fzf_default_completion() { printf 'completion:%s\n' "$*" >> "$FZF_RESULT"; }
+__fzf_default_completion() {
+  printf 'completion:%s\n' "$*" >> "$FZF_RESULT"
+  [ -n "${FZF_MOCK_DEFAULT_REPLY-}" ] \
+    && COMPREPLY=("$FZF_MOCK_DEFAULT_REPLY")
+}
 complete -D -F __fzf_default_completion -o default -o bashdefault
 _fzf_replacement() {
   printf 'replacement:%s:%s:%s:%s:%s\n' "$1" "$2" "$3" \
@@ -134,7 +138,8 @@ write_legacy_mock() {
 
   run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
     DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
-    FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
+    FZF_RESULT="$FZF_RESULT" FZF_MOCK_DEFAULT_REPLY=fzf-match \
+    bash --noprofile --norc -i -c '
       . "$SCRIPT_PATH"
       _dotfiles_fzf_completion first-input
       printf "%s\n" "$(cat "$FZF_RESULT")"
@@ -150,7 +155,8 @@ write_legacy_mock() {
 
   run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
     DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
-    FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
+    FZF_RESULT="$FZF_RESULT" FZF_MOCK_DEFAULT_REPLY=fzf-match \
+    bash --noprofile --norc -i -c '
       _original_default() { printf "default:%s\n" "${COMP_WORDS[0]}" >> "$FZF_RESULT"; }
       _original_explicit() {
         COMPREPLY=(explicit-match)
@@ -175,7 +181,7 @@ write_legacy_mock() {
   assert_output --partial 'default-spec:complete -F _dotfiles_fzf_completion -D'
   assert_output --partial 'explicit:explicit-command:current-word:previous-word'
   assert_output --partial 'status:124'
-  assert_output --partial 'explicit-comreply:explicit-match word-match'
+  assert_output --partial 'explicit-comreply:explicit-match word-match fzf-match'
 }
 
 @test "WSL completion preserves word-list and command handlers" {

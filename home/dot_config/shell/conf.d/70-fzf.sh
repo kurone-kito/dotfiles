@@ -312,7 +312,11 @@ EOF
 
     _dotfiles_fzf_completion() {
       local _dotfiles_fzf_status=0
+      local _dotfiles_fzf_fzf_status=0
       local _dotfiles_fzf_current_spec=
+      local _dotfiles_fzf_original_reply=
+      local _dotfiles_fzf_fzf_reply=
+      local _dotfiles_fzf_combined_reply=
       _dotfiles_fzf_command_name="${COMP_WORDS[0]-}"
       _dotfiles_fzf_original_spec=
       if [ -n "$_dotfiles_fzf_command_name" ]; then
@@ -341,12 +345,38 @@ EOF
       if [ -n "$_dotfiles_fzf_original_spec" ]; then
         _dotfiles_fzf_completion_invoke_spec "$_dotfiles_fzf_original_spec" "$@"
         _dotfiles_fzf_status=$?
-      elif [ "$(type -t __fzf_default_completion 2>/dev/null)" = function ]; then
+        if [ "${#COMPREPLY[@]}" -gt 0 ]; then
+          _dotfiles_fzf_original_reply="$(printf '%s\n' "${COMPREPLY[@]}")"
+        fi
+      fi
+      if [ "$(type -t __fzf_default_completion 2>/dev/null)" = function ]; then
+        eval 'COMPREPLY=()'
         __fzf_default_completion "$@"
-        _dotfiles_fzf_status=$?
+        _dotfiles_fzf_fzf_status=$?
+        [ "$_dotfiles_fzf_status" -ne 0 ] \
+          || _dotfiles_fzf_status=$_dotfiles_fzf_fzf_status
+        if [ "${#COMPREPLY[@]}" -gt 0 ]; then
+          _dotfiles_fzf_fzf_reply="$(printf '%s\n' "${COMPREPLY[@]}")"
+        fi
+      fi
+      if [ -n "$_dotfiles_fzf_original_reply" ]; then
+        _dotfiles_fzf_combined_reply="$_dotfiles_fzf_original_reply"
+      fi
+      if [ -n "$_dotfiles_fzf_fzf_reply" ]; then
+        [ -n "$_dotfiles_fzf_combined_reply" ] \
+          && _dotfiles_fzf_combined_reply="$_dotfiles_fzf_combined_reply
+$_dotfiles_fzf_fzf_reply" \
+          || _dotfiles_fzf_combined_reply="$_dotfiles_fzf_fzf_reply"
+      fi
+      eval 'COMPREPLY=()'
+      if [ -n "$_dotfiles_fzf_combined_reply" ]; then
+        readarray -t COMPREPLY <<EOF
+$_dotfiles_fzf_combined_reply
+EOF
       fi
       unset _dotfiles_fzf_command_name _dotfiles_fzf_original_spec \
-        _dotfiles_fzf_current_spec
+        _dotfiles_fzf_current_spec _dotfiles_fzf_original_reply \
+        _dotfiles_fzf_fzf_reply _dotfiles_fzf_combined_reply
       return "$_dotfiles_fzf_status"
     }
 
