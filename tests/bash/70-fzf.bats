@@ -46,6 +46,7 @@ fzf-file-widget() { printf 'file:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_history__() { printf 'history:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_cd__() { printf 'cd -- %s\n' "$FZF_CD_TARGET"; }
 __fzf_default_completion() { printf 'completion:%s\n' "$*" >> "$FZF_RESULT"; }
+complete -D -F __fzf_default_completion -o default -o bashdefault
 _fzf_replacement() {
   printf 'replacement:%s:%s:%s:%s:%s\n' "$1" "$2" "$3" \
     "${COMP_LINE-}" "${COMP_POINT-}" >> "$FZF_RESULT"
@@ -162,6 +163,7 @@ write_legacy_mock() {
       COMP_WORDS=(printf)
       COMP_CWORD=1
       _dotfiles_fzf_completion default-input
+      printf "default-spec:%s\n" "$(complete -p -D)"
       COMP_WORDS=(example-command)
       _dotfiles_fzf_completion explicit-command current-word previous-word
       printf "status:%s\n" "$?"
@@ -170,6 +172,7 @@ write_legacy_mock() {
     '
   assert_success
   assert_output --partial 'default:printf'
+  assert_output --partial 'default-spec:complete -F _dotfiles_fzf_completion -D'
   assert_output --partial 'explicit:explicit-command:current-word:previous-word'
   assert_output --partial 'status:124'
   assert_output --partial 'explicit-comreply:explicit-match word-match'

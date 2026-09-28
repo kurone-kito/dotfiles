@@ -322,6 +322,11 @@ EOF
       [ -n "$_dotfiles_fzf_original_spec" ] \
         || _dotfiles_fzf_original_spec="$_dotfiles_fzf_original_default_spec"
       _dotfiles_fzf_lazy_load || return
+      if [ -z "$_dotfiles_fzf_original_default_spec" ]; then
+        complete -D -F _dotfiles_fzf_completion -o default -o bashdefault 2>/dev/null || true
+      else
+        complete -D -F _dotfiles_fzf_completion 2>/dev/null || true
+      fi
       if [ -n "$_dotfiles_fzf_command_name" ]; then
         _dotfiles_fzf_current_spec="$(complete -p -- \
           "$_dotfiles_fzf_command_name" 2>/dev/null || true)"
