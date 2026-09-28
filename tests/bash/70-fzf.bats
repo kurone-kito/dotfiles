@@ -14,6 +14,7 @@ setup() {
   FZF_RESULT="$BATS_TEST_TMPDIR/fzf.result"
   FZF_CD_TARGET="$BATS_TEST_TMPDIR"
   FZF_PROC_VERSION="$BATS_TEST_TMPDIR/proc-version"
+  unset FZF_MOCK_VERSION
   mkdir -p "$MOCK_BIN"
   : > "$FZF_LOG"
   : > "$FZF_RESULT"
@@ -31,9 +32,9 @@ write_modern_mock() {
   cat > "$MOCK_BIN/fzf" << 'MOCK'
 #!/bin/sh
 printf '%s\n' "$*" >> "$FZF_LOG"
-case "$1" in
+  case "$1" in
   --version)
-    echo "0.74.0 (test)"
+    echo "${FZF_MOCK_VERSION:-0.74.0} (test)"
     ;;
   --bash)
     cat << 'BASH'
@@ -41,11 +42,17 @@ fzf-file-widget() { printf 'file:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_history__() { printf 'history:%s\n' "${READLINE_LINE-}" >> "$FZF_RESULT"; }
 __fzf_cd__() { printf 'cd -- %s\n' "$FZF_CD_TARGET"; }
 __fzf_default_completion() { printf 'completion:%s\n' "$*" >> "$FZF_RESULT"; }
+_fzf_replacement() {
+  printf 'replacement:%s:%s:%s:%s:%s\n' "$1" "$2" "$3" \
+    "${COMP_LINE-}" "${COMP_POINT-}" >> "$FZF_RESULT"
+  return 124
+}
+complete -F _fzf_replacement fzf-replaced-command
 if [ "${FZF_CTRL_T_COMMAND-x}" != "" ]; then
-  bind -m emacs-standard -x '"\\C-t": fzf-file-widget'
+  bind -m emacs-standard -x '"\C-t": fzf-file-widget'
 fi
 if [ "${FZF_ALT_C_COMMAND-x}" != "" ]; then
-  bind -m emacs-standard -x '"\\ec": __fzf_cd__'
+  bind -m emacs-standard -x '"\ec": __fzf_cd__'
 fi
 BASH
     ;;
@@ -65,7 +72,7 @@ MOCK
 
 write_legacy_mock() {
   write_modern_mock
-  sed -i 's/0.74.0/0.42.0/' "$MOCK_BIN/fzf"
+  export FZF_MOCK_VERSION=0.42.0
   FZF_DIR="$BATS_TEST_TMPDIR/share/fzf"
   mkdir -p "$FZF_DIR"
   printf '%s\n' \
@@ -97,12 +104,14 @@ write_legacy_mock() {
       READLINE_LINE="prefix"
       READLINE_POINT=6
       _dotfiles_fzf_file_widget
+      printf "first:%s\n" "$(head -n 1 "$FZF_RESULT")"
       _dotfiles_fzf_cd_widget
       _dotfiles_fzf_file_widget
       printf "pwd:%s\n" "$PWD" >> "$FZF_RESULT"
       printf "%s\n" "$(cat "$FZF_RESULT")"
     '
   assert_success
+  assert_output --partial 'first:file:prefix'
   assert_output --partial 'file:prefix'
   assert_output --partial "pwd:$BATS_TEST_TMPDIR"
   run grep -c -- '--version' "$FZF_LOG"
@@ -134,20 +143,77 @@ write_legacy_mock() {
     DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
     FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
       _original_default() { printf "default:%s\n" "${COMP_WORDS[0]}" >> "$FZF_RESULT"; }
-      _original_explicit() { printf "explicit:%s\n" "${COMP_WORDS[0]}" >> "$FZF_RESULT"; }
+      _original_explicit() {
+        COMPREPLY=(explicit-match)
+        printf "explicit:%s:%s:%s\n" "$1" "$2" "$3" >> "$FZF_RESULT"
+        return 124
+      }
       complete -D -F _original_default
-      complete -F _original_explicit example-command
+      complete -F _original_explicit -W "word-match" example-command
       . "$SCRIPT_PATH"
       COMP_WORDS=(printf)
       COMP_CWORD=1
       _dotfiles_fzf_completion default-input
       COMP_WORDS=(example-command)
-      _dotfiles_fzf_completion explicit-input
+      _dotfiles_fzf_completion explicit-command current-word previous-word
+      printf "status:%s\n" "$?"
+      printf "explicit-comreply:%s\n" "${COMPREPLY[*]}"
       cat "$FZF_RESULT"
     '
   assert_success
   assert_output --partial 'default:printf'
-  assert_output --partial 'explicit:example-command'
+  assert_output --partial 'explicit:explicit-command:current-word:previous-word'
+  assert_output --partial 'status:124'
+  assert_output --partial 'explicit-comreply:explicit-match word-match'
+}
+
+@test "WSL completion preserves word-list and command handlers" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    bash --noprofile --norc -i -c '
+      complete -D -W "alpha beta"
+      __test_completion_command() {
+        printf "command-result:%s:%s:%s:%s:%s\\n" "$1" "$2" "$3" \
+          "${COMP_LINE-}" "${COMP_POINT-}"
+      }
+      complete -C __test_completion_command command-completion
+      . "$SCRIPT_PATH"
+      COMP_WORDS=(word-command a)
+      COMP_CWORD=1
+      _dotfiles_fzf_completion
+      printf "word:%s\\n" "${COMPREPLY[*]}"
+      COMP_WORDS=(command-completion)
+      COMP_CWORD=1
+      COMP_LINE="command-completion a"
+      COMP_POINT=20
+      _dotfiles_fzf_completion command-name current-word previous-word
+      printf "command:%s\\n" "${COMPREPLY[*]}"
+    '
+  assert_success
+  assert_output --partial 'word:alpha'
+  assert_output --partial 'command:command-result:command-name:current-word:previous-word:command-completion a:20'
+}
+
+@test "WSL completion uses fzf replacement installed during lazy setup" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      COMP_WORDS=(fzf-replaced-command current)
+      COMP_CWORD=1
+      COMP_LINE="fzf-replaced-command current"
+      COMP_POINT=29
+      _dotfiles_fzf_completion replaced-command current previous
+      printf "status:%s\n" "$?"
+      cat "$FZF_RESULT"
+    '
+  assert_success
+  assert_output --partial 'replacement:replaced-command:current:previous:fzf-replaced-command current:29'
+  assert_output --partial 'status:124'
 }
 
 @test "WSL legacy integration loads on first use" {
@@ -213,9 +279,11 @@ write_legacy_mock() {
 }
 
 @test "missing fzf and non-interactive shells are clean no-op paths" {
-  run env PATH="$BATS_TEST_TMPDIR/no-fzf:/usr/bin:/bin" \
+  BASH_BIN="$(command -v bash)"
+  run env PATH="$BATS_TEST_TMPDIR/no-fzf" \
     SCRIPT_PATH="$SCRIPT_PATH" DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" \
-    bash --noprofile --norc -c '. "$SCRIPT_PATH"'
+    "$BASH_BIN" --noprofile --norc -i -c \
+      '! command -v fzf >/dev/null 2>&1; . "$SCRIPT_PATH"'
   assert_success
 
   write_modern_mock
@@ -235,10 +303,12 @@ write_legacy_mock() {
       . "$SCRIPT_PATH"
       BUFFER="zsh-input"
       _dotfiles_fzf_file_widget
+      printf "first:%s\n" "$(head -n 1 "$FZF_RESULT")"
       _dotfiles_fzf_file_widget
       cat "$FZF_RESULT"
     '
   assert_success
+  assert_output --partial 'first:zsh-file:zsh-input'
   assert_output --partial 'zsh-file:zsh-input'
   run grep -c -- '--zsh' "$FZF_LOG"
   assert_output '1'
