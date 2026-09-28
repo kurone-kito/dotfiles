@@ -120,12 +120,33 @@ _dotfiles_mise_fp_body() {
   while [ -n "$_dir" ]; do
     for _name in \
       mise.toml .mise.toml mise.local.toml .mise.local.toml \
+      mise/config.toml .config/mise.toml .config/mise/mise.toml \
       .config/mise/config.toml .config/mise/config.local.toml \
+      mise/config.local.toml .config/mise.local.toml \
+      .config/mise/mise.local.toml \
       .mise/config.toml .mise/config.local.toml \
       .tool-versions .node-version .nvmrc .python-version \
       .ruby-version .go-version .java-version .bun-version \
       .terraform-version; do
       _dotfiles_mise_fp_add_file "${_dir}/${_name}"
+    done
+    case ${MISE_ENV-} in
+      "" | *[!A-Za-z0-9_-]*) ;;
+      *)
+        _dotfiles_mise_fp_add_file "${_dir}/mise.${MISE_ENV}.toml"
+        _dotfiles_mise_fp_add_file "${_dir}/.mise.${MISE_ENV}.toml"
+        _dotfiles_mise_fp_add_file "${_dir}/.config/mise/config.${MISE_ENV}.toml"
+        ;;
+    esac
+    for _confd in \
+      "${_dir}/.config/mise/conf.d" \
+      "${_dir}/mise/conf.d" \
+      "${_dir}/.mise/conf.d"; do
+      if [ -d "$_confd" ]; then
+        for _conf in "$_confd"/*; do
+          _dotfiles_mise_fp_add_file "$_conf"
+        done
+      fi
     done
     [ "$_dir" = / ] && break
     _next=$(dirname "$_dir")
@@ -165,11 +186,25 @@ _dotfiles_mise_wrap_bash() {
   _fn=$1
   _orig=$2
   declare -F "$_fn" >/dev/null 2>&1 || return 0
-  eval "$(declare -f "$_fn" | sed "1s/^${_fn} /${_orig} /")"
+  # Keep the saved exit status visible to the original function. Its
+  # first line reads $?, which would otherwise be the fingerprint check.
+  eval "$(declare -f "$_fn" \
+    | sed -e "1s/^${_fn} /${_orig} /" \
+      -e 's/previous_exit_status=\$?/previous_exit_status=${_DOTFILES_MISE_PREV:-$?}/')"
   eval "${_fn}() {
-    _prev=\$?
+    _DOTFILES_MISE_PREV=\$?
     if _dotfiles_mise_hook_is_unchanged \"\$@\"; then
-      return \$_prev
+      if [ \"${_fn}\" = _mise_hook_prompt_command ]; then
+        __MISE_BASH_CHPWD_RAN=0
+        unset __MISE_BASH_SKIP_FIRST_PROMPT
+      fi
+      return \$_DOTFILES_MISE_PREV
+    fi
+    # A stale chpwd flag would make the original prompt hook return
+    # before applying a same-directory config change.
+    if [ \"${_fn}\" = _mise_hook_prompt_command ]; then
+      __MISE_BASH_CHPWD_RAN=0
+      unset __MISE_BASH_SKIP_FIRST_PROMPT
     fi
     if [ -n \"\${_DOTFILES_MISE_FP_NEXT:-}\" ]; then
       _DOTFILES_MISE_FP=\$_DOTFILES_MISE_FP_NEXT
@@ -207,6 +242,16 @@ _dotfiles_mise_install_hook_cache() {
   fi
   _fp=$(_dotfiles_mise_config_fingerprint) || return 0
   _DOTFILES_MISE_FP=$_fp
+}
+
+# Drop PATH snapshots from `mise activate`. Replaying them would reset
+# PATH and __MISE_ORIG_PATH to the shell that first filled the cache.
+_dotfiles_mise_strip_frozen_path() {
+  awk '
+    $0 ~ /^export PATH=/ { next }
+    $0 ~ /^export __MISE_ORIG_PATH=/ { next }
+    { print }
+  '
 }
 
 # Cache the activate script text. A hit still prints it for eval, so
@@ -260,6 +305,7 @@ ${_env}" | _dotfiles_mise_sha256_stdin) || _key=
     [ -n "$_out" ] && printf '%s\n' "$_out"
     return 0
   fi
+  _out=$(printf '%s\n' "$_out" | _dotfiles_mise_strip_frozen_path)
   mkdir -p "$_cache_dir" || {
     printf '%s\n' "$_out"
     return 0

@@ -397,11 +397,18 @@ _mise_hook() {
 }
 _mise_hook_chpwd() {
   echo "chpwd $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  __MISE_BASH_CHPWD_RAN=1
   MISE_SELECTED_NODE=$(_mise_selected_node)
   export MISE_SELECTED_NODE
 }
 _mise_hook_prompt_command() {
-  echo "precmd $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  if [ "${__MISE_BASH_CHPWD_RAN:-0}" = 1 ]; then
+    echo "prompt-skip" >> "${MISE_MOCK_LOG:-/dev/null}"
+    __MISE_BASH_CHPWD_RAN=0
+    unset __MISE_BASH_SKIP_FIRST_PROMPT
+    return
+  fi
+  echo "prompt-hook" >> "${MISE_MOCK_LOG:-/dev/null}"
   MISE_SELECTED_NODE=$(_mise_selected_node)
   export MISE_SELECTED_NODE
 }
@@ -546,6 +553,77 @@ _count_log() {
   assert_success
   assert_output "1"
   assert_equal "$MISE_ACTIVATED" "bash"
+}
+
+@test "WSL: prompt hook applies a same-directory config edit" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/proj"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+  _mise_hook_prompt_command
+  assert_equal "$MISE_SELECTED_NODE" "22"
+  run _count_log '^prompt-hook$'
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: mise/config.toml still changes the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/proj/mise"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise/config.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: cached activate script does not replace PATH" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    printf '%s\n' "export PATH='/frozen'"
+    printf '%s\n' 'export MISE_ACTIVATED=bash'
+    printf '%s\n' 'export __MISE_ORIG_PATH="${__MISE_ORIG_PATH:-$PATH}"'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  _source_script
+  PATH="/sentinel:${PATH}"
+  _source_script
+
+  case "$PATH" in
+    /frozen | /frozen:*) return 1 ;;
+  esac
+  case "$PATH" in
+    *"/sentinel"*) ;;
+    *) return 1 ;;
+  esac
 }
 
 @test "WSL: does not cache activate output when the version is empty" {
