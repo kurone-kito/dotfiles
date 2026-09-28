@@ -70,6 +70,13 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
       fzf_default_completion="$_dotfiles_fzf_zsh_original_tab"
     fi
     _dotfiles_fzf_setup
+    # fzf's own integration replaces complete -D. Restore the bridge after
+    # every trigger, including key bindings, which never re-enter completion.
+    if [ -n "${BASH_VERSION:-}" ] \
+      && [ "$(type -t _dotfiles_fzf_restore_default_completion 2>/dev/null)" = function ]
+    then
+      _dotfiles_fzf_restore_default_completion
+    fi
   }
 
   if [ -n "${BASH_VERSION:-}" ]; then
@@ -104,6 +111,43 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
         local command_line
         command_line="$(__fzf_cd__ "$@")" || return
         eval "$command_line"
+      fi
+    }
+
+    # Bash complete -X: a leading ! negates, and & is the current word.
+    _dotfiles_fzf_x_removes() {
+      local _dotfiles_fzf_word="$1"
+      local _dotfiles_fzf_pat="$2"
+      local _dotfiles_fzf_cur="$3"
+      local _dotfiles_fzf_neg=0
+      local _dotfiles_fzf_matched=0
+      local _dotfiles_fzf_old_ifs="$IFS"
+      case "$_dotfiles_fzf_pat" in
+        '!'*)
+          _dotfiles_fzf_neg=1
+          _dotfiles_fzf_pat="${_dotfiles_fzf_pat#!}"
+          ;;
+      esac
+      [ -n "$_dotfiles_fzf_pat" ] || return 1
+      _dotfiles_fzf_pat="${_dotfiles_fzf_pat//&/$_dotfiles_fzf_cur}"
+      [ -n "$_dotfiles_fzf_pat" ] || return 1
+      IFS=
+      case "$_dotfiles_fzf_word" in
+        $_dotfiles_fzf_pat) _dotfiles_fzf_matched=1 ;;
+      esac
+      IFS="$_dotfiles_fzf_old_ifs"
+      if [ "$_dotfiles_fzf_neg" = 1 ]; then
+        [ "$_dotfiles_fzf_matched" = 0 ]
+      else
+        [ "$_dotfiles_fzf_matched" = 1 ]
+      fi
+    }
+
+    _dotfiles_fzf_restore_default_completion() {
+      if [ -z "${_dotfiles_fzf_original_default_spec-}" ]; then
+        complete -D -F _dotfiles_fzf_completion -o default -o bashdefault 2>/dev/null || true
+      else
+        complete -D -F _dotfiles_fzf_completion 2>/dev/null || true
       fi
     }
 
@@ -227,10 +271,13 @@ $_dotfiles_fzf_source_matches" \
       if [ -n "$_dotfiles_fzf_matches" ]; then
         _dotfiles_fzf_processed_matches=
         while IFS= read -r _dotfiles_fzf_token; do
-          if [ -n "$_dotfiles_fzf_exclude" ]; then
-            case "$_dotfiles_fzf_token" in
-              $_dotfiles_fzf_exclude) continue ;;
-            esac
+          if [ -n "$_dotfiles_fzf_exclude" ] \
+            && _dotfiles_fzf_x_removes \
+              "$_dotfiles_fzf_token" \
+              "$_dotfiles_fzf_exclude" \
+              "$_dotfiles_fzf_current"
+          then
+            continue
           fi
           _dotfiles_fzf_token="$_dotfiles_fzf_prefix$_dotfiles_fzf_token$_dotfiles_fzf_suffix"
           [ -n "$_dotfiles_fzf_processed_matches" ] \
@@ -240,9 +287,12 @@ $_dotfiles_fzf_token" \
         done <<EOF
 $_dotfiles_fzf_matches
 EOF
-        readarray -t COMPREPLY <<EOF
+        eval 'COMPREPLY=()'
+        if [ -n "$_dotfiles_fzf_processed_matches" ]; then
+          readarray -t COMPREPLY <<EOF
 $_dotfiles_fzf_processed_matches
 EOF
+        fi
       fi
       return "$_dotfiles_fzf_status"
     }
@@ -326,11 +376,7 @@ EOF
       [ -n "$_dotfiles_fzf_original_spec" ] \
         || _dotfiles_fzf_original_spec="$_dotfiles_fzf_original_default_spec"
       _dotfiles_fzf_lazy_load || return
-      if [ -z "$_dotfiles_fzf_original_default_spec" ]; then
-        complete -D -F _dotfiles_fzf_completion -o default -o bashdefault 2>/dev/null || true
-      else
-        complete -D -F _dotfiles_fzf_completion 2>/dev/null || true
-      fi
+      _dotfiles_fzf_restore_default_completion
       if [ -n "$_dotfiles_fzf_command_name" ]; then
         _dotfiles_fzf_current_spec="$(complete -p -- \
           "$_dotfiles_fzf_command_name" 2>/dev/null || true)"
@@ -401,11 +447,7 @@ EOF
       bind -m vi-command -x '"\ec": _dotfiles_fzf_cd_widget'
       bind -m vi-insert -x '"\ec": _dotfiles_fzf_cd_widget'
     fi
-    if [ -z "$_dotfiles_fzf_original_default_spec" ]; then
-      complete -D -F _dotfiles_fzf_completion -o default -o bashdefault 2>/dev/null || true
-    else
-      complete -D -F _dotfiles_fzf_completion 2>/dev/null || true
-    fi
+    _dotfiles_fzf_restore_default_completion
       _dotfiles_fzf_install_explicit_bridges
     fi
   elif [ -n "${ZSH_VERSION:-}" ]; then

@@ -233,6 +233,68 @@ write_legacy_mock() {
   assert_output --partial 'modifier:pre-keep-suf'
 }
 
+@test "WSL completion honors negated and current-word -X filters" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    bash --noprofile --norc -i -c '
+      _negated() { COMPREPLY=(a.txt b.tmp c.txt); }
+      complete -F _negated -X "!*.txt" negated-command
+      _anchored() { COMPREPLY=(foo.tmp foo.txt bar.tmp); }
+      complete -F _anchored -X "&.tmp" anchored-command
+      . "$SCRIPT_PATH"
+      COMP_WORDS=(negated-command)
+      COMP_CWORD=1
+      _dotfiles_fzf_completion negated-command "" ""
+      printf "neg:%s\n" "${COMPREPLY[*]}"
+      COMP_WORDS=(anchored-command foo)
+      COMP_CWORD=1
+      _dotfiles_fzf_completion anchored-command foo ""
+      printf "amp:%s\n" "${COMPREPLY[*]}"
+    '
+  assert_success
+  assert_output --partial 'neg:a.txt c.txt'
+  assert_output --partial 'amp:foo.txt bar.tmp'
+}
+
+@test "WSL completion leaves COMPREPLY empty when -X removes every match" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    bash --noprofile --norc -i -c '
+      _removed() { COMPREPLY=(drop drop2); }
+      complete -F _removed -X "drop*" empty-command
+      . "$SCRIPT_PATH"
+      COMP_WORDS=(empty-command)
+      COMP_CWORD=1
+      _dotfiles_fzf_completion empty-command "" ""
+      printf "empty-count:%s\n" "${#COMPREPLY[@]}"
+    '
+  assert_success
+  assert_output --partial 'empty-count:0'
+}
+
+@test "WSL key binding restores an existing default completion bridge" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
+      _original_default() { COMPREPLY=(original); }
+      complete -D -F _original_default
+      . "$SCRIPT_PATH"
+      READLINE_LINE="prefix"
+      READLINE_POINT=6
+      _dotfiles_fzf_file_widget
+      printf "default-spec:%s\n" "$(complete -p -D)"
+    '
+  assert_success
+  assert_output --partial 'default-spec:complete -F _dotfiles_fzf_completion -D'
+  refute_output --partial '__fzf_default_completion'
+}
+
 @test "WSL completion uses fzf replacement installed during lazy setup" {
   write_modern_mock
 
