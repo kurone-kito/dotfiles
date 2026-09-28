@@ -18,6 +18,7 @@ setup() {
   export DOTFILES_WSL_INTEROP_PROC_VERSION="$BATS_TEST_TMPDIR/proc-version"
   export DOTFILES_WSL_INTEROP_DROPIN="$BATS_TEST_TMPDIR/drop-in/override.conf"
   export SUDO_LOG="$BATS_TEST_TMPDIR/sudo.log"
+  export GREP_LOG="$BATS_TEST_TMPDIR/grep.log"
   export SYSTEMCTL_CREATES_ENTRY=0
   export SYSTEMCTL_STATUS=0
   export TEE_CREATES_ENTRY=0
@@ -32,7 +33,7 @@ teardown() {
   export PATH="$_ORIG_PATH"
   unset DOTFILES_WSL_INTEROP_BINFMT_DIR DOTFILES_WSL_INTEROP_PROC_VERSION \
     DOTFILES_WSL_INTEROP_DROPIN DOTFILES_WSL_INTEROP_WARN SUDO_LOG \
-    SYSTEMCTL_CREATES_ENTRY SYSTEMCTL_STATUS TEE_CREATES_ENTRY
+    GREP_LOG SYSTEMCTL_CREATES_ENTRY SYSTEMCTL_STATUS TEE_CREATES_ENTRY
 }
 
 make_sudo_stub() {
@@ -95,6 +96,15 @@ run_interactive_source() {
   run_interactive_source
   assert_success
   refute_stderr --partial 'wsl_interop_repair'
+}
+
+@test "warns when global binfmt status is disabled" {
+  printf '%s\n' disabled >"$DOTFILES_WSL_INTEROP_BINFMT_DIR/status"
+  printf '%s\n' enabled >"$DOTFILES_WSL_INTEROP_BINFMT_DIR/WSLInterop"
+
+  run_interactive_source
+  assert_success
+  assert_stderr --partial 'wsl_interop_repair'
 }
 
 @test "does not warn for non-interactive, non-WSL, unmounted, or opted-out shells" {

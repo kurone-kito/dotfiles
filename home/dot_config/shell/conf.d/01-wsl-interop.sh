@@ -37,13 +37,11 @@ _dotfiles_wsl_interop_status_is_enabled() {
 if [ -f "$_dotfiles_wsl_interop_binfmt_dir/status" ]; then
   _dotfiles_wsl_interop_warning_needed=false
   if ! _dotfiles_wsl_interop_status_is_enabled \
-    "$_dotfiles_wsl_interop_binfmt_dir/status"
-  then
-    _dotfiles_wsl_interop_warning_needed=true
-  elif ! _dotfiles_wsl_interop_entry_is_enabled \
-      "$_dotfiles_wsl_interop_binfmt_dir/WSLInterop" \
-    && ! _dotfiles_wsl_interop_entry_is_enabled \
-      "$_dotfiles_wsl_interop_binfmt_dir/WSLInterop-late"
+      "$_dotfiles_wsl_interop_binfmt_dir/status" \
+    || { ! _dotfiles_wsl_interop_entry_is_enabled \
+        "$_dotfiles_wsl_interop_binfmt_dir/WSLInterop" \
+      && ! _dotfiles_wsl_interop_entry_is_enabled \
+        "$_dotfiles_wsl_interop_binfmt_dir/WSLInterop-late"; }
   then
     _dotfiles_wsl_interop_warning_needed=true
   fi
