@@ -22,7 +22,8 @@ BeforeAll {
     $configPath = Join-Path ([IO.Path]::GetTempPath()) ("coderabbit-config-{0}.json" -f [guid]::NewGuid())
     $destination = Join-Path ([IO.Path]::GetTempPath()) ("coderabbit-destination-{0}" -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
-    $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath
+    $configJson = $config | ConvertTo-Json -Depth 5
+    [IO.File]::WriteAllText($configPath, $configJson, [Text.UTF8Encoding]::new($false))
     try {
       $output = & chezmoi execute-template --file $script:TemplatePath --config $configPath --config-format json --source (Join-Path $script:RepoRoot 'home') --destination $destination 2>&1
       [pscustomobject]@{
