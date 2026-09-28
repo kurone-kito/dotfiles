@@ -24,7 +24,8 @@ value supplied by the caller instead of unsetting or overriding it.
 
 To return to standard review depth, remove the section or set
 `deepReview = false`, run `chezmoi apply`, and start a new
-shell. If the variable was supplied externally, also run
+shell. If the variable is set in the parent shell, including by a previous
+profile, also run
 `unset CODERABBIT_CRITIQUE_DEEP` in POSIX shells or
 `Remove-Item Env:CODERABBIT_CRITIQUE_DEEP` in PowerShell before
 starting the new shell. This setting only selects the review depth; it does
