@@ -73,7 +73,11 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
   }
 
   if [ -n "${BASH_VERSION:-}" ]; then
-    _dotfiles_fzf_file_widget() {
+    if [ "${BASH_VERSION%%.*}" -lt 4 ] 2>/dev/null; then
+      # Bash 3.2 has no bind -x or READLINE_LINE/READLINE_POINT support.
+      _dotfiles_fzf_lazy_load
+    else
+      _dotfiles_fzf_file_widget() {
       _dotfiles_fzf_lazy_load || return
       if [ "$(type -t fzf-file-widget 2>/dev/null)" = function ]; then
         fzf-file-widget "$@"
@@ -115,6 +119,11 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
       local _dotfiles_fzf_matches=
       local _dotfiles_fzf_source_matches=
       local _dotfiles_fzf_completion_args=
+      local _dotfiles_fzf_completion_env=
+      local _dotfiles_fzf_exclude=
+      local _dotfiles_fzf_prefix=
+      local _dotfiles_fzf_suffix=
+      local _dotfiles_fzf_processed_matches=
       local _dotfiles_fzf_status=0
       local _dotfiles_fzf_source_status=0
       local _dotfiles_fzf_completion_command="${1-}"
@@ -144,10 +153,25 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
             _dotfiles_fzf_command="$1"
             shift
             ;;
-          -A|-G|-W|-X|-P|-S)
+          -A|-G|-W)
             [ "$#" -gt 0 ] || continue
             _dotfiles_fzf_compgen_args="$_dotfiles_fzf_compgen_args \
               $(printf '%q %q' "$_dotfiles_fzf_token" "$1")"
+            shift
+            ;;
+          -X)
+            [ "$#" -gt 0 ] || continue
+            _dotfiles_fzf_exclude="$1"
+            shift
+            ;;
+          -P)
+            [ "$#" -gt 0 ] || continue
+            _dotfiles_fzf_prefix="$1"
+            shift
+            ;;
+          -S)
+            [ "$#" -gt 0 ] || continue
+            _dotfiles_fzf_suffix="$1"
             shift
             ;;
           -*) _dotfiles_fzf_compgen_args="$_dotfiles_fzf_compgen_args $_dotfiles_fzf_token" ;;
@@ -171,8 +195,12 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
           "$_dotfiles_fzf_completion_command" \
           "$_dotfiles_fzf_completion_current" \
           "$_dotfiles_fzf_completion_previous")"
+        _dotfiles_fzf_completion_env="$(printf \
+          'COMP_LINE=%q COMP_POINT=%q COMP_TYPE=%q COMP_KEY=%q' \
+          "${COMP_LINE-}" "${COMP_POINT-}" "${COMP_TYPE-}" "${COMP_KEY-}")"
         _dotfiles_fzf_source_matches="$(eval \
-          "$_dotfiles_fzf_command$_dotfiles_fzf_completion_args")"
+          "$_dotfiles_fzf_completion_env \
+          $_dotfiles_fzf_command$_dotfiles_fzf_completion_args")"
         _dotfiles_fzf_source_status=$?
         [ "$_dotfiles_fzf_status" -ne 0 ] \
           || _dotfiles_fzf_status=$_dotfiles_fzf_source_status
@@ -197,8 +225,23 @@ $_dotfiles_fzf_source_matches" \
         fi
       fi
       if [ -n "$_dotfiles_fzf_matches" ]; then
-        readarray -t COMPREPLY <<EOF
+        _dotfiles_fzf_processed_matches=
+        while IFS= read -r _dotfiles_fzf_token; do
+          if [ -n "$_dotfiles_fzf_exclude" ]; then
+            case "$_dotfiles_fzf_token" in
+              $_dotfiles_fzf_exclude) continue ;;
+            esac
+          fi
+          _dotfiles_fzf_token="$_dotfiles_fzf_prefix$_dotfiles_fzf_token$_dotfiles_fzf_suffix"
+          [ -n "$_dotfiles_fzf_processed_matches" ] \
+            && _dotfiles_fzf_processed_matches="$_dotfiles_fzf_processed_matches
+$_dotfiles_fzf_token" \
+            || _dotfiles_fzf_processed_matches="$_dotfiles_fzf_token"
+        done <<EOF
 $_dotfiles_fzf_matches
+EOF
+        readarray -t COMPREPLY <<EOF
+$_dotfiles_fzf_processed_matches
 EOF
       fi
       return "$_dotfiles_fzf_status"
@@ -328,7 +371,8 @@ EOF
     else
       complete -D -F _dotfiles_fzf_completion 2>/dev/null || true
     fi
-    _dotfiles_fzf_install_explicit_bridges
+      _dotfiles_fzf_install_explicit_bridges
+    fi
   elif [ -n "${ZSH_VERSION:-}" ]; then
     _dotfiles_fzf_file_widget() {
       _dotfiles_fzf_lazy_load || return
@@ -347,13 +391,15 @@ EOF
 
     _dotfiles_fzf_completion() {
       _dotfiles_fzf_lazy_load || return
-      if [ "$(whence -w fzf-completion 2>/dev/null)" = \
-        "fzf-completion: function"
-      then
+      if [ "$(whence -w fzf-completion 2>/dev/null)" = "fzf-completion: function" ]; then
         fzf-completion "$@"
       elif [ -n "${_dotfiles_fzf_zsh_original_tab:-}" ]; then
         bindkey '^I' "$_dotfiles_fzf_zsh_original_tab"
-        zle "$_dotfiles_fzf_zsh_original_tab"
+        if [ -n "${ZLE_STATE:-}" ]; then
+          zle "$_dotfiles_fzf_zsh_original_tab"
+        else
+          "$_dotfiles_fzf_zsh_original_tab" "$@"
+        fi
       fi
     }
 

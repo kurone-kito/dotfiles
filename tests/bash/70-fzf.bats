@@ -28,6 +28,10 @@ teardown() {
   export PATH="$_ORIG_PATH"
 }
 
+require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
+}
+
 write_modern_mock() {
   cat > "$MOCK_BIN/fzf" << 'MOCK'
 #!/bin/sh
@@ -61,8 +65,12 @@ BASH
 fzf-file-widget() { print -r -- "zsh-file:${BUFFER-}" >> "$FZF_RESULT"; }
 fzf-history-widget() { print -r -- "zsh-history:${BUFFER-}" >> "$FZF_RESULT"; }
 fzf-cd-widget() { print -r -- "zsh-cd:${BUFFER-}" >> "$FZF_RESULT"; }
+ZSH
+    if [ "${FZF_MOCK_ZSH_NO_COMPLETION-}" != x ]; then
+      cat << 'ZSH'
 fzf-completion() { print -r -- "zsh-completion:${BUFFER-}" >> "$FZF_RESULT"; }
 ZSH
+    fi
     ;;
 esac
 MOCK
@@ -177,6 +185,7 @@ write_legacy_mock() {
       __test_completion_command() {
         printf "command-result:%s:%s:%s:%s:%s\\n" "$1" "$2" "$3" \
           "${COMP_LINE-}" "${COMP_POINT-}"
+        bash -c '\''printf "command-context:%s:%s\\n" "$COMP_LINE" "$COMP_POINT"'\''
       }
       complete -C __test_completion_command command-completion
       . "$SCRIPT_PATH"
@@ -194,6 +203,25 @@ write_legacy_mock() {
   assert_success
   assert_output --partial 'word:alpha'
   assert_output --partial 'command:command-result:command-name:current-word:previous-word:command-completion a:20'
+  assert_output --partial 'command-context:command-completion a:20'
+}
+
+@test "WSL completion applies modifiers to combined handler results" {
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    FZF_RESULT="$FZF_RESULT" bash --noprofile --norc -i -c '
+      _test_modified_completion() { COMPREPLY=(drop keep); }
+      complete -F _test_modified_completion -X "drop*" -P "pre-" -S "-suf" modified-command
+      . "$SCRIPT_PATH"
+      COMP_WORDS=(modified-command)
+      COMP_CWORD=1
+      _dotfiles_fzf_completion modified-command current previous
+      printf "modifier:%s\n" "${COMPREPLY[*]}"
+    '
+  assert_success
+  assert_output --partial 'modifier:pre-keep-suf'
 }
 
 @test "WSL completion uses fzf replacement installed during lazy setup" {
@@ -294,7 +322,7 @@ write_legacy_mock() {
 }
 
 @test "zsh WSL widgets defer and preserve the first buffer" {
-  command -v zsh >/dev/null 2>&1 || skip "zsh not available"
+  require_zsh
   write_modern_mock
 
   run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
@@ -310,6 +338,29 @@ write_legacy_mock() {
   assert_success
   assert_output --partial 'first:zsh-file:zsh-input'
   assert_output --partial 'zsh-file:zsh-input'
+  run grep -c -- '--zsh' "$FZF_LOG"
+  assert_output '1'
+}
+
+@test "zsh WSL completion falls back to the original Tab widget" {
+  require_zsh
+  write_modern_mock
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    FZF_RESULT="$FZF_RESULT" FZF_MOCK_ZSH_NO_COMPLETION=x zsh -f -i -c '
+      _original_tab() { print -r -- "original-tab:${BUFFER-}" >> "$FZF_RESULT"; }
+      zle -N _original_tab
+      bindkey "^I" _original_tab
+      . "$SCRIPT_PATH"
+      BUFFER="zsh-tab-input"
+      _dotfiles_fzf_completion
+      printf "first:%s\n" "$(head -n 1 "$FZF_RESULT")"
+      cat "$FZF_RESULT"
+    '
+  assert_success
+  assert_output --partial 'first:original-tab:zsh-tab-input'
+  assert_output --partial 'original-tab:zsh-tab-input'
   run grep -c -- '--zsh' "$FZF_LOG"
   assert_output '1'
 }
