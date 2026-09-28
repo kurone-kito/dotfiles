@@ -16,6 +16,9 @@ setup() {
   # filesystem (e.g. a real /mnt/c/Users/*/.mise on a WSL host running
   # this suite) by pointing it at a guaranteed-nonexistent directory.
   export DOTFILES_MISE_WSL_USERS_ROOT="$BATS_TEST_TMPDIR/no-windows-users"
+  export DOTFILES_MISE_TRUST_STAMP="$BATS_TEST_TMPDIR/mise-trust-stamp"
+  export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/mise-activate-cache"
+  unset DOTFILES_MISE_ASSUME_WSL
 }
 
 teardown() {
@@ -350,6 +353,212 @@ MOCK
   assert_success
   assert_output --partial 'allow_low_downloads = true'
   assert_output --partial 'version = "latest"'
+}
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
+_setup_recording_mise() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  trust)
+    echo "$@" >> "${MISE_MOCK_LOG:-/dev/null}"
+    ;;
+  --version | version)
+    if [ -n "${MISE_MOCK_VERSION:-}" ]; then
+      printf '%s\n' "$MISE_MOCK_VERSION"
+    fi
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ "$2" = "bash" ]; then
+      cat << 'EOF'
+export MISE_ACTIVATED=bash
+_mise_selected_node() {
+  _d=${PWD:-/}
+  _ver=global
+  while [ -n "$_d" ] && [ "$_d" != / ]; do
+    if [ -f "$_d/mise.toml" ]; then
+      _ver=$(awk -F '"' '/^node = / { print $2; exit }' "$_d/mise.toml")
+      [ -n "$_ver" ] || _ver=global
+      break
+    fi
+    _d=$(dirname "$_d")
+  done
+  printf '%s\n' "$_ver"
+}
+_mise_hook() {
+  echo "hook $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+_mise_hook_chpwd() {
+  echo "chpwd $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+_mise_hook_prompt_command() {
+  echo "precmd $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+EOF
+    fi
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}
+
+_count_log() {
+  if [ ! -f "$MISE_MOCK_LOG" ]; then
+    printf '%s\n' 0
+    return 0
+  fi
+  grep -c -e "$1" "$MISE_MOCK_LOG" || true
+}
+
+# ---------------------------------------------------------------------------
+# WSL trust stamp and non-WSL trust
+# ---------------------------------------------------------------------------
+
+@test "WSL: trusts an unchanged config once and trusts it again after a change" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: trusts a config that appears after the first startup" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  mkdir -p "$HOME/.mise"
+  printf '%s\n' 'node = "22"' > "$HOME/.mise/config.toml"
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "2"
+}
+
+@test "non-WSL: trusts existing configs on every startup" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=0
+  mkdir -p "$HOME/.mise" "$HOME/.config/mise"
+  touch "$HOME/.mise/config.toml" "$HOME/.config/mise/config.toml"
+
+  _source_script
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "4"
+}
+
+@test "WSL: directory hook applies and restores the selected tool across enter and leave" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/empty-b" \
+    "$BATS_TEST_TMPDIR/proj/sub" "$BATS_TEST_TMPDIR/proj-b"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/proj-b/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+
+  cd "$BATS_TEST_TMPDIR/empty-b"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "0"
+  assert [ -z "${MISE_SELECTED_NODE:-}" ]
+
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+
+  cd "$BATS_TEST_TMPDIR/proj/sub"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "global"
+
+  cd "$BATS_TEST_TMPDIR/proj-b"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "22"
+}
+
+@test "WSL: a cwd template and --force still run the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/tmpl/a" "$BATS_TEST_TMPDIR/tmpl/b"
+  printf '%s\n' 'node = "24" # {{cwd}}' > "$BATS_TEST_TMPDIR/tmpl/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/tmpl/a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+
+  cd "$BATS_TEST_TMPDIR/tmpl/b"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+
+  _mise_hook --force
+  run _count_log '^hook '
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: reuses a cached activate script without skipping activation" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+
+  _source_script
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "1"
+  assert_equal "$MISE_ACTIVATED" "bash"
+}
+
+@test "WSL: does not cache activate output when the version is empty" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  unset MISE_MOCK_VERSION
+
+  _source_script
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "2"
 }
 
 # ---------------------------------------------------------------------------
