@@ -34,6 +34,29 @@ _dotfiles_wsl_interop_status_is_enabled() {
   return 1
 }
 
+_dotfiles_wsl_interop_proc_version_is_wsl() {
+  _dotfiles_wsl_interop_proc_version_line=
+  _dotfiles_wsl_interop_proc_version_match=false
+  if [ -f "$1" ]; then
+    while IFS= read -r _dotfiles_wsl_interop_proc_version_line; do
+      case "$_dotfiles_wsl_interop_proc_version_line" in
+        *[mM][iI][cC][rR][oO][sS][oO][fF][tT]*)
+          _dotfiles_wsl_interop_proc_version_match=true
+          break
+          ;;
+      esac
+    done 2>/dev/null <"$1"
+  fi
+  if [ "$_dotfiles_wsl_interop_proc_version_match" = true ]; then
+    unset _dotfiles_wsl_interop_proc_version_line
+    unset _dotfiles_wsl_interop_proc_version_match
+    return 0
+  fi
+  unset _dotfiles_wsl_interop_proc_version_line
+  unset _dotfiles_wsl_interop_proc_version_match
+  return 1
+}
+
 if [ -f "$_dotfiles_wsl_interop_binfmt_dir/status" ]; then
   _dotfiles_wsl_interop_warning_needed=false
   if ! _dotfiles_wsl_interop_status_is_enabled \
@@ -53,7 +76,8 @@ if [ -f "$_dotfiles_wsl_interop_binfmt_dir/status" ]; then
   then
     if [ "${DOTFILES_WSL_INTEROP_WARN:-1}" != 0 ] \
       && [ "$_dotfiles_wsl_interop_warning_needed" = true ] \
-      && grep -qi microsoft "$_dotfiles_wsl_interop_proc_version" 2>/dev/null
+      && _dotfiles_wsl_interop_proc_version_is_wsl \
+        "$_dotfiles_wsl_interop_proc_version"
     then
       printf '%s\n' \
         'wsl_interop_repair: WSLInterop registration is missing, disabled, or globally disabled; run wsl_interop_repair to restore it.' >&2

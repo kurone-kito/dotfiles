@@ -107,6 +107,22 @@ run_interactive_source() {
   assert_stderr --partial 'wsl_interop_repair'
 }
 
+@test "does not fork for a non-WSL host with missing registration" {
+  cat >"$BATS_TEST_TMPDIR/bin/grep" <<'EOF'
+#!/bin/sh
+: >"$GREP_LOG"
+exec /usr/bin/grep "$@"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/grep"
+  printf '%s\n' 'Linux version 6.6.0-generic' \
+    >"$DOTFILES_WSL_INTEROP_PROC_VERSION"
+
+  run_interactive_source
+  assert_success
+  refute_stderr --partial 'wsl_interop_repair'
+  assert_file_not_exists "$GREP_LOG"
+}
+
 @test "does not warn for non-interactive, non-WSL, unmounted, or opted-out shells" {
   run --separate-stderr env HOME="$HOME" PATH="$PATH" \
     DOTFILES_WSL_INTEROP_BINFMT_DIR="$DOTFILES_WSL_INTEROP_BINFMT_DIR" \
