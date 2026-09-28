@@ -49,6 +49,14 @@ model (how `data.git.*` connects to `data.secret.gpg.*` and
 `data.secret.ssh.*`) and
 [Using ghq with multiple accounts](ghq-workflow.md) for `sshhost` routing.
 
+## CodeRabbit deep review (data.coderabbit)
+
+| Field      | Type    | Required | Default | Purpose                                                                 |
+| ---------- | ------- | -------- | ------- | ----------------------------------------------------------------------- |
+| deepReview | boolean | no       | false   | Enables the opt-in deep-review environment variable in shell profiles. |
+
+See [CodeRabbit deep-review mode](coderabbit-deep-review.md).
+
 ## Secret manager (`data.secret`)
 
 | Field       | Type   | Required | Default                       | Purpose                                                                      |

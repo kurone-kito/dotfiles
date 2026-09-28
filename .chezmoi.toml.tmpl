@@ -25,6 +25,13 @@ sshhost = {{ dig "sshhost" "" $profile | quote }}
 {{- end }}
 {{- end }}
 
+{{- $coderabbitDeepReview := dig "coderabbit" "deepReview" false . }}
+{{- if $coderabbitDeepReview }}
+
+[data.coderabbit]
+deepReview = true
+{{- end }}
+
 [data.secret]
 manager = {{ $secretManager | quote }}
 {{- if (dig "secret" "local_dir" "" .) }}
