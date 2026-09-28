@@ -7,3 +7,4 @@ autoProxy=true
 dnsTunneling=true
 networkingMode=mirrored
 virtiofs=true
+vmIdleTimeout=-1
