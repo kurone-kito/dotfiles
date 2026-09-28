@@ -1,0 +1,6 @@
+#!/bin/sh
+# Opt in to CodeRabbit's deep review mode when enabled in chezmoi data.
+
+{{ if (dig "coderabbit" "deepReview" false .) }}
+export CODERABBIT_CRITIQUE_DEEP=1
+{{ end }}

@@ -114,6 +114,19 @@ input line editing
 - [Grok Build](https://grok.com/)
 - [OpenAI Codex CLI](https://github.com/openai/codex)
 
+### CodeRabbit deep reviews
+
+CodeRabbit uses standard review depth by default. Enable the opt-in deep
+review mode from chezmoi with this configuration:
+
+```toml
+[data.coderabbit]
+deepReview = true
+```
+
+See the [CodeRabbit deep-review guide](docs/coderabbit-deep-review.md) for
+the configuration and apply steps.
+
 ## Requirements
 
 - [chezmoi](https://www.chezmoi.io/)
