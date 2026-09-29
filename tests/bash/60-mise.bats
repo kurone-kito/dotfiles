@@ -593,6 +593,51 @@ _count_log() {
   assert_output "1"
 }
 
+@test "WSL: cached activate keeps a leading shim directory on PATH" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_DATA_DIR="$BATS_TEST_TMPDIR/mise-data"
+  _source_script
+
+  PATH="/sentinel:/usr/bin"
+  unset __MISE_ORIG_PATH
+  eval "$({
+    printf '%s\n' "export PATH='${MISE_DATA_DIR}/shims:/frozen'"
+    printf '%s\n' "export __MISE_ORIG_PATH='/frozen'"
+    printf '%s\n' "export PATH=\"/exe:\$PATH\""
+    printf '%s\n' "export PATH='/usr/bin:/${MISE_DATA_DIR}/shims'"
+  } | _dotfiles_mise_strip_frozen_path)"
+
+  case "$PATH" in
+    "/exe:${MISE_DATA_DIR}/shims:/sentinel:/usr/bin") ;;
+    *) printf 'PATH=%s\n' "$PATH" >&2; return 1 ;;
+  esac
+  assert_equal "$__MISE_ORIG_PATH" "/sentinel:/usr/bin"
+  case "$PATH" in
+    *frozen*) return 1 ;;
+  esac
+}
+
+@test "WSL: editing MISE_CONFIG_FILE still runs the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/selected.toml"
+  export MISE_CONFIG_FILE="$BATS_TEST_TMPDIR/selected.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/selected.toml"
+  _mise_hook_prompt_command
+
+  run _count_log '^prompt-hook$'
+  assert_success
+  assert_output "1"
+}
+
 @test "WSL: cached activate script does not replace PATH" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1

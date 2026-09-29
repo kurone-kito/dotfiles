@@ -108,7 +108,16 @@ _dotfiles_mise_fp_add_file() {
 
 _dotfiles_mise_fp_body() {
   printf 'env\t%s\n' "${MISE_ENV-}"
+  # The path alone misses an in-place edit of an explicit config file
+  # that the directory walk does not already name.
   printf 'config_file\t%s\n' "${MISE_CONFIG_FILE-}"
+  if [ -n "${MISE_CONFIG_FILE:-}" ]; then
+    case $MISE_CONFIG_FILE in
+      /*) ;;
+      *) printf '%s\n' NEED_PWD ;;
+    esac
+    _dotfiles_mise_fp_add_file "$MISE_CONFIG_FILE"
+  fi
   _dotfiles_mise_fp_add_file "${HOME}/.config/mise/config.toml"
   _dotfiles_mise_fp_add_file "${HOME}/.config/mise/config.local.toml"
   _dotfiles_mise_fp_add_file "${HOME}/.mise/config.toml"
@@ -244,12 +253,106 @@ _dotfiles_mise_install_hook_cache() {
   _DOTFILES_MISE_FP=$_fp
 }
 
-# Drop PATH snapshots from `mise activate`. Replaying them would reset
-# PATH and __MISE_ORIG_PATH to the shell that first filled the cache.
+# Drop frozen PATH snapshots from `mise activate`. Replaying a literal
+# assignment would reset PATH to the shell that filled the cache.
+# `activate_shims` emits that snapshot with shim directories first;
+# rewrite only that prefix into a live prepend, after capturing
+# __MISE_ORIG_PATH from this shell. Assignments that already reference
+# $PATH (shim mode, or the mise executable directory) stay as written.
 _dotfiles_mise_strip_frozen_path() {
-  awk '
-    $0 ~ /^export PATH=/ { next }
-    $0 ~ /^export __MISE_ORIG_PATH=/ { next }
+  DOTFILES_MISE_SHIM_DIRS=$(
+    _data=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
+    printf '%s\n' \
+      "${MISE_SHIMS_DIR:-$_data/shims}" \
+      "${MISE_SYSTEM_SHIMS_DIR:-${MISE_SYSTEM_DATA_DIR:-/usr/local/share/mise}/shims}" \
+      "${HOME}/.local/share/mise/shims"
+  ) awk -v q="'" '
+    function is_known_shim(entry,    i, e) {
+      e = entry
+      sub(/\/+$/, "", e)
+      if (e ~ /(^|\/)mise\/shims$/) return 1
+      for (i = 1; i <= known_n; i++) if (e == known[i]) return 1
+      return 0
+    }
+    function dquote(s,    out, i, c, n) {
+      out = ""
+      n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\" || c == "\"" || c == "`" || c == "$") out = out "\\"
+        out = out c
+      }
+      return out
+    }
+    function unquote_sq(s,    out, i, c, n, esc) {
+      if (substr(s, 1, 1) != q) return ""
+      esc = q "\\" q q
+      out = ""
+      n = length(s)
+      i = 2
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (c == q) {
+          if (substr(s, i, 4) == esc) {
+            out = out q
+            i += 4
+            continue
+          }
+          return out
+        }
+        out = out c
+        i++
+      }
+      return out
+    }
+    function leading_shims(value,    n, i, parts, prefix, count, entry) {
+      n = split(value, parts, ":")
+      prefix = ""
+      count = 0
+      for (i = 1; i <= n; i++) {
+        entry = parts[i]
+        sub(/\/+$/, "", entry)
+        if (!is_known_shim(entry)) break
+        if (count > 0) prefix = prefix ":"
+        prefix = prefix entry
+        count++
+      }
+      if (count == 0) return ""
+      return prefix
+    }
+    BEGIN {
+      known_n = split(ENVIRON["DOTFILES_MISE_SHIM_DIRS"], _raw, "\n")
+      known_n_out = 0
+      for (i = 1; i <= known_n; i++) {
+        if (_raw[i] == "") continue
+        known_n_out++
+        known[known_n_out] = _raw[i]
+        sub(/\/+$/, "", known[known_n_out])
+      }
+      known_n = known_n_out
+    }
+    $0 ~ /^export PATH=/ {
+      rest = substr($0, length("export PATH=") + 1)
+      if (rest ~ /^"/ && rest ~ /\$(\{PATH\}|PATH)/) {
+        print
+        next
+      }
+      value = ""
+      if (substr(rest, 1, 1) == q) value = unquote_sq(rest)
+      prefix = leading_shims(value)
+      if (prefix != "") {
+        print "if [ -z \"${__MISE_ORIG_PATH:-}\" ]; then"
+        print "export __MISE_ORIG_PATH=\"$PATH\""
+        print "fi"
+        print "export PATH=\"" dquote(prefix) ":$PATH\""
+      }
+      next
+    }
+    $0 ~ /^export __MISE_ORIG_PATH=/ {
+      rest = substr($0, length("export __MISE_ORIG_PATH=") + 1)
+      if (rest ~ /\$/) print
+      next
+    }
     { print }
   '
 }
