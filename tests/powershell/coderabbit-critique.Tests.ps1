@@ -197,14 +197,24 @@ Describe 'coderabbit-critique' {
 
   Context 'critique policy environment restore' {
     It 'restores a set-but-empty policy variable' {
+      # Win32 SetEnvironmentVariable deletes a name whose value is empty.
+      # Windows PowerShell 5.1 follows that, so set-but-empty is absent
+      # there. PowerShell 7 keeps the empty value.
       Set-Item -Path Env:CODERABBIT_CRITIQUE_DEEP -Value ''
+      $storedEmpty = (Test-Path Env:CODERABBIT_CRITIQUE_DEEP) -and
+        ($env:CODERABBIT_CRITIQUE_DEEP -eq '')
       $snapshot = Get-DotfilesCritiquePolicySnapshot
-      Clear-DotfilesCritiquePolicyEnv
+      Set-Item -Path Env:CODERABBIT_CRITIQUE_DEEP -Value 'leaked'
 
       Restore-DotfilesCritiquePolicySnapshot -Snapshot $snapshot
 
-      Test-Path Env:CODERABBIT_CRITIQUE_DEEP | Should -BeTrue
-      $env:CODERABBIT_CRITIQUE_DEEP | Should -Be ''
+      if ($storedEmpty) {
+        Test-Path Env:CODERABBIT_CRITIQUE_DEEP | Should -BeTrue
+        $env:CODERABBIT_CRITIQUE_DEEP | Should -Be ''
+      } else {
+        $snapshot['CODERABBIT_CRITIQUE_DEEP'].Present | Should -BeFalse
+        Test-Path Env:CODERABBIT_CRITIQUE_DEEP | Should -BeFalse
+      }
     }
   }
 
