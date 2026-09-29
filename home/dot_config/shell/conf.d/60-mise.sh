@@ -281,8 +281,97 @@ _dotfiles_mise_install_hook_cache() {
   elif [ -n "${ZSH_VERSION:-}" ]; then
     _dotfiles_mise_wrap_zsh _mise_hook _dotfiles_mise_orig_hook
   fi
+  # A deferred activation hook records the fingerprint itself, and only
+  # after hook-env succeeds. Stamping it here would hide that failure.
+  if [ "${1:-}" = "--defer-fingerprint" ]; then
+    return 0
+  fi
   _fp=$(_dotfiles_mise_config_fingerprint) || return 0
   _DOTFILES_MISE_FP=$_fp
+}
+
+# Split `_mise_hook --force` out of a generated activate script.
+# That call runs before these wrappers exist. Bash's hook returns the
+# previous status, so a failed hook-env is invisible and a later prompt
+# would skip the retry. The flag stays inside mise's own guard. Lines
+# after the call (zsh records PATH there) are printed after the marker
+# and run only once the wrapped hook has finished.
+_dotfiles_mise_split_activation_hook() {
+  awk '
+    function is_force(line) {
+      return line ~ /^[ \t]*_mise_hook[ \t]+--force[ \t]*;?[ \t]*$/
+    }
+    function is_closer(line) {
+      if (line ~ /^[ \t]*$/) return 1
+      if (line ~ /^[ \t]*#/) return 1
+      if (line ~ /^[ \t]*(fi|done|esac|})[ \t]*(#.*)?$/) return 1
+      return 0
+    }
+    { lines[++n] = $0 }
+    END {
+      force = 0
+      for (i = 1; i <= n; i++) {
+        if (is_force(lines[i])) {
+          force = i
+          break
+        }
+      }
+      if (force == 0) {
+        for (i = 1; i <= n; i++) print lines[i]
+        exit
+      }
+      for (i = 1; i < force; i++) print lines[i]
+      print "_DOTFILES_MISE_DEFER_FORCE=1"
+      j = force + 1
+      while (j <= n && is_closer(lines[j])) {
+        print lines[j]
+        j++
+      }
+      print "%%dotfiles-mise-activation-split%%"
+      for (i = j; i <= n; i++) print lines[i]
+    }
+  '
+}
+
+_dotfiles_mise_run_activation_hook() {
+  if [ -n "${BASH_VERSION:-}" ]; then
+    declare -F _mise_hook >/dev/null 2>&1 || return 0
+  elif [ -n "${ZSH_VERSION:-}" ]; then
+    whence -f _mise_hook >/dev/null 2>&1 || return 0
+  else
+    return 0
+  fi
+  _mise_hook --force
+}
+
+# Eval a cached activate script, then record the fingerprint only when
+# its startup hook-env succeeds. Scripts with no force hook keep the
+# previous stamp so an unchanged directory can still skip.
+_dotfiles_mise_activate_wsl() {
+  _shell=$1
+  _split=$(
+    _dotfiles_mise_activate_cached "$_shell" \
+      | _dotfiles_mise_split_activation_hook
+  )
+  _marker='%%dotfiles-mise-activation-split%%'
+  _suffix=
+  _immediate=$_split
+  case "$_split" in
+    *"$_marker"*)
+      _immediate=${_split%%"$_marker"*}
+      _suffix=${_split#*"$_marker"}
+      ;;
+  esac
+  unset _DOTFILES_MISE_DEFER_FORCE
+  eval "$_immediate" 2>/dev/null
+  if [ "${_DOTFILES_MISE_DEFER_FORCE:-}" = 1 ]; then
+    unset _DOTFILES_MISE_DEFER_FORCE
+    _dotfiles_mise_install_hook_cache --defer-fingerprint
+    _dotfiles_mise_run_activation_hook
+  else
+    _dotfiles_mise_install_hook_cache
+  fi
+  eval "$_suffix" 2>/dev/null
 }
 
 # Drop frozen PATH snapshots from `mise activate`. Replaying a literal
@@ -400,8 +489,9 @@ _dotfiles_mise_activate_file_token() {
   _dotfiles_mise_sha256_file "$1" || printf '%s\n' unavailable
 }
 
-# Cache the activate script text. A hit still prints it for eval, so
-# the initial hook-env inside that script still runs.
+# Cache the activate script text. A hit still prints it for eval.
+# The caller moves `_mise_hook --force` until after the wrappers exist,
+# so the one startup hook-env runs where its status is visible.
 _dotfiles_mise_activate_cached() {
   _shell=$1
   _ver=$(mise --version 2>/dev/null | awk 'NR == 1 { print; exit }')
@@ -525,15 +615,13 @@ unset _mise_cfg _mise_win_users
 
 if [ -n "${ZSH_VERSION:-}" ]; then
   if _dotfiles_mise_is_wsl; then
-    eval "$(_dotfiles_mise_activate_cached zsh)" 2>/dev/null
-    _dotfiles_mise_install_hook_cache
+    _dotfiles_mise_activate_wsl zsh
   else
     eval "$(mise activate zsh --quiet 2>/dev/null)" 2>/dev/null
   fi
 elif [ -n "${BASH_VERSION:-}" ]; then
   if _dotfiles_mise_is_wsl; then
-    eval "$(_dotfiles_mise_activate_cached bash)" 2>/dev/null
-    _dotfiles_mise_install_hook_cache
+    _dotfiles_mise_activate_wsl bash
   else
     eval "$(mise activate bash --quiet 2>/dev/null)" 2>/dev/null
   fi

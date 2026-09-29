@@ -660,6 +660,113 @@ MOCK
   assert_output "2"
 }
 
+@test "WSL: a failed activation hook does not stick the fingerprint" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_MOCK_FAIL_ONCE="$BATS_TEST_TMPDIR/fail-activate"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+__MISE_HOOK_ENABLED=1
+_mise_hook() {
+  local previous_exit_status=$?
+  eval "$(mise hook-env -s bash "$@")"
+  return $previous_exit_status
+}
+_mise_hook_prompt_command() {
+  local previous_exit_status=$?
+  if [ "${__MISE_BASH_SKIP_FIRST_PROMPT:-0}" = 1 ]; then
+    unset __MISE_BASH_SKIP_FIRST_PROMPT
+    echo "prompt-skip" >> "${MISE_MOCK_LOG:-/dev/null}"
+    return $previous_exit_status
+  fi
+  echo "prompt-hook" >> "${MISE_MOCK_LOG:-/dev/null}"
+  eval "$(mise hook-env --reason precmd)"
+  return $previous_exit_status
+}
+if [ "$__MISE_HOOK_ENABLED" = "1" ]; then
+  __MISE_BASH_SKIP_FIRST_PROMPT=1
+  _mise_hook --force
+fi
+EOF
+    ;;
+  hook-env)
+    echo "hook-env $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ ! -f "${MISE_MOCK_FAIL_ONCE}" ]; then
+      : > "${MISE_MOCK_FAIL_ONCE}"
+      exit 1
+    fi
+    printf '%s\n' 'export MISE_HOOK_APPLIED=1'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+
+  [ -z "${MISE_HOOK_APPLIED:-}" ]
+  [ -z "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "1"
+
+  _mise_hook_prompt_command
+  assert_equal "$MISE_HOOK_APPLIED" "1"
+  [ -n "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "2"
+
+  _mise_hook_prompt_command
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: the activation snapshot runs after the startup hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+_mise_hook() {
+  echo "hook $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  export MISE_HOOK_RAN=1
+}
+_mise_hook --force
+export MISE_SNAPSHOT="${MISE_HOOK_RAN:-0}"
+EOF
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  _source_script
+
+  assert_equal "$MISE_SNAPSHOT" "1"
+  assert_equal "$MISE_HOOK_RAN" "1"
+  [ -n "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook '
+  assert_success
+  assert_output "1"
+}
+
 @test "WSL: cached activate keeps a leading shim directory on PATH" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
