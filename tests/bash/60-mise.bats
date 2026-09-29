@@ -16,6 +16,9 @@ setup() {
   # filesystem (e.g. a real /mnt/c/Users/*/.mise on a WSL host running
   # this suite) by pointing it at a guaranteed-nonexistent directory.
   export DOTFILES_MISE_WSL_USERS_ROOT="$BATS_TEST_TMPDIR/no-windows-users"
+  export DOTFILES_MISE_TRUST_STAMP="$BATS_TEST_TMPDIR/mise-trust-stamp"
+  export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/mise-activate-cache"
+  unset DOTFILES_MISE_ASSUME_WSL
 }
 
 teardown() {
@@ -350,6 +353,509 @@ MOCK
   assert_success
   assert_output --partial 'allow_low_downloads = true'
   assert_output --partial 'version = "latest"'
+}
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
+_setup_recording_mise() {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  trust)
+    echo "$@" >> "${MISE_MOCK_LOG:-/dev/null}"
+    ;;
+  --version | version)
+    if [ -n "${MISE_MOCK_VERSION:-}" ]; then
+      printf '%s\n' "$MISE_MOCK_VERSION"
+    fi
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ "$2" = "bash" ]; then
+      cat << 'EOF'
+export MISE_ACTIVATED=bash
+_mise_selected_node() {
+  _d=${PWD:-/}
+  _ver=global
+  while [ -n "$_d" ] && [ "$_d" != / ]; do
+    if [ -f "$_d/mise.toml" ]; then
+      _ver=$(awk -F '"' '/^node = / { print $2; exit }' "$_d/mise.toml")
+      [ -n "$_ver" ] || _ver=global
+      break
+    fi
+    _d=$(dirname "$_d")
+  done
+  printf '%s\n' "$_ver"
+}
+_mise_hook() {
+  echo "hook $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+_mise_hook_chpwd() {
+  echo "chpwd $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  __MISE_BASH_CHPWD_RAN=1
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+_mise_hook_prompt_command() {
+  if [ "${__MISE_BASH_CHPWD_RAN:-0}" = 1 ]; then
+    echo "prompt-skip" >> "${MISE_MOCK_LOG:-/dev/null}"
+    __MISE_BASH_CHPWD_RAN=0
+    unset __MISE_BASH_SKIP_FIRST_PROMPT
+    return
+  fi
+  echo "prompt-hook" >> "${MISE_MOCK_LOG:-/dev/null}"
+  MISE_SELECTED_NODE=$(_mise_selected_node)
+  export MISE_SELECTED_NODE
+}
+EOF
+    fi
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}
+
+_count_log() {
+  if [ ! -f "$MISE_MOCK_LOG" ]; then
+    printf '%s\n' 0
+    return 0
+  fi
+  grep -c -e "$1" "$MISE_MOCK_LOG" || true
+}
+
+# ---------------------------------------------------------------------------
+# WSL trust stamp and non-WSL trust
+# ---------------------------------------------------------------------------
+
+@test "WSL: trusts an unchanged config once and trusts it again after a change" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: trusts a config that appears after the first startup" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  mkdir -p "$HOME/.mise"
+  printf '%s\n' 'node = "22"' > "$HOME/.mise/config.toml"
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "2"
+}
+
+@test "non-WSL: trusts existing configs on every startup" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=0
+  mkdir -p "$HOME/.mise" "$HOME/.config/mise"
+  touch "$HOME/.mise/config.toml" "$HOME/.config/mise/config.toml"
+
+  _source_script
+  _source_script
+
+  run _count_log '^trust '
+  assert_success
+  assert_output "4"
+}
+
+@test "WSL: directory hook applies and restores the selected tool across enter and leave" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/empty-b" \
+    "$BATS_TEST_TMPDIR/proj/sub" "$BATS_TEST_TMPDIR/proj-b"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/proj-b/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+
+  cd "$BATS_TEST_TMPDIR/empty-b"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "0"
+  assert [ -z "${MISE_SELECTED_NODE:-}" ]
+
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+
+  cd "$BATS_TEST_TMPDIR/proj/sub"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "global"
+
+  cd "$BATS_TEST_TMPDIR/proj-b"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "22"
+}
+
+@test "WSL: a cwd template and --force still run the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/tmpl/a" "$BATS_TEST_TMPDIR/tmpl/b"
+  printf '%s\n' 'node = "24" # {{cwd}}' > "$BATS_TEST_TMPDIR/tmpl/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/tmpl/a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+
+  cd "$BATS_TEST_TMPDIR/tmpl/b"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+
+  _mise_hook --force
+  run _count_log '^hook '
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: reuses a cached activate script without skipping activation" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+
+  _source_script
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "1"
+  assert_equal "$MISE_ACTIVATED" "bash"
+}
+
+@test "WSL: prompt hook applies a same-directory config edit" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/proj"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  assert_equal "$MISE_SELECTED_NODE" "24"
+
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/proj/mise.toml"
+  _mise_hook_prompt_command
+  assert_equal "$MISE_SELECTED_NODE" "22"
+  run _count_log '^prompt-hook$'
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: mise/config.toml still changes the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a" "$BATS_TEST_TMPDIR/proj/mise"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/proj/mise/config.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+  cd "$BATS_TEST_TMPDIR/proj"
+  _mise_hook_chpwd
+  run _count_log '^chpwd '
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: editing config.local.toml refreshes the activate cache" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$HOME/.config/mise"
+
+  _source_script
+  printf '%s\n' 'not_found_auto_install = false' \
+    > "$HOME/.config/mise/config.local.toml"
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: a failed hook-env does not stick the fingerprint" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_MOCK_FAIL_ONCE="$BATS_TEST_TMPDIR/fail-once"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+_mise_hook_prompt_command() {
+  local previous_exit_status=$?
+  eval "$(mise hook-env --reason precmd)"
+  return $previous_exit_status
+}
+EOF
+    ;;
+  hook-env)
+    echo "hook-env" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ ! -f "${MISE_MOCK_FAIL_ONCE}" ]; then
+      : > "${MISE_MOCK_FAIL_ONCE}"
+      exit 1
+    fi
+    printf '%s\n' 'export MISE_HOOK_APPLIED=1'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/empty-a/mise.toml"
+  : > "$MISE_MOCK_LOG"
+  unset MISE_HOOK_APPLIED
+
+  _mise_hook_prompt_command
+  [ -z "${MISE_HOOK_APPLIED:-}" ]
+  _mise_hook_prompt_command
+  assert_equal "$MISE_HOOK_APPLIED" "1"
+  _mise_hook_prompt_command
+
+  run _count_log '^hook-env$'
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: a failed activation hook does not stick the fingerprint" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_MOCK_FAIL_ONCE="$BATS_TEST_TMPDIR/fail-activate"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+__MISE_HOOK_ENABLED=1
+_mise_hook() {
+  local previous_exit_status=$?
+  eval "$(mise hook-env -s bash "$@")"
+  return $previous_exit_status
+}
+_mise_hook_prompt_command() {
+  local previous_exit_status=$?
+  if [ "${__MISE_BASH_SKIP_FIRST_PROMPT:-0}" = 1 ]; then
+    unset __MISE_BASH_SKIP_FIRST_PROMPT
+    echo "prompt-skip" >> "${MISE_MOCK_LOG:-/dev/null}"
+    return $previous_exit_status
+  fi
+  echo "prompt-hook" >> "${MISE_MOCK_LOG:-/dev/null}"
+  eval "$(mise hook-env --reason precmd)"
+  return $previous_exit_status
+}
+if [ "$__MISE_HOOK_ENABLED" = "1" ]; then
+  __MISE_BASH_SKIP_FIRST_PROMPT=1
+  _mise_hook --force
+fi
+EOF
+    ;;
+  hook-env)
+    echo "hook-env $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ ! -f "${MISE_MOCK_FAIL_ONCE}" ]; then
+      : > "${MISE_MOCK_FAIL_ONCE}"
+      exit 1
+    fi
+    printf '%s\n' 'export MISE_HOOK_APPLIED=1'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+
+  [ -z "${MISE_HOOK_APPLIED:-}" ]
+  [ -z "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "1"
+
+  _mise_hook_prompt_command
+  assert_equal "$MISE_HOOK_APPLIED" "1"
+  [ -n "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "2"
+
+  _mise_hook_prompt_command
+  run _count_log '^hook-env '
+  assert_success
+  assert_output "2"
+}
+
+@test "WSL: the activation snapshot runs after the startup hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+_mise_hook() {
+  echo "hook $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+  export MISE_HOOK_RAN=1
+}
+_mise_hook --force
+export MISE_SNAPSHOT="${MISE_HOOK_RAN:-0}"
+EOF
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  _source_script
+
+  assert_equal "$MISE_SNAPSHOT" "1"
+  assert_equal "$MISE_HOOK_RAN" "1"
+  [ -n "${_DOTFILES_MISE_FP:-}" ]
+  run _count_log '^hook '
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: cached activate keeps a leading shim directory on PATH" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_DATA_DIR="$BATS_TEST_TMPDIR/mise-data"
+  _source_script
+
+  PATH="/sentinel:/usr/bin"
+  unset __MISE_ORIG_PATH
+  eval "$({
+    printf '%s\n' "export PATH='${MISE_DATA_DIR}/shims:/frozen'"
+    printf '%s\n' "export __MISE_ORIG_PATH='/frozen'"
+    printf '%s\n' "export PATH=\"/exe:\$PATH\""
+    printf '%s\n' "export PATH='/usr/bin:/${MISE_DATA_DIR}/shims'"
+  } | _dotfiles_mise_strip_frozen_path)"
+
+  case "$PATH" in
+    "/exe:${MISE_DATA_DIR}/shims:/sentinel:/usr/bin") ;;
+    *) printf 'PATH=%s\n' "$PATH" >&2; return 1 ;;
+  esac
+  assert_equal "$__MISE_ORIG_PATH" "/sentinel:/usr/bin"
+  case "$PATH" in
+    *frozen*) return 1 ;;
+  esac
+}
+
+@test "WSL: editing MISE_CONFIG_FILE still runs the directory hook" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/selected.toml"
+  export MISE_CONFIG_FILE="$BATS_TEST_TMPDIR/selected.toml"
+
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  : > "$MISE_MOCK_LOG"
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/selected.toml"
+  _mise_hook_prompt_command
+
+  run _count_log '^prompt-hook$'
+  assert_success
+  assert_output "1"
+}
+
+@test "WSL: cached activate script does not replace PATH" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    printf '%s\n' "export PATH='/frozen'"
+    printf '%s\n' 'export MISE_ACTIVATED=bash'
+    printf '%s\n' 'export __MISE_ORIG_PATH="${__MISE_ORIG_PATH:-$PATH}"'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  _source_script
+  PATH="/sentinel:${PATH}"
+  _source_script
+
+  case "$PATH" in
+    /frozen | /frozen:*) return 1 ;;
+  esac
+  case "$PATH" in
+    *"/sentinel"*) ;;
+    *) return 1 ;;
+  esac
+}
+
+@test "WSL: does not cache activate output when the version is empty" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  unset MISE_MOCK_VERSION
+
+  _source_script
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "2"
 }
 
 # ---------------------------------------------------------------------------
