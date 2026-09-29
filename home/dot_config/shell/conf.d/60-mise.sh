@@ -191,6 +191,37 @@ _dotfiles_mise_hook_is_unchanged() {
   return 1
 }
 
+# Run one hook-env command and record its status. Bash activate returns
+# the prompt's previous status, so a failed hook-env is invisible there.
+# Leave a failed run unevaluated; the caller then retries next time.
+_dotfiles_mise_eval_hook_env() {
+  _dotfiles_mise_hook_out=$("$@") && _DOTFILES_MISE_HOOK_STATUS=0 \
+    || _DOTFILES_MISE_HOOK_STATUS=$?
+  if [ "$_DOTFILES_MISE_HOOK_STATUS" -eq 0 ]; then
+    eval "$_dotfiles_mise_hook_out"
+  fi
+  return 0
+}
+
+# `eval "$(… hook-env …)"` hides the command status. Rewrite that call
+# into _dotfiles_mise_eval_hook_env so the wrapper can see it.
+_dotfiles_mise_rewrite_hook_env() {
+  sed -e 's/eval "\$(\(.*hook-env.*\))";\{0,1\}/_dotfiles_mise_eval_hook_env \1/'
+}
+
+# Remember the fingerprint only after hook-env succeeds. A hook that
+# does not report status (the test double) still advances it.
+_dotfiles_mise_commit_fp_after_hook() {
+  if [ "${_DOTFILES_MISE_HOOK_STATUS+x}" = x ]; then
+    if [ "$_DOTFILES_MISE_HOOK_STATUS" -eq 0 ] \
+      && [ -n "${_DOTFILES_MISE_FP_NEXT:-}" ]; then
+      _DOTFILES_MISE_FP=$_DOTFILES_MISE_FP_NEXT
+    fi
+  elif [ -n "${_DOTFILES_MISE_FP_NEXT:-}" ]; then
+    _DOTFILES_MISE_FP=$_DOTFILES_MISE_FP_NEXT
+  fi
+}
+
 _dotfiles_mise_wrap_bash() {
   _fn=$1
   _orig=$2
@@ -199,7 +230,8 @@ _dotfiles_mise_wrap_bash() {
   # first line reads $?, which would otherwise be the fingerprint check.
   eval "$(declare -f "$_fn" \
     | sed -e "1s/^${_fn} /${_orig} /" \
-      -e 's/previous_exit_status=\$?/previous_exit_status=${_DOTFILES_MISE_PREV:-$?}/')"
+      -e 's/previous_exit_status=\$?/previous_exit_status=${_DOTFILES_MISE_PREV:-$?}/' \
+    | _dotfiles_mise_rewrite_hook_env)"
   eval "${_fn}() {
     _DOTFILES_MISE_PREV=\$?
     if _dotfiles_mise_hook_is_unchanged \"\$@\"; then
@@ -215,10 +247,9 @@ _dotfiles_mise_wrap_bash() {
       __MISE_BASH_CHPWD_RAN=0
       unset __MISE_BASH_SKIP_FIRST_PROMPT
     fi
-    if [ -n \"\${_DOTFILES_MISE_FP_NEXT:-}\" ]; then
-      _DOTFILES_MISE_FP=\$_DOTFILES_MISE_FP_NEXT
-    fi
+    unset _DOTFILES_MISE_HOOK_STATUS
     ${_orig} \"\$@\"
+    _dotfiles_mise_commit_fp_after_hook
   }"
 }
 
@@ -227,17 +258,18 @@ _dotfiles_mise_wrap_zsh() {
   _orig=$2
   _src=$(whence -f "$_fn" 2>/dev/null) || return 0
   [ -n "$_src" ] || return 0
-  _renamed=$(printf '%s\n' "$_src" | sed "1s/^${_fn} /${_orig} /")
+  _renamed=$(printf '%s\n' "$_src" \
+    | sed "1s/^${_fn} /${_orig} /" \
+    | _dotfiles_mise_rewrite_hook_env)
   eval "$_renamed"
   eval "${_fn}() {
     _prev=\$?
     if _dotfiles_mise_hook_is_unchanged \"\$@\"; then
       return \$_prev
     fi
-    if [ -n \"\${_DOTFILES_MISE_FP_NEXT:-}\" ]; then
-      _DOTFILES_MISE_FP=\$_DOTFILES_MISE_FP_NEXT
-    fi
+    unset _DOTFILES_MISE_HOOK_STATUS
     ${_orig} \"\$@\"
+    _dotfiles_mise_commit_fp_after_hook
   }"
 }
 

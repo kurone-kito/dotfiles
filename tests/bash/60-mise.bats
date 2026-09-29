@@ -593,6 +593,57 @@ _count_log() {
   assert_output "1"
 }
 
+@test "WSL: a failed hook-env does not stick the fingerprint" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  export MISE_MOCK_FAIL_ONCE="$BATS_TEST_TMPDIR/fail-once"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version | version)
+    printf '%s\n' "${MISE_MOCK_VERSION:-}"
+    ;;
+  activate)
+    echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    cat << 'EOF'
+_mise_hook_prompt_command() {
+  local previous_exit_status=$?
+  eval "$(mise hook-env --reason precmd)"
+  return $previous_exit_status
+}
+EOF
+    ;;
+  hook-env)
+    echo "hook-env" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ ! -f "${MISE_MOCK_FAIL_ONCE}" ]; then
+      : > "${MISE_MOCK_FAIL_ONCE}"
+      exit 1
+    fi
+    printf '%s\n' 'export MISE_HOOK_APPLIED=1'
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+
+  mkdir -p "$BATS_TEST_TMPDIR/empty-a"
+  cd "$BATS_TEST_TMPDIR/empty-a"
+  _source_script
+  printf '%s\n' 'node = "24"' > "$BATS_TEST_TMPDIR/empty-a/mise.toml"
+  : > "$MISE_MOCK_LOG"
+  unset MISE_HOOK_APPLIED
+
+  _mise_hook_prompt_command
+  [ -z "${MISE_HOOK_APPLIED:-}" ]
+  _mise_hook_prompt_command
+  assert_equal "$MISE_HOOK_APPLIED" "1"
+  _mise_hook_prompt_command
+
+  run _count_log '^hook-env$'
+  assert_success
+  assert_output "2"
+}
+
 @test "WSL: cached activate keeps a leading shim directory on PATH" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
