@@ -138,6 +138,8 @@ words:
   - unscored
   - unwaived
   - upserts
+  - vicmd
+  - viins
   - viml
   - vfox
   - vimrc
