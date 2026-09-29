@@ -5,6 +5,49 @@
 
 bats_require_minimum_version 1.5.0
 
+# Presence is ${name+x}, not a non-empty test: a set-but-empty value must
+# be restored as empty, and an absent value must stay absent. Separate
+# variables, not an associative array, so this still runs on bash 3.2.
+save_critique_policy_env() {
+  _policy_deep_set=0
+  _policy_deep_val=
+  _policy_base_set=0
+  _policy_base_val=
+  _policy_timeout_set=0
+  _policy_timeout_val=
+  if [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]; then
+    _policy_deep_set=1
+    _policy_deep_val=$CODERABBIT_CRITIQUE_DEEP
+  fi
+  if [ "${CODERABBIT_CRITIQUE_BASE+x}" = x ]; then
+    _policy_base_set=1
+    _policy_base_val=$CODERABBIT_CRITIQUE_BASE
+  fi
+  if [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" = x ]; then
+    _policy_timeout_set=1
+    _policy_timeout_val=$CODERABBIT_CRITIQUE_TIMEOUT
+  fi
+  unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+}
+
+restore_critique_policy_env() {
+  if [ "${_policy_deep_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_DEEP="$_policy_deep_val"
+  else
+    unset CODERABBIT_CRITIQUE_DEEP
+  fi
+  if [ "${_policy_base_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_BASE="$_policy_base_val"
+  else
+    unset CODERABBIT_CRITIQUE_BASE
+  fi
+  if [ "${_policy_timeout_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_TIMEOUT="$_policy_timeout_val"
+  else
+    unset CODERABBIT_CRITIQUE_TIMEOUT
+  fi
+}
+
 setup() {
   load 'helpers/bats-support/load'
   load 'helpers/bats-assert/load'
@@ -13,6 +56,12 @@ setup() {
   export HOME="$BATS_TEST_TMPDIR"
   SCRIPT="$BATS_TEST_DIRNAME/../../home/dot_local/bin/executable_coderabbit-critique"
   _ORIG_PATH="$PATH"
+  # Resolve host tools before PATH is narrowed to /usr/bin:/bin. A Homebrew
+  # gtimeout lives outside that prefix and would otherwise be invisible.
+  _HOST_TIMEOUT="$(command -v timeout 2>/dev/null || true)"
+  _HOST_GTIMEOUT="$(command -v gtimeout 2>/dev/null || true)"
+  _HOST_SETSID="$(command -v setsid 2>/dev/null || true)"
+  save_critique_policy_env
   export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
@@ -22,7 +71,8 @@ setup() {
 
 teardown() {
   export PATH="$_ORIG_PATH"
-  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_DEEP
+  restore_critique_policy_env
+  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG
 }
 
 make_mock() {
@@ -126,7 +176,7 @@ make_immediate_exit_coderabbit() {
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -154,7 +204,7 @@ make_default_mocks() {
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -313,7 +363,7 @@ shift 1; exec "$@"
 @test "resolves to gtimeout when timeout is absent" {
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
@@ -325,7 +375,10 @@ exit 1
   link_system_command cat
   link_system_command rm
   link_system_command mkdir
-  link_system_command setsid
+  link_system_command sh
+  if [ -n "$_HOST_SETSID" ]; then
+    ln -sf "$_HOST_SETSID" "$BATS_TEST_TMPDIR/bin/setsid"
+  fi
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
@@ -358,7 +411,7 @@ exit 1
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   printf "auth:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
-  echo "Status       : signed out"
+  echo "{\"authenticated\":false}"
   exit 0
 fi
 printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
@@ -372,6 +425,8 @@ exit 0
   assert_fallback_reason unauthenticated
   run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
+  run grep -c 'auth:auth status --agent' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
   assert_no_git_calls
 }
 
@@ -420,9 +475,11 @@ exit 0
 }
 
 @test "waits for setsid to establish its process group before checking isolation" {
+  if [ -z "$_HOST_SETSID" ]; then
+    skip "requires setsid"
+  fi
   make_default_mocks
-  real_setsid="$(command -v setsid)"
-  export CODERABBIT_REAL_SETSID="$real_setsid"
+  export CODERABBIT_REAL_SETSID="$_HOST_SETSID"
   make_mock setsid '
 sleep 0.1
 exec "$CODERABBIT_REAL_SETSID" "$@"
@@ -440,7 +497,7 @@ exec "$CODERABBIT_REAL_SETSID" "$@"
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -476,7 +533,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
@@ -510,7 +567,7 @@ EOF
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
@@ -551,7 +608,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -579,7 +636,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -603,7 +660,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -629,7 +686,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -653,7 +710,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -677,7 +734,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -700,7 +757,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -730,7 +787,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -752,7 +809,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -776,7 +833,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -811,7 +868,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -838,7 +895,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -865,7 +922,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -897,7 +954,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -932,7 +989,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -959,7 +1016,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -984,7 +1041,10 @@ exit 1
 }
 
 @test "uses timeout's process group when setsid is unavailable" {
-  host_timeout="$(command -v timeout || command -v gtimeout || true)"
+  host_timeout="${_HOST_TIMEOUT:-}"
+  if [ -z "$host_timeout" ]; then
+    host_timeout="${_HOST_GTIMEOUT:-}"
+  fi
   if [ -z "$host_timeout" ]; then
     skip "requires GNU timeout or gtimeout"
   fi
@@ -992,7 +1052,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1033,7 +1093,10 @@ exec "$CODERABBIT_REAL_PS" "$@"
 }
 
 @test "does not count the membership probe as a no-setsid review member" {
-  host_timeout="$(command -v timeout || command -v gtimeout || true)"
+  host_timeout="${_HOST_TIMEOUT:-}"
+  if [ -z "$host_timeout" ]; then
+    host_timeout="${_HOST_GTIMEOUT:-}"
+  fi
   if [ -z "$host_timeout" ]; then
     skip "requires GNU timeout or gtimeout"
   fi
@@ -1041,7 +1104,7 @@ exec "$CODERABBIT_REAL_PS" "$@"
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1075,7 +1138,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1129,7 +1192,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1198,7 +1261,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1264,7 +1327,7 @@ exit 1
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1336,7 +1399,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1361,7 +1424,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1384,7 +1447,13 @@ exit 1
 
 @test "fails closed when both origin/main and origin/master exist without a symref" {
   make_mock_timeout timeout 'shift 4; exec "$@"'
-  make_mock coderabbit 'exit 1'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+exit 1
+'
   work="$(setup_git_repo_with_base both)"
   make_git_passthrough_logger
 
@@ -1397,7 +1466,13 @@ exit 1
 
 @test "fails closed when the base branch cannot be determined" {
   make_mock_timeout timeout 'shift 4; exec "$@"'
-  make_mock coderabbit 'exit 1'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+exit 1
+'
   work="$(setup_git_repo_with_base none)"
   make_git_passthrough_logger
 
@@ -1407,4 +1482,100 @@ exit 1
   assert_stderr --partial "could not determine the default base branch"
   assert_fallback_reason base-branch-unresolved
   assert_only_readonly_git_subcommands_and_at_least_one
+}
+
+@test "ignores an inherited deep switch cleared by setup" {
+  make_default_mocks
+
+  run "$SCRIPT"
+
+  assert_success
+  run grep -cF -- '--deep' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "0"
+  assert_no_git_calls
+}
+
+@test "restores a set-but-empty delegate policy variable" {
+  saved_set="$_policy_deep_set"
+  saved_val="$_policy_deep_val"
+  _policy_deep_set=1
+  _policy_deep_val=
+  unset CODERABBIT_CRITIQUE_DEEP
+
+  restore_critique_policy_env
+
+  [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]
+  [ -z "${CODERABBIT_CRITIQUE_DEEP}" ]
+  _policy_deep_set="$saved_set"
+  _policy_deep_val="$saved_val"
+  unset CODERABBIT_CRITIQUE_DEEP
+}
+
+@test "fails closed when structured auth status is malformed" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo not-json
+  exit 0
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status was not a boolean authenticated field"
+  assert_fallback_reason auth-malformed
+  # Auth fails before review, so the invocation log may not exist.
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
+@test "fails closed when structured auth status is unsupported" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 2
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status command is unsupported or failed"
+  assert_fallback_reason auth-unsupported
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
+@test "fails closed when the structured auth probe times out" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exit 124'
+  make_mock coderabbit '
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status timed out"
+  assert_fallback_reason auth-timeout
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
 }

@@ -14,9 +14,11 @@
 #
 # `coderabbit review --agent` does not fail fast when unauthenticated -- it
 # hangs waiting on an interactive browser OAuth flow instead of exiting, so
-# authentication is checked up front via `coderabbit auth status` (which
-# never hangs and always exits 0 regardless of sign-in state -- its text
-# output must be parsed instead).
+# authentication is checked up front with a bounded `coderabbit auth status
+# --agent` probe. Only a JSON boolean `authenticated: true` continues.
+# Timeout, malformed JSON, an unsupported CLI, or `authenticated: false`
+# fails closed before review starts. The CLI's own text is never copied
+# onto this script's stdout.
 set -eu
 
 usage() {
@@ -40,7 +42,7 @@ fi
 log_fallback_reason() {
   fallback_reason=${1:-}
   case "$fallback_reason" in
-    action_required|unauthenticated|coderabbit-missing|timeout|review-failed|base-branch-unresolved|mktemp-failed|no-compatible-timeout-command|jq-missing) ;;
+    action_required|unauthenticated|auth-timeout|auth-malformed|auth-unsupported|coderabbit-missing|timeout|review-failed|base-branch-unresolved|mktemp-failed|no-compatible-timeout-command|jq-missing) ;;
     *) return 0 ;;
   esac
 
@@ -135,11 +137,69 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-auth_status="$(coderabbit auth status 2>&1 || true)"
-case "$auth_status" in
-  *"signed out"*)
+# Review temps are created later. Auth temps are included so the EXIT trap
+# installed below still removes the auth stdout file when a later mktemp
+# fails before that review chain's own trap would have been installed.
+# The done path is not created here: mktemp would make an empty file, and
+# an empty file cannot be told apart from a probe that never finished.
+cleanup_tmp_files() {
+  for tmp in \
+    "${auth_stdout:-}" \
+    "${auth_done:-}" \
+    "${stderr_tmp:-}" \
+    "${stdout_tmp:-}" \
+    "${deadline_tmp:-}" \
+    "${review_status_tmp:-}" \
+    "${review_wrapper_tmp:-}" \
+    "${review_members_tmp:-}"; do
+    if [ -n "$tmp" ]; then
+      rm -f "$tmp" 2>/dev/null || true
+    fi
+  done
+}
+
+auth_stdout="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-auth.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot capture authentication status" >&2
+  exit 1
+}
+auth_done="${auth_stdout}.done"
+trap 'cleanup_tmp_files' EXIT
+
+# Same four-argument prefix as the review invocation. Bats mocks shift
+# those four arguments off before exec, and --preserve-status does not
+# return 124 when the child is killed, so a missing done token is the
+# timeout signal.
+set +e
+"$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
+  sh -c 'coderabbit auth status --agent >"$1" 2>/dev/null; rc=$?; printf "%s\n" done >"$2"; exit "$rc"' \
+  sh "$auth_stdout" "$auth_done"
+auth_rc=$?
+set -e
+
+if [ ! -s "$auth_done" ]; then
+  log_fallback_reason auth-timeout
+  echo "coderabbit-critique: authentication status timed out" >&2
+  exit 1
+fi
+
+if [ "$auth_rc" -ne 0 ]; then
+  log_fallback_reason auth-unsupported
+  echo "coderabbit-critique: authentication status command is unsupported or failed" >&2
+  exit 1
+fi
+
+auth_value="$(jq -r 'if type == "object" and (.authenticated | type == "boolean") then (if .authenticated then "true" else "false" end) else "malformed" end' "$auth_stdout" 2>/dev/null)" || auth_value="malformed"
+case "$auth_value" in
+  true) ;;
+  false)
     log_fallback_reason unauthenticated
     echo "coderabbit is not authenticated (run: coderabbit auth login)" >&2
+    exit 1
+    ;;
+  *)
+    log_fallback_reason auth-malformed
+    echo "coderabbit-critique: authentication status was not a boolean authenticated field" >&2
     exit 1
     ;;
 esac
@@ -197,20 +257,6 @@ fi
 # secret-deploy-state); failing to create it fails closed rather than
 # falling back to a merged capture that would reintroduce the leak this
 # split exists to close.
-cleanup_tmp_files() {
-  for tmp in \
-    "${stderr_tmp:-}" \
-    "${stdout_tmp:-}" \
-    "${deadline_tmp:-}" \
-    "${review_status_tmp:-}" \
-    "${review_wrapper_tmp:-}" \
-    "${review_members_tmp:-}"; do
-    if [ -n "$tmp" ]; then
-      rm -f "$tmp" 2>/dev/null || true
-    fi
-  done
-}
-
 stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
   log_fallback_reason mktemp-failed
   echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2

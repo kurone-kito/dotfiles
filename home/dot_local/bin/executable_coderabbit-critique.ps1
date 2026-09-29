@@ -14,9 +14,11 @@
 #
 # `coderabbit review --agent` does not fail fast when unauthenticated -- it
 # hangs waiting on an interactive browser OAuth flow instead of exiting, so
-# authentication is checked up front via `coderabbit auth status` (which
-# never hangs and always exits 0 regardless of sign-in state -- its text
-# output must be parsed instead).
+# authentication is checked up front with a bounded `coderabbit auth status
+# --agent` probe. Only a JSON boolean `authenticated: true` continues.
+# Timeout, malformed JSON, an unsupported CLI, or `authenticated: false`
+# fails closed before review starts. The CLI's own text is never copied
+# onto this script's stdout.
 $ErrorActionPreference = 'Stop'
 
 function global:Write-DotfilesCoderabbitUsage {
@@ -31,9 +33,10 @@ function global:Write-DotfilesCoderabbitFallbackReason {
   param(
     [Parameter(Mandatory)]
     [ValidateSet(
-      'action_required', 'unauthenticated', 'coderabbit-missing',
-      'timeout', 'review-failed', 'base-branch-unresolved',
-      'mktemp-failed', 'no-compatible-timeout-command', 'jq-missing'
+      'action_required', 'unauthenticated', 'auth-timeout', 'auth-malformed',
+      'auth-unsupported', 'coderabbit-missing', 'timeout', 'review-failed',
+      'base-branch-unresolved', 'mktemp-failed', 'no-compatible-timeout-command',
+      'jq-missing'
     )]
     [string] $Reason
   )
@@ -106,11 +109,60 @@ function global:Get-DotfilesCoderabbitCommand {
   return Get-Command coderabbit -ErrorAction SilentlyContinue
 }
 
+# Returns a fallback reason, or $null when stdout is one JSON object whose
+# authenticated property is boolean true. A single-element JSON array is
+# rejected before ConvertFrom-Json: that cmdlet unwraps it into a
+# PSCustomObject, which would otherwise look like a real object. No
+# -ErrorAction on ConvertFrom-Json: Windows PowerShell 5.1 rejects it.
+function global:Resolve-DotfilesCoderabbitAuthFailure {
+  param(
+    [Parameter(Mandatory)] [bool] $TimedOut,
+    [Parameter(Mandatory)] [int] $ExitCode,
+    [AllowEmptyString()] [string] $Stdout
+  )
+
+  if ($TimedOut) {
+    return 'auth-timeout'
+  }
+  if ($ExitCode -ne 0) {
+    return 'auth-unsupported'
+  }
+  if (-not $Stdout -or -not $Stdout.TrimStart().StartsWith('{')) {
+    return 'auth-malformed'
+  }
+  try {
+    $parsed = $Stdout | ConvertFrom-Json
+  } catch {
+    return 'auth-malformed'
+  }
+  if ($parsed -isnot [pscustomobject]) {
+    return 'auth-malformed'
+  }
+  $authenticated = $parsed.PSObject.Properties |
+    Where-Object { $_.Name -ceq 'authenticated' } |
+    Select-Object -First 1
+  if (-not $authenticated -or $authenticated.Value -isnot [bool]) {
+    return 'auth-malformed'
+  }
+  if ($authenticated.Value) {
+    return $null
+  }
+  return 'unauthenticated'
+}
+
 function global:Test-DotfilesCoderabbitAuthenticated {
   param([Parameter(Mandatory)] $CoderabbitCommand)
 
-  $authOutput = & $CoderabbitCommand.Name auth status 2>&1 | Out-String
-  return ($authOutput -notmatch 'signed out')
+  $result = Start-DotfilesProcessWithTimeout -FilePath $CoderabbitCommand.Name `
+    -ArgumentList @('auth', 'status', '--agent') `
+    -TimeoutSeconds (Resolve-DotfilesCoderabbitTimeoutSeconds)
+  $failure = Resolve-DotfilesCoderabbitAuthFailure -TimedOut $result.TimedOut `
+    -ExitCode $result.ExitCode -Stdout $result.Stdout
+  if ($failure) {
+    $script:DotfilesCoderabbitAuthFailure = $failure
+    return $false
+  }
+  return $true
 }
 
 # 300s default: an empirically observed real review of a 5-file diff took
@@ -414,6 +466,9 @@ function global:Invoke-DotfilesCoderabbitCritique {
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
+  # Cleared before the call so a test mock that returns $false without
+  # setting this variable still means unauthenticated.
+  $script:DotfilesCoderabbitAuthFailure = $null
   try {
     $authenticated = Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $coderabbitCommand
   } catch {
@@ -423,8 +478,25 @@ function global:Invoke-DotfilesCoderabbitCritique {
   }
 
   if (-not $authenticated) {
-    Write-DotfilesCoderabbitFallbackReason -Reason 'unauthenticated'
-    [Console]::Error.WriteLine('coderabbit is not authenticated (run: coderabbit auth login)')
+    $authFailure = $script:DotfilesCoderabbitAuthFailure
+    if ([string]::IsNullOrEmpty($authFailure)) {
+      $authFailure = 'unauthenticated'
+    }
+    Write-DotfilesCoderabbitFallbackReason -Reason $authFailure
+    switch ($authFailure) {
+      'auth-timeout' {
+        [Console]::Error.WriteLine('coderabbit-critique: authentication status timed out')
+      }
+      'auth-malformed' {
+        [Console]::Error.WriteLine('coderabbit-critique: authentication status was not a boolean authenticated field')
+      }
+      'auth-unsupported' {
+        [Console]::Error.WriteLine('coderabbit-critique: authentication status command is unsupported or failed')
+      }
+      default {
+        [Console]::Error.WriteLine('coderabbit is not authenticated (run: coderabbit auth login)')
+      }
+    }
     return [pscustomobject]@{ Success = $false; Output = '' }
   }
 
