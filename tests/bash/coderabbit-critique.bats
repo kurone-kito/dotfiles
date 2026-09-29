@@ -118,6 +118,41 @@ link_system_command() {
   ln -sf "$command_path" "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+# Same --help probe as the wrapper. An incompatible timeout earlier on
+# PATH must not hide a compatible gtimeout, including one outside
+# /usr/bin:/bin.
+host_timer_is_compatible() {
+  help_output=$("$1" --help 2>&1) || true
+  case "$help_output" in
+    *--kill-after*) ;;
+    *) return 1 ;;
+  esac
+  case "$help_output" in
+    *--preserve-status*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+compatible_host_timer() {
+  if [ -n "${_HOST_TIMEOUT:-}" ] && host_timer_is_compatible "$_HOST_TIMEOUT"; then
+    printf '%s\n' "$_HOST_TIMEOUT"
+    return 0
+  fi
+  if [ -n "${_HOST_GTIMEOUT:-}" ] && host_timer_is_compatible "$_HOST_GTIMEOUT"; then
+    printf '%s\n' "$_HOST_GTIMEOUT"
+    return 0
+  fi
+  return 1
+}
+
+# The fixture PATH starts at the mock bin, then /usr/bin:/bin. Put a
+# compatible host timer there as `timeout` so Homebrew gtimeout remains
+# visible to tests that invoke the real timer.
+require_compatible_host_timer() {
+  timer="$(compatible_host_timer)" || return 1
+  ln -sf "$timer" "$BATS_TEST_TMPDIR/bin/timeout"
+}
+
 # The script probes `timeout`/`gtimeout --help` for --kill-after and
 # --preserve-status support before selecting either as TIMEOUT_CMD (same
 # probe-before-trust pattern as ~/.gnupg/pinentry-auto's
@@ -865,6 +900,10 @@ exit 1
 }
 
 @test "fails when review times out" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
@@ -951,6 +990,14 @@ exit 1
 }
 
 @test "kills descendants before timeout's grace kills the setsid supervisor" {
+  if [ -z "${_HOST_SETSID:-}" ]; then
+    skip "requires setsid"
+  fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+  ln -sf "$_HOST_SETSID" "$BATS_TEST_TMPDIR/bin/setsid"
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
@@ -1041,11 +1088,7 @@ exit 1
 }
 
 @test "uses timeout's process group when setsid is unavailable" {
-  host_timeout="${_HOST_TIMEOUT:-}"
-  if [ -z "$host_timeout" ]; then
-    host_timeout="${_HOST_GTIMEOUT:-}"
-  fi
-  if [ -z "$host_timeout" ]; then
+  if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
   fi
 
@@ -1067,7 +1110,6 @@ exit 1
   export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
   export CODERABBIT_CRITIQUE_BASE=master
 
-  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
   real_ps="$(command -v ps)"
   export CODERABBIT_REAL_PS="$real_ps"
   for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
@@ -1093,11 +1135,7 @@ exec "$CODERABBIT_REAL_PS" "$@"
 }
 
 @test "does not count the membership probe as a no-setsid review member" {
-  host_timeout="${_HOST_TIMEOUT:-}"
-  if [ -z "$host_timeout" ]; then
-    host_timeout="${_HOST_GTIMEOUT:-}"
-  fi
-  if [ -z "$host_timeout" ]; then
+  if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
   fi
 
@@ -1116,7 +1154,6 @@ exit 1
   export CODERABBIT_CRITIQUE_TIMEOUT=1
   export CODERABBIT_CRITIQUE_BASE=master
 
-  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
   real_ps="$(command -v ps)"
   export CODERABBIT_REAL_PS="$real_ps"
   for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
@@ -1135,6 +1172,10 @@ exit 1
 }
 
 @test "forwards external TERM to the timeout job before exiting" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
@@ -1187,6 +1228,9 @@ exit 1
   signal_reset_command="$(command -v perl || true)"
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGINT disposition"
+  fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
   fi
 
   make_git_call_recorder
@@ -1257,6 +1301,9 @@ exit 1
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGHUP disposition"
   fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
 
   make_git_call_recorder
   make_mock coderabbit '
@@ -1322,6 +1369,9 @@ exit 1
   signal_reset_command="$(command -v perl || true)"
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGQUIT disposition"
+  fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
   fi
 
   make_git_call_recorder
