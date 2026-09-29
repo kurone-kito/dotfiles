@@ -593,6 +593,22 @@ _count_log() {
   assert_output "1"
 }
 
+@test "WSL: editing config.local.toml refreshes the activate cache" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$HOME/.config/mise"
+
+  _source_script
+  printf '%s\n' 'not_found_auto_install = false' \
+    > "$HOME/.config/mise/config.local.toml"
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "2"
+}
+
 @test "WSL: a failed hook-env does not stick the fingerprint" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1

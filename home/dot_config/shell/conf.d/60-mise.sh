@@ -389,6 +389,17 @@ _dotfiles_mise_strip_frozen_path() {
   '
 }
 
+# Token for one optional file in the activate-script cache key.
+# missing and a hash failure both differ from a real hash, so a new
+# or unreadable settings file cannot reuse another shell's script.
+_dotfiles_mise_activate_file_token() {
+  if [ ! -f "$1" ]; then
+    printf '%s\n' missing
+    return 0
+  fi
+  _dotfiles_mise_sha256_file "$1" || printf '%s\n' unavailable
+}
+
 # Cache the activate script text. A hit still prints it for eval, so
 # the initial hook-env inside that script still runs.
 _dotfiles_mise_activate_cached() {
@@ -400,10 +411,20 @@ _dotfiles_mise_activate_cached() {
   fi
   _bin=$(command -v mise)
   _mt=$(stat -c %Y "$_bin" 2>/dev/null || printf '%s' nomtime)
-  _cfg_hash=noconfig
-  if [ -f "${HOME}/.config/mise/config.toml" ]; then
-    _cfg_hash=$(_dotfiles_mise_sha256_file "${HOME}/.config/mise/config.toml") || _cfg_hash=unavailable
-  fi
+  # Settings files change the generated script. A path-only key misses
+  # an in-place edit of config.local.toml or an explicit config file.
+  _cfg_hash=$(
+    _dotfiles_mise_activate_file_token "${HOME}/.config/mise/config.toml"
+    _dotfiles_mise_activate_file_token "${HOME}/.config/mise/config.local.toml"
+    _dotfiles_mise_activate_file_token "${HOME}/.mise/config.toml"
+    _dotfiles_mise_activate_file_token "${HOME}/.mise/config.local.toml"
+    if [ -n "${MISE_GLOBAL_CONFIG_FILE:-}" ]; then
+      _dotfiles_mise_activate_file_token "$MISE_GLOBAL_CONFIG_FILE"
+    fi
+    if [ -n "${MISE_CONFIG_FILE:-}" ]; then
+      _dotfiles_mise_activate_file_token "$MISE_CONFIG_FILE"
+    fi
+  )
   # Only inputs that can change the generated script. Do not hash every
   # MISE_* variable: activate itself exports some, and a second source
   # in the same shell would miss an otherwise valid cache entry.
