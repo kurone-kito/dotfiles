@@ -1323,6 +1323,59 @@ exit 1
   assert [ "$review_alive" = false ]
 }
 
+@test "gives a cooperative review its cleanup grace when TERM reaches the supervisor twice" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "requires perl for the timeout mock's process group"
+  fi
+
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  sleeper=$!
+  # Needs about 0.4s of cleanup after TERM. Ignoring further TERMs stops the
+  # sweeps from re-entering this handler and keeps them from cutting that work
+  # short, and the review sends the supervisor a second TERM once cleanup has
+  # begun, the duplicate delivery real timeout produces by forwarding and
+  # broadcasting.
+  cleanup() {
+    trap "" TERM
+    sleep 0.1
+    kill -TERM "$PPID"
+    sleep 0.3
+    kill "$sleeper" 2>/dev/null
+    printf "%s\\n" done > "$CODERABBIT_CLEANUP_MARKER"
+    exit 143
+  }
+  trap cleanup TERM
+  wait "$sleeper"
+fi
+exit 1
+'
+  cleanup_marker="$BATS_TEST_TMPDIR/cleanup.marker"
+  export CODERABBIT_CLEANUP_MARKER="$cleanup_marker"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+  export TMPDIR="$BATS_TEST_TMPDIR"
+  for command in awk cat date jq mkdir mktemp perl ps rm sh sleep tr; do
+    link_system_command "$command"
+  done
+
+  # Keep setsid out of the wrapper's PATH so cleanup runs in members mode,
+  # where the delayed-KILL helper's grace can be cut short by a repeated sweep.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
+
+  assert_failure
+  assert_fallback_reason timeout
+  assert [ -f "$cleanup_marker" ]
+  assert_no_git_calls
+}
+
 @test "forwards external TERM to the timeout job before exiting" {
   if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
