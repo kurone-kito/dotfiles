@@ -1914,6 +1914,37 @@ exit 0
   assert_no_git_calls
 }
 
+@test "fails closed when structured auth status is valid JSON of the wrong shape" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  printf "%s\\n" "$CODERABBIT_AUTH_JSON"
+  exit 0
+fi
+printf "review:%s\\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  # Only an object whose authenticated field is the boolean true may pass. Each
+  # of these parses as JSON, so only the wrapper's own shape check rejects them.
+  for auth_json in '{"authenticated":"true"}' '{}' '{"authenticated":null}' '[{"authenticated":true}]'; do
+    rm -f "$FALLBACK_LOG_FILE" "$CODERABBIT_CRITIQUE_LOG"
+    export CODERABBIT_AUTH_JSON="$auth_json"
+
+    run --separate-stderr "$SCRIPT"
+
+    assert_failure
+    assert_stderr --partial "authentication status was not a boolean authenticated field"
+    assert_fallback_reason auth-malformed
+    if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+      run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+      assert_output "0"
+    fi
+    assert_no_git_calls
+  done
+}
+
 @test "fails closed when structured auth status is unsupported" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'
