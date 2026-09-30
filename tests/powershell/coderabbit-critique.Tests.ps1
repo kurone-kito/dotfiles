@@ -196,6 +196,22 @@ Describe 'coderabbit-critique' {
   }
 
   Context 'Test-DotfilesCoderabbitAuthenticated' {
+    It 'asks for structured auth status with the resolved timeout and accepts a true result' {
+      $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{"authenticated":true}'; Stderr = '' }
+      }
+      $cmd = [pscustomobject]@{ Name = '/usr/bin/coderabbit' }
+
+      Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $cmd | Should -BeTrue
+
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly -ParameterFilter {
+        $FilePath -eq '/usr/bin/coderabbit' -and
+        $TimeoutSeconds -eq 45 -and
+        ($ArgumentList -join ' ') -eq 'auth status --agent'
+      }
+    }
+
     It 'returns false instead of throwing when the probe cannot be started' {
       Mock Start-DotfilesProcessWithTimeout {
         throw [InvalidOperationException]::new('simulated auth probe start failure')
@@ -607,6 +623,66 @@ Describe 'coderabbit-critique' {
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
+    }
+
+    # These run the real auth probe and classifier and mock only the process
+    # primitive, so the recorded reason and the "review never invoked"
+    # guarantee are checked on every platform CI runs (the subprocess tests
+    # further down are Unix-only).
+    It 'records auth-timeout and skips the review when the auth probe times out' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-timeout'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records auth-unsupported and skips the review when the auth command fails' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 2; Stdout = ''; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-unsupported'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records auth-malformed and skips the review when the auth output is not JSON' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = 'not-json'; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-malformed'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records unauthenticated and skips the review when authenticated is false' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{"authenticated":false}'; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
     }
 
     It 'records auth-unsupported and skips the review when the auth probe cannot be started' {
