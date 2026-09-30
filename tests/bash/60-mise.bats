@@ -75,13 +75,8 @@ MOCK
 # WSL: overridable Windows-side glob root
 # ---------------------------------------------------------------------------
 
-_require_wsl() {
-  { [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; } \
-    || skip "not running on a WSL host"
-}
-
 @test "WSL: includes Windows-side mise directories under the overridable root" {
-  _require_wsl
+  export DOTFILES_MISE_ASSUME_WSL=1
   _setup_mock_mise
   mkdir -p "$BATS_TEST_TMPDIR/winusers/alice/.mise" \
     "$BATS_TEST_TMPDIR/winusers/bob/.config/mise"
@@ -94,7 +89,7 @@ _require_wsl() {
 }
 
 @test "WSL: trusts Windows-side mise config files under the overridable root" {
-  _require_wsl
+  export DOTFILES_MISE_ASSUME_WSL=1
   _setup_mock_mise
   mkdir -p "$BATS_TEST_TMPDIR/winusers/alice/.mise" \
     "$BATS_TEST_TMPDIR/winusers/bob/.config/mise"
@@ -108,6 +103,101 @@ _require_wsl() {
   run grep -c "trust" "$MISE_MOCK_LOG"
   assert_success
   assert_output "2"
+}
+
+_require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
+}
+
+# Sources the profile under `zsh -f` in WSL mode and prints what the
+# caller's shell ends up with. zsh reports `no matches found` and stops a
+# sourced file at a glob that matches nothing, so the Windows-side
+# expansions must not run into it. The probe starts in $HOME: the
+# fingerprint walk goes from $PWD upward, and an empty conf.d directory in
+# any ancestor would print the same message from a different glob.
+# $1: the Windows-side users root
+_run_zsh_wsl_probe() {
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export DOTFILES_MISE_WSL_USERS_ROOT="$1"
+  cat > "$BATS_TEST_TMPDIR/zsh-wsl-probe.zsh" << 'PROBE'
+cd "$HOME" || exit 1
+source "$1"
+print "trusted=$MISE_TRUSTED_CONFIG_PATHS"
+[[ -o nomatch ]] && print nomatch=on || print nomatch=off
+[[ -o nullglob ]] && print nullglob=on || print nullglob=off
+PROBE
+  run --separate-stderr zsh -f "$BATS_TEST_TMPDIR/zsh-wsl-probe.zsh" "$SCRIPT_PATH"
+}
+
+# Prints stderr when the profile stopped on an empty glob.
+_refute_zsh_glob_error() {
+  case "$stderr" in
+    *"no matches found"*) fail "zsh stopped on an empty glob: $stderr" ;;
+  esac
+}
+
+# A Windows account with no mise directory is the ordinary case.
+@test "zsh, WSL: a users root with no mise directory does not stop the profile" {
+  _require_zsh
+  _setup_recording_mise
+  mkdir -p "$HOME/.config/mise" "$BATS_TEST_TMPDIR/win-users"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _run_zsh_wsl_probe "$BATS_TEST_TMPDIR/win-users"
+
+  # `run` in the count helpers replaces $output and $stderr, so read these first.
+  assert_success
+  _refute_zsh_glob_error
+  assert_line "trusted=$HOME/.mise:$HOME/.config/mise"
+  _assert_trust_count 1
+  run grep -c '^activate zsh$' "$MISE_MOCK_LOG"
+  assert_success
+  assert_output "1"
+}
+
+@test "zsh, WSL: a users root that does not exist does not stop the profile" {
+  _require_zsh
+  _setup_recording_mise
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _run_zsh_wsl_probe "$BATS_TEST_TMPDIR/no-such-users-root"
+
+  assert_success
+  _refute_zsh_glob_error
+  assert_line "trusted=$HOME/.mise:$HOME/.config/mise"
+  _assert_trust_count 1
+}
+
+# The account has .mise but no .config/mise, so one pattern of each list
+# matches and the other does not.
+@test "zsh, WSL: trusts a Windows-side config when only some patterns match" {
+  _require_zsh
+  _setup_recording_mise
+  mkdir -p "$HOME/.config/mise" "$BATS_TEST_TMPDIR/win-users/alice/.mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+  printf '%s\n' 'node = "22"' > "$BATS_TEST_TMPDIR/win-users/alice/.mise/config.toml"
+
+  _run_zsh_wsl_probe "$BATS_TEST_TMPDIR/win-users"
+
+  assert_success
+  _refute_zsh_glob_error
+  assert_line "trusted=$HOME/.mise:$HOME/.config/mise:$BATS_TEST_TMPDIR/win-users/alice/.mise"
+  _assert_trust_count 2
+}
+
+# null_glob is set inside the helpers only; a top-level setopt would stay
+# on in the user's interactive shell.
+@test "zsh, WSL: sourcing leaves nomatch on and nullglob off" {
+  _require_zsh
+  _setup_recording_mise
+  mkdir -p "$BATS_TEST_TMPDIR/win-users"
+
+  _run_zsh_wsl_probe "$BATS_TEST_TMPDIR/win-users"
+
+  assert_success
+  assert_line "nomatch=on"
+  assert_line "nullglob=off"
 }
 
 # ---------------------------------------------------------------------------

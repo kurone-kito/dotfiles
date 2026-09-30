@@ -600,6 +600,40 @@ ${_env}" | _dotfiles_mise_sha256_stdin) || _key=
   printf '%s\n' "$_out"
 }
 
+# The Windows-side expansions below are globs that may match nothing (a
+# Windows account with no mise directory is the ordinary case). Bash passes
+# an unmatched pattern through as text, which the -d / -f tests reject. zsh
+# would report `no matches found` and stop this sourced file, so it gets
+# null_glob, scoped to the function: a top-level `setopt` in a sourced file
+# would persist in the user's interactive shell.
+
+# Append the Windows-side mise directories under $1 to the trusted list.
+_dotfiles_mise_wsl_add_trusted_dirs() {
+  local _root _dir
+  _root=$1
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt local_options null_glob
+  fi
+  for _dir in "${_root}"/*/.mise "${_root}"/*/.config/mise; do
+    [ -d "${_dir}" ] 2>/dev/null && _mise_trusted="${_mise_trusted}:${_dir}"
+  done
+  # The last test above is the loop's status; a caller under set -e must
+  # not see it.
+  return 0
+}
+
+# Trust the Windows-side mise config files under $1.
+_dotfiles_mise_wsl_trust_configs() {
+  local _root _cfg
+  _root=$1
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt local_options null_glob
+  fi
+  for _cfg in "${_root}"/*/.mise/config.toml "${_root}"/*/.config/mise/config.toml; do
+    _dotfiles_mise_trust_if_needed "${_cfg}"
+  done
+}
+
 # Build trusted config paths so hooks never show trust errors
 _mise_trusted="${HOME}/.mise:${HOME}/.config/mise"
 
@@ -609,9 +643,7 @@ _mise_trusted="${HOME}/.mise:${HOME}/.config/mise"
 # real host's Windows-side filesystem contents.
 _mise_win_users="${DOTFILES_MISE_WSL_USERS_ROOT:-/mnt/c/Users}"
 if _dotfiles_mise_is_wsl; then
-  for _mise_dir in "${_mise_win_users}"/*/.mise "${_mise_win_users}"/*/.config/mise; do
-    [ -d "${_mise_dir}" ] 2>/dev/null && _mise_trusted="${_mise_trusted}:${_mise_dir}"
-  done
+  _dotfiles_mise_wsl_add_trusted_dirs "${_mise_win_users}"
 fi
 
 # Append ghq-cloned owner directories opted in via mise_trust in chezmoi
@@ -627,7 +659,7 @@ fi
 unset _ghq_trust_file _ghq_root _pair
 
 export MISE_TRUSTED_CONFIG_PATHS="${_mise_trusted}"
-unset _mise_trusted _mise_dir
+unset _mise_trusted
 
 # Also run mise trust for persistence across sessions
 for _mise_cfg in \
@@ -639,11 +671,7 @@ done
 # WSL: also trust Windows-side configs visible via /mnt/c/ (same
 # overridable root as the trusted-paths block above).
 if _dotfiles_mise_is_wsl; then
-  for _mise_cfg in \
-    "${_mise_win_users}"/*/.mise/config.toml \
-    "${_mise_win_users}"/*/.config/mise/config.toml; do
-    _dotfiles_mise_trust_if_needed "${_mise_cfg}"
-  done
+  _dotfiles_mise_wsl_trust_configs "${_mise_win_users}"
 fi
 unset _mise_cfg _mise_win_users
 
