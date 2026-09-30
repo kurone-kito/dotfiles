@@ -1381,13 +1381,13 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
 if [ "$1" = "review" ]; then
-  sleep 30 &
-  sleeper=$!
+  sleeper=
   # Needs about 0.4s of cleanup after TERM. Ignoring further TERMs stops the
   # sweeps from re-entering this handler and keeps them from cutting that work
   # short, and the review sends the supervisor a second TERM once cleanup has
   # begun, the duplicate delivery real timeout produces by forwarding and
-  # broadcasting.
+  # broadcasting. The handler goes in first so a slow start cannot let the
+  # first TERM kill the review before it is ready.
   cleanup() {
     trap "" TERM
     sleep 0.1
@@ -1398,6 +1398,8 @@ if [ "$1" = "review" ]; then
     exit 143
   }
   trap cleanup TERM
+  sleep 30 &
+  sleeper=$!
   wait "$sleeper"
 fi
 exit 1
