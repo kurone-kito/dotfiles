@@ -1198,6 +1198,77 @@ exit 1
   assert_no_git_calls
 }
 
+@test "reaps a TERM-ignoring review without setsid when cancellation reaches the group twice" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$!" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-members.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+  for command in awk cat date jq mkdir mktemp ps rm sh sleep tr; do
+    link_system_command "$command"
+  done
+
+  # Keep setsid out of the wrapper's PATH so cleanup runs in the members
+  # mode a host without setsid uses. One external TERM already reaches the
+  # supervisor twice there (timeout's forward plus the group broadcast); the
+  # second sweep must not remove the delayed-KILL helper that escalates
+  # against a review ignoring TERM.
+  PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" &
+  script_pid=$!
+  started=false
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+
+  kill -TERM "$script_pid"
+  set +e
+  wait "$script_pid"
+  status=$?
+  set -e
+
+  assert_equal "$status" 143
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in $(seq 1 60); do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  assert [ "$review_alive" = false ]
+}
+
 @test "forwards external TERM to the timeout job before exiting" {
   if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
