@@ -5,6 +5,11 @@
 
 command -v mise >/dev/null 2>&1 || return 0
 
+# This file is sourced into the caller's shell (bash or zsh). Only some
+# helpers declare the scratch names they assign `local` so far, on a
+# line of their own so a `$(...)` status is not masked; the rest still
+# assign plain globals.
+
 # DOTFILES_MISE_ASSUME_WSL=1 forces the WSL branch and =0 forces the
 # non-WSL branch so tests do not depend on the host.
 _dotfiles_mise_is_wsl() {
@@ -48,6 +53,7 @@ _dotfiles_mise_trust_stamp_file() {
 }
 
 _dotfiles_mise_trust_dir_mtime() {
+  local _trust_dir
   _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
   if [ -d "$_trust_dir" ]; then
     stat -c %Y "$_trust_dir" 2>/dev/null && return 0
@@ -58,6 +64,7 @@ _dotfiles_mise_trust_dir_mtime() {
 # Skip mise trust only when this exact path and content were trusted
 # while mise's trust directory was unchanged. Any miss falls open.
 _dotfiles_mise_trust_if_needed() {
+  local _cfg _hash _size _mtime _stamp _tmp
   _cfg=$1
   [ -f "$_cfg" ] || return 0
   if ! _dotfiles_mise_is_wsl; then
@@ -94,6 +101,7 @@ _dotfiles_mise_trust_if_needed() {
 # In-memory identity of the configs hook-env would read. A hash failure
 # prints HASH_FAIL so the caller refuses to skip.
 _dotfiles_mise_fp_add_file() {
+  local _file_hash
   [ -n "$1" ] || return 0
   [ -f "$1" ] || return 0
   _file_hash=$(_dotfiles_mise_sha256_file "$1") || {
@@ -348,6 +356,7 @@ _dotfiles_mise_run_activation_hook() {
 # its startup hook-env succeeds. Scripts with no force hook keep the
 # previous stamp so an unchanged directory can still skip.
 _dotfiles_mise_activate_wsl() {
+  local _shell
   _shell=$1
   _split=$(
     _dotfiles_mise_activate_cached "$_shell" \
@@ -493,6 +502,8 @@ _dotfiles_mise_activate_file_token() {
 # The caller moves `_mise_hook --force` until after the wrappers exist,
 # so the one startup hook-env runs where its status is visible.
 _dotfiles_mise_activate_cached() {
+  local _shell _ver _bin _mt _cfg_hash _env _key _cache_dir _cache_file
+  local _out _tmp
   _shell=$1
   _ver=$(mise --version 2>/dev/null | awk 'NR == 1 { print; exit }')
   if [ -z "$_ver" ]; then
