@@ -1248,6 +1248,9 @@ exit 1
 }
 
 @test "reaps a TERM-ignoring review without setsid when a group-directed TERM follows the first" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "requires perl for the timeout mock's process group"
+  fi
   make_git_call_recorder
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
