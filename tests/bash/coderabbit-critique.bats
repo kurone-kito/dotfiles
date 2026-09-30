@@ -599,7 +599,18 @@ EOF
 
 @test "cleans an earlier auth temp directory when a later mktemp fails" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 4; exec "$@"'
+  # The auth probe is the only timeout call before the later mktemp fails.
+  # Its ninth and tenth arguments are the stdout and done paths it hands to
+  # `sh -c`; record them so the test can pin that both live inside the
+  # private directory rather than beside it.
+  probe_paths="$BATS_TEST_TMPDIR/probe.paths"
+  export CODERABBIT_PROBE_PATHS="$probe_paths"
+  make_mock_timeout timeout '
+printf "%s\n" "$9" >> "$CODERABBIT_PROBE_PATHS"
+printf "%s\n" "${10}" >> "$CODERABBIT_PROBE_PATHS"
+shift 4
+exec "$@"
+'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "{\"authenticated\":true}"
@@ -647,7 +658,9 @@ exit 1
   assert_failure
   assert_stderr --partial "mktemp failed"
   assert_fallback_reason mktemp-failed
-  assert_equal "-d" "$(cut -d' ' -f1 "$mktemp_first_args")"
+  assert_equal "$(cut -d' ' -f1 "$mktemp_first_args")" "-d"
+  assert_equal "$(dirname "$(sed -n 1p "$probe_paths")")" "$allocated_temp"
+  assert_equal "$(dirname "$(sed -n 2p "$probe_paths")")" "$allocated_temp"
   assert [ ! -e "$allocated_temp" ]
   assert_no_git_calls
 }
