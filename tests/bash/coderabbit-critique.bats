@@ -189,7 +189,9 @@ start_wrapper_job() {
 # because a background job in the non-interactive Bats shell shares Bats' own
 # group, so a group kill would hit the runner itself. The tree is captured
 # before anything is signalled, since killing the wrapper first would orphan its
-# descendants out of reach. Safe under `set -e`: nothing here can fail the test.
+# descendants out of reach; a child forked after that snapshot is not reached,
+# which is acceptable for the short-lived helpers the wrapper starts while it
+# shuts down. Safe under `set -e`: nothing here can fail the test.
 stop_tracked_wrappers() {
   for tracked_pid in $_TRACKED_WRAPPER_PIDS; do
     # Already gone and reaped, usually by the test's own `wait`: nothing is left
@@ -209,7 +211,15 @@ stop_tracked_wrappers() {
     for member in $tracked_tree; do
       process_is_gone "$member" || kill -KILL "$member" 2>/dev/null || true
     done
-    wait "$tracked_pid" 2>/dev/null || true
+    # SIGKILL is delivered asynchronously, so confirm the members are really
+    # gone before returning instead of leaving one still exiting. Reap the
+    # wrapper only once it is gone too: `wait` would block on a process that
+    # survived, and teardown must never hang.
+    # shellcheck disable=SC2086 # word splitting of the PID list is intended
+    poll_until 5 all_processes_gone $tracked_tree || true
+    if process_is_gone "$tracked_pid"; then
+      wait "$tracked_pid" 2>/dev/null || true
+    fi
   done
   _TRACKED_WRAPPER_PIDS=
   return 0
@@ -1725,8 +1735,11 @@ exit 1
 
   assert_failure
   assert_output --partial "timed out after 1s waiting for the never-written file"
-  # Bounded on both sides: it really waited, and it did not hang.
-  assert [ "$elapsed" -ge 1 ]
+  # Bounded on both sides: it really waited, and it did not hang. SECONDS is a
+  # whole-second clock, so the two-second lower bound is what proves that the
+  # helper's extra second is there and that at least the requested second of
+  # real time passed.
+  assert [ "$elapsed" -ge 2 ]
   assert [ "$elapsed" -le 5 ]
 }
 
@@ -1804,6 +1817,23 @@ exit 1
   child_pid=$(cat "$child_file")
   run process_is_gone "$child_pid"
   assert_failure
+
+  stop_tracked_wrappers
+
+  run process_is_gone "$script_pid"
+  assert_success
+  run process_is_gone "$child_pid"
+  assert_success
+}
+
+@test "stop_tracked_wrappers kills a process tree that ignores TERM" {
+  child_file="$BATS_TEST_TMPDIR/ignoring-child.pid"
+  # The parent and its sleeper both ignore TERM, and the sleeper outlasts the
+  # test, so only the KILL pass can end them.
+  start_wrapper_job "$BATS_TEST_TMPDIR/ignoring.stdout" "$BATS_TEST_TMPDIR/ignoring.stderr" \
+    sh -c 'trap "" TERM; sleep 60 & echo "$!" >"$1"; wait' sh "$child_file"
+  wait_for_file "$child_file" 10 "the child to record its PID"
+  child_pid=$(cat "$child_file")
 
   stop_tracked_wrappers
 
