@@ -199,6 +199,8 @@ EOF
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+# Pass "survive" as the second argument for a mock that, like real timeout,
+# catches TERM and keeps waiting for its child instead of dying with it.
 make_mock_timeout_with_kill() {
   skip_without_process_group_source
   {
@@ -218,6 +220,12 @@ kill_after=$3
 duration=$4
 shift 4
 
+EOF
+    printf 'survive=%s\n' "${2:-}"
+    cat << 'EOF'
+if [ "$survive" = survive ]; then
+  trap ':' TERM
+fi
 "$@" &
 child=$!
 # Real timeout keeps its timer inside its own process (an alarm), never as a
@@ -240,6 +248,10 @@ fi
 watcher=$!
 wait "$child"
 status=$?
+while kill -0 "$child" 2>/dev/null; do
+  wait "$child"
+  status=$?
+done
 kill "$watcher" 2>/dev/null || true
 wait "$watcher" 2>/dev/null || true
 exit "$status"
@@ -1252,7 +1264,7 @@ exit 1
     skip "requires perl for the timeout mock's process group"
   fi
   make_git_call_recorder
-  make_mock_timeout_with_kill timeout
+  make_mock_timeout_with_kill timeout survive
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "{\"authenticated\":true}"
@@ -1276,15 +1288,18 @@ exit 1
     link_system_command "$command"
   done
 
-  # Keep setsid out of the wrapper's PATH so cleanup runs in the members
+  # Keep setsid out of the wrapper's PATH so cleanup runs in members mode, the
   # mode a host without setsid uses, where the delayed-KILL helper shares the
   # review's process group. The mock timer TERMs the supervisor after 1s and
   # the helper's KILL is due 1s after that; a second TERM aimed at the whole
   # group in between, as the wrapper's own cancellation forwarding sends,
   # must not remove the helper. The mock timer keeps this independent of
-  # whether the host's timeout kills its whole group itself.
+  # whether the host's timeout kills its whole group itself. The second TERM
+  # is timed from the supervisor recording the first one, not from the review
+  # starting, because a slow host starts the review well after the mock timer.
   # Close FD 3 for the background run: a review left alive by a regression
   # would otherwise hold it and stall Bats until that process exits.
+  t_launch=$(date +%s.%N)
   PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT" \
     >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" 3>&- &
   script_pid=$!
@@ -1297,11 +1312,27 @@ exit 1
     sleep 0.1
   done
   assert [ "$started" = true ]
+  t_started=$(date +%s.%N)
 
-  sleep 1.3
+  # The supervisor writes its deadline marker in the first TERM handler.
+  first_term_seen=false
+  for _ in $(seq 1 100); do
+    for deadline_file in "$BATS_TEST_TMPDIR"/coderabbit-critique-deadline.*; do
+      if [ -s "$deadline_file" ]; then
+        first_term_seen=true
+      fi
+    done
+    if [ "$first_term_seen" = true ]; then
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$first_term_seen" = true ]
+  sleep 0.3
   supervisor_pid=$(cat "$review_pid_file.supervisor")
   group_id="$(ps -o pgid= -p "$supervisor_pid" | tr -d '[:space:]')"
   assert [ -n "$group_id" ]
+  t_group_term=$(date +%s.%N)
   kill -TERM -- "-$group_id" 2>/dev/null || true
 
   review_pid=$(cat "$review_pid_file")
@@ -1321,6 +1352,17 @@ exit 1
     sleep 0.1
   done
   if [ "$review_alive" = true ]; then
+    # Leave enough evidence in the log to tell a wrapper that never escalated
+    # from one whose KILL missed, since this only shows up on some hosts.
+    {
+      echo "DIAG launch=$t_launch started=$t_started group_term=$t_group_term now=$(date +%s.%N)"
+      echo "DIAG group_id=$group_id supervisor_pid=$supervisor_pid review_pid=$review_pid script_pid=$script_pid"
+      ps -eo pid,ppid,pgid,stat,etime,args |
+        awk -v r="$review_pid" -v s="$supervisor_pid" -v g="$group_id" \
+          'NR == 1 || $1 == r || $1 == s || $2 == r || $2 == s || $3 == g || $3 == r { print "DIAG " $0 }'
+      echo "DIAG wrapper stderr:"
+      cat "$BATS_TEST_TMPDIR/members.stderr"
+    } >&3
     kill -KILL "$review_pid" "$supervisor_pid" 2>/dev/null || true
   fi
   assert [ "$review_alive" = false ]
