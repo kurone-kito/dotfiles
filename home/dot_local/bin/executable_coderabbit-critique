@@ -137,15 +137,15 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Review temps are created later. Auth temps are included so the EXIT trap
-# installed below still removes the auth stdout file when a later mktemp
-# fails before that review chain's own trap would have been installed.
-# The done path is not created here: mktemp would make an empty file, and
-# an empty file cannot be told apart from a probe that never finished.
+# Review temps are created later. The auth probe's stdout capture and done
+# token live inside a private directory, so removing that directory with its
+# contents is the whole auth cleanup; the EXIT trap installed below still
+# runs it when a later mktemp fails before that review chain's own trap
+# would have been installed. The probe itself writes the done token, and
+# nothing pre-creates it: a missing or empty token still means the probe
+# never finished.
 cleanup_tmp_files() {
   for tmp in \
-    "${auth_stdout:-}" \
-    "${auth_done:-}" \
     "${stderr_tmp:-}" \
     "${stdout_tmp:-}" \
     "${deadline_tmp:-}" \
