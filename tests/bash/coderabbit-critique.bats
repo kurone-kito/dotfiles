@@ -71,6 +71,12 @@ setup() {
 
 teardown() {
   export PATH="$_ORIG_PATH"
+  # A test that models an inherited runner replaces setup()'s snapshot. Put the
+  # real one back first, so a test that fails part way still restores the
+  # values from before it ran, not the ones it injected.
+  if [ "${_outer_snapshot_stashed:-0}" = 1 ]; then
+    reinstate_critique_policy_snapshot
+  fi
   restore_critique_policy_env
   unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG
 }
@@ -1795,9 +1801,11 @@ exit 1
 }
 
 # The next two tests model a caller that already has the policy variables
-# set, instead of relying on the runner that happens to run the suite. Both
-# helpers overwrite the snapshot setup() took, so put it back afterwards.
+# set, instead of relying on the runner that happens to run the suite. Saving
+# overwrites the snapshot setup() took, so they stash it first and teardown()
+# puts it back, including when an assertion fails part way.
 stash_critique_policy_snapshot() {
+  _outer_snapshot_stashed=1
   _outer_deep_set=$_policy_deep_set
   _outer_deep_val=$_policy_deep_val
   _outer_base_set=$_policy_base_set
@@ -1860,7 +1868,6 @@ reinstate_critique_policy_snapshot() {
     esac
   done
 
-  reinstate_critique_policy_snapshot
   unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
 }
 
@@ -1880,7 +1887,6 @@ reinstate_critique_policy_snapshot() {
   run grep -cF -- '--deep' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
   assert_no_git_calls
-  reinstate_critique_policy_snapshot
 }
 
 @test "fails closed when structured auth status is malformed" {
