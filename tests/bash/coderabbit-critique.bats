@@ -167,7 +167,14 @@ require_compatible_host_timer() {
 # mock that skips it fails every launching test on a host without `setsid`
 # (macOS). Emit a prelude that re-executes the mock once as a group leader,
 # keeping the same PID. `setpgid` fails harmlessly when the mock already
-# leads a group, and a host without perl keeps the previous behavior.
+# leads a group. A host with neither setsid nor perl has no way to give the
+# mock that group, so those tests skip there rather than fail.
+skip_without_process_group_source() {
+  if ! command -v setsid >/dev/null 2>&1 && ! command -v perl >/dev/null 2>&1; then
+    skip "requires setsid or perl to give the timeout mock its own process group"
+  fi
+}
+
 timeout_mock_group_prelude() {
   cat << 'EOF'
 if [ -z "$CODERABBIT_MOCK_TIMEOUT_GROUPED" ] && command -v perl >/dev/null 2>&1; then
@@ -177,6 +184,7 @@ EOF
 }
 
 make_mock_timeout() {
+  skip_without_process_group_source
   {
     cat << 'EOF'
 #!/bin/sh
@@ -192,6 +200,7 @@ EOF
 }
 
 make_mock_timeout_with_kill() {
+  skip_without_process_group_source
   {
     cat << 'EOF'
 #!/bin/sh
