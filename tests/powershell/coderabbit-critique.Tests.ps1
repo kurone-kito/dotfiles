@@ -38,13 +38,60 @@ function global:Assert-DotfilesCoderabbitFallbackReason {
   $records[0].reason | Should -Be $ExpectedReason
 }
 
+# $null -eq '' is $true in PowerShell, so a null comparison cannot tell a
+# set-but-empty value from an absent one. Presence is Test-Path Env:.
+function script:Get-DotfilesCritiquePolicySnapshot {
+  $snapshot = @{}
+  foreach ($name in @(
+      'CODERABBIT_CRITIQUE_DEEP',
+      'CODERABBIT_CRITIQUE_BASE',
+      'CODERABBIT_CRITIQUE_TIMEOUT'
+    )) {
+    $present = Test-Path "Env:$name"
+    $snapshot[$name] = @{
+      Present = $present
+      Value   = $(if ($present) {
+          [Environment]::GetEnvironmentVariable($name)
+        } else {
+          $null
+        })
+    }
+  }
+  return $snapshot
+}
+
+function script:Restore-DotfilesCritiquePolicySnapshot {
+  param([Parameter(Mandatory)] [hashtable] $Snapshot)
+
+  foreach ($name in @(
+      'CODERABBIT_CRITIQUE_DEEP',
+      'CODERABBIT_CRITIQUE_BASE',
+      'CODERABBIT_CRITIQUE_TIMEOUT'
+    )) {
+    $entry = $Snapshot[$name]
+    if ($entry.Present) {
+      Set-Item -Path "Env:$name" -Value ([string]$entry.Value)
+    } else {
+      Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+function script:Clear-DotfilesCritiquePolicyEnv {
+  foreach ($name in @(
+      'CODERABBIT_CRITIQUE_DEEP',
+      'CODERABBIT_CRITIQUE_BASE',
+      'CODERABBIT_CRITIQUE_TIMEOUT'
+    )) {
+    Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
+  }
+}
+
 Describe 'coderabbit-critique' {
 
   BeforeEach {
     $script:OriginalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
-    $script:OriginalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
-    $script:OriginalBase = $env:CODERABBIT_CRITIQUE_BASE
-    $script:OriginalDeep = $env:CODERABBIT_CRITIQUE_DEEP
+    $script:CritiquePolicySnapshot = Get-DotfilesCritiquePolicySnapshot
     $script:OriginalXdgStateHome = $env:XDG_STATE_HOME
     $script:FallbackStateHome = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
     $env:XDG_STATE_HOME = $script:FallbackStateHome
@@ -52,9 +99,7 @@ Describe 'coderabbit-critique' {
       (Join-Path $script:FallbackStateHome 'idd-critique') `
       'fallbacks.jsonl'
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = '1'
-    Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
-    Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
-    Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
+    Clear-DotfilesCritiquePolicyEnv
     # Every diagnostic in Invoke-DotfilesCoderabbitCritique now goes through
     # [Console]::Error.WriteLine rather than Write-Warning -- deliberately,
     # so a non-interactive `pwsh -File` host can't reroute it onto real
@@ -75,21 +120,7 @@ Describe 'coderabbit-critique' {
   AfterEach {
     [Console]::SetError($script:OriginalConsoleError)
     $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $script:OriginalSkip
-    if ($null -eq $script:OriginalTimeout) {
-      Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
-    } else {
-      $env:CODERABBIT_CRITIQUE_TIMEOUT = $script:OriginalTimeout
-    }
-    if ($null -eq $script:OriginalBase) {
-      Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
-    } else {
-      $env:CODERABBIT_CRITIQUE_BASE = $script:OriginalBase
-    }
-    if ($null -eq $script:OriginalDeep) {
-      Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
-    } else {
-      $env:CODERABBIT_CRITIQUE_DEEP = $script:OriginalDeep
-    }
+    Restore-DotfilesCritiquePolicySnapshot -Snapshot $script:CritiquePolicySnapshot
     if ($null -eq $script:OriginalXdgStateHome) {
       Remove-Item Env:\XDG_STATE_HOME -ErrorAction SilentlyContinue
     } else {
@@ -101,6 +132,7 @@ Describe 'coderabbit-critique' {
       'Write-DotfilesCoderabbitUsageError'
       'Write-DotfilesCoderabbitFallbackReason'
       'Get-DotfilesCoderabbitCommand'
+      'Resolve-DotfilesCoderabbitAuthFailure'
       'Test-DotfilesCoderabbitAuthenticated'
       'Resolve-DotfilesCoderabbitTimeoutSeconds'
       'Test-DotfilesCoderabbitDeepReview'
@@ -126,27 +158,90 @@ Describe 'coderabbit-critique' {
     }
   }
 
+  Context 'Resolve-DotfilesCoderabbitAuthFailure' {
+    It 'accepts only a boolean authenticated true' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 0 `
+        -Stdout '{"authenticated":true}' | Should -BeNullOrEmpty
+    }
+
+    It 'classifies boolean false as unauthenticated' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 0 `
+        -Stdout '{"authenticated":false}' | Should -Be 'unauthenticated'
+    }
+
+    It 'rejects a string true' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 0 `
+        -Stdout '{"authenticated":"true"}' | Should -Be 'auth-malformed'
+    }
+
+    It 'rejects invalid JSON' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 0 `
+        -Stdout 'not-json' | Should -Be 'auth-malformed'
+    }
+
+    It 'rejects a single-element array even when the element is authenticated' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 0 `
+        -Stdout '[{"authenticated":true}]' | Should -Be 'auth-malformed'
+    }
+
+    It 'classifies a non-zero exit as unsupported' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $false -ExitCode 2 `
+        -Stdout '{"authenticated":true}' | Should -Be 'auth-unsupported'
+    }
+
+    It 'classifies a timed-out probe before the exit code' {
+      Resolve-DotfilesCoderabbitAuthFailure -TimedOut $true -ExitCode -1 `
+        -Stdout '' | Should -Be 'auth-timeout'
+    }
+  }
+
   Context 'Test-DotfilesCoderabbitAuthenticated' {
-    It 'returns $false when auth status reports signed out' {
-      function script:coderabbit {
-        if ($args[0] -eq 'auth' -and $args[1] -eq 'status') {
-          'Status       : signed out'
-        }
+    It 'asks for structured auth status with the resolved timeout and accepts a true result' {
+      $env:CODERABBIT_CRITIQUE_TIMEOUT = '45'
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{"authenticated":true}'; Stderr = '' }
+      }
+      $cmd = [pscustomobject]@{ Name = '/usr/bin/coderabbit' }
+
+      Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $cmd | Should -BeTrue
+
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly -ParameterFilter {
+        $FilePath -eq '/usr/bin/coderabbit' -and
+        $TimeoutSeconds -eq 45 -and
+        ($ArgumentList -join ' ') -eq 'auth status --agent'
+      }
+    }
+
+    It 'returns false instead of throwing when the probe cannot be started' {
+      Mock Start-DotfilesProcessWithTimeout {
+        throw [InvalidOperationException]::new('simulated auth probe start failure')
       }
       $cmd = [pscustomobject]@{ Name = 'coderabbit' }
 
       Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $cmd | Should -BeFalse
     }
+  }
 
-    It 'returns $true when auth status shows account info without signed out' {
-      function script:coderabbit {
-        if ($args[0] -eq 'auth' -and $args[1] -eq 'status') {
-          'Account      : test-user'
-        }
+  Context 'critique policy environment restore' {
+    It 'restores a set-but-empty policy variable' {
+      # Win32 SetEnvironmentVariable deletes a name whose value is empty.
+      # Windows PowerShell 5.1 follows that, so set-but-empty is absent
+      # there. PowerShell 7 keeps the empty value.
+      Set-Item -Path Env:CODERABBIT_CRITIQUE_DEEP -Value ''
+      $storedEmpty = (Test-Path Env:CODERABBIT_CRITIQUE_DEEP) -and
+        ($env:CODERABBIT_CRITIQUE_DEEP -eq '')
+      $snapshot = Get-DotfilesCritiquePolicySnapshot
+      Set-Item -Path Env:CODERABBIT_CRITIQUE_DEEP -Value 'leaked'
+
+      Restore-DotfilesCritiquePolicySnapshot -Snapshot $snapshot
+
+      if ($storedEmpty) {
+        Test-Path Env:CODERABBIT_CRITIQUE_DEEP | Should -BeTrue
+        $env:CODERABBIT_CRITIQUE_DEEP | Should -Be ''
+      } else {
+        $snapshot['CODERABBIT_CRITIQUE_DEEP'].Present | Should -BeFalse
+        Test-Path Env:CODERABBIT_CRITIQUE_DEEP | Should -BeFalse
       }
-      $cmd = [pscustomobject]@{ Name = 'coderabbit' }
-
-      Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $cmd | Should -BeTrue
     }
   }
 
@@ -518,7 +613,7 @@ Describe 'coderabbit-critique' {
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
     }
 
-    It 'logs review-failed when the authentication probe cannot be started' {
+    It 'logs review-failed when checking authentication fails unexpectedly' {
       Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
       Mock Test-DotfilesCoderabbitAuthenticated {
         throw [InvalidOperationException]::new('simulated auth probe start failure')
@@ -528,6 +623,80 @@ Describe 'coderabbit-critique' {
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
+    }
+
+    # These run the real auth probe and classifier and mock only the process
+    # primitive, so the recorded reason and the "review never invoked"
+    # guarantee are checked on every platform CI runs (the subprocess tests
+    # further down are Unix-only).
+    It 'records auth-timeout and skips the review when the auth probe times out' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-timeout'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records auth-unsupported and skips the review when the auth command fails' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 2; Stdout = ''; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-unsupported'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records auth-malformed and skips the review when the auth output is not JSON' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = 'not-json'; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-malformed'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records unauthenticated and skips the review when authenticated is false' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Stdout = '{"authenticated":false}'; Stderr = '' }
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
+    }
+
+    It 'records auth-unsupported and skips the review when the auth probe cannot be started' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        throw [InvalidOperationException]::new('simulated auth probe start failure')
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-unsupported'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
     }
 
     It 'fails when the base branch cannot be resolved' {
@@ -1153,7 +1322,7 @@ try {
       $script:FakeCoderabbitPath = Join-Path $script:FakeBinDir 'coderabbit'
       $content = "#!/bin/sh`n" +
         "if [ `"`$1`" = auth ] && [ `"`$2`" = status ]; then`n" +
-        "  echo `"Account: fake-user`"`n" +
+        "  echo '{`"authenticated`":true}'`n" +
         "  exit 0`n" +
         "fi`n" +
         "echo STDOUT_MARKER_TEXT`n" +
@@ -1286,20 +1455,18 @@ try {
         # set by one scenario's $EnvironmentOverrides can never leak into
         # the next scenario's run.
         $fakeVarNames = @(
-          'FAKE_AUTH_SIGNED_OUT', 'FAKE_REVIEW_SLEEP', 'FAKE_REVIEW_STDOUT',
-          'FAKE_REVIEW_STDERR', 'FAKE_REVIEW_EXIT', 'FAKE_REVIEW_ARGS_FILE'
+          'FAKE_AUTH_SIGNED_OUT', 'FAKE_AUTH_SLEEP', 'FAKE_AUTH_MALFORMED',
+          'FAKE_AUTH_EXIT', 'FAKE_AUTH_ARGS_FILE', 'FAKE_REVIEW_SLEEP',
+          'FAKE_REVIEW_STDOUT', 'FAKE_REVIEW_STDERR', 'FAKE_REVIEW_EXIT',
+          'FAKE_REVIEW_ARGS_FILE'
         )
 
         $originalPath = $env:PATH
         $originalSkip = $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN
-        $originalBase = $env:CODERABBIT_CRITIQUE_BASE
-        $originalTimeout = $env:CODERABBIT_CRITIQUE_TIMEOUT
-        $originalDeep = $env:CODERABBIT_CRITIQUE_DEEP
+        $policySnapshot = Get-DotfilesCritiquePolicySnapshot
         try {
           Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
-          Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
-          Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
-          Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
+          Clear-DotfilesCritiquePolicyEnv
           foreach ($name in $fakeVarNames) {
             Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
           }
@@ -1338,31 +1505,14 @@ try {
           }
         } finally {
           $env:PATH = $originalPath
-          # $null checks, not truthiness -- matching the outer AfterEach's
-          # own pattern below. A truthy check (`if ($original...)`) would
-          # treat a captured empty string the same as unset and skip
-          # restoring it, silently changing the environment from what the
-          # test actually started with.
+          # Presence, not `$null -eq`: in PowerShell `$null -eq ''` is
+          # $true, so a null comparison would drop a set-but-empty value.
           if ($null -eq $originalSkip) {
             Remove-Item Env:\DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN -ErrorAction SilentlyContinue
           } else {
             $env:DOTFILES_TEST_CODERABBIT_CRITIQUE_SKIP_MAIN = $originalSkip
           }
-          if ($null -eq $originalBase) {
-            Remove-Item Env:\CODERABBIT_CRITIQUE_BASE -ErrorAction SilentlyContinue
-          } else {
-            $env:CODERABBIT_CRITIQUE_BASE = $originalBase
-          }
-          if ($null -eq $originalTimeout) {
-            Remove-Item Env:\CODERABBIT_CRITIQUE_TIMEOUT -ErrorAction SilentlyContinue
-          } else {
-            $env:CODERABBIT_CRITIQUE_TIMEOUT = $originalTimeout
-          }
-          if ($null -eq $originalDeep) {
-            Remove-Item Env:\CODERABBIT_CRITIQUE_DEEP -ErrorAction SilentlyContinue
-          } else {
-            $env:CODERABBIT_CRITIQUE_DEEP = $originalDeep
-          }
+          Restore-DotfilesCritiquePolicySnapshot -Snapshot $policySnapshot
           foreach ($name in $fakeVarNames) {
             Remove-Item "Env:\$name" -ErrorAction SilentlyContinue
           }
@@ -1382,10 +1532,23 @@ try {
       $content = @'
 #!/bin/sh
 if [ "$1" = auth ] && [ "$2" = status ]; then
+  if [ -n "$FAKE_AUTH_ARGS_FILE" ]; then
+    printf '%s\n' "$@" > "$FAKE_AUTH_ARGS_FILE"
+  fi
+  if [ -n "$FAKE_AUTH_SLEEP" ]; then
+    sleep "$FAKE_AUTH_SLEEP"
+  fi
+  if [ -n "$FAKE_AUTH_EXIT" ]; then
+    exit "$FAKE_AUTH_EXIT"
+  fi
+  if [ -n "$FAKE_AUTH_MALFORMED" ]; then
+    printf '%s\n' "$FAKE_AUTH_MALFORMED"
+    exit 0
+  fi
   if [ -n "$FAKE_AUTH_SIGNED_OUT" ]; then
-    echo "Status       : signed out"
+    printf '%s\n' '{"authenticated":false}'
   else
-    echo "Account: fake-user"
+    printf '%s\n' '{"authenticated":true}'
   fi
   exit 0
 fi
@@ -1424,14 +1587,75 @@ exit "${FAKE_REVIEW_EXIT:-0}"
     }
 
     It 'produces no stdout when coderabbit is not authenticated' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
-        PATH                 = $script:FakeBinDir
-        FAKE_AUTH_SIGNED_OUT = '1'
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_SIGNED_OUT  = '1'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
       }
 
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
+    }
+
+    It 'asks coderabbit for structured auth status before review' {
+      $argsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                     = $script:FakeBinDir
+        CODERABBIT_CRITIQUE_BASE = 'master'
+        FAKE_AUTH_ARGS_FILE      = $argsFile
+        FAKE_REVIEW_STDOUT       = '{"type":"finding"}'
+      }
+
+      $result.ExitCode | Should -Be 0
+      @(Get-Content -LiteralPath $argsFile) | Should -Be @(
+        'auth', 'status', '--agent'
+      )
+    }
+
+    It 'produces no stdout when authentication status is malformed' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_MALFORMED   = 'not-json'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'authentication status was not a boolean authenticated field'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
+    }
+
+    It 'produces no stdout when the auth command is unsupported' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_EXIT        = '2'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'authentication status command is unsupported or failed'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
+    }
+
+    It 'produces no stdout when the auth probe times out' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
+      $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
+        PATH                        = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
+        CODERABBIT_CRITIQUE_TIMEOUT = '1'
+        FAKE_AUTH_SLEEP             = '10'
+        FAKE_REVIEW_ARGS_FILE       = $reviewArgsFile
+      }
+
+      $result.ExitCode | Should -Be 1
+      $result.Stdout | Should -BeNullOrEmpty
+      $result.Stderr | Should -Match 'authentication status timed out'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
     }
 
     It 'prints usage for --help without invoking coderabbit' {
@@ -1642,20 +1866,17 @@ exit "${FAKE_REVIEW_EXIT:-0}"
   Context 'No git mutation' {
     It 'never invokes a git subcommand other than symbolic-ref/rev-parse across the orchestration' {
       $script:GitCalls = [System.Collections.Generic.List[string]]::new()
-      function script:coderabbit {
-        if ($args[0] -eq 'auth') { 'Account: test'; return }
-        '{"type":"finding"}'
-      }
       function script:git {
         $script:GitCalls.Add(($args -join ' '))
         $global:LASTEXITCODE = 1
       }
       Mock Get-Command {
-        [pscustomobject]@{ Name = 'coderabbit'; CommandType = 'Function' }
+        [pscustomobject]@{ Name = 'coderabbit'; CommandType = 'Application' }
       } -ParameterFilter { $Name -eq 'coderabbit' }
       Mock Get-Command {
         [pscustomobject]@{ Name = 'git'; CommandType = 'Function' }
       } -ParameterFilter { $Name -eq 'git' }
+      Mock Test-DotfilesCoderabbitAuthenticated { $true }
 
       Invoke-DotfilesCoderabbitCritique 3>&1 | Out-Null
 

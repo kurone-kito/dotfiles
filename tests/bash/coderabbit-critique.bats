@@ -5,6 +5,49 @@
 
 bats_require_minimum_version 1.5.0
 
+# Presence is ${name+x}, not a non-empty test: a set-but-empty value must
+# be restored as empty, and an absent value must stay absent. Separate
+# variables, not an associative array, so this still runs on bash 3.2.
+save_critique_policy_env() {
+  _policy_deep_set=0
+  _policy_deep_val=
+  _policy_base_set=0
+  _policy_base_val=
+  _policy_timeout_set=0
+  _policy_timeout_val=
+  if [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]; then
+    _policy_deep_set=1
+    _policy_deep_val=$CODERABBIT_CRITIQUE_DEEP
+  fi
+  if [ "${CODERABBIT_CRITIQUE_BASE+x}" = x ]; then
+    _policy_base_set=1
+    _policy_base_val=$CODERABBIT_CRITIQUE_BASE
+  fi
+  if [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" = x ]; then
+    _policy_timeout_set=1
+    _policy_timeout_val=$CODERABBIT_CRITIQUE_TIMEOUT
+  fi
+  unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+}
+
+restore_critique_policy_env() {
+  if [ "${_policy_deep_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_DEEP="$_policy_deep_val"
+  else
+    unset CODERABBIT_CRITIQUE_DEEP
+  fi
+  if [ "${_policy_base_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_BASE="$_policy_base_val"
+  else
+    unset CODERABBIT_CRITIQUE_BASE
+  fi
+  if [ "${_policy_timeout_set:-0}" = 1 ]; then
+    export CODERABBIT_CRITIQUE_TIMEOUT="$_policy_timeout_val"
+  else
+    unset CODERABBIT_CRITIQUE_TIMEOUT
+  fi
+}
+
 setup() {
   load 'helpers/bats-support/load'
   load 'helpers/bats-assert/load'
@@ -13,6 +56,12 @@ setup() {
   export HOME="$BATS_TEST_TMPDIR"
   SCRIPT="$BATS_TEST_DIRNAME/../../home/dot_local/bin/executable_coderabbit-critique"
   _ORIG_PATH="$PATH"
+  # Resolve host tools before PATH is narrowed to /usr/bin:/bin. A Homebrew
+  # gtimeout lives outside that prefix and would otherwise be invisible.
+  _HOST_TIMEOUT="$(command -v timeout 2>/dev/null || true)"
+  _HOST_GTIMEOUT="$(command -v gtimeout 2>/dev/null || true)"
+  _HOST_SETSID="$(command -v setsid 2>/dev/null || true)"
+  save_critique_policy_env
   export PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin"
   mkdir -p "$BATS_TEST_TMPDIR/bin"
   export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
@@ -22,7 +71,14 @@ setup() {
 
 teardown() {
   export PATH="$_ORIG_PATH"
-  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG CODERABBIT_CRITIQUE_TIMEOUT CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_DEEP
+  # A test that models an inherited runner replaces setup()'s snapshot. Put the
+  # real one back first, so a test that fails part way still restores the
+  # values from before it ran, not the ones it injected.
+  if [ "${_outer_snapshot_stashed:-0}" = 1 ]; then
+    reinstate_critique_policy_snapshot
+  fi
+  restore_critique_policy_env
+  unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG
 }
 
 make_mock() {
@@ -68,6 +124,41 @@ link_system_command() {
   ln -sf "$command_path" "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+# Same --help probe as the wrapper. An incompatible timeout earlier on
+# PATH must not hide a compatible gtimeout, including one outside
+# /usr/bin:/bin.
+host_timer_is_compatible() {
+  help_output=$("$1" --help 2>&1) || true
+  case "$help_output" in
+    *--kill-after*) ;;
+    *) return 1 ;;
+  esac
+  case "$help_output" in
+    *--preserve-status*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+compatible_host_timer() {
+  if [ -n "${_HOST_TIMEOUT:-}" ] && host_timer_is_compatible "$_HOST_TIMEOUT"; then
+    printf '%s\n' "$_HOST_TIMEOUT"
+    return 0
+  fi
+  if [ -n "${_HOST_GTIMEOUT:-}" ] && host_timer_is_compatible "$_HOST_GTIMEOUT"; then
+    printf '%s\n' "$_HOST_GTIMEOUT"
+    return 0
+  fi
+  return 1
+}
+
+# The fixture PATH starts at the mock bin, then /usr/bin:/bin. Put a
+# compatible host timer there as `timeout` so Homebrew gtimeout remains
+# visible to tests that invoke the real timer.
+require_compatible_host_timer() {
+  timer="$(compatible_host_timer)" || return 1
+  ln -sf "$timer" "$BATS_TEST_TMPDIR/bin/timeout"
+}
+
 # The script probes `timeout`/`gtimeout --help` for --kill-after and
 # --preserve-status support before selecting either as TIMEOUT_CMD (same
 # probe-before-trust pattern as ~/.gnupg/pinentry-auto's
@@ -75,25 +166,59 @@ link_system_command() {
 # itself, on top of its normal behavior, or every test below would silently
 # fail closed on the "no compatible timeout" path instead of exercising the
 # path it means to test.
-make_mock_timeout() {
-  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
-#!/bin/sh
-if [ "\$1" = "--help" ]; then
-  printf -- '--kill-after --preserve-status\n'
-  exit 0
-fi
-$2
-EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+#
+# Real GNU timeout also puts itself in its own process group before it
+# launches the command. Without `setsid` the wrapper relies on exactly that
+# boundary and refuses to run when the group is shared with its caller, so a
+# mock that skips it fails every launching test on a host without `setsid`
+# (macOS). Emit a prelude that re-executes the mock once as a group leader,
+# keeping the same PID. `setpgid` fails harmlessly when the mock already
+# leads a group. A host with neither setsid nor perl has no way to give the
+# mock that group, so those tests skip there rather than fail.
+skip_without_process_group_source() {
+  if ! command -v setsid >/dev/null 2>&1 && ! command -v perl >/dev/null 2>&1; then
+    skip "requires setsid or perl to give the timeout mock its own process group"
+  fi
 }
 
-make_mock_timeout_with_kill() {
-  cat > "$BATS_TEST_TMPDIR/bin/$1" << 'EOF'
+timeout_mock_group_prelude() {
+  cat << 'EOF'
+if [ -z "$CODERABBIT_MOCK_TIMEOUT_GROUPED" ] && command -v perl >/dev/null 2>&1; then
+  CODERABBIT_MOCK_TIMEOUT_GROUPED=1 exec perl -MPOSIX -e 'POSIX::setpgid(0, 0); exec @ARGV or die "exec: $!"' "$0" "$@"
+fi
+EOF
+}
+
+make_mock_timeout() {
+  skip_without_process_group_source
+  {
+    cat << 'EOF'
 #!/bin/sh
 if [ "$1" = "--help" ]; then
   printf -- '--kill-after --preserve-status\n'
   exit 0
 fi
+EOF
+    timeout_mock_group_prelude
+    printf '%s\n' "$2"
+  } > "$BATS_TEST_TMPDIR/bin/$1"
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+# Pass "survive" as the second argument for a mock that, like real timeout,
+# catches TERM and keeps waiting for its child instead of dying with it.
+make_mock_timeout_with_kill() {
+  skip_without_process_group_source
+  {
+    cat << 'EOF'
+#!/bin/sh
+if [ "$1" = "--help" ]; then
+  printf -- '--kill-after --preserve-status\n'
+  exit 0
+fi
+EOF
+    timeout_mock_group_prelude
+    cat << 'EOF'
 if [ "$1" != "--preserve-status" ] || [ "$2" != "--kill-after" ]; then
   exit 2
 fi
@@ -101,23 +226,43 @@ kill_after=$3
 duration=$4
 shift 4
 
+EOF
+    printf 'survive=%s\n' "${2:-}"
+    cat << 'EOF'
+if [ "$survive" = survive ]; then
+  trap ':' TERM
+fi
 "$@" &
 child=$!
-(
-  sleep "$duration"
-  if kill -0 "$child" 2>/dev/null; then
-    kill -TERM "$child" 2>/dev/null || true
-    sleep "$kill_after"
-    kill -KILL "$child" 2>/dev/null || true
-  fi
-) &
+# Real timeout keeps its timer inside its own process (an alarm), never as a
+# helper in the group it manages. Start the watcher in a group of its own so
+# the wrapper's members sweep of the timeout-created group cannot kill it.
+watcher_script='
+sleep "$1"
+if kill -0 "$2" 2>/dev/null; then
+  kill -TERM "$2" 2>/dev/null || true
+  sleep "$3"
+  kill -KILL "$2" 2>/dev/null || true
+fi
+'
+if command -v perl >/dev/null 2>&1; then
+  perl -MPOSIX -e 'POSIX::setpgid(0, 0); exec @ARGV or die "exec: $!"' \
+    sh -c "$watcher_script" sh "$duration" "$child" "$kill_after" &
+else
+  sh -c "$watcher_script" sh "$duration" "$child" "$kill_after" &
+fi
 watcher=$!
 wait "$child"
 status=$?
+while kill -0 "$child" 2>/dev/null; do
+  wait "$child"
+  status=$?
+done
 kill "$watcher" 2>/dev/null || true
 wait "$watcher" 2>/dev/null || true
 exit "$status"
 EOF
+  } > "$BATS_TEST_TMPDIR/bin/$1"
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
@@ -126,7 +271,7 @@ make_immediate_exit_coderabbit() {
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -154,7 +299,7 @@ make_default_mocks() {
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -313,7 +458,7 @@ shift 1; exec "$@"
 @test "resolves to gtimeout when timeout is absent" {
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
@@ -325,7 +470,10 @@ exit 1
   link_system_command cat
   link_system_command rm
   link_system_command mkdir
-  link_system_command setsid
+  link_system_command sh
+  if [ -n "$_HOST_SETSID" ]; then
+    ln -sf "$_HOST_SETSID" "$BATS_TEST_TMPDIR/bin/setsid"
+  fi
 
   # Scope PATH so the real system timeout cannot mask the gtimeout-only
   # branch; the mock gtimeout remains available.
@@ -358,7 +506,7 @@ exit 1
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   printf "auth:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
-  echo "Status       : signed out"
+  echo "{\"authenticated\":false}"
   exit 0
 fi
 printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
@@ -372,6 +520,8 @@ exit 0
   assert_fallback_reason unauthenticated
   run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
+  run grep -c 'auth:auth status --agent' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
   assert_no_git_calls
 }
 
@@ -420,10 +570,15 @@ exit 0
 }
 
 @test "waits for setsid to establish its process group before checking isolation" {
+  if [ -z "$_HOST_SETSID" ]; then
+    skip "requires setsid"
+  fi
   make_default_mocks
-  real_setsid="$(command -v setsid)"
-  export CODERABBIT_REAL_SETSID="$real_setsid"
+  export CODERABBIT_REAL_SETSID="$_HOST_SETSID"
+  setsid_invocations="$BATS_TEST_TMPDIR/setsid.invocations"
+  export CODERABBIT_SETSID_INVOCATIONS="$setsid_invocations"
   make_mock setsid '
+printf "%s\n" "$*" >> "$CODERABBIT_SETSID_INVOCATIONS"
 sleep 0.1
 exec "$CODERABBIT_REAL_SETSID" "$@"
 '
@@ -432,6 +587,10 @@ exec "$CODERABBIT_REAL_SETSID" "$@"
 
   assert_success
   assert_output --partial '"type":"finding"'
+  # The delay only proves the wait if the wrapper really launched the review
+  # through this setsid; without the record, a run that fell back to the
+  # timeout-created group would pass just the same.
+  assert [ -s "$setsid_invocations" ]
   assert_no_git_calls
 }
 
@@ -440,7 +599,7 @@ exec "$CODERABBIT_REAL_SETSID" "$@"
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -476,7 +635,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
@@ -505,26 +664,50 @@ EOF
   assert_no_git_calls
 }
 
-@test "cleans an earlier temp file when a later mktemp fails" {
+@test "cleans an earlier auth temp directory when a later mktemp fails" {
   make_git_call_recorder
-  make_mock_timeout timeout 'shift 4; exec "$@"'
+  # The auth probe is the only timeout call before the later mktemp fails.
+  # Its ninth and tenth arguments are the stdout and done paths it hands to
+  # `sh -c`; record them so the test can pin that both live inside the
+  # private directory rather than beside it.
+  probe_paths="$BATS_TEST_TMPDIR/probe.paths"
+  export CODERABBIT_PROBE_PATHS="$probe_paths"
+  make_mock_timeout timeout '
+printf "%s\n" "$9" >> "$CODERABBIT_PROBE_PATHS"
+printf "%s\n" "${10}" >> "$CODERABBIT_PROBE_PATHS"
+shift 4
+exec "$@"
+'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 exit 1
 '
   allocated_temp="$BATS_TEST_TMPDIR/allocated.tmp"
   mktemp_counter="$BATS_TEST_TMPDIR/mktemp.counter"
+  mktemp_first_args="$BATS_TEST_TMPDIR/mktemp.first-args"
   export CODERABBIT_MKTEMP_COUNTER="$mktemp_counter"
   export CODERABBIT_MKTEMP_FIRST="$allocated_temp"
+  export CODERABBIT_MKTEMP_FIRST_ARGS="$mktemp_first_args"
   later_mktemp_dir="$BATS_TEST_TMPDIR/later-mktemp-bin"
   mkdir -p "$later_mktemp_dir"
+  # The first allocation is the auth probe's private directory: honor
+  # `mktemp -d` by making a directory (the probe then writes its stdout
+  # and done token inside it), and record the arguments so the private
+  # directory contract cannot silently regress to a predictable sibling
+  # file. A plain (non -d) call still yields a file, which the argument
+  # assertion below rejects.
   make_mock mktemp '
 if [ ! -e "$CODERABBIT_MKTEMP_COUNTER" ]; then
   : > "$CODERABBIT_MKTEMP_COUNTER"
-  : > "$CODERABBIT_MKTEMP_FIRST"
+  printf "%s\n" "$*" > "$CODERABBIT_MKTEMP_FIRST_ARGS"
+  if [ "$1" = "-d" ]; then
+    mkdir "$CODERABBIT_MKTEMP_FIRST"
+  else
+    : > "$CODERABBIT_MKTEMP_FIRST"
+  fi
   printf "%s\n" "$CODERABBIT_MKTEMP_FIRST"
   exit 0
 fi
@@ -542,6 +725,9 @@ exit 1
   assert_failure
   assert_stderr --partial "mktemp failed"
   assert_fallback_reason mktemp-failed
+  assert_equal "$(cut -d' ' -f1 "$mktemp_first_args")" "-d"
+  assert_equal "$(dirname "$(sed -n 1p "$probe_paths")")" "$allocated_temp"
+  assert_equal "$(dirname "$(sed -n 2p "$probe_paths")")" "$allocated_temp"
   assert [ ! -e "$allocated_temp" ]
   assert_no_git_calls
 }
@@ -551,7 +737,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -579,7 +765,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -603,7 +789,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -629,7 +815,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -653,7 +839,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -677,7 +863,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -700,7 +886,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -730,7 +916,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -752,7 +938,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -776,7 +962,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -808,10 +994,14 @@ exit 1
 }
 
 @test "fails when review times out" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -838,7 +1028,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -865,7 +1055,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -894,10 +1084,18 @@ exit 1
 }
 
 @test "kills descendants before timeout's grace kills the setsid supervisor" {
+  if [ -z "${_HOST_SETSID:-}" ]; then
+    skip "requires setsid"
+  fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+  ln -sf "$_HOST_SETSID" "$BATS_TEST_TMPDIR/bin/setsid"
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -932,7 +1130,7 @@ exit 1
   make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -959,7 +1157,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -984,15 +1182,14 @@ exit 1
 }
 
 @test "uses timeout's process group when setsid is unavailable" {
-  host_timeout="$(command -v timeout || command -v gtimeout || true)"
-  if [ -z "$host_timeout" ]; then
+  if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
   fi
 
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1007,7 +1204,6 @@ exit 1
   export CODERABBIT_DESCENDANT_PID_FILE="$descendant_pid_file"
   export CODERABBIT_CRITIQUE_BASE=master
 
-  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
   real_ps="$(command -v ps)"
   export CODERABBIT_REAL_PS="$real_ps"
   for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
@@ -1033,15 +1229,14 @@ exec "$CODERABBIT_REAL_PS" "$@"
 }
 
 @test "does not count the membership probe as a no-setsid review member" {
-  host_timeout="$(command -v timeout || command -v gtimeout || true)"
-  if [ -z "$host_timeout" ]; then
+  if ! require_compatible_host_timer; then
     skip "requires GNU timeout or gtimeout"
   fi
 
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1053,7 +1248,6 @@ exit 1
   export CODERABBIT_CRITIQUE_TIMEOUT=1
   export CODERABBIT_CRITIQUE_BASE=master
 
-  ln -sf "$host_timeout" "$BATS_TEST_TMPDIR/bin/timeout"
   real_ps="$(command -v ps)"
   export CODERABBIT_REAL_PS="$real_ps"
   for command in awk cat date jq mkdir mktemp rm sh sleep tr; do
@@ -1071,11 +1265,179 @@ exit 1
   assert_no_git_calls
 }
 
+@test "reaps a TERM-ignoring review without setsid when a group-directed TERM follows the first" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "requires perl for the timeout mock's process group"
+  fi
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout survive
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  trap "" TERM
+  sleep 30 &
+  printf "%s\\n" "$PPID" > "$CODERABBIT_REVIEW_PID_FILE.supervisor"
+  printf "%s\\n" "$!" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-members.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+  export TMPDIR="$BATS_TEST_TMPDIR"
+  for command in awk cat date jq mkdir mktemp perl ps rm sh sleep tr; do
+    link_system_command "$command"
+  done
+
+  # Keep setsid out of the wrapper's PATH so cleanup runs in members mode, the
+  # mode a host without setsid uses, where the delayed-KILL helper shares the
+  # review's process group. The mock timer TERMs the supervisor after 1s and
+  # the helper's KILL is due 1s after that; a second TERM aimed at the whole
+  # group in between, as the wrapper's own cancellation forwarding sends,
+  # must not remove the helper. The mock timer keeps this independent of
+  # whether the host's timeout kills its whole group itself. The second TERM
+  # is timed from the supervisor recording the first one, not from the review
+  # starting, because a slow host starts the review well after the mock timer.
+  # Close FD 3 for the background run: a review left alive by a regression
+  # would otherwise hold it and stall Bats until that process exits.
+  t_launch=$(date +%s.%N)
+  PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT" \
+    >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" 3>&- &
+  script_pid=$!
+  started=false
+  for _ in $(seq 1 30); do
+    if [ -s "$review_pid_file" ]; then
+      started=true
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$started" = true ]
+  t_started=$(date +%s.%N)
+
+  # The supervisor writes its deadline marker in the first TERM handler.
+  first_term_seen=false
+  for _ in $(seq 1 100); do
+    for deadline_file in "$BATS_TEST_TMPDIR"/coderabbit-critique-deadline.*; do
+      if [ -s "$deadline_file" ]; then
+        first_term_seen=true
+      fi
+    done
+    if [ "$first_term_seen" = true ]; then
+      break
+    fi
+    sleep 0.1
+  done
+  assert [ "$first_term_seen" = true ]
+  sleep 0.3
+  supervisor_pid=$(cat "$review_pid_file.supervisor")
+  group_id="$(ps -o pgid= -p "$supervisor_pid" | tr -d '[:space:]')"
+  assert [ -n "$group_id" ]
+  t_group_term=$(date +%s.%N)
+  kill -TERM -- "-$group_id" 2>/dev/null || true
+
+  review_pid=$(cat "$review_pid_file")
+  review_alive=true
+  for _ in $(seq 1 60); do
+    if ! kill -0 "$review_pid" 2>/dev/null; then
+      review_alive=false
+      break
+    fi
+    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$review_state" in
+      '' | Z*)
+        review_alive=false
+        break
+        ;;
+    esac
+    sleep 0.1
+  done
+  if [ "$review_alive" = true ]; then
+    # Leave enough evidence in the log to tell a wrapper that never escalated
+    # from one whose KILL missed, since this only shows up on some hosts.
+    {
+      echo "DIAG launch=$t_launch started=$t_started group_term=$t_group_term now=$(date +%s.%N)"
+      echo "DIAG group_id=$group_id supervisor_pid=$supervisor_pid review_pid=$review_pid script_pid=$script_pid"
+      ps -eo pid,ppid,pgid,stat,etime,args |
+        awk -v r="$review_pid" -v s="$supervisor_pid" -v g="$group_id" \
+          'NR == 1 || $1 == r || $1 == s || $2 == r || $2 == s || $3 == g || $3 == r { print "DIAG " $0 }'
+      echo "DIAG wrapper stderr:"
+      cat "$BATS_TEST_TMPDIR/members.stderr"
+    } >&3
+    kill -KILL "$review_pid" "$supervisor_pid" 2>/dev/null || true
+  fi
+  assert [ "$review_alive" = false ]
+}
+
+@test "gives a cooperative review its cleanup grace when TERM reaches the supervisor twice" {
+  if ! command -v perl >/dev/null 2>&1; then
+    skip "requires perl for the timeout mock's process group"
+  fi
+
+  make_git_call_recorder
+  make_mock_timeout_with_kill timeout
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleeper=
+  # Needs about 0.4s of cleanup after TERM. Ignoring further TERMs stops the
+  # sweeps from re-entering this handler and keeps them from cutting that work
+  # short, and the review sends the supervisor a second TERM once cleanup has
+  # begun, the duplicate delivery real timeout produces by forwarding and
+  # broadcasting. The handler goes in first so a slow start cannot let the
+  # first TERM kill the review before it is ready.
+  cleanup() {
+    trap "" TERM
+    sleep 0.1
+    kill -TERM "$PPID"
+    sleep 0.3
+    kill "$sleeper" 2>/dev/null
+    printf "%s\\n" done > "$CODERABBIT_CLEANUP_MARKER"
+    exit 143
+  }
+  trap cleanup TERM
+  sleep 30 &
+  sleeper=$!
+  wait "$sleeper"
+fi
+exit 1
+'
+  cleanup_marker="$BATS_TEST_TMPDIR/cleanup.marker"
+  export CODERABBIT_CLEANUP_MARKER="$cleanup_marker"
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  export CODERABBIT_CRITIQUE_BASE=master
+  export TMPDIR="$BATS_TEST_TMPDIR"
+  for command in awk cat date jq mkdir mktemp perl ps rm sh sleep tr; do
+    link_system_command "$command"
+  done
+
+  # Keep setsid out of the wrapper's PATH so cleanup runs in members mode,
+  # where the delayed-KILL helper's grace can be cut short by a repeated sweep.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
+
+  assert_failure
+  assert_fallback_reason timeout
+  assert [ -f "$cleanup_marker" ]
+  assert_no_git_calls
+}
+
 @test "forwards external TERM to the timeout job before exiting" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1114,7 +1476,15 @@ exit 1
 
   assert_equal 143 "$status"
   run grep -c '^term$' "$CODERABBIT_CRITIQUE_LOG"
-  assert_output "1"
+  # With setsid the review's isolated session receives TERM exactly once.
+  # Without it, GNU timeout's own group broadcast and the wrapper's sweep of
+  # that group can legitimately both reach the review, so require at least
+  # one delivery there rather than an exact count.
+  if command -v setsid >/dev/null 2>&1; then
+    assert_output "1"
+  else
+    assert [ "$output" -ge 1 ]
+  fi
   review_pid=$(cat "$review_pid_file")
   run kill -0 "$review_pid"
   assert_failure
@@ -1125,11 +1495,14 @@ exit 1
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGINT disposition"
   fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
 
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1194,11 +1567,14 @@ exit 1
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGHUP disposition"
   fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
 
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1260,11 +1636,14 @@ exit 1
   if [ -z "$signal_reset_command" ]; then
     skip "requires perl to reset inherited SIGQUIT disposition"
   fi
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
 
   make_git_call_recorder
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1336,7 +1715,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1361,7 +1740,7 @@ exit 1
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  echo "Account      : test-user"
+  echo "{\"authenticated\":true}"
   exit 0
 fi
 if [ "$1" = "review" ]; then
@@ -1384,7 +1763,13 @@ exit 1
 
 @test "fails closed when both origin/main and origin/master exist without a symref" {
   make_mock_timeout timeout 'shift 4; exec "$@"'
-  make_mock coderabbit 'exit 1'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+exit 1
+'
   work="$(setup_git_repo_with_base both)"
   make_git_passthrough_logger
 
@@ -1397,7 +1782,13 @@ exit 1
 
 @test "fails closed when the base branch cannot be determined" {
   make_mock_timeout timeout 'shift 4; exec "$@"'
-  make_mock coderabbit 'exit 1'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+exit 1
+'
   work="$(setup_git_repo_with_base none)"
   make_git_passthrough_logger
 
@@ -1407,4 +1798,228 @@ exit 1
   assert_stderr --partial "could not determine the default base branch"
   assert_fallback_reason base-branch-unresolved
   assert_only_readonly_git_subcommands_and_at_least_one
+}
+
+# The next two tests model a caller that already has the policy variables
+# set, instead of relying on the runner that happens to run the suite. Saving
+# overwrites the snapshot setup() took, so they stash it first and teardown()
+# puts it back, including when an assertion fails part way.
+stash_critique_policy_snapshot() {
+  _outer_snapshot_stashed=1
+  _outer_deep_set=$_policy_deep_set
+  _outer_deep_val=$_policy_deep_val
+  _outer_base_set=$_policy_base_set
+  _outer_base_val=$_policy_base_val
+  _outer_timeout_set=$_policy_timeout_set
+  _outer_timeout_val=$_policy_timeout_val
+}
+
+reinstate_critique_policy_snapshot() {
+  _policy_deep_set=$_outer_deep_set
+  _policy_deep_val=$_outer_deep_val
+  _policy_base_set=$_outer_base_set
+  _policy_base_val=$_outer_base_val
+  _policy_timeout_set=$_outer_timeout_set
+  _policy_timeout_val=$_outer_timeout_val
+}
+
+@test "saves, clears, and restores each policy variable exactly across absent, empty, and set states" {
+  stash_critique_policy_snapshot
+
+  for state in absent empty set; do
+    case "$state" in
+      absent)
+        unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+        ;;
+      empty)
+        export CODERABBIT_CRITIQUE_DEEP= CODERABBIT_CRITIQUE_BASE= CODERABBIT_CRITIQUE_TIMEOUT=
+        ;;
+      set)
+        export CODERABBIT_CRITIQUE_DEEP=1 CODERABBIT_CRITIQUE_BASE=develop CODERABBIT_CRITIQUE_TIMEOUT=45
+        ;;
+    esac
+
+    save_critique_policy_env
+    # Cleared after the save, whatever state the caller was in.
+    [ "${CODERABBIT_CRITIQUE_DEEP+x}" != x ]
+    [ "${CODERABBIT_CRITIQUE_BASE+x}" != x ]
+    [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" != x ]
+
+    restore_critique_policy_env
+    case "$state" in
+      absent)
+        [ "${CODERABBIT_CRITIQUE_DEEP+x}" != x ]
+        [ "${CODERABBIT_CRITIQUE_BASE+x}" != x ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" != x ]
+        ;;
+      empty)
+        [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_DEEP" ]
+        [ "${CODERABBIT_CRITIQUE_BASE+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_BASE" ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_TIMEOUT" ]
+        ;;
+      set)
+        [ "${CODERABBIT_CRITIQUE_DEEP-}" = 1 ]
+        [ "${CODERABBIT_CRITIQUE_BASE-}" = develop ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT-}" = 45 ]
+        ;;
+    esac
+  done
+
+  unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+}
+
+@test "keeps standard review arguments when the runner already has deep, base, and timeout set" {
+  stash_critique_policy_snapshot
+  export CODERABBIT_CRITIQUE_DEEP=1 CODERABBIT_CRITIQUE_BASE=develop CODERABBIT_CRITIQUE_TIMEOUT=45
+  # The same save-and-clear setup() applies before every test.
+  save_critique_policy_env
+  make_default_mocks
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_success
+  assert_stderr --partial "invoking coderabbit review --agent --base master (timeout 300s)"
+  run grep -cF 'review:review --agent --base master' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
+  run grep -cF -- '--deep' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "0"
+  assert_no_git_calls
+}
+
+@test "fails closed when structured auth status is malformed" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo not-json
+  exit 0
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status was not a boolean authenticated field"
+  assert_fallback_reason auth-malformed
+  # Auth fails before review, so the invocation log may not exist.
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
+@test "fails closed when structured auth status is valid JSON of the wrong shape" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  printf "%s\\n" "$CODERABBIT_AUTH_JSON"
+  exit 0
+fi
+printf "review:%s\\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  # Only an object whose authenticated field is the boolean true may pass. Each
+  # of these parses as JSON, so only the wrapper's own shape check rejects them.
+  for auth_json in '{"authenticated":"true"}' '{}' '{"authenticated":null}' '[{"authenticated":true}]'; do
+    rm -f "$FALLBACK_LOG_FILE" "$CODERABBIT_CRITIQUE_LOG"
+    export CODERABBIT_AUTH_JSON="$auth_json"
+
+    run --separate-stderr "$SCRIPT"
+
+    assert_failure
+    assert_stderr --partial "authentication status was not a boolean authenticated field"
+    assert_fallback_reason auth-malformed
+    if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+      run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+      assert_output "0"
+    fi
+    assert_no_git_calls
+  done
+}
+
+@test "fails closed when structured auth status is unsupported" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exec "$@"'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 2
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status command is unsupported or failed"
+  assert_fallback_reason auth-unsupported
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
+@test "fails closed when a real timer cuts off a hung structured auth probe" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  sleep 10
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  started_at=$(date +%s)
+
+  run --separate-stderr "$SCRIPT"
+
+  elapsed=$(( $(date +%s) - started_at ))
+  assert_failure
+  # The mocked timer below never runs the probe, so only a real kill leaves
+  # the done token unwritten. That absence, not the exit status (a killed
+  # child under --preserve-status is not 124), is what marks the timeout.
+  assert_stderr --partial "authentication status timed out"
+  assert_fallback_reason auth-timeout
+  assert [ "$elapsed" -lt 8 ]
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
+@test "fails closed when the structured auth probe times out" {
+  make_git_call_recorder
+  make_mock_timeout timeout 'shift 4; exit 124'
+  make_mock coderabbit '
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+
+  run --separate-stderr "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "authentication status timed out"
+  assert_fallback_reason auth-timeout
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
 }
