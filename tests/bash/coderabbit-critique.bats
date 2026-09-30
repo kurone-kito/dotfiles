@@ -1680,31 +1680,93 @@ exit 1
   assert_only_readonly_git_subcommands_and_at_least_one
 }
 
-@test "ignores an inherited deep switch cleared by setup" {
+# The next two tests model a caller that already has the policy variables
+# set, instead of relying on the runner that happens to run the suite. Both
+# helpers overwrite the snapshot setup() took, so put it back afterwards.
+stash_critique_policy_snapshot() {
+  _outer_deep_set=$_policy_deep_set
+  _outer_deep_val=$_policy_deep_val
+  _outer_base_set=$_policy_base_set
+  _outer_base_val=$_policy_base_val
+  _outer_timeout_set=$_policy_timeout_set
+  _outer_timeout_val=$_policy_timeout_val
+}
+
+reinstate_critique_policy_snapshot() {
+  _policy_deep_set=$_outer_deep_set
+  _policy_deep_val=$_outer_deep_val
+  _policy_base_set=$_outer_base_set
+  _policy_base_val=$_outer_base_val
+  _policy_timeout_set=$_outer_timeout_set
+  _policy_timeout_val=$_outer_timeout_val
+}
+
+@test "saves, clears, and restores each policy variable exactly across absent, empty, and set states" {
+  stash_critique_policy_snapshot
+
+  for state in absent empty set; do
+    case "$state" in
+      absent)
+        unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+        ;;
+      empty)
+        export CODERABBIT_CRITIQUE_DEEP= CODERABBIT_CRITIQUE_BASE= CODERABBIT_CRITIQUE_TIMEOUT=
+        ;;
+      set)
+        export CODERABBIT_CRITIQUE_DEEP=1 CODERABBIT_CRITIQUE_BASE=develop CODERABBIT_CRITIQUE_TIMEOUT=45
+        ;;
+    esac
+
+    save_critique_policy_env
+    # Cleared after the save, whatever state the caller was in.
+    [ "${CODERABBIT_CRITIQUE_DEEP+x}" != x ]
+    [ "${CODERABBIT_CRITIQUE_BASE+x}" != x ]
+    [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" != x ]
+
+    restore_critique_policy_env
+    case "$state" in
+      absent)
+        [ "${CODERABBIT_CRITIQUE_DEEP+x}" != x ]
+        [ "${CODERABBIT_CRITIQUE_BASE+x}" != x ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" != x ]
+        ;;
+      empty)
+        [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_DEEP" ]
+        [ "${CODERABBIT_CRITIQUE_BASE+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_BASE" ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT+x}" = x ]
+        [ -z "$CODERABBIT_CRITIQUE_TIMEOUT" ]
+        ;;
+      set)
+        [ "${CODERABBIT_CRITIQUE_DEEP-}" = 1 ]
+        [ "${CODERABBIT_CRITIQUE_BASE-}" = develop ]
+        [ "${CODERABBIT_CRITIQUE_TIMEOUT-}" = 45 ]
+        ;;
+    esac
+  done
+
+  reinstate_critique_policy_snapshot
+  unset CODERABBIT_CRITIQUE_DEEP CODERABBIT_CRITIQUE_BASE CODERABBIT_CRITIQUE_TIMEOUT
+}
+
+@test "keeps standard review arguments when the runner already has deep, base, and timeout set" {
+  stash_critique_policy_snapshot
+  export CODERABBIT_CRITIQUE_DEEP=1 CODERABBIT_CRITIQUE_BASE=develop CODERABBIT_CRITIQUE_TIMEOUT=45
+  # The same save-and-clear setup() applies before every test.
+  save_critique_policy_env
   make_default_mocks
 
-  run "$SCRIPT"
+  run --separate-stderr "$SCRIPT"
 
   assert_success
+  assert_stderr --partial "invoking coderabbit review --agent --base master (timeout 300s)"
+  run grep -cF 'review:review --agent --base master' "$CODERABBIT_CRITIQUE_LOG"
+  assert_output "1"
   run grep -cF -- '--deep' "$CODERABBIT_CRITIQUE_LOG"
   assert_output "0"
   assert_no_git_calls
-}
-
-@test "restores a set-but-empty delegate policy variable" {
-  saved_set="$_policy_deep_set"
-  saved_val="$_policy_deep_val"
-  _policy_deep_set=1
-  _policy_deep_val=
-  unset CODERABBIT_CRITIQUE_DEEP
-
-  restore_critique_policy_env
-
-  [ "${CODERABBIT_CRITIQUE_DEEP+x}" = x ]
-  [ -z "${CODERABBIT_CRITIQUE_DEEP}" ]
-  _policy_deep_set="$saved_set"
-  _policy_deep_val="$saved_val"
-  unset CODERABBIT_CRITIQUE_DEEP
+  reinstate_critique_policy_snapshot
 }
 
 @test "fails closed when structured auth status is malformed" {
