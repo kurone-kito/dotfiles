@@ -1818,6 +1818,41 @@ exit 0
   assert_no_git_calls
 }
 
+@test "fails closed when a real timer cuts off a hung structured auth probe" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  sleep 10
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+printf "review:%s\n" "$*" >> "$CODERABBIT_CRITIQUE_LOG"
+exit 0
+'
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
+  started_at=$(date +%s)
+
+  run --separate-stderr "$SCRIPT"
+
+  elapsed=$(( $(date +%s) - started_at ))
+  assert_failure
+  # The mocked timer below never runs the probe, so only a real kill leaves
+  # the done token unwritten. That absence, not the exit status (a killed
+  # child under --preserve-status is not 124), is what marks the timeout.
+  assert_stderr --partial "authentication status timed out"
+  assert_fallback_reason auth-timeout
+  assert [ "$elapsed" -lt 8 ]
+  if [ -f "$CODERABBIT_CRITIQUE_LOG" ]; then
+    run grep -c '^review:' "$CODERABBIT_CRITIQUE_LOG"
+    assert_output "0"
+  fi
+  assert_no_git_calls
+}
+
 @test "fails closed when the structured auth probe times out" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exit 124'
