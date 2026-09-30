@@ -67,10 +67,14 @@ setup() {
   export XDG_STATE_HOME="$BATS_TEST_TMPDIR/state"
   FALLBACK_LOG_FILE="$XDG_STATE_HOME/idd-critique/fallbacks.jsonl"
   export CODERABBIT_CRITIQUE_LOG="$BATS_TEST_TMPDIR/coderabbit-critique.log"
+  _TRACKED_WRAPPER_PIDS=
 }
 
 teardown() {
   export PATH="$_ORIG_PATH"
+  # Before anything else can fail: a test that stopped at an assertion while its
+  # wrapper was still running must not leave it, or its mock review, behind.
+  stop_tracked_wrappers
   # A test that models an inherited runner replaces setup()'s snapshot. Put the
   # real one back first, so a test that fails part way still restores the
   # values from before it ran, not the ones it injected.
@@ -79,6 +83,128 @@ teardown() {
   fi
   restore_critique_policy_env
   unset XDG_STATE_HOME CODERABBIT_CRITIQUE_LOG
+}
+
+# Polls "$@" every 0.1 s until it succeeds or a wall-clock deadline passes, so
+# a slow host gets the full time instead of a fixed number of sleeps. SECONDS
+# has whole-second resolution, so the extra second guarantees that at least
+# the requested time really elapses, and one last try after the deadline keeps
+# a condition that turned true during the final sleep from being missed. It
+# prints nothing; wait_until adds the failure message.
+poll_until() {
+  poll_seconds="$1"
+  shift
+  poll_end=$((SECONDS + poll_seconds + 1))
+  while [ "$SECONDS" -lt "$poll_end" ]; do
+    if "$@"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  "$@"
+}
+
+# Like poll_until, but fails the test with a message that names what was being
+# awaited, so a timeout reads as "waiting for X" instead of a bare assertion.
+wait_until() {
+  wait_seconds="$1"
+  wait_what="$2"
+  shift 2
+  poll_until "$wait_seconds" "$@" ||
+    fail "timed out after ${wait_seconds}s waiting for ${wait_what}"
+}
+
+# wait_for_file <path> <seconds> <what>: waits for a non-empty file.
+wait_for_file() {
+  wait_until "$2" "$3" test -s "$1"
+}
+
+# True once the process has exited, or is only a zombie awaiting its parent.
+process_is_gone() {
+  if ! kill -0 "$1" 2>/dev/null; then
+    return 0
+  fi
+  gone_state="$(ps -o stat= -p "$1" 2>/dev/null | tr -d '[:space:]')"
+  case "$gone_state" in
+    '' | Z*) return 0 ;;
+  esac
+  return 1
+}
+
+all_processes_gone() {
+  for gone_pid in "$@"; do
+    process_is_gone "$gone_pid" || return 1
+  done
+  return 0
+}
+
+# True once the supervisor's first TERM handler has written its deadline marker.
+deadline_marker_written() {
+  for marker_file in "$BATS_TEST_TMPDIR"/coderabbit-critique-deadline.*; do
+    if [ -s "$marker_file" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Prints the PID given and every descendant of it from a single process-table
+# snapshot, so children that an earlier kill orphaned are still listed.
+process_tree() {
+  ps -A -o pid= -o ppid= | awk -v root="$1" '
+    { parent[$1] = $2; pids[NR] = $1 }
+    END {
+      print root
+      changed = 1
+      while (changed) {
+        changed = 0
+        for (i = 1; i <= NR; i++) {
+          p = pids[i]
+          if (p != root && !(p in seen) && (parent[p] == root || parent[p] in seen)) {
+            seen[p] = 1
+            print p
+            changed = 1
+          }
+        }
+      }
+    }'
+}
+
+# Runs "$@" as a background job with its output in the two given files, records
+# its PID in script_pid, and tracks it so teardown can stop it if the test
+# returns early. FD 3 is closed for the job: a wrapper left alive by a
+# regression would otherwise hold it and stall Bats until that process exits.
+start_wrapper_job() {
+  job_stdout="$1"
+  job_stderr="$2"
+  shift 2
+  "$@" >"$job_stdout" 2>"$job_stderr" 3>&- &
+  script_pid=$!
+  _TRACKED_WRAPPER_PIDS="$_TRACKED_WRAPPER_PIDS $script_pid"
+}
+
+# Stops every wrapper started through start_wrapper_job, together with its
+# whole process tree (the timeout job, the supervisor, the mock review and its
+# sleeper), and reaps it. It walks parent links rather than a process group
+# because a background job in the non-interactive Bats shell shares Bats' own
+# group, so a group kill would hit the runner itself. The tree is captured
+# before anything is signalled, since killing the wrapper first would orphan its
+# descendants out of reach. Safe under `set -e`: nothing here can fail the test.
+stop_tracked_wrappers() {
+  for tracked_pid in $_TRACKED_WRAPPER_PIDS; do
+    tracked_tree="$(process_tree "$tracked_pid" 2>/dev/null)" || tracked_tree=
+    for member in $tracked_tree; do
+      process_is_gone "$member" || kill -TERM "$member" 2>/dev/null || true
+    done
+    # shellcheck disable=SC2086 # word splitting of the PID list is intended
+    poll_until 5 all_processes_gone $tracked_tree || true
+    for member in $tracked_tree; do
+      process_is_gone "$member" || kill -KILL "$member" 2>/dev/null || true
+    done
+    wait "$tracked_pid" 2>/dev/null || true
+  done
+  _TRACKED_WRAPPER_PIDS=
+  return 0
 }
 
 make_mock() {
@@ -1303,37 +1429,17 @@ exit 1
   # whether the host's timeout kills its whole group itself. The second TERM
   # is timed from the supervisor recording the first one, not from the review
   # starting, because a slow host starts the review well after the mock timer.
-  # Close FD 3 for the background run: a review left alive by a regression
-  # would otherwise hold it and stall Bats until that process exits.
+  # start_wrapper_job closes FD 3 for the background run: a review left alive
+  # by a regression would otherwise hold it and stall Bats until that process
+  # exits.
   t_launch=$(date +%s.%N)
-  PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT" \
-    >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" 3>&- &
-  script_pid=$!
-  started=false
-  for _ in $(seq 1 30); do
-    if [ -s "$review_pid_file" ]; then
-      started=true
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$started" = true ]
+  start_wrapper_job "$BATS_TEST_TMPDIR/members.stdout" "$BATS_TEST_TMPDIR/members.stderr" \
+    env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
+  wait_for_file "$review_pid_file" 20 "the review to record its PID"
   t_started=$(date +%s.%N)
 
   # The supervisor writes its deadline marker in the first TERM handler.
-  first_term_seen=false
-  for _ in $(seq 1 100); do
-    for deadline_file in "$BATS_TEST_TMPDIR"/coderabbit-critique-deadline.*; do
-      if [ -s "$deadline_file" ]; then
-        first_term_seen=true
-      fi
-    done
-    if [ "$first_term_seen" = true ]; then
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$first_term_seen" = true ]
+  wait_until 20 "the supervisor's deadline marker" deadline_marker_written
   sleep 0.3
   supervisor_pid=$(cat "$review_pid_file.supervisor")
   group_id="$(ps -o pgid= -p "$supervisor_pid" | tr -d '[:space:]')"
@@ -1342,22 +1448,7 @@ exit 1
   kill -TERM -- "-$group_id" 2>/dev/null || true
 
   review_pid=$(cat "$review_pid_file")
-  review_alive=true
-  for _ in $(seq 1 60); do
-    if ! kill -0 "$review_pid" 2>/dev/null; then
-      review_alive=false
-      break
-    fi
-    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
-    case "$review_state" in
-      '' | Z*)
-        review_alive=false
-        break
-        ;;
-    esac
-    sleep 0.1
-  done
-  if [ "$review_alive" = true ]; then
+  if ! poll_until 20 process_is_gone "$review_pid"; then
     # Leave enough evidence in the log to tell a wrapper that never escalated
     # from one whose KILL missed, since this only shows up on some hosts.
     {
@@ -1370,8 +1461,8 @@ exit 1
       cat "$BATS_TEST_TMPDIR/members.stderr"
     } >&3
     kill -KILL "$review_pid" "$supervisor_pid" 2>/dev/null || true
+    fail "timed out after 20s waiting for review process $review_pid to exit"
   fi
-  assert [ "$review_alive" = false ]
 }
 
 @test "gives a cooperative review its cleanup grace when TERM reaches the supervisor twice" {
@@ -1456,17 +1547,8 @@ exit 1
   output_file="$BATS_TEST_TMPDIR/outer.stdout"
   error_file="$BATS_TEST_TMPDIR/outer.stderr"
 
-  "$SCRIPT" >"$output_file" 2>"$error_file" &
-  script_pid=$!
-  started=false
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if [ -s "$review_pid_file" ]; then
-      started=true
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$started" = true ]
+  start_wrapper_job "$output_file" "$error_file" "$SCRIPT"
+  wait_for_file "$review_pid_file" 10 "the review to record its PID"
 
   kill -TERM "$script_pid"
   set +e
@@ -1522,18 +1604,9 @@ exit 1
   # Background jobs inherit SIGINT=ignored from the non-interactive Bats
   # shell. Reset it in a tiny exec shim so this exercises the delegate's
   # real external-cancellation trap rather than the shell's disposition.
-  "$signal_reset_command" -e '$SIG{INT} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
-    >"$BATS_TEST_TMPDIR/outer-int.stdout" 2>"$BATS_TEST_TMPDIR/outer-int.stderr" &
-  script_pid=$!
-  started=false
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if [ -s "$review_pid_file" ]; then
-      started=true
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$started" = true ]
+  start_wrapper_job "$BATS_TEST_TMPDIR/outer-int.stdout" "$BATS_TEST_TMPDIR/outer-int.stderr" \
+    "$signal_reset_command" -e '$SIG{INT} = "DEFAULT"; exec @ARGV' "$SCRIPT"
+  wait_for_file "$review_pid_file" 10 "the review to record its PID"
 
   kill -INT "$script_pid"
   if wait "$script_pid"; then
@@ -1544,22 +1617,7 @@ exit 1
 
   assert_equal 130 "$status"
   review_pid=$(cat "$review_pid_file")
-  review_alive=true
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
-    if ! kill -0 "$review_pid" 2>/dev/null; then
-      review_alive=false
-      break
-    fi
-    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
-    case "$review_state" in
-      '' | Z*)
-        review_alive=false
-        break
-        ;;
-    esac
-    sleep 0.1
-  done
-  assert [ "$review_alive" = false ]
+  wait_until 10 "the review process to exit" process_is_gone "$review_pid"
 }
 
 @test "forwards external HUP and applies bounded cleanup before exiting" {
@@ -1591,18 +1649,9 @@ exit 1
   export CODERABBIT_CRITIQUE_TIMEOUT=30
   export CODERABBIT_CRITIQUE_BASE=master
 
-  "$signal_reset_command" -e '$SIG{HUP} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
-    >"$BATS_TEST_TMPDIR/outer-hup.stdout" 2>"$BATS_TEST_TMPDIR/outer-hup.stderr" &
-  script_pid=$!
-  started=false
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if [ -s "$review_pid_file" ]; then
-      started=true
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$started" = true ]
+  start_wrapper_job "$BATS_TEST_TMPDIR/outer-hup.stdout" "$BATS_TEST_TMPDIR/outer-hup.stderr" \
+    "$signal_reset_command" -e '$SIG{HUP} = "DEFAULT"; exec @ARGV' "$SCRIPT"
+  wait_for_file "$review_pid_file" 10 "the review to record its PID"
 
   kill -HUP "$script_pid"
   if wait "$script_pid"; then
@@ -1613,22 +1662,7 @@ exit 1
 
   assert_equal 129 "$status"
   review_pid=$(cat "$review_pid_file")
-  review_alive=true
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
-    if ! kill -0 "$review_pid" 2>/dev/null; then
-      review_alive=false
-      break
-    fi
-    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
-    case "$review_state" in
-      '' | Z*)
-        review_alive=false
-        break
-        ;;
-    esac
-    sleep 0.1
-  done
-  assert [ "$review_alive" = false ]
+  wait_until 10 "the review process to exit" process_is_gone "$review_pid"
 }
 
 @test "forwards external QUIT and applies bounded cleanup before exiting" {
@@ -1660,18 +1694,9 @@ exit 1
   export CODERABBIT_CRITIQUE_TIMEOUT=30
   export CODERABBIT_CRITIQUE_BASE=master
 
-  "$signal_reset_command" -e '$SIG{QUIT} = "DEFAULT"; exec @ARGV' "$SCRIPT" \
-    >"$BATS_TEST_TMPDIR/outer-quit.stdout" 2>"$BATS_TEST_TMPDIR/outer-quit.stderr" &
-  script_pid=$!
-  started=false
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if [ -s "$review_pid_file" ]; then
-      started=true
-      break
-    fi
-    sleep 0.1
-  done
-  assert [ "$started" = true ]
+  start_wrapper_job "$BATS_TEST_TMPDIR/outer-quit.stdout" "$BATS_TEST_TMPDIR/outer-quit.stderr" \
+    "$signal_reset_command" -e '$SIG{QUIT} = "DEFAULT"; exec @ARGV' "$SCRIPT"
+  wait_for_file "$review_pid_file" 10 "the review to record its PID"
 
   kill -QUIT "$script_pid"
   if wait "$script_pid"; then
@@ -1682,22 +1707,83 @@ exit 1
 
   assert_equal 131 "$status"
   review_pid=$(cat "$review_pid_file")
-  review_alive=true
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
-    if ! kill -0 "$review_pid" 2>/dev/null; then
-      review_alive=false
-      break
-    fi
-    review_state="$(ps -o stat= -p "$review_pid" 2>/dev/null | tr -d '[:space:]')"
-    case "$review_state" in
-      '' | Z*)
-        review_alive=false
-        break
-        ;;
-    esac
-    sleep 0.1
-  done
-  assert [ "$review_alive" = false ]
+  wait_until 10 "the review process to exit" process_is_gone "$review_pid"
+}
+
+@test "wait_for_file fails at its deadline and names what it was waiting for" {
+  started_at=$SECONDS
+  run wait_for_file "$BATS_TEST_TMPDIR/never-written" 1 "the never-written file"
+  elapsed=$((SECONDS - started_at))
+
+  assert_failure
+  assert_output --partial "timed out after 1s waiting for the never-written file"
+  # Bounded on both sides: it really waited, and it did not hang.
+  assert [ "$elapsed" -ge 1 ]
+  assert [ "$elapsed" -le 5 ]
+}
+
+@test "wait_for_file succeeds once a file appears after the wait has begun" {
+  late_file="$BATS_TEST_TMPDIR/written-late"
+  (
+    sleep 0.5
+    echo ready >"$late_file"
+  ) >/dev/null 2>&1 3>&- &
+  late_writer=$!
+
+  wait_for_file "$late_file" 10 "the late file"
+
+  wait "$late_writer"
+  assert_equal ready "$(cat "$late_file")"
+}
+
+@test "teardown stops a wrapper and its review that a failed test left running" {
+  if ! require_compatible_host_timer; then
+    skip "requires GNU timeout or gtimeout"
+  fi
+
+  make_git_call_recorder
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+if [ "$1" = "review" ]; then
+  sleep 30 &
+  printf "%s\\n%s\\n" "$$" "$!" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait
+fi
+exit 1
+'
+  review_pid_file="$BATS_TEST_TMPDIR/review-left-running.pid"
+  export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+
+  start_wrapper_job "$BATS_TEST_TMPDIR/left-running.stdout" \
+    "$BATS_TEST_TMPDIR/left-running.stderr" "$SCRIPT"
+  wrapper_pid=$script_pid
+  wait_for_file "$review_pid_file" 10 "the review to record its PIDs"
+  review_shell_pid=$(sed -n 1p "$review_pid_file")
+  review_sleeper_pid=$(sed -n 2p "$review_pid_file")
+  # Everything is running at this point, as it would be for a test that failed
+  # an assertion right after launching the wrapper.
+  run kill -0 "$wrapper_pid"
+  assert_success
+  run process_is_gone "$review_shell_pid"
+  assert_failure
+  run process_is_gone "$review_sleeper_pid"
+  assert_failure
+
+  # Return without stopping anything, then run the teardown routine itself.
+  # Bats runs it again afterwards, which must stay harmless.
+  teardown
+
+  run kill -0 "$wrapper_pid"
+  assert_failure
+  run process_is_gone "$review_shell_pid"
+  assert_success
+  run process_is_gone "$review_sleeper_pid"
+  assert_success
 }
 
 @test "uses CODERABBIT_CRITIQUE_BASE for the review base branch, skipping auto-detection" {
