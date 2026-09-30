@@ -5,10 +5,13 @@
 
 command -v mise >/dev/null 2>&1 || return 0
 
-# This file is sourced into the caller's shell (bash or zsh). Only some
-# helpers declare the scratch names they assign `local` so far, on a
-# line of their own so a `$(...)` status is not masked; the rest still
-# assign plain globals.
+# This file is sourced into the caller's shell (bash or zsh). The helpers
+# that run there declare the scratch names they assign `local`, and
+# assign them on a line of their own so a `$(...)` status is not masked.
+# Helpers the profile only calls inside `$(...)` may keep plain names:
+# their assignments die with the subshell. The `_DOTFILES_MISE_*` globals
+# are deliberate state shared between calls; `_dotfiles_mise_hook_out` is
+# namespaced, so it cannot collide with a caller's names.
 
 # DOTFILES_MISE_ASSUME_WSL=1 forces the WSL branch and =0 forces the
 # non-WSL branch so tests do not depend on the host.
@@ -76,7 +79,7 @@ _dotfiles_mise_trust_if_needed() {
     mise trust "$_cfg" 2>/dev/null || true
     return 0
   fi
-  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
+  _trust_dir="${MISE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/mise}/trusted-configs"
   _hash=$(_dotfiles_mise_sha256_file "$_cfg") || _hash=
   _size=$(wc -c < "$_cfg" | tr -d '[:space:]')
   _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")
@@ -201,6 +204,7 @@ pwd=${PWD:-}"
 # Return 0 when the caller should skip hook-env. --force never skips.
 # A missing previous fingerprint never skips.
 _dotfiles_mise_hook_is_unchanged() {
+  local _fp
   _fp=$(_dotfiles_mise_config_fingerprint) || return 1
   [ -n "$_fp" ] || return 1
   _DOTFILES_MISE_FP_NEXT=$_fp
@@ -245,6 +249,7 @@ _dotfiles_mise_commit_fp_after_hook() {
 }
 
 _dotfiles_mise_wrap_bash() {
+  local _fn _orig
   _fn=$1
   _orig=$2
   declare -F "$_fn" >/dev/null 2>&1 || return 0
@@ -276,6 +281,7 @@ _dotfiles_mise_wrap_bash() {
 }
 
 _dotfiles_mise_wrap_zsh() {
+  local _fn _orig _src _renamed
   _fn=$1
   _orig=$2
   _src=$(whence -f "$_fn" 2>/dev/null) || return 0
@@ -284,8 +290,10 @@ _dotfiles_mise_wrap_zsh() {
     | sed "1s/^${_fn} /${_orig} /" \
     | _dotfiles_mise_rewrite_hook_env)
   eval "$_renamed"
+  # The status is read on the declaration line: a bare `local _prev`
+  # first would reset `$?` to 0 before the wrapper could return it.
   eval "${_fn}() {
-    _prev=\$?
+    local _prev=\$?
     if _dotfiles_mise_hook_is_unchanged \"\$@\"; then
       return \$_prev
     fi
@@ -296,6 +304,7 @@ _dotfiles_mise_wrap_zsh() {
 }
 
 _dotfiles_mise_install_hook_cache() {
+  local _fp
   if [ -n "${BASH_VERSION:-}" ]; then
     _dotfiles_mise_wrap_bash _mise_hook _dotfiles_mise_orig_hook
     _dotfiles_mise_wrap_bash _mise_hook_chpwd _dotfiles_mise_orig_hook_chpwd
@@ -370,7 +379,7 @@ _dotfiles_mise_run_activation_hook() {
 # its startup hook-env succeeds. Scripts with no force hook keep the
 # previous stamp so an unchanged directory can still skip.
 _dotfiles_mise_activate_wsl() {
-  local _shell
+  local _shell _split _marker _suffix _immediate
   _shell=$1
   _split=$(
     _dotfiles_mise_activate_cached "$_shell" \

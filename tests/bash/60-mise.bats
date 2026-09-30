@@ -20,6 +20,9 @@ setup() {
   export DOTFILES_MISE_TRUST_STAMP="$BATS_TEST_TMPDIR/mise-trust-stamp"
   export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/mise-activate-cache"
   unset DOTFILES_MISE_ASSUME_WSL
+  # The trust directory follows these two, so a value inherited from the
+  # host would decide which directory the trust-stamp tests look at.
+  unset MISE_STATE_DIR XDG_STATE_HOME
 }
 
 teardown() {
@@ -468,6 +471,14 @@ case "$1" in
     ;;
   activate)
     echo "activate $2" >> "${MISE_MOCK_LOG:-/dev/null}"
+    if [ "$2" = "zsh" ]; then
+      cat << 'EOF'
+export MISE_ACTIVATED=zsh
+_mise_hook() {
+  echo "hook $*" >> "${MISE_MOCK_LOG:-/dev/null}"
+}
+EOF
+    fi
     if [ "$2" = "bash" ]; then
       cat << 'EOF'
 export MISE_ACTIVATED=bash
@@ -574,7 +585,6 @@ _assert_trust_count() {
 @test "WSL: records the default trust directory when MISE_STATE_DIR is unset" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
-  unset MISE_STATE_DIR
   mkdir -p "$HOME/.config/mise"
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 
@@ -582,6 +592,41 @@ _assert_trust_count() {
 
   run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
   assert_output "$HOME/.local/state/mise/trusted-configs"
+}
+
+# mise 2026.9.15 writes the trust store under $XDG_STATE_HOME/mise when
+# MISE_STATE_DIR is unset. Creating that directory must change the mtime
+# the stamp compares, which it cannot if the stamp watches another path.
+@test "WSL: follows XDG_STATE_HOME for the trust directory when MISE_STATE_DIR is unset" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg-state"
+  _source_script
+  _source_script
+  _assert_trust_count 1
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$XDG_STATE_HOME/mise/trusted-configs"
+
+  mkdir -p "$XDG_STATE_HOME/mise/trusted-configs"
+  _source_script
+  _assert_trust_count 2
+}
+
+@test "WSL: MISE_STATE_DIR still wins over XDG_STATE_HOME for the trust directory" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg-state"
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/mise-state"
+  _source_script
+
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$MISE_STATE_DIR/trusted-configs"
 }
 
 # awk -v would expand the backslash and never match the raw stamp text,
@@ -1123,15 +1168,16 @@ MOCK
 # Caller scratch names
 # ---------------------------------------------------------------------------
 
-# Scratch names the profile assigns while it runs (issue #530). Sourcing
-# alone can only expose the first eight; the rest are assigned inside
-# $(...) or by helpers a source never reaches, so the tests below also
-# call those helpers directly. _data only exists inside a subshell and
-# cannot be told apart at all.
+# Scratch names the profile assigns while it runs (issues #530 and #534).
+# Sourcing reaches most of them; the rest belong to helpers a source
+# never reaches, or to the hook wrappers, which assign theirs only when
+# the hook runs, so the tests below also call those directly. _data only
+# exists inside a subshell and cannot be told apart at all.
 _SCRATCH_NAMES=(
   _cfg _mtime _shell _hash _size _stamp _tmp
   _trust_dir _bin _mt _ver _key _cache_dir _cache_file _out _cfg_hash
   _env _data _file_hash
+  _split _marker _suffix _immediate _fp _fn _orig
 )
 
 # $1: sentinel (set to a marker value) or unset
@@ -1169,11 +1215,16 @@ _setup_wsl_first_startup() {
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 }
 
+# The plain call and the prompt hook take the wrapper's
+# fingerprint-unchanged exit; --force is what reaches an original hook.
 _source_and_call_helpers() {
   _source_script
   export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/direct-cache"
   _dotfiles_mise_activate_cached bash > /dev/null
   _dotfiles_mise_fp_add_file "$HOME/.config/mise/config.toml" > /dev/null
+  _mise_hook
+  _mise_hook --force
+  _mise_hook_prompt_command
 }
 
 @test "WSL: keeps the caller's _cfg when sourced" {
@@ -1222,6 +1273,76 @@ _source_and_call_helpers() {
   _source_and_call_helpers
 
   _assert_scratch_names_kept unset
+}
+
+_require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
+}
+
+# The zsh side of the same check. The wrappers differ per shell, so this
+# sources the profile under `zsh -f`, calls the installed hook wrapper,
+# and prints what it changed. The users root holds one account with both
+# Windows-side mise directories: zsh stops a sourced file at a glob with
+# no match, and that is a separate defect (#533). The probe starts in
+# $HOME because the fingerprint walk goes from $PWD up to /, and its own
+# "$_confd"/* glob fails the same way on an empty conf.d directory in any
+# ancestor (a case #533 does not cover).
+# $1: sentinel (set to a marker value) or unset
+_run_zsh_scratch_probe() {
+  local _root="$BATS_TEST_TMPDIR/zsh-users"
+  mkdir -p "$_root/acct/.mise" "$_root/acct/.config/mise"
+  : > "$_root/acct/.mise/config.toml"
+  : > "$_root/acct/.config/mise/config.toml"
+  export DOTFILES_MISE_WSL_USERS_ROOT="$_root"
+  cat > "$BATS_TEST_TMPDIR/zsh-probe.zsh" << 'PROBE'
+mode=$1
+profile=$2
+names=(_split _marker _suffix _immediate _fp _fn _orig _src _renamed _prev)
+cd "$HOME" || exit 1
+for n in $names; do
+  if [[ $mode == unset ]]; then
+    unset $n
+  else
+    typeset -g "$n=caller-$n"
+  fi
+done
+source "$profile"
+# The wrapper has to hand the caller's status back, not its own.
+(exit 7)
+_mise_hook
+print "status=$?"
+_mise_hook --force
+changed=
+for n in $names; do
+  if [[ $mode == unset ]]; then
+    (( ${+parameters[$n]} )) && changed="$changed $n"
+  else
+    [[ ${(P)n} == caller-$n ]] || changed="$changed $n"
+  fi
+done
+print "changed=[$changed]"
+PROBE
+  run zsh -f "$BATS_TEST_TMPDIR/zsh-probe.zsh" "$1" "$SCRIPT_PATH"
+}
+
+@test "zsh, WSL: keeps every scratch name the caller had set" {
+  _require_zsh
+  _setup_wsl_first_startup
+
+  _run_zsh_scratch_probe sentinel
+
+  assert_success
+  assert_output $'status=7\nchanged=[]'
+}
+
+@test "zsh, WSL: leaves every scratch name unset when the caller had none" {
+  _require_zsh
+  _setup_wsl_first_startup
+
+  _run_zsh_scratch_probe unset
+
+  assert_success
+  assert_output $'status=7\nchanged=[]'
 }
 
 # Declaring and assigning on one line (local _out=$(...)) would replace
