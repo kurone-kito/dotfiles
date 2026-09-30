@@ -597,7 +597,7 @@ EOF
   assert_no_git_calls
 }
 
-@test "cleans an earlier temp file when a later mktemp fails" {
+@test "cleans an earlier auth temp directory when a later mktemp fails" {
   make_git_call_recorder
   make_mock_timeout timeout 'shift 4; exec "$@"'
   make_mock coderabbit '
@@ -609,14 +609,27 @@ exit 1
 '
   allocated_temp="$BATS_TEST_TMPDIR/allocated.tmp"
   mktemp_counter="$BATS_TEST_TMPDIR/mktemp.counter"
+  mktemp_first_args="$BATS_TEST_TMPDIR/mktemp.first-args"
   export CODERABBIT_MKTEMP_COUNTER="$mktemp_counter"
   export CODERABBIT_MKTEMP_FIRST="$allocated_temp"
+  export CODERABBIT_MKTEMP_FIRST_ARGS="$mktemp_first_args"
   later_mktemp_dir="$BATS_TEST_TMPDIR/later-mktemp-bin"
   mkdir -p "$later_mktemp_dir"
+  # The first allocation is the auth probe's private directory: honor
+  # `mktemp -d` by making a directory (the probe then writes its stdout
+  # and done token inside it), and record the arguments so the private
+  # directory contract cannot silently regress to a predictable sibling
+  # file. A plain (non -d) call still yields a file, which the argument
+  # assertion below rejects.
   make_mock mktemp '
 if [ ! -e "$CODERABBIT_MKTEMP_COUNTER" ]; then
   : > "$CODERABBIT_MKTEMP_COUNTER"
-  : > "$CODERABBIT_MKTEMP_FIRST"
+  printf "%s\n" "$*" > "$CODERABBIT_MKTEMP_FIRST_ARGS"
+  if [ "$1" = "-d" ]; then
+    mkdir "$CODERABBIT_MKTEMP_FIRST"
+  else
+    : > "$CODERABBIT_MKTEMP_FIRST"
+  fi
   printf "%s\n" "$CODERABBIT_MKTEMP_FIRST"
   exit 0
 fi
@@ -634,6 +647,7 @@ exit 1
   assert_failure
   assert_stderr --partial "mktemp failed"
   assert_fallback_reason mktemp-failed
+  assert_equal "-d" "$(cut -d' ' -f1 "$mktemp_first_args")"
   assert [ ! -e "$allocated_temp" ]
   assert_no_git_calls
 }
