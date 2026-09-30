@@ -1587,14 +1587,17 @@ exit "${FAKE_REVIEW_EXIT:-0}"
     }
 
     It 'produces no stdout when coderabbit is not authenticated' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
-        PATH                 = $script:FakeBinDir
-        FAKE_AUTH_SIGNED_OUT = '1'
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_SIGNED_OUT  = '1'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
       }
 
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'coderabbit is not authenticated'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
     }
 
     It 'asks coderabbit for structured auth status before review' {
@@ -1613,37 +1616,46 @@ exit "${FAKE_REVIEW_EXIT:-0}"
     }
 
     It 'produces no stdout when authentication status is malformed' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
-        PATH                = $script:FakeBinDir
-        FAKE_AUTH_MALFORMED = 'not-json'
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_MALFORMED   = 'not-json'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
       }
 
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'authentication status was not a boolean authenticated field'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
     }
 
     It 'produces no stdout when the auth command is unsupported' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
-        PATH           = $script:FakeBinDir
-        FAKE_AUTH_EXIT = '2'
+        PATH                  = $script:FakeBinDir
+        FAKE_AUTH_EXIT        = '2'
+        FAKE_REVIEW_ARGS_FILE = $reviewArgsFile
       }
 
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'authentication status command is unsupported or failed'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
     }
 
     It 'produces no stdout when the auth probe times out' {
+      $reviewArgsFile = Join-Path $TestDrive ([Guid]::NewGuid().ToString())
       $result = Invoke-DotfilesSubjectAsSubprocess -EnvironmentOverrides @{
         PATH                        = "$script:FakeBinDir$([IO.Path]::PathSeparator)$env:PATH"
         CODERABBIT_CRITIQUE_TIMEOUT = '1'
         FAKE_AUTH_SLEEP             = '10'
+        FAKE_REVIEW_ARGS_FILE       = $reviewArgsFile
       }
 
       $result.ExitCode | Should -Be 1
       $result.Stdout | Should -BeNullOrEmpty
       $result.Stderr | Should -Match 'authentication status timed out'
+      Test-Path -LiteralPath $reviewArgsFile | Should -BeFalse
     }
 
     It 'prints usage for --help without invoking coderabbit' {
