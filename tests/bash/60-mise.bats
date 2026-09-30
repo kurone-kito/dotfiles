@@ -1178,6 +1178,7 @@ _SCRATCH_NAMES=(
   _trust_dir _bin _mt _ver _key _cache_dir _cache_file _out _cfg_hash
   _env _data _file_hash
   _split _marker _suffix _immediate _fp _fn _orig
+  _root _dir
 )
 
 # $1: sentinel (set to a marker value) or unset
@@ -1275,18 +1276,14 @@ _source_and_call_helpers() {
   _assert_scratch_names_kept unset
 }
 
-_require_zsh() {
-  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
-}
-
 # The zsh side of the same check. The wrappers differ per shell, so this
 # sources the profile under `zsh -f`, calls the installed hook wrapper,
 # and prints what it changed. The users root holds one account with both
-# Windows-side mise directories: zsh stops a sourced file at a glob with
-# no match, and that is a separate defect (#533). The probe starts in
-# $HOME because the fingerprint walk goes from $PWD up to /, and its own
-# "$_confd"/* glob fails the same way on an empty conf.d directory in any
-# ancestor (a case #533 does not cover).
+# Windows-side mise directories, as it had to before #533: zsh stops a
+# sourced file at a glob with no match. The probe starts in $HOME because
+# the fingerprint walk goes from $PWD up to /, and its own "$_confd"/*
+# glob fails the same way on an empty conf.d directory in any ancestor (a
+# case #533 did not cover).
 # $1: sentinel (set to a marker value) or unset
 _run_zsh_scratch_probe() {
   local _root="$BATS_TEST_TMPDIR/zsh-users"
