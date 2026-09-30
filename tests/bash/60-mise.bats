@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 # Tests for the mise (polyglot runtime manager) shell initialization script.
+# cspell:words mawk
 
 bats_require_minimum_version 1.5.0
 
@@ -433,6 +434,15 @@ _count_log() {
 # WSL trust stamp and non-WSL trust
 # ---------------------------------------------------------------------------
 
+_assert_trust_count() {
+  run _count_log '^trust '
+  assert_success
+  assert_output "$1"
+}
+
+# The second source of the unchanged config is what tells a stamp from
+# trusting on every startup: both give 1 after the first source and 2
+# after the edit, but only the stamp still gives 1 in between.
 @test "WSL: trusts an unchanged config once and trusts it again after a change" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
@@ -440,12 +450,102 @@ _count_log() {
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 
   _source_script
+  _assert_trust_count 1
+  _source_script
+  _assert_trust_count 1
   printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
   _source_script
+  _assert_trust_count 2
+}
 
-  run _count_log '^trust '
-  assert_success
-  assert_output "2"
+# Both state directories are absent, so their mtime is `missing` either
+# way and only the recorded directory tells the two stores apart.
+@test "WSL: trusts an unchanged config again when MISE_STATE_DIR changes" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state-a"
+  _source_script
+  _source_script
+  _assert_trust_count 1
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state-b"
+  _source_script
+  _assert_trust_count 2
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$BATS_TEST_TMPDIR/state-b/trusted-configs"
+}
+
+@test "WSL: records the default trust directory when MISE_STATE_DIR is unset" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  unset MISE_STATE_DIR
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$HOME/.local/state/mise/trusted-configs"
+}
+
+# awk -v would expand the backslash and never match the raw stamp text,
+# so the config would be trusted again on every startup. The name uses
+# \t because gawk and mawk both turn it into a tab, whereas mawk keeps an
+# unknown escape such as \d as it is.
+@test "WSL: an unchanged config still hits when the trust directory has a backslash" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state\\tdir"
+  _source_script
+  _source_script
+  _source_script
+
+  _assert_trust_count 1
+}
+
+# The same holds for the config path, and sha256sum prefixes its hash
+# with a backslash when the file name has one, so the hash needs it too.
+# The \t in the name is expanded by awk -v in both gawk and mawk.
+@test "WSL: an unchanged config still hits when its path has a backslash" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export HOME="$BATS_TEST_TMPDIR/ho\\tme"
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  _source_script
+  _source_script
+  _assert_trust_count 1
+
+  # Trusting the edited config must replace its row, not add a second.
+  printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
+  _source_script
+  _assert_trust_count 2
+  assert_equal "$(wc -l < "$DOTFILES_MISE_TRUST_STAMP" | tr -d ' ')" 1
+}
+
+@test "WSL: a stamp row without the trust directory is trusted once more" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+  _source_script
+  # Rewrite the row in the four-column layout that predates the directory.
+  awk -F '\t' -v OFS='\t' '{ print $1, $2, $3, $5 }' \
+    "$DOTFILES_MISE_TRUST_STAMP" > "$BATS_TEST_TMPDIR/old-stamp"
+  mv "$BATS_TEST_TMPDIR/old-stamp" "$DOTFILES_MISE_TRUST_STAMP"
+
+  _source_script
+  _assert_trust_count 2
+  _source_script
+  _assert_trust_count 2
 }
 
 @test "WSL: trusts a config that appears after the first startup" {
@@ -863,7 +963,7 @@ MOCK
 # ---------------------------------------------------------------------------
 
 # Scratch names the profile assigns while it runs (issue #530). Sourcing
-# alone can only expose the first seven; the rest are assigned inside
+# alone can only expose the first eight; the rest are assigned inside
 # $(...) or by helpers a source never reaches, so the tests below also
 # call those helpers directly. _data only exists inside a subshell and
 # cannot be told apart at all.
@@ -913,7 +1013,6 @@ _source_and_call_helpers() {
   export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/direct-cache"
   _dotfiles_mise_activate_cached bash > /dev/null
   _dotfiles_mise_fp_add_file "$HOME/.config/mise/config.toml" > /dev/null
-  _dotfiles_mise_trust_dir_mtime > /dev/null
 }
 
 @test "WSL: keeps the caller's _cfg when sourced" {

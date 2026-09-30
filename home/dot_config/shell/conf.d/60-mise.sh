@@ -52,32 +52,43 @@ _dotfiles_mise_trust_stamp_file() {
   printf '%s\n' "${HOME}/.cache/dotfiles/mise-trust-stamp"
 }
 
+# Print the mtime of the trust directory in $1, or `missing`.
 _dotfiles_mise_trust_dir_mtime() {
-  local _trust_dir
-  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
-  if [ -d "$_trust_dir" ]; then
-    stat -c %Y "$_trust_dir" 2>/dev/null && return 0
+  if [ -d "$1" ]; then
+    stat -c %Y "$1" 2>/dev/null && return 0
   fi
   printf '%s\n' missing
 }
 
 # Skip mise trust only when this exact path and content were trusted
-# while mise's trust directory was unchanged. Any miss falls open.
+# while the same trust directory was unchanged. A row is
+# path, hash, size, directory, mtime; an older row without the
+# directory never matches. Any miss falls open.
+# The path, hash and directory reach awk through the environment: -v
+# would expand a backslash and never match the raw stamp text. The hash
+# needs it too: sha256sum prefixes it with a backslash when the file
+# name contains one.
 _dotfiles_mise_trust_if_needed() {
-  local _cfg _hash _size _mtime _stamp _tmp
+  local _cfg _hash _size _mtime _stamp _tmp _trust_dir
   _cfg=$1
   [ -f "$_cfg" ] || return 0
   if ! _dotfiles_mise_is_wsl; then
     mise trust "$_cfg" 2>/dev/null || true
     return 0
   fi
+  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
   _hash=$(_dotfiles_mise_sha256_file "$_cfg") || _hash=
   _size=$(wc -c < "$_cfg" | tr -d '[:space:]')
-  _mtime=$(_dotfiles_mise_trust_dir_mtime)
+  _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")
   _stamp=$(_dotfiles_mise_trust_stamp_file)
   if [ -n "$_hash" ] && [ -f "$_stamp" ]; then
-    if awk -F '\t' -v p="$_cfg" -v h="$_hash" -v s="$_size" -v m="$_mtime" \
-      '$1 == p && $2 == h && $3 == s && $4 == m { found = 1 } END { exit found ? 0 : 1 }' \
+    if DOTFILES_MISE_STAMP_PATH=$_cfg DOTFILES_MISE_STAMP_HASH=$_hash \
+      DOTFILES_MISE_STAMP_DIR=$_trust_dir \
+      awk -F '\t' -v s="$_size" -v m="$_mtime" '
+        $1 == ENVIRON["DOTFILES_MISE_STAMP_PATH"] &&
+          $2 == ENVIRON["DOTFILES_MISE_STAMP_HASH"] && $3 == s &&
+          $4 == ENVIRON["DOTFILES_MISE_STAMP_DIR"] && $5 == m { found = 1 }
+        END { exit found ? 0 : 1 }' \
       "$_stamp"; then
       return 0
     fi
@@ -86,15 +97,18 @@ _dotfiles_mise_trust_if_needed() {
     return 0
   fi
   [ -n "$_hash" ] || return 0
-  _mtime=$(_dotfiles_mise_trust_dir_mtime)
+  _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")
   mkdir -p "$(dirname "$_stamp")" || return 0
   _tmp="${_stamp}.tmp.$$"
   if [ -f "$_stamp" ]; then
-    awk -F '\t' -v p="$_cfg" '$1 != p { print }' "$_stamp" > "$_tmp" || true
+    DOTFILES_MISE_STAMP_PATH=$_cfg \
+      awk -F '\t' '$1 != ENVIRON["DOTFILES_MISE_STAMP_PATH"] { print }' \
+      "$_stamp" > "$_tmp" || true
   else
     : > "$_tmp"
   fi
-  printf '%s\t%s\t%s\t%s\n' "$_cfg" "$_hash" "$_size" "$_mtime" >> "$_tmp"
+  printf '%s\t%s\t%s\t%s\t%s\n' \
+    "$_cfg" "$_hash" "$_size" "$_trust_dir" "$_mtime" >> "$_tmp"
   mv "$_tmp" "$_stamp"
 }
 
