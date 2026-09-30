@@ -1294,7 +1294,7 @@ _run_zsh_scratch_probe() {
   cat > "$BATS_TEST_TMPDIR/zsh-probe.zsh" << 'PROBE'
 mode=$1
 profile=$2
-names=(_split _marker _suffix _immediate _fp _fn _orig _src _renamed _prev)
+names=(_split _marker _suffix _immediate _fp _fn _orig _src _renamed _prev _root _dir)
 cd "$HOME" || exit 1
 for n in $names; do
   if [[ $mode == unset ]]; then
