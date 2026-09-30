@@ -548,7 +548,10 @@ exit 0
   fi
   make_default_mocks
   export CODERABBIT_REAL_SETSID="$_HOST_SETSID"
+  setsid_invocations="$BATS_TEST_TMPDIR/setsid.invocations"
+  export CODERABBIT_SETSID_INVOCATIONS="$setsid_invocations"
   make_mock setsid '
+printf "%s\n" "$*" >> "$CODERABBIT_SETSID_INVOCATIONS"
 sleep 0.1
 exec "$CODERABBIT_REAL_SETSID" "$@"
 '
@@ -557,6 +560,10 @@ exec "$CODERABBIT_REAL_SETSID" "$@"
 
   assert_success
   assert_output --partial '"type":"finding"'
+  # The delay only proves the wait if the wrapper really launched the review
+  # through this setsid; without the record, a run that fell back to the
+  # timeout-created group would pass just the same.
+  assert [ -s "$setsid_invocations" ]
   assert_no_git_calls
 }
 
