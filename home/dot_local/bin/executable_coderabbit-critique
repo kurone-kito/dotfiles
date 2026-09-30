@@ -333,21 +333,17 @@ process_parent_id() {
 # The process used for the `ps` snapshot is itself briefly a member of the
 # timeout-created group. Run it in the background so its PID can be excluded
 # from the completed snapshot before awk filters the actual review members.
-# The snapshot carries the parent PID as well: the delayed-KILL helper below
-# (and its `sleep`) also run inside this group when there is no separate
-# session, so a repeated cancellation signal must not sweep them away and
-# cancel the very escalation that kills a review ignoring TERM.
 review_group_members() {
   ps_pid=
-  ps -axo pid=,ppid=,pgid= >"$members_file" 2>/dev/null &
+  ps -axo pid=,pgid= >"$members_file" 2>/dev/null &
   ps_pid=$!
   wait "$ps_pid" 2>/dev/null || true
 }
 
 review_group_member_filter() {
   awk -v target="$review_group_id" -v self="$$" -v parent="$PPID" \
-    -v leader="$review_group_id" -v snapshot="$ps_pid" -v killer="$killer_pid" \
-    '$3 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot && $1 != killer && $2 != killer { print $1 }' \
+    -v leader="$review_group_id" -v snapshot="$ps_pid" \
+    '$2 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot { print $1 }' \
     "$members_file" 2>/dev/null || true
 }
 
@@ -355,8 +351,8 @@ review_group_exists() {
   if [ "$cleanup_mode" = members ]; then
     review_group_members
     awk -v target="$review_group_id" -v self="$$" -v parent="$PPID" \
-      -v leader="$review_group_id" -v snapshot="$ps_pid" -v killer="$killer_pid" \
-      '$3 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot && $1 != killer && $2 != killer { found=1 } END { exit(found ? 0 : 1) }' \
+      -v leader="$review_group_id" -v snapshot="$ps_pid" \
+      '$2 == target && $1 != self && $1 != parent && $1 != leader && $1 != snapshot { found=1 } END { exit(found ? 0 : 1) }' \
       "$members_file" 2>/dev/null
   else
     [ -n "$review_group_id" ] && kill -0 "-$review_group_id" 2>/dev/null
@@ -405,6 +401,12 @@ on_term() {
     signal_review_group TERM
     if [ -n "$review_group_id" ] && [ -z "$killer_pid" ]; then
       (
+      # Without a separate session this helper shares the group that a
+      # group-directed cancellation signal (the wrapper's own `kill -TERM
+      # -group`) reaches directly, so catch those signals: a handler, not an
+      # ignore, keeps the `sleep` below killable and the escalation intact.
+      # Only the final reap uses KILL.
+      trap ':' TERM INT HUP QUIT
       sleep "$cleanup_grace_seconds"
       signal_review_group KILL
       ) &
@@ -542,7 +544,7 @@ while :; do
 done
 
 if [ -n "$killer_pid" ]; then
-  kill "$killer_pid" 2>/dev/null || true
+  kill -KILL "$killer_pid" 2>/dev/null || true
   wait "$killer_pid" 2>/dev/null || true
 fi
 

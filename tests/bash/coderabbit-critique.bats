@@ -1238,12 +1238,9 @@ exit 1
   assert_no_git_calls
 }
 
-@test "reaps a TERM-ignoring review without setsid when cancellation reaches the group twice" {
-  if ! require_compatible_host_timer; then
-    skip "requires GNU timeout or gtimeout"
-  fi
-
+@test "reaps a TERM-ignoring review without setsid when a group-directed TERM follows the first" {
   make_git_call_recorder
+  make_mock_timeout_with_kill timeout
   make_mock coderabbit '
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   echo "{\"authenticated\":true}"
@@ -1252,6 +1249,7 @@ fi
 if [ "$1" = "review" ]; then
   trap "" TERM
   sleep 30 &
+  printf "%s\\n" "$PPID" > "$CODERABBIT_REVIEW_PID_FILE.supervisor"
   printf "%s\\n" "$!" > "$CODERABBIT_REVIEW_PID_FILE"
   wait
 fi
@@ -1259,22 +1257,27 @@ exit 1
 '
   review_pid_file="$BATS_TEST_TMPDIR/review-members.pid"
   export CODERABBIT_REVIEW_PID_FILE="$review_pid_file"
-  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_TIMEOUT=1
   export CODERABBIT_CRITIQUE_BASE=master
-  for command in awk cat date jq mkdir mktemp ps rm sh sleep tr; do
+  export TMPDIR="$BATS_TEST_TMPDIR"
+  for command in awk cat date jq mkdir mktemp perl ps rm sh sleep tr; do
     link_system_command "$command"
   done
 
   # Keep setsid out of the wrapper's PATH so cleanup runs in the members
-  # mode a host without setsid uses. One external TERM already reaches the
-  # supervisor twice there (timeout's forward plus the group broadcast); the
-  # second sweep must not remove the delayed-KILL helper that escalates
-  # against a review ignoring TERM.
+  # mode a host without setsid uses, where the delayed-KILL helper shares the
+  # review's process group. The mock timer TERMs the supervisor after 1s and
+  # the helper's KILL is due 1s after that; a second TERM aimed at the whole
+  # group in between, as the wrapper's own cancellation forwarding sends,
+  # must not remove the helper. The mock timer keeps this independent of
+  # whether the host's timeout kills its whole group itself.
+  # Close FD 3 for the background run: a review left alive by a regression
+  # would otherwise hold it and stall Bats until that process exits.
   PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT" \
-    >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" &
+    >"$BATS_TEST_TMPDIR/members.stdout" 2>"$BATS_TEST_TMPDIR/members.stderr" 3>&- &
   script_pid=$!
   started=false
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  for _ in $(seq 1 30); do
     if [ -s "$review_pid_file" ]; then
       started=true
       break
@@ -1283,13 +1286,12 @@ exit 1
   done
   assert [ "$started" = true ]
 
-  kill -TERM "$script_pid"
-  set +e
-  wait "$script_pid"
-  status=$?
-  set -e
+  sleep 1.3
+  supervisor_pid=$(cat "$review_pid_file.supervisor")
+  group_id="$(ps -o pgid= -p "$supervisor_pid" | tr -d '[:space:]')"
+  assert [ -n "$group_id" ]
+  kill -TERM -- "-$group_id" 2>/dev/null || true
 
-  assert_equal "$status" 143
   review_pid=$(cat "$review_pid_file")
   review_alive=true
   for _ in $(seq 1 60); do
@@ -1306,6 +1308,9 @@ exit 1
     esac
     sleep 0.1
   done
+  if [ "$review_alive" = true ]; then
+    kill -KILL "$review_pid" "$supervisor_pid" 2>/dev/null || true
+  fi
   assert [ "$review_alive" = false ]
 }
 
