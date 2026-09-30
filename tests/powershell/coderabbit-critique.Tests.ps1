@@ -195,6 +195,17 @@ Describe 'coderabbit-critique' {
     }
   }
 
+  Context 'Test-DotfilesCoderabbitAuthenticated' {
+    It 'returns false instead of throwing when the probe cannot be started' {
+      Mock Start-DotfilesProcessWithTimeout {
+        throw [InvalidOperationException]::new('simulated auth probe start failure')
+      }
+      $cmd = [pscustomobject]@{ Name = 'coderabbit' }
+
+      Test-DotfilesCoderabbitAuthenticated -CoderabbitCommand $cmd | Should -BeFalse
+    }
+  }
+
   Context 'critique policy environment restore' {
     It 'restores a set-but-empty policy variable' {
       # Win32 SetEnvironmentVariable deletes a name whose value is empty.
@@ -586,7 +597,7 @@ Describe 'coderabbit-critique' {
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'unauthenticated'
     }
 
-    It 'logs review-failed when the authentication probe cannot be started' {
+    It 'logs review-failed when checking authentication fails unexpectedly' {
       Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
       Mock Test-DotfilesCoderabbitAuthenticated {
         throw [InvalidOperationException]::new('simulated auth probe start failure')
@@ -596,6 +607,20 @@ Describe 'coderabbit-critique' {
       $result = Invoke-DotfilesCoderabbitCritique 3>&1
       ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
       Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'review-failed'
+    }
+
+    It 'records auth-unsupported and skips the review when the auth probe cannot be started' {
+      Mock Get-DotfilesCoderabbitCommand { [pscustomobject]@{ Name = 'coderabbit' } }
+      Mock Start-DotfilesProcessWithTimeout {
+        throw [InvalidOperationException]::new('simulated auth probe start failure')
+      }
+      Mock Invoke-DotfilesCoderabbitReviewWithTimeout { throw 'must not be called' }
+
+      $result = Invoke-DotfilesCoderabbitCritique 3>&1
+      ($result | Where-Object { $_ -is [pscustomobject] }).Success | Should -BeFalse
+      Assert-DotfilesCoderabbitFallbackReason -ExpectedReason 'auth-unsupported'
+      Should -Invoke Invoke-DotfilesCoderabbitReviewWithTimeout -Times 0 -Exactly
+      Should -Invoke Start-DotfilesProcessWithTimeout -Times 1 -Exactly
     }
 
     It 'fails when the base branch cannot be resolved' {

@@ -153,9 +153,18 @@ function global:Resolve-DotfilesCoderabbitAuthFailure {
 function global:Test-DotfilesCoderabbitAuthenticated {
   param([Parameter(Mandatory)] $CoderabbitCommand)
 
-  $result = Start-DotfilesProcessWithTimeout -FilePath $CoderabbitCommand.Name `
-    -ArgumentList @('auth', 'status', '--agent') `
-    -TimeoutSeconds (Resolve-DotfilesCoderabbitTimeoutSeconds)
+  # A probe that cannot even be launched (a broken shim, a missing
+  # interpreter) is the same "unsupported or failed" class the POSIX wrapper
+  # reports when its `sh -c` probe exits non-zero, not a failed review: no
+  # review was ever attempted.
+  try {
+    $result = Start-DotfilesProcessWithTimeout -FilePath $CoderabbitCommand.Name `
+      -ArgumentList @('auth', 'status', '--agent') `
+      -TimeoutSeconds (Resolve-DotfilesCoderabbitTimeoutSeconds)
+  } catch {
+    $script:DotfilesCoderabbitAuthFailure = 'auth-unsupported'
+    return $false
+  }
   $failure = Resolve-DotfilesCoderabbitAuthFailure -TimedOut $result.TimedOut `
     -ExitCode $result.ExitCode -Stdout $result.Stdout
   if ($failure) {
