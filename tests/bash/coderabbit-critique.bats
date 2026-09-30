@@ -160,25 +160,48 @@ require_compatible_host_timer() {
 # itself, on top of its normal behavior, or every test below would silently
 # fail closed on the "no compatible timeout" path instead of exercising the
 # path it means to test.
-make_mock_timeout() {
-  cat > "$BATS_TEST_TMPDIR/bin/$1" << EOF
-#!/bin/sh
-if [ "\$1" = "--help" ]; then
-  printf -- '--kill-after --preserve-status\n'
-  exit 0
+#
+# Real GNU timeout also puts itself in its own process group before it
+# launches the command. Without `setsid` the wrapper relies on exactly that
+# boundary and refuses to run when the group is shared with its caller, so a
+# mock that skips it fails every launching test on a host without `setsid`
+# (macOS). Emit a prelude that re-executes the mock once as a group leader,
+# keeping the same PID. `setpgid` fails harmlessly when the mock already
+# leads a group, and a host without perl keeps the previous behavior.
+timeout_mock_group_prelude() {
+  cat << 'EOF'
+if [ -z "$CODERABBIT_MOCK_TIMEOUT_GROUPED" ] && command -v perl >/dev/null 2>&1; then
+  CODERABBIT_MOCK_TIMEOUT_GROUPED=1 exec perl -MPOSIX -e 'POSIX::setpgid(0, 0); exec @ARGV or die "exec: $!"' "$0" "$@"
 fi
-$2
 EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
-make_mock_timeout_with_kill() {
-  cat > "$BATS_TEST_TMPDIR/bin/$1" << 'EOF'
+make_mock_timeout() {
+  {
+    cat << 'EOF'
 #!/bin/sh
 if [ "$1" = "--help" ]; then
   printf -- '--kill-after --preserve-status\n'
   exit 0
 fi
+EOF
+    timeout_mock_group_prelude
+    printf '%s\n' "$2"
+  } > "$BATS_TEST_TMPDIR/bin/$1"
+  chmod +x "$BATS_TEST_TMPDIR/bin/$1"
+}
+
+make_mock_timeout_with_kill() {
+  {
+    cat << 'EOF'
+#!/bin/sh
+if [ "$1" = "--help" ]; then
+  printf -- '--kill-after --preserve-status\n'
+  exit 0
+fi
+EOF
+    timeout_mock_group_prelude
+    cat << 'EOF'
 if [ "$1" != "--preserve-status" ] || [ "$2" != "--kill-after" ]; then
   exit 2
 fi
@@ -188,14 +211,23 @@ shift 4
 
 "$@" &
 child=$!
-(
-  sleep "$duration"
-  if kill -0 "$child" 2>/dev/null; then
-    kill -TERM "$child" 2>/dev/null || true
-    sleep "$kill_after"
-    kill -KILL "$child" 2>/dev/null || true
-  fi
-) &
+# Real timeout keeps its timer inside its own process (an alarm), never as a
+# helper in the group it manages. Start the watcher in a group of its own so
+# the wrapper's members sweep of the timeout-created group cannot kill it.
+watcher_script='
+sleep "$1"
+if kill -0 "$2" 2>/dev/null; then
+  kill -TERM "$2" 2>/dev/null || true
+  sleep "$3"
+  kill -KILL "$2" 2>/dev/null || true
+fi
+'
+if command -v perl >/dev/null 2>&1; then
+  perl -MPOSIX -e 'POSIX::setpgid(0, 0); exec @ARGV or die "exec: $!"' \
+    sh -c "$watcher_script" sh "$duration" "$child" "$kill_after" &
+else
+  sh -c "$watcher_script" sh "$duration" "$child" "$kill_after" &
+fi
 watcher=$!
 wait "$child"
 status=$?
@@ -203,6 +235,7 @@ kill "$watcher" 2>/dev/null || true
 wait "$watcher" 2>/dev/null || true
 exit "$status"
 EOF
+  } > "$BATS_TEST_TMPDIR/bin/$1"
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
@@ -1316,7 +1349,15 @@ exit 1
 
   assert_equal 143 "$status"
   run grep -c '^term$' "$CODERABBIT_CRITIQUE_LOG"
-  assert_output "1"
+  # With setsid the review's isolated session receives TERM exactly once.
+  # Without it, GNU timeout's own group broadcast and the wrapper's sweep of
+  # that group can legitimately both reach the review, so require at least
+  # one delivery there rather than an exact count.
+  if command -v setsid >/dev/null 2>&1; then
+    assert_output "1"
+  else
+    assert [ "$output" -ge 1 ]
+  fi
   review_pid=$(cat "$review_pid_file")
   run kill -0 "$review_pid"
   assert_failure
