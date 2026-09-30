@@ -5,12 +5,13 @@
 
 command -v mise >/dev/null 2>&1 || return 0
 
-# This file is sourced into the caller's shell (bash or zsh). Every helper
-# that can run there declares the scratch names it assigns `local`, and
-# assigns them on a line of their own so a `$(...)` status is not masked.
-# Helpers that only ever run inside `$(...)` keep plain names: their
-# assignments die with the subshell. The `_DOTFILES_MISE_*` globals and
-# `_dotfiles_mise_hook_out` are deliberate state shared between calls.
+# This file is sourced into the caller's shell (bash or zsh). The helpers
+# that run there declare the scratch names they assign `local`, and
+# assign them on a line of their own so a `$(...)` status is not masked.
+# Helpers the profile only calls inside `$(...)` may keep plain names:
+# their assignments die with the subshell. The `_DOTFILES_MISE_*` globals
+# are deliberate state shared between calls; `_dotfiles_mise_hook_out` is
+# namespaced, so it cannot collide with a caller's names.
 
 # DOTFILES_MISE_ASSUME_WSL=1 forces the WSL branch and =0 forces the
 # non-WSL branch so tests do not depend on the host.

@@ -1122,8 +1122,8 @@ _setup_wsl_first_startup() {
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 }
 
-# The plain call takes the wrapper's fingerprint-unchanged exit; --force
-# is what reaches the original hook.
+# The plain call and the prompt hook take the wrapper's
+# fingerprint-unchanged exit; --force is what reaches an original hook.
 _source_and_call_helpers() {
   _source_script
   export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/direct-cache"
@@ -1190,9 +1190,10 @@ _require_zsh() {
 # sources the profile under `zsh -f`, calls the installed hook wrapper,
 # and prints what it changed. The users root holds one account with both
 # Windows-side mise directories: zsh stops a sourced file at a glob with
-# no match, and that is a separate defect. The probe starts in $HOME
-# because the fingerprint walk goes from $PWD up to /, and an empty
-# conf.d directory in any ancestor would trip the same glob.
+# no match, and that is a separate defect (#533). The probe starts in
+# $HOME because the fingerprint walk goes from $PWD up to /, and its own
+# "$_confd"/* glob fails the same way on an empty conf.d directory in any
+# ancestor (a case #533 does not cover).
 # $1: sentinel (set to a marker value) or unset
 _run_zsh_scratch_probe() {
   local _root="$BATS_TEST_TMPDIR/zsh-users"
