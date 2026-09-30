@@ -192,6 +192,14 @@ start_wrapper_job() {
 # descendants out of reach. Safe under `set -e`: nothing here can fail the test.
 stop_tracked_wrappers() {
   for tracked_pid in $_TRACKED_WRAPPER_PIDS; do
+    # Already gone and reaped, usually by the test's own `wait`: nothing is left
+    # to walk, and a stale PID must never be signalled. A zombie still passes
+    # `kill -0` and takes the normal path: its children were reparented when it
+    # exited, so the walk finds only the zombie and the `wait` below reaps it.
+    if ! kill -0 "$tracked_pid" 2>/dev/null; then
+      wait "$tracked_pid" 2>/dev/null || true
+      continue
+    fi
     tracked_tree="$(process_tree "$tracked_pid" 2>/dev/null)" || tracked_tree=
     for member in $tracked_tree; do
       process_is_gone "$member" || kill -TERM "$member" 2>/dev/null || true
@@ -1783,6 +1791,25 @@ exit 1
   run process_is_gone "$review_shell_pid"
   assert_success
   run process_is_gone "$review_sleeper_pid"
+  assert_success
+}
+
+@test "stop_tracked_wrappers reaches descendants that would outlive their parent" {
+  child_file="$BATS_TEST_TMPDIR/tree-child.pid"
+  # The parent dies on the first TERM and leaves its sleeper running, so only a
+  # walk of the parent links finds the sleeper in time.
+  start_wrapper_job "$BATS_TEST_TMPDIR/tree.stdout" "$BATS_TEST_TMPDIR/tree.stderr" \
+    sh -c 'sleep 30 & echo "$!" >"$1"; wait' sh "$child_file"
+  wait_for_file "$child_file" 10 "the child to record its PID"
+  child_pid=$(cat "$child_file")
+  run process_is_gone "$child_pid"
+  assert_failure
+
+  stop_tracked_wrappers
+
+  run process_is_gone "$script_pid"
+  assert_success
+  run process_is_gone "$child_pid"
   assert_success
 }
 
