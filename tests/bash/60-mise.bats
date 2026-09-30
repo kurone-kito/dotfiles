@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 # Tests for the mise (polyglot runtime manager) shell initialization script.
+# cspell:words mawk
 
 bats_require_minimum_version 1.5.0
 
@@ -433,6 +434,15 @@ _count_log() {
 # WSL trust stamp and non-WSL trust
 # ---------------------------------------------------------------------------
 
+_assert_trust_count() {
+  run _count_log '^trust '
+  assert_success
+  assert_output "$1"
+}
+
+# The second source of the unchanged config is what tells a stamp from
+# trusting on every startup: both give 1 after the first source and 2
+# after the edit, but only the stamp still gives 1 in between.
 @test "WSL: trusts an unchanged config once and trusts it again after a change" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
@@ -440,12 +450,102 @@ _count_log() {
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 
   _source_script
+  _assert_trust_count 1
+  _source_script
+  _assert_trust_count 1
   printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
   _source_script
+  _assert_trust_count 2
+}
 
-  run _count_log '^trust '
-  assert_success
-  assert_output "2"
+# Both state directories are absent, so their mtime is `missing` either
+# way and only the recorded directory tells the two stores apart.
+@test "WSL: trusts an unchanged config again when MISE_STATE_DIR changes" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state-a"
+  _source_script
+  _source_script
+  _assert_trust_count 1
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state-b"
+  _source_script
+  _assert_trust_count 2
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$BATS_TEST_TMPDIR/state-b/trusted-configs"
+}
+
+@test "WSL: records the default trust directory when MISE_STATE_DIR is unset" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  unset MISE_STATE_DIR
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$HOME/.local/state/mise/trusted-configs"
+}
+
+# awk -v would expand the backslash and never match the raw stamp text,
+# so the config would be trusted again on every startup. The name uses
+# \t because gawk and mawk both turn it into a tab, whereas mawk keeps an
+# unknown escape such as \d as it is.
+@test "WSL: an unchanged config still hits when the trust directory has a backslash" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state\\tdir"
+  _source_script
+  _source_script
+  _source_script
+
+  _assert_trust_count 1
+}
+
+# The same holds for the config path, and sha256sum prefixes its hash
+# with a backslash when the file name has one, so the hash needs it too.
+# The \t in the name is expanded by awk -v in both gawk and mawk.
+@test "WSL: an unchanged config still hits when its path has a backslash" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export HOME="$BATS_TEST_TMPDIR/ho\\tme"
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  _source_script
+  _source_script
+  _source_script
+  _assert_trust_count 1
+
+  # Trusting the edited config must replace its row, not add a second.
+  printf '%s\n' 'node = "22"' > "$HOME/.config/mise/config.toml"
+  _source_script
+  _assert_trust_count 2
+  assert_equal "$(wc -l < "$DOTFILES_MISE_TRUST_STAMP" | tr -d ' ')" 1
+}
+
+@test "WSL: a stamp row without the trust directory is trusted once more" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+  _source_script
+  # Rewrite the row in the four-column layout that predates the directory.
+  awk -F '\t' -v OFS='\t' '{ print $1, $2, $3, $5 }' \
+    "$DOTFILES_MISE_TRUST_STAMP" > "$BATS_TEST_TMPDIR/old-stamp"
+  mv "$BATS_TEST_TMPDIR/old-stamp" "$DOTFILES_MISE_TRUST_STAMP"
+
+  _source_script
+  _assert_trust_count 2
+  _source_script
+  _assert_trust_count 2
 }
 
 @test "WSL: trusts a config that appears after the first startup" {
@@ -607,6 +707,74 @@ _count_log() {
   run _count_log '^activate '
   assert_success
   assert_output "2"
+}
+
+# The environment names the activate cache key hashes, read from the
+# script so that a name added later shows up here. It reads the script's
+# own "${NAME-}" form only; another spelling would be skipped.
+_cache_key_env_names() {
+  sed -n '/^  _env=\$(printf/,/)$/p' "$SCRIPT_PATH" \
+    | grep -o '\${[A-Za-z0-9_]*-}' | tr -d '${}-' | sort
+}
+
+# These decide the shim prefix baked into a cached activate script (HOME
+# is its fallback), so a shell that changes one must not replay the
+# script another shell cached. Each change is the only new difference,
+# and each state must add one cache file.
+@test "WSL: changing a shim prefix input builds a new activate script" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  local _name _built=1
+
+  _source_script
+  for _name in MISE_DATA_DIR XDG_DATA_HOME MISE_SHIMS_DIR \
+    MISE_SYSTEM_SHIMS_DIR MISE_SYSTEM_DATA_DIR; do
+    export "$_name=$BATS_TEST_TMPDIR/other-$_name"
+    _source_script
+    _built=$((_built + 1))
+    run _count_log '^activate '
+    assert_success
+    assert_output "$_built"
+  done
+
+  # A source also rebuilds MISE_TRUSTED_CONFIG_PATHS from HOME, and that
+  # is already in the key, so call the key function on its own here.
+  export HOME="$BATS_TEST_TMPDIR/other-HOME"
+  _dotfiles_mise_activate_cached bash > /dev/null
+  _built=$((_built + 1))
+  run _count_log '^activate '
+  assert_success
+  assert_output "$_built"
+
+  run find "$DOTFILES_MISE_ACTIVATE_CACHE" -type f
+  assert_success
+  assert_equal "${#lines[@]}" "$_built"
+}
+
+@test "WSL: other MISE_* names reuse the cached activate script" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+
+  _source_script
+  export MISE_CACHE_DIR="$BATS_TEST_TMPDIR/cache"
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  export MISE_UNRELATED_SETTING=1
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "1"
+}
+
+@test "the activate cache key hashes only the expected environment names" {
+  run _cache_key_env_names
+  assert_success
+  assert_output "$(printf '%s\n' \
+    HOME MISE_CONFIG_FILE MISE_DATA_DIR MISE_ENV MISE_GLOBAL_CONFIG_FILE \
+    MISE_QUIET MISE_SHIMS_DIR MISE_SYSTEM_DATA_DIR MISE_SYSTEM_SHIMS_DIR \
+    MISE_TRUSTED_CONFIG_PATHS MISE_YES XDG_DATA_HOME | sort)"
 }
 
 @test "WSL: a failed hook-env does not stick the fingerprint" {
@@ -856,6 +1024,135 @@ MOCK
   run _count_log '^activate '
   assert_success
   assert_output "2"
+}
+
+# ---------------------------------------------------------------------------
+# Caller scratch names
+# ---------------------------------------------------------------------------
+
+# Scratch names the profile assigns while it runs (issue #530). Sourcing
+# alone can only expose the first eight; the rest are assigned inside
+# $(...) or by helpers a source never reaches, so the tests below also
+# call those helpers directly. _data only exists inside a subshell and
+# cannot be told apart at all.
+_SCRATCH_NAMES=(
+  _cfg _mtime _shell _hash _size _stamp _tmp
+  _trust_dir _bin _mt _ver _key _cache_dir _cache_file _out _cfg_hash
+  _env _data _file_hash
+)
+
+# $1: sentinel (set to a marker value) or unset
+_preset_scratch_names() {
+  local _name
+  for _name in "${_SCRATCH_NAMES[@]}"; do
+    if [ "$1" = unset ]; then
+      unset "$_name"
+    else
+      printf -v "$_name" '%s' "caller-$_name"
+    fi
+  done
+}
+
+# $1: the mode given to _preset_scratch_names; names every change at once
+_assert_scratch_names_kept() {
+  local _name _changed=
+  for _name in "${_SCRATCH_NAMES[@]}"; do
+    if [ "$1" = unset ]; then
+      [ -z "${!_name+x}" ] || _changed="$_changed $_name"
+    else
+      [ "${!_name-}" = "caller-$_name" ] || _changed="$_changed $_name"
+    fi
+  done
+  assert_equal "$_changed" ""
+}
+
+# A first WSL startup: a config with no stamp yet, so the trust path
+# runs, and a mise version, so the activate cache is used.
+_setup_wsl_first_startup() {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+}
+
+_source_and_call_helpers() {
+  _source_script
+  export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/direct-cache"
+  _dotfiles_mise_activate_cached bash > /dev/null
+  _dotfiles_mise_fp_add_file "$HOME/.config/mise/config.toml" > /dev/null
+}
+
+@test "WSL: keeps the caller's _cfg when sourced" {
+  _setup_wsl_first_startup
+  _cfg=caller-cfg
+
+  _source_script
+
+  assert_equal "$_cfg" "caller-cfg"
+}
+
+@test "non-WSL: keeps the caller's _cfg when sourced" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=0
+  mkdir -p "$HOME/.config/mise"
+  touch "$HOME/.config/mise/config.toml"
+  _cfg=caller-cfg
+
+  _source_script
+
+  assert_equal "$_cfg" "caller-cfg"
+}
+
+@test "WSL: leaves _mtime unset when the caller had none" {
+  _setup_wsl_first_startup
+  unset _mtime
+
+  _source_script
+
+  assert [ -z "${_mtime+x}" ]
+}
+
+@test "WSL: keeps every scratch name the caller had set" {
+  _setup_wsl_first_startup
+  _preset_scratch_names sentinel
+
+  _source_and_call_helpers
+
+  _assert_scratch_names_kept sentinel
+}
+
+@test "WSL: leaves every scratch name unset when the caller had none" {
+  _setup_wsl_first_startup
+  _preset_scratch_names unset
+
+  _source_and_call_helpers
+
+  _assert_scratch_names_kept unset
+}
+
+# Declaring and assigning on one line (local _out=$(...)) would replace
+# the failing status with local's own, and the partial output below
+# would be cached.
+@test "WSL: a failed mise activate leaves no cached script" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/mise" << 'MOCK'
+#!/bin/sh
+case "$1" in
+  --version) echo 2026.9.15 ;;
+  activate)
+    echo 'export MISE_PARTIAL=1'
+    exit 1
+    ;;
+esac
+MOCK
+  chmod +x "$BATS_TEST_TMPDIR/bin/mise"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  export DOTFILES_MISE_ASSUME_WSL=1
+
+  _source_script
+
+  assert [ -z "$(find "$DOTFILES_MISE_ACTIVATE_CACHE" -type f 2>/dev/null)" ]
 }
 
 # ---------------------------------------------------------------------------

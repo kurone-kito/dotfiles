@@ -5,6 +5,11 @@
 
 command -v mise >/dev/null 2>&1 || return 0
 
+# This file is sourced into the caller's shell (bash or zsh). Only some
+# helpers declare the scratch names they assign `local` so far, on a
+# line of their own so a `$(...)` status is not masked; the rest still
+# assign plain globals.
+
 # DOTFILES_MISE_ASSUME_WSL=1 forces the WSL branch and =0 forces the
 # non-WSL branch so tests do not depend on the host.
 _dotfiles_mise_is_wsl() {
@@ -47,30 +52,43 @@ _dotfiles_mise_trust_stamp_file() {
   printf '%s\n' "${HOME}/.cache/dotfiles/mise-trust-stamp"
 }
 
+# Print the mtime of the trust directory in $1, or `missing`.
 _dotfiles_mise_trust_dir_mtime() {
-  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
-  if [ -d "$_trust_dir" ]; then
-    stat -c %Y "$_trust_dir" 2>/dev/null && return 0
+  if [ -d "$1" ]; then
+    stat -c %Y "$1" 2>/dev/null && return 0
   fi
   printf '%s\n' missing
 }
 
 # Skip mise trust only when this exact path and content were trusted
-# while mise's trust directory was unchanged. Any miss falls open.
+# while the same trust directory was unchanged. A row is
+# path, hash, size, directory, mtime; an older row without the
+# directory never matches. Any miss falls open.
+# The path, hash and directory reach awk through the environment: -v
+# would expand a backslash and never match the raw stamp text. The hash
+# needs it too: sha256sum prefixes it with a backslash when the file
+# name contains one.
 _dotfiles_mise_trust_if_needed() {
+  local _cfg _hash _size _mtime _stamp _tmp _trust_dir
   _cfg=$1
   [ -f "$_cfg" ] || return 0
   if ! _dotfiles_mise_is_wsl; then
     mise trust "$_cfg" 2>/dev/null || true
     return 0
   fi
+  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
   _hash=$(_dotfiles_mise_sha256_file "$_cfg") || _hash=
   _size=$(wc -c < "$_cfg" | tr -d '[:space:]')
-  _mtime=$(_dotfiles_mise_trust_dir_mtime)
+  _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")
   _stamp=$(_dotfiles_mise_trust_stamp_file)
   if [ -n "$_hash" ] && [ -f "$_stamp" ]; then
-    if awk -F '\t' -v p="$_cfg" -v h="$_hash" -v s="$_size" -v m="$_mtime" \
-      '$1 == p && $2 == h && $3 == s && $4 == m { found = 1 } END { exit found ? 0 : 1 }' \
+    if DOTFILES_MISE_STAMP_PATH=$_cfg DOTFILES_MISE_STAMP_HASH=$_hash \
+      DOTFILES_MISE_STAMP_DIR=$_trust_dir \
+      awk -F '\t' -v s="$_size" -v m="$_mtime" '
+        $1 == ENVIRON["DOTFILES_MISE_STAMP_PATH"] &&
+          $2 == ENVIRON["DOTFILES_MISE_STAMP_HASH"] && $3 == s &&
+          $4 == ENVIRON["DOTFILES_MISE_STAMP_DIR"] && $5 == m { found = 1 }
+        END { exit found ? 0 : 1 }' \
       "$_stamp"; then
       return 0
     fi
@@ -79,21 +97,25 @@ _dotfiles_mise_trust_if_needed() {
     return 0
   fi
   [ -n "$_hash" ] || return 0
-  _mtime=$(_dotfiles_mise_trust_dir_mtime)
+  _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")
   mkdir -p "$(dirname "$_stamp")" || return 0
   _tmp="${_stamp}.tmp.$$"
   if [ -f "$_stamp" ]; then
-    awk -F '\t' -v p="$_cfg" '$1 != p { print }' "$_stamp" > "$_tmp" || true
+    DOTFILES_MISE_STAMP_PATH=$_cfg \
+      awk -F '\t' '$1 != ENVIRON["DOTFILES_MISE_STAMP_PATH"] { print }' \
+      "$_stamp" > "$_tmp" || true
   else
     : > "$_tmp"
   fi
-  printf '%s\t%s\t%s\t%s\n' "$_cfg" "$_hash" "$_size" "$_mtime" >> "$_tmp"
+  printf '%s\t%s\t%s\t%s\t%s\n' \
+    "$_cfg" "$_hash" "$_size" "$_trust_dir" "$_mtime" >> "$_tmp"
   mv "$_tmp" "$_stamp"
 }
 
 # In-memory identity of the configs hook-env would read. A hash failure
 # prints HASH_FAIL so the caller refuses to skip.
 _dotfiles_mise_fp_add_file() {
+  local _file_hash
   [ -n "$1" ] || return 0
   [ -f "$1" ] || return 0
   _file_hash=$(_dotfiles_mise_sha256_file "$1") || {
@@ -348,6 +370,7 @@ _dotfiles_mise_run_activation_hook() {
 # its startup hook-env succeeds. Scripts with no force hook keep the
 # previous stamp so an unchanged directory can still skip.
 _dotfiles_mise_activate_wsl() {
+  local _shell
   _shell=$1
   _split=$(
     _dotfiles_mise_activate_cached "$_shell" \
@@ -493,6 +516,8 @@ _dotfiles_mise_activate_file_token() {
 # The caller moves `_mise_hook --force` until after the wrappers exist,
 # so the one startup hook-env runs where its status is visible.
 _dotfiles_mise_activate_cached() {
+  local _shell _ver _bin _mt _cfg_hash _env _key _cache_dir _cache_file
+  local _out _tmp
   _shell=$1
   _ver=$(mise --version 2>/dev/null | awk 'NR == 1 { print; exit }')
   if [ -z "$_ver" ]; then
@@ -518,13 +543,22 @@ _dotfiles_mise_activate_cached() {
   # Only inputs that can change the generated script. Do not hash every
   # MISE_* variable: activate itself exports some, and a second source
   # in the same shell would miss an otherwise valid cache entry.
+  # The last six decide the shim prefix that _dotfiles_mise_strip_frozen_path
+  # rewrites, and HOME is the fallback prefix; a shell that changes one of
+  # them must not replay the script another shell cached.
   _env=$(printf '%s\n' \
     "${MISE_ENV-}" \
     "${MISE_CONFIG_FILE-}" \
     "${MISE_GLOBAL_CONFIG_FILE-}" \
     "${MISE_TRUSTED_CONFIG_PATHS-}" \
     "${MISE_YES-}" \
-    "${MISE_QUIET-}")
+    "${MISE_QUIET-}" \
+    "${MISE_DATA_DIR-}" \
+    "${XDG_DATA_HOME-}" \
+    "${HOME-}" \
+    "${MISE_SHIMS_DIR-}" \
+    "${MISE_SYSTEM_SHIMS_DIR-}" \
+    "${MISE_SYSTEM_DATA_DIR-}")
   _key=$(printf '%s' "${_shell}
 ${_ver}
 ${_bin}
