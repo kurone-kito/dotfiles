@@ -78,7 +78,7 @@ _dotfiles_mise_trust_if_needed() {
     mise trust "$_cfg" 2>/dev/null || true
     return 0
   fi
-  _trust_dir="${MISE_STATE_DIR:-$HOME/.local/state/mise}/trusted-configs"
+  _trust_dir="${MISE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/mise}/trusted-configs"
   _hash=$(_dotfiles_mise_sha256_file "$_cfg") || _hash=
   _size=$(wc -c < "$_cfg" | tr -d '[:space:]')
   _mtime=$(_dotfiles_mise_trust_dir_mtime "$_trust_dir")

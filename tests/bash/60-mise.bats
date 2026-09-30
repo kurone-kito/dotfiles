@@ -20,6 +20,9 @@ setup() {
   export DOTFILES_MISE_TRUST_STAMP="$BATS_TEST_TMPDIR/mise-trust-stamp"
   export DOTFILES_MISE_ACTIVATE_CACHE="$BATS_TEST_TMPDIR/mise-activate-cache"
   unset DOTFILES_MISE_ASSUME_WSL
+  # The trust directory follows these two, so a value inherited from the
+  # host would decide which directory the trust-stamp tests look at.
+  unset MISE_STATE_DIR XDG_STATE_HOME
 }
 
 teardown() {
@@ -489,7 +492,6 @@ _assert_trust_count() {
 @test "WSL: records the default trust directory when MISE_STATE_DIR is unset" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
-  unset MISE_STATE_DIR
   mkdir -p "$HOME/.config/mise"
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 
@@ -497,6 +499,41 @@ _assert_trust_count() {
 
   run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
   assert_output "$HOME/.local/state/mise/trusted-configs"
+}
+
+# mise 2026.9.15 writes the trust store under $XDG_STATE_HOME/mise when
+# MISE_STATE_DIR is unset. Creating that directory must change the mtime
+# the stamp compares, which it cannot if the stamp watches another path.
+@test "WSL: follows XDG_STATE_HOME for the trust directory when MISE_STATE_DIR is unset" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg-state"
+  _source_script
+  _source_script
+  _assert_trust_count 1
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$XDG_STATE_HOME/mise/trusted-configs"
+
+  mkdir -p "$XDG_STATE_HOME/mise/trusted-configs"
+  _source_script
+  _assert_trust_count 2
+}
+
+@test "WSL: MISE_STATE_DIR still wins over XDG_STATE_HOME for the trust directory" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  mkdir -p "$HOME/.config/mise"
+  printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
+
+  export XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg-state"
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/mise-state"
+  _source_script
+
+  run awk -F '\t' 'NR == 1 { print $4 }' "$DOTFILES_MISE_TRUST_STAMP"
+  assert_output "$MISE_STATE_DIR/trusted-configs"
 }
 
 # awk -v would expand the backslash and never match the raw stamp text,
