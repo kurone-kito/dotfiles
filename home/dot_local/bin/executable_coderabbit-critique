@@ -156,14 +156,19 @@ cleanup_tmp_files() {
       rm -f "$tmp" 2>/dev/null || true
     fi
   done
+
+  if [ -n "${auth_tmpdir:-}" ]; then
+    rm -rf "$auth_tmpdir" 2>/dev/null || true
+  fi
 }
 
-auth_stdout="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-auth.XXXXXX")" || {
+auth_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/coderabbit-critique-auth.XXXXXX")" || {
   log_fallback_reason mktemp-failed
   echo "coderabbit-critique: mktemp failed; cannot capture authentication status" >&2
   exit 1
 }
-auth_done="${auth_stdout}.done"
+auth_stdout="${auth_tmpdir}/stdout"
+auth_done="${auth_tmpdir}/done"
 trap 'cleanup_tmp_files' EXIT
 
 # Same four-argument prefix as the review invocation. Bats mocks shift
