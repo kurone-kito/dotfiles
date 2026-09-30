@@ -122,17 +122,20 @@ _run_zsh_wsl_probe() {
   cat > "$BATS_TEST_TMPDIR/zsh-wsl-probe.zsh" << 'PROBE'
 cd "$HOME" || exit 1
 source "$1"
-print "trusted=$MISE_TRUSTED_CONFIG_PATHS"
+print -r -- "trusted=$MISE_TRUSTED_CONFIG_PATHS"
 [[ -o nomatch ]] && print nomatch=on || print nomatch=off
 [[ -o nullglob ]] && print nullglob=on || print nullglob=off
 PROBE
   run --separate-stderr zsh -f "$BATS_TEST_TMPDIR/zsh-wsl-probe.zsh" "$SCRIPT_PATH"
 }
 
-# Prints stderr when the profile stopped on an empty glob.
+# Fails when the profile stopped on an empty Windows-side glob. Only the
+# users root is matched, so an empty conf.d in an ancestor of the scratch
+# HOME (the fingerprint walk's own glob) is not blamed on these expansions.
 _refute_zsh_glob_error() {
   case "$stderr" in
-    *"no matches found"*) fail "zsh stopped on an empty glob: $stderr" ;;
+    *"no matches found: ${DOTFILES_MISE_WSL_USERS_ROOT}"*)
+      fail "zsh stopped on an empty glob: $stderr" ;;
   esac
 }
 
@@ -140,7 +143,7 @@ _refute_zsh_glob_error() {
 @test "zsh, WSL: a users root with no mise directory does not stop the profile" {
   _require_zsh
   _setup_recording_mise
-  mkdir -p "$HOME/.config/mise" "$BATS_TEST_TMPDIR/win-users"
+  mkdir -p "$HOME/.config/mise" "$BATS_TEST_TMPDIR/win-users/alice"
   printf '%s\n' 'node = "24"' > "$HOME/.config/mise/config.toml"
 
   _run_zsh_wsl_probe "$BATS_TEST_TMPDIR/win-users"
@@ -1254,7 +1257,6 @@ MOCK
   _source_script
 
   assert [ -z "${_mise_trusted+x}" ]
-  assert [ -z "${_mise_dir+x}" ]
   assert [ -z "${_mise_win_users+x}" ]
   assert [ -z "${_mise_cfg+x}" ]
   assert [ -z "${_ghq_trust_file+x}" ]

@@ -607,7 +607,9 @@ ${_env}" | _dotfiles_mise_sha256_stdin) || _key=
 # null_glob, scoped to the function: a top-level `setopt` in a sourced file
 # would persist in the user's interactive shell.
 
-# Append the Windows-side mise directories under $1 to the trusted list.
+# Append the Windows-side mise directories under $1 to the top-level
+# _mise_trusted (set just below) rather than printing them, so the WSL
+# startup path gains no `$(...)` fork.
 _dotfiles_mise_wsl_add_trusted_dirs() {
   local _root _dir
   _root=$1
@@ -622,7 +624,11 @@ _dotfiles_mise_wsl_add_trusted_dirs() {
   return 0
 }
 
-# Trust the Windows-side mise config files under $1.
+# Trust the Windows-side mise config files under $1. Unlike the helper
+# above, an unmatched pattern cannot make it fail: in bash that pattern is
+# a path that is not a file, and _dotfiles_mise_trust_if_needed returns 0
+# for it. A real config keeps that function's own status, as the loop that
+# used to sit at top level did.
 _dotfiles_mise_wsl_trust_configs() {
   local _root _cfg
   _root=$1
