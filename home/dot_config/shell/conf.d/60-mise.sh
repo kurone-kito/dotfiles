@@ -543,13 +543,22 @@ _dotfiles_mise_activate_cached() {
   # Only inputs that can change the generated script. Do not hash every
   # MISE_* variable: activate itself exports some, and a second source
   # in the same shell would miss an otherwise valid cache entry.
+  # The last six decide the shim prefix that _dotfiles_mise_strip_frozen_path
+  # rewrites, and HOME is the fallback prefix; a shell that changes one of
+  # them must not replay the script another shell cached.
   _env=$(printf '%s\n' \
     "${MISE_ENV-}" \
     "${MISE_CONFIG_FILE-}" \
     "${MISE_GLOBAL_CONFIG_FILE-}" \
     "${MISE_TRUSTED_CONFIG_PATHS-}" \
     "${MISE_YES-}" \
-    "${MISE_QUIET-}")
+    "${MISE_QUIET-}" \
+    "${MISE_DATA_DIR-}" \
+    "${XDG_DATA_HOME-}" \
+    "${HOME-}" \
+    "${MISE_SHIMS_DIR-}" \
+    "${MISE_SYSTEM_SHIMS_DIR-}" \
+    "${MISE_SYSTEM_DATA_DIR-}")
   _key=$(printf '%s' "${_shell}
 ${_ver}
 ${_bin}

@@ -709,6 +709,74 @@ _assert_trust_count() {
   assert_output "2"
 }
 
+# The environment names the activate cache key hashes, read from the
+# script so that a name added later shows up here. It reads the script's
+# own "${NAME-}" form only; another spelling would be skipped.
+_cache_key_env_names() {
+  sed -n '/^  _env=\$(printf/,/)$/p' "$SCRIPT_PATH" \
+    | grep -o '\${[A-Za-z0-9_]*-}' | tr -d '${}-' | sort
+}
+
+# These decide the shim prefix baked into a cached activate script (HOME
+# is its fallback), so a shell that changes one must not replay the
+# script another shell cached. Each change is the only new difference,
+# and each state must add one cache file.
+@test "WSL: changing a shim prefix input builds a new activate script" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+  local _name _built=1
+
+  _source_script
+  for _name in MISE_DATA_DIR XDG_DATA_HOME MISE_SHIMS_DIR \
+    MISE_SYSTEM_SHIMS_DIR MISE_SYSTEM_DATA_DIR; do
+    export "$_name=$BATS_TEST_TMPDIR/other-$_name"
+    _source_script
+    _built=$((_built + 1))
+    run _count_log '^activate '
+    assert_success
+    assert_output "$_built"
+  done
+
+  # A source also rebuilds MISE_TRUSTED_CONFIG_PATHS from HOME, and that
+  # is already in the key, so call the key function on its own here.
+  export HOME="$BATS_TEST_TMPDIR/other-HOME"
+  _dotfiles_mise_activate_cached bash > /dev/null
+  _built=$((_built + 1))
+  run _count_log '^activate '
+  assert_success
+  assert_output "$_built"
+
+  run find "$DOTFILES_MISE_ACTIVATE_CACHE" -type f
+  assert_success
+  assert_equal "${#lines[@]}" "$_built"
+}
+
+@test "WSL: other MISE_* names reuse the cached activate script" {
+  _setup_recording_mise
+  export DOTFILES_MISE_ASSUME_WSL=1
+  export MISE_MOCK_VERSION=2026.9.15
+
+  _source_script
+  export MISE_CACHE_DIR="$BATS_TEST_TMPDIR/cache"
+  export MISE_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  export MISE_UNRELATED_SETTING=1
+  _source_script
+
+  run _count_log '^activate '
+  assert_success
+  assert_output "1"
+}
+
+@test "the activate cache key hashes only the expected environment names" {
+  run _cache_key_env_names
+  assert_success
+  assert_output "$(printf '%s\n' \
+    HOME MISE_CONFIG_FILE MISE_DATA_DIR MISE_ENV MISE_GLOBAL_CONFIG_FILE \
+    MISE_QUIET MISE_SHIMS_DIR MISE_SYSTEM_DATA_DIR MISE_SYSTEM_SHIMS_DIR \
+    MISE_TRUSTED_CONFIG_PATHS MISE_YES XDG_DATA_HOME | sort)"
+}
+
 @test "WSL: a failed hook-env does not stick the fingerprint" {
   _setup_recording_mise
   export DOTFILES_MISE_ASSUME_WSL=1
