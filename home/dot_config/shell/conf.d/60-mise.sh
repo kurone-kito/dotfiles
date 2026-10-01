@@ -132,6 +132,15 @@ _dotfiles_mise_fp_add_file() {
 }
 
 _dotfiles_mise_fp_body() {
+  # An existing but empty conf.d makes the "$_confd"/* glob below match
+  # nothing. bash passes the pattern through as text, which
+  # _dotfiles_mise_fp_add_file rejects with its -f test. zsh would report
+  # `no matches found` and fail the whole fingerprint, so the skip cache
+  # would never engage. null_glob is scoped to this function: a top-level
+  # `setopt` in a sourced file would persist in the user's interactive shell.
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt local_options null_glob
+  fi
   printf 'env\t%s\n' "${MISE_ENV-}"
   # The path alone misses an in-place edit of an explicit config file
   # that the directory walk does not already name.
