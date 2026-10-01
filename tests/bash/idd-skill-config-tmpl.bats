@@ -2,7 +2,10 @@
 #
 # Tests for the home/dot_config/idd-skill/config.json.tmpl chezmoi
 # template: the rendered user-global critiqueLoop.delegate and
-# critiqueLoop.telemetryHook config.
+# critiqueLoop.telemetryHook config. The delegate is opt-in through
+# data.coderabbit.review, so every render passes an explicit --config (the
+# maintainer's own chezmoi data must never leak into a test) and the tests
+# that exercise the delegate run in the "lite" mode.
 
 bats_require_minimum_version 1.5.0
 
@@ -11,11 +14,25 @@ setup() {
   load 'helpers/bats-assert/load'
   load 'helpers/bats-file/load'
 
-  TEMPLATE_PATH="$BATS_TEST_DIRNAME/../../home/dot_config/idd-skill/config.json.tmpl"
+  REPO_HOME="$BATS_TEST_DIRNAME/../../home"
+  TEMPLATE_PATH="$REPO_HOME/dot_config/idd-skill/config.json.tmpl"
 }
 
+# $1: HOME for the render
+# $2: data.coderabbit as JSON (default: review "lite"), or "absent" to omit it
+# The helper behind the opt-in is found through --source.
 _render() {
-  HOME="$1" chezmoi execute-template --init < "$TEMPLATE_PATH"
+  local coderabbit=${2:-'{"review": "lite"}'}
+  local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+  if [ "$coderabbit" = absent ]; then
+    printf '%s\n' '{ "data": {} }' > "$config"
+  else
+    printf '{ "data": { "coderabbit": %s } }\n' "$coderabbit" > "$config"
+  fi
+  HOME="$1" chezmoi execute-template --init \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination" \
+    < "$TEMPLATE_PATH"
 }
 
 @test "renders valid JSON with mode combined" {
@@ -112,4 +129,65 @@ print(json.load(sys.stdin)['critiqueLoop']['telemetryHook']['command'])
     *"it's a home"*"idd-critique-telemetry") ;;
     *) fail "unexpected single token: $1" ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# The opt-in: data.coderabbit.review
+# ---------------------------------------------------------------------------
+
+@test "off renders no delegate but keeps the telemetry hook" {
+  for coderabbit in absent '{}' '{"review": false}' '{"deepReview": false}'; do
+    run --separate-stderr _render "$BATS_TEST_TMPDIR/home" "$coderabbit"
+
+    assert_success
+    echo "$output" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+loop = c['critiqueLoop']
+assert 'delegate' not in loop, loop
+assert sorted(loop) == ['telemetryHook'], loop
+assert 'idd-critique-telemetry' in loop['telemetryHook']['command'], loop
+"
+  done
+}
+
+@test "lite, deep and the legacy alias render the same delegate" {
+  run --separate-stderr _render "$BATS_TEST_TMPDIR/home" '{"review": "lite"}'
+  assert_success
+  lite_output=$output
+
+  for coderabbit in '{"review": true}' '{"review": "deep"}' '{"deepReview": true}' \
+    '{"review": "deep", "deepReview": true}'; do
+    run --separate-stderr _render "$BATS_TEST_TMPDIR/home" "$coderabbit"
+
+    assert_success
+    assert_equal "$output" "$lite_output"
+  done
+}
+
+@test "the telemetry hook is identical in every mode" {
+  run --separate-stderr _render "$BATS_TEST_TMPDIR/home" '{"review": false}'
+  assert_success
+  off_hook=$(echo "$output" | python3 -c "
+import json, sys
+print(json.dumps(json.load(sys.stdin)['critiqueLoop']['telemetryHook'], sort_keys=True))
+")
+
+  for coderabbit in '{"review": "lite"}' '{"review": "deep"}'; do
+    run --separate-stderr _render "$BATS_TEST_TMPDIR/home" "$coderabbit"
+
+    assert_success
+    hook=$(echo "$output" | python3 -c "
+import json, sys
+print(json.dumps(json.load(sys.stdin)['critiqueLoop']['telemetryHook'], sort_keys=True))
+")
+    assert_equal "$hook" "$off_hook"
+  done
+}
+
+@test "an invalid review value fails the render" {
+  run --separate-stderr _render "$BATS_TEST_TMPDIR/home" '{"review": "bogus"}'
+
+  assert_failure
+  assert_regex "$stderr" 'data\.coderabbit\.review'
 }

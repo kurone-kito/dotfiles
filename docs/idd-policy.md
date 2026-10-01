@@ -192,6 +192,15 @@ back to `powershell.exe`), so a Windows C1 pass now runs the delegate
 the same as a POSIX host instead of falling through to the per-agent
 mechanism under `combined`.
 
+The user-global delegate fragment (`home/dot_config/idd-skill/config.json.tmpl`)
+and the launchers it points at are opt-in: they are deployed and rendered only
+when `data.coderabbit.review` is `true`, `"lite"` or `"deep"` (or the
+deprecated `deepReview = true`) in the operator's chezmoi data (#544; see
+[`docs/coderabbit-deep-review.md`](./coderabbit-deep-review.md)). The
+repo-local `critiqueLoop.delegate` above is unaffected (its configuration is
+unchanged; it resolves only where the launcher is deployed), and
+`critiqueLoop.telemetryHook` stays rendered in every mode.
+
 ## Claim Timing
 
 - **`claim-stale-age`**: `12h` (shortened from the `24h` distributed

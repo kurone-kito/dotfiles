@@ -1,3 +1,7 @@
+{{- /* CodeRabbit critique delegate is opt-in (data.coderabbit.review): when
+     the mode is "off", its launchers are not deployed. Non-Windows already
+     excludes the .cmd twin below, so list it here for Windows only. */ -}}
+{{- $coderabbitMode := includeTemplate "coderabbit-review-mode" . | trim }}
 {{- if eq .chezmoi.os "windows" }}
 .gnupg/**
 generate-git-profiles.sh
@@ -56,4 +60,11 @@ Library/LaunchAgents/**
 {{- end }}
 {{- if or (ne .chezmoi.os "linux") (not (lookPath "systemd-tmpfiles")) }}
 .config/tmpfiles.d/tmp.conf
+{{- end }}
+{{- if eq $coderabbitMode "off" }}
+.local/bin/coderabbit-critique
+.local/bin/coderabbit-critique.ps1
+{{-   if eq .chezmoi.os "windows" }}
+.local/bin/coderabbit-critique.cmd
+{{-   end }}
 {{- end }}

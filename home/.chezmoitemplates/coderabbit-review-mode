@@ -1,0 +1,54 @@
+{{- /* coderabbit-review-mode: Resolve the effective CodeRabbit review mode.
+
+     Usage:
+       {{ includeTemplate "coderabbit-review-mode" . | trim }}
+
+     Reads data.coderabbit.review and the deprecated
+     data.coderabbit.deepReview, and returns exactly one of:
+       "off"  - the default: deploy no coderabbit-critique launcher, render no
+                critiqueLoop.delegate, and assign no CODERABBIT_CRITIQUE_DEEP
+       "lite" - deploy the launchers and render the delegate
+       "deep" - everything "lite" does, plus CODERABBIT_CRITIQUE_DEEP=1 in the
+                shell profiles
+
+     Resolution (review wins whenever it is present):
+       review absent, deepReview absent or false  -> "off"
+       review false                               -> "off"
+       review true or "lite"                      -> "lite"
+       review "deep"                              -> "deep"
+       review absent, deepReview true             -> "deep"
+
+     The render fails, naming the offending key and the allowed values, for
+     any other review value (a string such as "bogus", a number, an empty
+     string), for a deepReview that is not a boolean, and for a
+     data.coderabbit that is not a table. Any use of deepReview, in any
+     combination, also prints a deprecation notice on stderr naming
+     review = "deep"; every template that calls this helper prints it, so one
+     chezmoi apply shows it once per rendered file.
+
+     Every read is guarded with hasKey: sprig's get returns "" for a missing
+     key, so testing the result alone would treat an absent key as present. */ -}}
+{{- $coderabbit := dig "coderabbit" dict . -}}
+{{- if not (kindIs "map" $coderabbit) -}}
+{{-   fail (printf "data.coderabbit must be a table; got %#v" $coderabbit) -}}
+{{- end -}}
+{{- $mode := "off" -}}
+{{- if hasKey $coderabbit "deepReview" -}}
+{{-   $deepReview := get $coderabbit "deepReview" -}}
+{{-   if not (kindIs "bool" $deepReview) -}}
+{{-     fail (printf "data.coderabbit.deepReview must be true or false (it is deprecated; use review = \"deep\"); got %#v" $deepReview) -}}
+{{-   end -}}
+{{-   warnf "data.coderabbit.deepReview is deprecated; use review = \"deep\" instead" -}}
+{{-   if $deepReview -}}{{- $mode = "deep" -}}{{- end -}}
+{{- end -}}
+{{- if hasKey $coderabbit "review" -}}
+{{-   $review := get $coderabbit "review" -}}
+{{-   if kindIs "bool" $review -}}
+{{-     if $review -}}{{- $mode = "lite" -}}{{- else -}}{{- $mode = "off" -}}{{- end -}}
+{{-   else if and (kindIs "string" $review) (eq $review "lite") -}}{{- $mode = "lite" -}}
+{{-   else if and (kindIs "string" $review) (eq $review "deep") -}}{{- $mode = "deep" -}}
+{{-   else -}}
+{{-     fail (printf "data.coderabbit.review must be false, true, \"lite\" or \"deep\"; got %#v" $review) -}}
+{{-   end -}}
+{{- end -}}
+{{- $mode -}}

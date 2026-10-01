@@ -25,11 +25,46 @@ sshhost = {{ dig "sshhost" "" $profile | quote }}
 {{- end }}
 {{- end }}
 
-{{- $coderabbitDeepReview := dig "coderabbit" "deepReview" false . }}
-{{- if $coderabbitDeepReview }}
+{{- /* Re-emit data.coderabbit so a `chezmoi init` does not discard it.
+     review keeps its type (a Boolean, including false, or a string):
+     dropping review = false next to a legacy deepReview = true would flip the
+     resolved mode. Anything else is dropped with a warning. The values are
+     copied, not resolved; home/.chezmoitemplates/coderabbit-review-mode owns
+     the resolution and its validation at apply time. */ -}}
+{{- $coderabbit := dig "coderabbit" dict . }}
+{{- if not (kindIs "map" $coderabbit) }}
+{{-   warnf "data.coderabbit is not a table; not re-emitting it" }}
+{{-   $coderabbit = dict }}
+{{- end }}
+{{- $coderabbitReviewLine := "" }}
+{{- if hasKey $coderabbit "review" }}
+{{-   $coderabbitReview := get $coderabbit "review" }}
+{{-   if kindIs "bool" $coderabbitReview }}
+{{-     $coderabbitReviewLine = printf "review = %t" $coderabbitReview }}
+{{-   else if kindIs "string" $coderabbitReview }}
+{{-     $coderabbitReviewLine = printf "review = %s" ($coderabbitReview | quote) }}
+{{-   else }}
+{{-     warnf "data.coderabbit.review must be true, false, \"lite\" or \"deep\"; dropping %#v" $coderabbitReview }}
+{{-   end }}
+{{- end }}
+{{- $coderabbitDeepReview := false }}
+{{- if hasKey $coderabbit "deepReview" }}
+{{-   $coderabbitDeepReviewValue := get $coderabbit "deepReview" }}
+{{-   if not (kindIs "bool" $coderabbitDeepReviewValue) }}
+{{-     warnf "data.coderabbit.deepReview must be true or false; dropping %#v" $coderabbitDeepReviewValue }}
+{{-   else if $coderabbitDeepReviewValue }}
+{{-     $coderabbitDeepReview = true }}
+{{-   end }}
+{{- end }}
+{{- if or $coderabbitReviewLine $coderabbitDeepReview }}
 
 [data.coderabbit]
+{{- with $coderabbitReviewLine }}
+{{ . }}
+{{- end }}
+{{- if $coderabbitDeepReview }}
 deepReview = true
+{{- end }}
 {{- end }}
 
 [data.secret]
@@ -226,3 +261,11 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # docs/chezmoi-toml-reference.md#zellij-web-datazellij-datazellijweb and
 # the "Zellij Web" section of README.md -- full schema, example, and
 # autostart/tailscale deployment steps for each OS.
+#
+# CodeRabbit critique delegate ([data.coderabbit]):
+# docs/chezmoi-toml-reference.md#coderabbit-review-datacoderabbit and
+# docs/coderabbit-deep-review.md. Off by default: review = true, "lite" or
+# "deep" deploys the coderabbit-critique launchers and wires them as the
+# user-global critiqueLoop.delegate; "deep" also sets
+# CODERABBIT_CRITIQUE_DEEP=1 in the shell profiles. deepReview is a
+# deprecated alias for review = "deep".
