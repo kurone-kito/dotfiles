@@ -39,11 +39,12 @@ and is rendered in every mode.
 
 ## Disable it
 
-Set `review = false` or remove the key, run `chezmoi apply`, and start a new
-shell. The next apply renders `~/.config/idd-skill/config.json` without the
-delegate and the profiles without the assignment. If
-`CODERABBIT_CRITIQUE_DEEP` is still set in the parent shell, including by a
-previous profile, also run `unset CODERABBIT_CRITIQUE_DEEP` in POSIX shells or
+Set `review = false` (it wins over the deprecated `deepReview`) or remove both
+`review` and `deepReview`, run `chezmoi apply`, and start a new shell. The next
+apply renders `~/.config/idd-skill/config.json` without the delegate and the
+profiles without the assignment. If `CODERABBIT_CRITIQUE_DEEP` is still set in
+the parent shell, including by a previous profile, also run
+`unset CODERABBIT_CRITIQUE_DEEP` in POSIX shells or
 `Remove-Item Env:CODERABBIT_CRITIQUE_DEEP` in PowerShell before starting the
 new shell. The same applies when you switch from `"deep"` to `"lite"`.
 
