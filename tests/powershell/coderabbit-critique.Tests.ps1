@@ -139,6 +139,7 @@ Describe 'coderabbit-critique' {
       'Resolve-DotfilesCoderabbitBaseBranch'
       'ConvertTo-DotfilesWindowsQuotedArgument'
       'ConvertTo-DotfilesQuotedArgumentString'
+      'Stop-DotfilesProcessTree'
       'Start-DotfilesProcessWithTimeout'
       'Invoke-DotfilesCoderabbitReviewWithTimeout'
       'Test-DotfilesActionRequiredType'
@@ -479,6 +480,85 @@ Describe 'coderabbit-critique' {
       $result.Stdout | Should -Not -Match 'stderr-marker-text'
       $result.Stderr | Should -Match 'stderr-marker-text'
       $result.Stderr | Should -Not -Match 'stdout-marker-text'
+    }
+
+    # Process.Kill() ends only the process it is called on, so a timed-out run
+    # used to leave whatever it had started running until that ended on its
+    # own. A grandchild that outlives its parent is the case that tells the
+    # two apart. Kill is asynchronous, hence the poll.
+    It 'ends a grandchild as well when the timeout expires (Unix)' -Skip:($IsWindows -ne $false) {
+      $pidFile = Join-Path $TestDrive 'grandchild.pid'
+      $grandchildId = 0
+      try {
+        $result = Start-DotfilesProcessWithTimeout -FilePath 'sh' `
+          -ArgumentList @('-c', 'sleep 4747 & echo $! > "$1"; wait', 'sh', $pidFile) `
+          -TimeoutSeconds 3
+
+        $result.TimedOut | Should -BeTrue
+        $pidFile | Should -Exist
+        $grandchildId = [int](Get-Content -LiteralPath $pidFile -Raw).Trim()
+
+        # A zombie still passes `kill -0`, so read the state: empty or Z is gone.
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        $alive = $true
+        while ($alive -and [DateTime]::UtcNow -lt $deadline) {
+          $state = ((& ps -o stat= -p $grandchildId 2>$null) -join '').Trim()
+          $alive = $state -and -not $state.StartsWith('Z')
+          if ($alive) { Start-Sleep -Milliseconds 100 }
+        }
+        $alive | Should -BeFalse -Because "grandchild $grandchildId outlived the timeout"
+      } finally {
+        if ($grandchildId -gt 0) {
+          Stop-Process -Id $grandchildId -Force -ErrorAction SilentlyContinue
+        }
+      }
+    }
+
+    # The same shape on Windows: pwsh.exe/powershell.exe starts ping.exe and
+    # records its PID. PowerShell 7 takes the Kill($true) path and Windows
+    # PowerShell 5.1 the taskkill one. The PID file path travels in an
+    # environment variable so the command string needs no quoting.
+    It 'ends a grandchild as well when the timeout expires (Windows)' -Skip:($IsWindows -eq $false) {
+      $pidFile = Join-Path $TestDrive 'grandchild.pid'
+      $previousPidFile = $env:DOTFILES_TEST_GRANDCHILD_PID_FILE
+      $grandchildId = 0
+      try {
+        $env:DOTFILES_TEST_GRANDCHILD_PID_FILE = $pidFile
+        $command = '$psi = [Diagnostics.ProcessStartInfo]::new(''ping.exe'', ''-n 60 127.0.0.1''); ' +
+          '$psi.UseShellExecute = $false; $psi.CreateNoWindow = $true; $psi.RedirectStandardOutput = $true; ' +
+          '$child = [Diagnostics.Process]::Start($psi); ' +
+          '[IO.File]::WriteAllText($env:DOTFILES_TEST_GRANDCHILD_PID_FILE, [string]$child.Id); ' +
+          'Start-Sleep -Seconds 60'
+        $result = Start-DotfilesProcessWithTimeout -FilePath $script:PwshPath `
+          -ArgumentList @('-NoProfile', '-Command', $command) `
+          -TimeoutSeconds 8
+
+        $result.TimedOut | Should -BeTrue
+        $pidFile | Should -Exist
+        $grandchildId = [int](Get-Content -LiteralPath $pidFile -Raw).Trim()
+
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        $alive = $true
+        while ($alive -and [DateTime]::UtcNow -lt $deadline) {
+          $process = Get-Process -Id $grandchildId -ErrorAction SilentlyContinue
+          $alive = $null -ne $process -and -not $process.HasExited
+          if ($alive) { Start-Sleep -Milliseconds 100 }
+        }
+        $alive | Should -BeFalse -Because "grandchild $grandchildId outlived the timeout"
+      } finally {
+        $env:DOTFILES_TEST_GRANDCHILD_PID_FILE = $previousPidFile
+        if ($grandchildId -gt 0) {
+          Stop-Process -Id $grandchildId -Force -ErrorAction SilentlyContinue
+        }
+      }
+    }
+
+    It 'does not throw when asked to stop a process that has already exited' {
+      $process = [Diagnostics.Process]::Start(
+        [Diagnostics.ProcessStartInfo]::new($script:PwshPath, '-NoProfile -Command "exit 0"'))
+      $process.WaitForExit()
+
+      { Stop-DotfilesProcessTree -Process $process } | Should -Not -Throw
     }
   }
 

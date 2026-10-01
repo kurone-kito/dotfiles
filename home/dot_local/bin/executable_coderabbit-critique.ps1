@@ -293,12 +293,55 @@ function global:ConvertTo-DotfilesQuotedArgumentString {
     }) -join ' '
 }
 
+# Ends a process and every descendant it started, so a timed-out CodeRabbit
+# run cannot leave its CLI (or the node process behind an npm .cmd shim)
+# running, as the Bash twin's isolated session or members sweep ensures.
+# [Process]::Kill($true) (entireProcessTree) exists on .NET Core and .NET 5+,
+# which is PowerShell 7; Windows PowerShell 5.1 on .NET Framework only has
+# Kill(), which ends the one process, so taskkill.exe /T /F does the tree
+# there. This is a hard kill, where the Bash twin sends TERM first. Best
+# effort throughout: each step swallows its own failure, and a plain Kill()
+# stays reachable when the tree kill did not run or failed. Kill is
+# asynchronous and HasExited describes only the root, so a caller that cares
+# whether a descendant is gone must poll.
+function global:Stop-DotfilesProcessTree {
+  param([Parameter(Mandatory)] [Diagnostics.Process] $Process)
+
+  $treeEnded = $false
+  try {
+    if ([Diagnostics.Process].GetMethod('Kill', [type[]]@([bool]))) {
+      $Process.Kill($true)
+      $treeEnded = $true
+    }
+  } catch [System.Exception] {}
+
+  if (-not $treeEnded -and $IsWindows -ne $false) {
+    # A redirected native stderr can surface as a terminating error under
+    # $ErrorActionPreference = 'Stop' in Windows PowerShell 5.1, and taskkill
+    # writes to stderr when the process is already gone, so relax it for this
+    # one call and leave the plain Kill() below reachable.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      & (Join-Path ([Environment]::SystemDirectory) 'taskkill.exe') /PID $Process.Id /T /F *>$null
+    } catch [System.Exception] {
+    } finally {
+      $ErrorActionPreference = $previousPreference
+    }
+  }
+
+  try {
+    if (-not $Process.HasExited) { $Process.Kill() }
+  } catch [System.Exception] {}
+}
+
 # Generic bounded-execution primitive, factored out of
 # Invoke-DotfilesCoderabbitReviewWithTimeout so it can be unit-tested with
 # an arbitrary real target (e.g. pwsh itself) instead of only via coderabbit
 # -- [Diagnostics.Process]::Start() launches a real OS process and bypasses
 # PowerShell function-shadowing, unlike the `&` call operator used
-# elsewhere in this script.
+# elsewhere in this script. On a timeout the whole process tree is ended,
+# not only the process this started.
 function global:Start-DotfilesProcessWithTimeout {
   param(
     [Parameter(Mandatory)] [string] $FilePath,
@@ -322,7 +365,7 @@ function global:Start-DotfilesProcessWithTimeout {
   $stderrTask = $proc.StandardError.ReadToEndAsync()
 
   if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
-    try { $proc.Kill() } catch [System.Exception] {}
+    Stop-DotfilesProcessTree -Process $proc
     return [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
   }
 
