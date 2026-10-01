@@ -478,5 +478,8 @@ primary reviewer-side reference.
   started, by a recorded PID (`$!`, a PID file) or a recorded process
   group; walking the children of a recorded PID with `pgrep -P` is
   fine. A name or pattern can match your own command line and other
-  sessions' processes on a shared host. Put the same instruction in the
-  prompts you hand to critique and review subagents.
+  sessions' processes on a shared host. The one exception is the signing
+  ladder's bounded `gpgconf --kill gpg-agent` step, which asks the
+  daemon to stop through `gpgconf` rather than through the process
+  table. Put this rule in the prompts you hand to critique and review
+  subagents.

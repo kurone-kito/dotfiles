@@ -20,8 +20,8 @@ immediately, without depending on a redirect.
 - End only the processes you started, by a recorded PID or process
   group, never by name or pattern (`pkill`, `killall`), and put the
   same rule in the prompts you hand to critique and review subagents
-  (reason and `pgrep -P` allowance: Guardrails in
-  `.github/copilot-instructions.md`).
+  (reason, the `gpgconf` exception and the `pgrep -P` allowance: see
+  Guardrails in `.github/copilot-instructions.md`).
 
 ## Project standards
 
