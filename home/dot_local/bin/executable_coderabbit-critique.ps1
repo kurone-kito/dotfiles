@@ -112,8 +112,11 @@ function global:Get-DotfilesCoderabbitCommand {
 # Returns a fallback reason, or $null when stdout is one JSON object whose
 # authenticated property is boolean true. A single-element JSON array is
 # rejected before ConvertFrom-Json: that cmdlet unwraps it into a
-# PSCustomObject, which would otherwise look like a real object. No
-# -ErrorAction on ConvertFrom-Json: Windows PowerShell 5.1 rejects it.
+# PSCustomObject, which would otherwise look like a real object.
+# ConvertFrom-Json reports invalid JSON as an error that the catch below
+# handles (this script runs with $ErrorActionPreference = 'Stop'), so no
+# -ErrorAction is needed on it here. Windows PowerShell 5.1 does accept
+# -ErrorAction on this cmdlet; Test-DotfilesActionRequiredType passes it.
 function global:Resolve-DotfilesCoderabbitAuthFailure {
   param(
     [Parameter(Mandatory)] [bool] $TimedOut,
