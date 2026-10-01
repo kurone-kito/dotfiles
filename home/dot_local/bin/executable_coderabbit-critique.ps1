@@ -113,10 +113,10 @@ function global:Get-DotfilesCoderabbitCommand {
 # authenticated property is boolean true. A single-element JSON array is
 # rejected before ConvertFrom-Json: that cmdlet unwraps it into a
 # PSCustomObject, which would otherwise look like a real object.
-# ConvertFrom-Json reports invalid JSON as an error that the catch below
-# handles (this script runs with $ErrorActionPreference = 'Stop'), so no
-# -ErrorAction is needed on it here. Windows PowerShell 5.1 does accept
-# -ErrorAction on this cmdlet; Test-DotfilesActionRequiredType passes it.
+# ConvertFrom-Json reports invalid JSON as a terminating error, which the
+# catch below handles, so no -ErrorAction is needed on it here. Windows
+# PowerShell 5.1 does accept -ErrorAction on this cmdlet;
+# Test-DotfilesActionRequiredType passes it.
 function global:Resolve-DotfilesCoderabbitAuthFailure {
   param(
     [Parameter(Mandatory)] [bool] $TimedOut,
@@ -299,10 +299,10 @@ function global:ConvertTo-DotfilesQuotedArgumentString {
 # Ends a process and every descendant it started, so a timed-out CodeRabbit
 # run cannot leave its CLI (or the node process behind an npm .cmd shim)
 # running, as the Bash twin's isolated session or members sweep ensures.
-# [Process]::Kill($true) (entireProcessTree) exists on .NET Core and .NET 5+,
-# which is PowerShell 7; Windows PowerShell 5.1 on .NET Framework only has
-# Kill(), which ends the one process, so taskkill.exe /T /F does the tree
-# there. This is a hard kill, where the Bash twin sends TERM first. Best
+# [Process]::Kill($true) (entireProcessTree) exists on .NET Core 3.0+ and
+# .NET 5+, which is PowerShell 7; Windows PowerShell 5.1 on .NET Framework
+# only has Kill(), which ends the one process, so taskkill.exe /T /F does the
+# tree there. This is a hard kill, where the Bash twin sends TERM first. Best
 # effort throughout: each step swallows its own failure, and a plain Kill()
 # stays reachable when the tree kill did not run or failed. Kill is
 # asynchronous and HasExited describes only the root, so a caller that cares
@@ -318,11 +318,17 @@ function global:Stop-DotfilesProcessTree {
     }
   } catch [System.Exception] {}
 
-  if (-not $treeEnded -and $IsWindows -ne $false) {
+  # taskkill takes a bare PID, which Windows can reuse once the process has
+  # exited, and it finds descendants through a live parent, so only run it
+  # while the root is still running. The plain Kill() below uses a handle.
+  $rootRunning = $false
+  try { $rootRunning = -not $Process.HasExited } catch [System.Exception] {}
+
+  if (-not $treeEnded -and $rootRunning -and $IsWindows -ne $false) {
     # A redirected native stderr can surface as a terminating error under
-    # $ErrorActionPreference = 'Stop' in Windows PowerShell 5.1, and taskkill
-    # writes to stderr when the process is already gone, so relax it for this
-    # one call and leave the plain Kill() below reachable.
+    # $ErrorActionPreference = 'Stop' in Windows PowerShell 5.1 and abort the
+    # call part-way, and taskkill writes to stderr when it finds nothing to
+    # kill, so relax the preference for this one call.
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {

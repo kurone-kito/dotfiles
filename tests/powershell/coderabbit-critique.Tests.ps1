@@ -496,7 +496,9 @@ Describe 'coderabbit-critique' {
 
         $result.TimedOut | Should -BeTrue
         $pidFile | Should -Exist
-        $grandchildId = [int](Get-Content -LiteralPath $pidFile -Raw).Trim()
+        $pidText = (Get-Content -LiteralPath $pidFile -Raw).Trim()
+        $pidText | Should -Not -BeNullOrEmpty
+        $grandchildId = [int]$pidText
 
         # A zombie still passes `kill -0`, so read the state: empty or Z is gone.
         $deadline = [DateTime]::UtcNow.AddSeconds(5)
@@ -508,6 +510,11 @@ Describe 'coderabbit-critique' {
         }
         $alive | Should -BeFalse -Because "grandchild $grandchildId outlived the timeout"
       } finally {
+        # An earlier assertion can fail before the PID is read; do not leave
+        # the sleeper running for the rest of its 79 minutes then.
+        if ($grandchildId -eq 0 -and (Test-Path -LiteralPath $pidFile)) {
+          $grandchildId = [int]((Get-Content -LiteralPath $pidFile -Raw).Trim())
+        }
         if ($grandchildId -gt 0) {
           Stop-Process -Id $grandchildId -Force -ErrorAction SilentlyContinue
         }
@@ -554,8 +561,12 @@ Describe 'coderabbit-critique' {
     }
 
     It 'does not throw when asked to stop a process that has already exited' {
-      $process = [Diagnostics.Process]::Start(
-        [Diagnostics.ProcessStartInfo]::new($script:PwshPath, '-NoProfile -Command "exit 0"'))
+      # UseShellExecute defaults to true on .NET Framework, so set it, as the
+      # primitive does for every process it starts.
+      $psi = [Diagnostics.ProcessStartInfo]::new($script:PwshPath, '-NoProfile -Command "exit 0"')
+      $psi.UseShellExecute = $false
+      $psi.CreateNoWindow = $true
+      $process = [Diagnostics.Process]::Start($psi)
       $process.WaitForExit()
 
       { Stop-DotfilesProcessTree -Process $process } | Should -Not -Throw
