@@ -280,8 +280,20 @@ ROWS
 
   assert_success
   assert_equal "$(printf '%s\n' "$output" | grep -c '^\[data\.coderabbit\]$')" 1
-  assert_output --partial 'review = false'
-  assert_output --partial 'deepReview = true'
+  # The header and both assignments sit on their own lines, in this order: the
+  # trim markers around the conditionals must not join them.
+  assert_equal "$(printf '%s\n' "$output" | grep -A2 -x '\[data\.coderabbit\]')" \
+    "$(printf '%s\n' '[data.coderabbit]' 'review = false' 'deepReview = true')"
+}
+
+@test "the configuration template puts the header and a lone review on separate lines" {
+  _write_config '{"review": "deep"}'
+
+  run --separate-stderr _render_config
+
+  assert_success
+  assert_equal "$(printf '%s\n' "$output" | grep -A1 -x '\[data\.coderabbit\]')" \
+    "$(printf '%s\n' '[data.coderabbit]' 'review = "deep"')"
 }
 
 # Re-parse the emitted TOML the way the next `chezmoi apply` would, and

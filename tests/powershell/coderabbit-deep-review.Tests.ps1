@@ -235,6 +235,22 @@ Describe 'CodeRabbit configuration template' -Skip:(-not $script:HasChezmoi) {
     }
   }
 
+  It 'puts the header and each assignment on separate lines' {
+    $both = Invoke-Render -TemplatePath $script:ConfigTemplate -CoderabbitJson '{"review": false, "deepReview": true}' -Init
+    $both.ExitCode | Should -Be 0
+    $lines = @($both.Output -split "`n")
+    $at = [array]::IndexOf($lines, '[data.coderabbit]')
+    $at | Should -BeGreaterOrEqual 0
+    @($lines[$at], $lines[$at + 1], $lines[$at + 2]) | Should -Be @('[data.coderabbit]', 'review = false', 'deepReview = true')
+
+    $lone = Invoke-Render -TemplatePath $script:ConfigTemplate -CoderabbitJson '{"review": "deep"}' -Init
+    $lone.ExitCode | Should -Be 0
+    $lines = @($lone.Output -split "`n")
+    $at = [array]::IndexOf($lines, '[data.coderabbit]')
+    $at | Should -BeGreaterOrEqual 0
+    @($lines[$at], $lines[$at + 1]) | Should -Be @('[data.coderabbit]', 'review = "deep"')
+  }
+
   It 'resolves the emitted configuration to the input mode for <Json>' -ForEach @(
     @{ Json = '{"review": true}' }
     @{ Json = '{"review": false}' }
