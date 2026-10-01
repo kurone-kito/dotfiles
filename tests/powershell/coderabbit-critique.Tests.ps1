@@ -554,6 +554,11 @@ Describe 'coderabbit-critique' {
         $alive | Should -BeFalse -Because "grandchild $grandchildId outlived the timeout"
       } finally {
         $env:DOTFILES_TEST_GRANDCHILD_PID_FILE = $previousPidFile
+        # An earlier assertion can fail before the PID is read; do not leave
+        # the ping running for the rest of its 60 seconds then.
+        if ($grandchildId -eq 0 -and (Test-Path -LiteralPath $pidFile)) {
+          $grandchildId = [int]((Get-Content -LiteralPath $pidFile -Raw).Trim())
+        }
         if ($grandchildId -gt 0) {
           Stop-Process -Id $grandchildId -Force -ErrorAction SilentlyContinue
         }
