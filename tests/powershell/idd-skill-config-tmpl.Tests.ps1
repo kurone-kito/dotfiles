@@ -65,10 +65,20 @@ BeforeAll {
       if ($PathOverride) {
         $env:PATH = $PathOverride
       }
-      $output = & $ChezmoiPath execute-template --file $script:TemplatePath `
-        --config $configFile --config-format json `
-        --override-data-file $overrideDataFile `
-        --source $script:RepoHome --destination $dest 2>&1
+      # Windows PowerShell 5.1 wraps a native process's redirected stderr
+      # lines as ErrorRecord objects, and GitHub Actions' powershell shell
+      # steps default $ErrorActionPreference to Stop, which would turn the
+      # expected stderr of an invalid-review render into a terminating error
+      # before ExitCode is captured. Scoped to a child scriptblock so the
+      # override never leaks past this one native-command capture (same fix
+      # as signing-resolve.Tests.ps1's Invoke-Render).
+      $output = & {
+        $ErrorActionPreference = 'Continue'
+        & $ChezmoiPath execute-template --file $script:TemplatePath `
+          --config $configFile --config-format json `
+          --override-data-file $overrideDataFile `
+          --source $script:RepoHome --destination $dest 2>&1
+      }
       [pscustomobject]@{
         ExitCode = $LASTEXITCODE
         Output   = ($output -join "`n")
