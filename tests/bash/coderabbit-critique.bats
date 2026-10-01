@@ -1798,7 +1798,7 @@ exit 1
     probe_status=$?
   fi
 
-  assert_equal "$probe_status" "$probe_expected"
+  assert_equal "$probe_expected" "$probe_status"
   run find "$TMPDIR" -name 'coderabbit-critique-auth.*'
   assert_output ""
   # shellcheck disable=SC2046 # the file holds exactly two PIDs, one per line
