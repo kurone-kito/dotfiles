@@ -112,8 +112,11 @@ function global:Get-DotfilesCoderabbitCommand {
 # Returns a fallback reason, or $null when stdout is one JSON object whose
 # authenticated property is boolean true. A single-element JSON array is
 # rejected before ConvertFrom-Json: that cmdlet unwraps it into a
-# PSCustomObject, which would otherwise look like a real object. No
-# -ErrorAction on ConvertFrom-Json: Windows PowerShell 5.1 rejects it.
+# PSCustomObject, which would otherwise look like a real object.
+# ConvertFrom-Json reports invalid JSON as a terminating error, which the
+# catch below handles, so no -ErrorAction is needed on it here. Windows
+# PowerShell 5.1 does accept -ErrorAction on this cmdlet;
+# Test-DotfilesActionRequiredType passes it.
 function global:Resolve-DotfilesCoderabbitAuthFailure {
   param(
     [Parameter(Mandatory)] [bool] $TimedOut,
@@ -293,12 +296,61 @@ function global:ConvertTo-DotfilesQuotedArgumentString {
     }) -join ' '
 }
 
+# Ends a process and every descendant it started, so a timed-out CodeRabbit
+# run cannot leave its CLI (or the node process behind an npm .cmd shim)
+# running, as the Bash twin's isolated session or members sweep ensures.
+# [Process]::Kill($true) (entireProcessTree) exists on .NET Core 3.0+ and
+# .NET 5+, which is PowerShell 7; Windows PowerShell 5.1 on .NET Framework
+# only has Kill(), which ends the one process, so taskkill.exe /T /F does the
+# tree there. This is a hard kill, where the Bash twin sends TERM first. Best
+# effort throughout: each step swallows its own failure, and a plain Kill()
+# stays reachable when the tree kill did not run or failed. Kill is
+# asynchronous and HasExited describes only the root, so a caller that cares
+# whether a descendant is gone must poll.
+function global:Stop-DotfilesProcessTree {
+  param([Parameter(Mandatory)] [Diagnostics.Process] $Process)
+
+  $treeEnded = $false
+  try {
+    if ([Diagnostics.Process].GetMethod('Kill', [type[]]@([bool]))) {
+      $Process.Kill($true)
+      $treeEnded = $true
+    }
+  } catch [System.Exception] {}
+
+  # taskkill takes a bare PID, which Windows can reuse once the process has
+  # exited, and it finds descendants through a live parent, so only run it
+  # while the root is still running. The plain Kill() below uses a handle.
+  $rootRunning = $false
+  try { $rootRunning = -not $Process.HasExited } catch [System.Exception] {}
+
+  if (-not $treeEnded -and $rootRunning -and $IsWindows -ne $false) {
+    # A redirected native stderr can surface as a terminating error under
+    # $ErrorActionPreference = 'Stop' in Windows PowerShell 5.1 and abort the
+    # call part-way, and taskkill writes to stderr when it finds nothing to
+    # kill, so relax the preference for this one call.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      & (Join-Path ([Environment]::SystemDirectory) 'taskkill.exe') /PID $Process.Id /T /F *>$null
+    } catch [System.Exception] {
+    } finally {
+      $ErrorActionPreference = $previousPreference
+    }
+  }
+
+  try {
+    if (-not $Process.HasExited) { $Process.Kill() }
+  } catch [System.Exception] {}
+}
+
 # Generic bounded-execution primitive, factored out of
 # Invoke-DotfilesCoderabbitReviewWithTimeout so it can be unit-tested with
 # an arbitrary real target (e.g. pwsh itself) instead of only via coderabbit
 # -- [Diagnostics.Process]::Start() launches a real OS process and bypasses
 # PowerShell function-shadowing, unlike the `&` call operator used
-# elsewhere in this script.
+# elsewhere in this script. On a timeout the whole process tree is ended,
+# not only the process this started.
 function global:Start-DotfilesProcessWithTimeout {
   param(
     [Parameter(Mandatory)] [string] $FilePath,
@@ -322,7 +374,7 @@ function global:Start-DotfilesProcessWithTimeout {
   $stderrTask = $proc.StandardError.ReadToEndAsync()
 
   if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
-    try { $proc.Kill() } catch [System.Exception] {}
+    Stop-DotfilesProcessTree -Process $proc
     return [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Stdout = ''; Stderr = '' }
   }
 
