@@ -17,6 +17,11 @@ immediately, without depending on a redirect.
   project's Conventional Commits rules and keep each commit atomic.
 - Do not modify community documents (`CODE_OF_CONDUCT*`,
   `CONTRIBUTING*`) without explicit approval.
+- End only the processes you started, by a recorded PID or process
+  group, never by name or pattern (`pkill`, `killall`), and put the
+  same rule in the prompts you hand to critique and review subagents
+  (reason and `pgrep -P` allowance: Guardrails in
+  `.github/copilot-instructions.md`).
 
 ## Project standards
 

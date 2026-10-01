@@ -473,3 +473,10 @@ primary reviewer-side reference.
 
 - **Do not** modify community documents (CODE_OF_CONDUCT, CONTRIBUTING)
   without explicit approval
+- **Do not** end processes by name or command-line pattern (`pkill`,
+  `killall`, `pgrep -f ... | xargs kill`). End only the processes you
+  started, by a recorded PID (`$!`, a PID file) or a recorded process
+  group; walking the children of a recorded PID with `pgrep -P` is
+  fine. A name or pattern can match your own command line and other
+  sessions' processes on a shared host. Put the same instruction in the
+  prompts you hand to critique and review subagents.
