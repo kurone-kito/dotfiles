@@ -1550,11 +1550,22 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
 if [ "$1" = "review" ]; then
+  sleeper=
+  # Ignoring further TERMs first makes the handler idempotent: the wrapper and
+  # timeout both deliver TERM, and a second one landing between the log write
+  # and the exit would otherwise log it twice. The handler is installed before
+  # the pid file appears, so the test only signals a review that is ready.
+  cleanup() {
+    trap "" TERM
+    kill "$sleeper" 2>/dev/null || true
+    echo term >> "$CODERABBIT_CRITIQUE_LOG"
+    exit 143
+  }
+  trap cleanup TERM
   sleep 30 &
-  review_pid=$!
-  printf "%s\\n" "$review_pid" > "$CODERABBIT_REVIEW_PID_FILE"
-  trap "kill $review_pid 2>/dev/null || true; echo term >> \"$CODERABBIT_CRITIQUE_LOG\"; exit 143" TERM
-  wait "$review_pid"
+  sleeper=$!
+  printf "%s\\n" "$sleeper" > "$CODERABBIT_REVIEW_PID_FILE"
+  wait "$sleeper"
 fi
 exit 1
 '
@@ -1576,10 +1587,16 @@ exit 1
 
   assert_equal 143 "$status"
   run grep -c '^term$' "$CODERABBIT_CRITIQUE_LOG"
-  # With setsid the review's isolated session receives TERM exactly once.
-  # Without it, GNU timeout's own group broadcast and the wrapper's sweep of
-  # that group can legitimately both reach the review, so require at least
-  # one delivery there rather than an exact count.
+  # The wrapper TERMs the timeout job's group itself and timeout forwards it
+  # again, and the supervisor's on_term has no once-guard, so it re-sends TERM
+  # to the review for each one it gets and the review can receive TERM more
+  # than once (the duplicate delivery described in "gives a cooperative review
+  # its cleanup grace when TERM reaches the supervisor twice"). The mock's
+  # handler ignores TERM first, so it logs once however many arrive, and it is
+  # installed before the pid file appears, so an early TERM cannot be missed.
+  # That makes the count exactly one with setsid. Without setsid the review
+  # shares timeout's own process group and which TERMs reach it depends on the
+  # host, so this stays an at-least-one check there.
   if command -v setsid >/dev/null 2>&1; then
     assert_output "1"
   else
