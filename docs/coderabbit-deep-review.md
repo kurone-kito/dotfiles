@@ -18,7 +18,8 @@ Add this section to `~/.config/chezmoi/chezmoi.toml`:
     [data.coderabbit]
     review = true   # false (default) | true | "lite" | "deep"
 
-`true` means `"lite"`. Then apply the configuration and start a new shell:
+`true` means `"lite"`. To select the longer deep-review depth instead, set
+`review = "deep"`. Then apply the configuration and start a new shell:
 
     chezmoi apply
 
@@ -44,7 +45,7 @@ delegate and the profiles without the assignment. If
 `CODERABBIT_CRITIQUE_DEEP` is still set in the parent shell, including by a
 previous profile, also run `unset CODERABBIT_CRITIQUE_DEEP` in POSIX shells or
 `Remove-Item Env:CODERABBIT_CRITIQUE_DEEP` in PowerShell before starting the
-new shell.
+new shell. The same applies when you switch from `"deep"` to `"lite"`.
 
 Launchers that an earlier apply already deployed are **not** removed
 automatically. Chezmoi only stops managing a path it now ignores, so delete
