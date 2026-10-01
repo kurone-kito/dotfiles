@@ -115,9 +115,9 @@ _require_zsh() {
 # Sources the profile under `zsh -f` in WSL mode and prints what the
 # caller's shell ends up with. zsh reports `no matches found` and stops a
 # sourced file at a glob that matches nothing, so the Windows-side
-# expansions must not run into it. The probe starts in $HOME: the
-# fingerprint walk goes from $PWD upward, and an empty conf.d directory in
-# any ancestor would print the same message from a different glob.
+# expansions must not run into it. The probe starts in $HOME so the
+# fingerprint walk, which goes from $PWD upward, begins at the scratch tree
+# and does not depend on the directory the suite was started from.
 # $1: the Windows-side users root
 _run_zsh_wsl_probe() {
   export DOTFILES_MISE_ASSUME_WSL=1
@@ -133,8 +133,8 @@ PROBE
 }
 
 # Fails when the profile stopped on an empty Windows-side glob. Only the
-# users root is matched, so an empty conf.d in an ancestor of the scratch
-# HOME (the fingerprint walk's own glob) is not blamed on these expansions.
+# users root is matched, so these tests blame nothing but those expansions;
+# the empty conf.d glob of the fingerprint walk has tests of its own below.
 _refute_zsh_glob_error() {
   case "$stderr" in
     *"no matches found: ${DOTFILES_MISE_WSL_USERS_ROOT}"*)
@@ -1281,9 +1281,8 @@ _source_and_call_helpers() {
 # and prints what it changed. The users root holds one account with both
 # Windows-side mise directories, as it had to before #533: zsh stops a
 # sourced file at a glob with no match. The probe starts in $HOME because
-# the fingerprint walk goes from $PWD up to /, and its own "$_confd"/*
-# glob fails the same way on an empty conf.d directory in any ancestor (a
-# case #533 did not cover).
+# the fingerprint walk goes from $PWD up to /, so the walk begins at the
+# scratch tree, whatever directory the suite was started from.
 # $1: sentinel (set to a marker value) or unset
 _run_zsh_scratch_probe() {
   local _root="$BATS_TEST_TMPDIR/zsh-users"
@@ -1340,6 +1339,135 @@ PROBE
 
   assert_success
   assert_output $'status=7\nchanged=[]'
+}
+
+# An existing but empty conf.d directory holds no config. The fingerprint
+# walk expands "$_confd"/* in every directory from $PWD up to /, and zsh would
+# report `no matches found` for it and fail the whole fingerprint, so the
+# hook-skip cache would never engage. Sources the profile under `zsh -f` in
+# WSL mode, then prints what the fingerprint did and calls the installed
+# wrapper once.
+# $1: the conf.d directory, created here (empty unless the test filled it)
+# $2: the directory to source from (default $HOME)
+_run_zsh_confd_probe() {
+  local _start=${2:-$HOME}
+  _setup_wsl_first_startup
+  mkdir -p "$1" "$_start"
+  cat > "$BATS_TEST_TMPDIR/zsh-confd-probe.zsh" << 'PROBE'
+cd "$2" || exit 1
+source "$1"
+fp=$(_dotfiles_mise_config_fingerprint)
+print "fingerprint_status=$?"
+[[ -n $fp ]] && print fingerprint=non-empty || print fingerprint=empty
+print -r -- "fingerprint_value=$fp"
+_mise_hook
+PROBE
+  run --separate-stderr zsh -f "$BATS_TEST_TMPDIR/zsh-confd-probe.zsh" \
+    "$SCRIPT_PATH" "$_start"
+}
+
+# Reads $stderr and the output lines before anything else: `run` in
+# _count_log replaces them.
+_assert_zsh_empty_confd_survives() {
+  case "$stderr" in
+    *"no matches found"*)
+      fail "zsh stopped on an empty conf.d glob: $stderr" ;;
+  esac
+  assert_success
+  assert_line "fingerprint_status=0"
+  assert_line "fingerprint=non-empty"
+  # The fingerprint recorded at startup is still current, so the wrapper
+  # skips the original hook instead of reaching mise's own.
+  run _count_log '^hook '
+  assert_success
+  assert_output "0"
+}
+
+@test "zsh, WSL: an empty .config/mise/conf.d does not break the fingerprint" {
+  _require_zsh
+
+  _run_zsh_confd_probe "$HOME/.config/mise/conf.d"
+
+  _assert_zsh_empty_confd_survives
+}
+
+@test "zsh, WSL: an empty mise/conf.d does not break the fingerprint" {
+  _require_zsh
+
+  _run_zsh_confd_probe "$HOME/mise/conf.d"
+
+  _assert_zsh_empty_confd_survives
+}
+
+@test "zsh, WSL: an empty .mise/conf.d does not break the fingerprint" {
+  _require_zsh
+
+  _run_zsh_confd_probe "$HOME/.mise/conf.d"
+
+  _assert_zsh_empty_confd_survives
+}
+
+# The walk reaches every ancestor of the working directory, not only $HOME.
+@test "zsh, WSL: an empty conf.d in an ancestor does not break the fingerprint" {
+  _require_zsh
+
+  _run_zsh_confd_probe "$HOME/a/.config/mise/conf.d" "$HOME/a/b"
+
+  _assert_zsh_empty_confd_survives
+}
+
+# bash keeps an unmatched glob as text, which the walk rejects as not a file,
+# so an empty conf.d changes nothing there. This passes without the zsh fix
+# and pins that the fix leaves bash alone.
+@test "bash, WSL: an empty conf.d leaves the fingerprint unchanged" {
+  _setup_wsl_first_startup
+  cd "$HOME" || return 1
+  _source_script
+
+  _before=$(_dotfiles_mise_config_fingerprint)
+  mkdir -p "$HOME/.config/mise/conf.d"
+  _after=$(_dotfiles_mise_config_fingerprint)
+
+  assert [ -n "$_before" ]
+  assert_equal "$_after" "$_before"
+}
+
+# Both shells hash the same files in the same order, so they agree. The tree
+# holds an empty conf.d only: with several files in one conf.d, glob order can
+# differ between shells.
+@test "bash and zsh, WSL: an empty conf.d gives both shells the same fingerprint" {
+  _require_zsh
+
+  _run_zsh_confd_probe "$HOME/.config/mise/conf.d"
+  _zsh_fp=$(printf '%s\n' "$output" | sed -n 's/^fingerprint_value=//p')
+  _assert_zsh_empty_confd_survives
+
+  cd "$HOME" || return 1
+  _source_script
+  _bash_fp=$(_dotfiles_mise_config_fingerprint)
+
+  assert [ -n "$_zsh_fp" ]
+  assert_equal "$_bash_fp" "$_zsh_fp"
+}
+
+# The null_glob guard must not make zsh skip real files: a conf.d holding one
+# config still counts, and counts the same in both shells. One file only,
+# since glob order can differ between the shells.
+@test "bash and zsh, WSL: a conf.d with one config is fingerprinted alike" {
+  _require_zsh
+  _setup_wsl_first_startup
+  cd "$HOME" || return 1
+  mkdir -p "$HOME/.config/mise/conf.d"
+  _source_script
+  _empty_fp=$(_dotfiles_mise_config_fingerprint)
+  printf '%s\n' 'node = "22"' > "$HOME/.config/mise/conf.d/extra.toml"
+  _bash_fp=$(_dotfiles_mise_config_fingerprint)
+
+  _run_zsh_confd_probe "$HOME/.config/mise/conf.d"
+  _zsh_fp=$(printf '%s\n' "$output" | sed -n 's/^fingerprint_value=//p')
+
+  assert [ "$_bash_fp" != "$_empty_fp" ]
+  assert_equal "$_zsh_fp" "$_bash_fp"
 }
 
 # Declaring and assigning on one line (local _out=$(...)) would replace
