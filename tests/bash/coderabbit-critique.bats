@@ -811,14 +811,14 @@ EOF
 @test "cleans an earlier auth temp directory when a later mktemp fails" {
   make_git_call_recorder
   # The auth probe is the only timeout call before the later mktemp fails.
-  # Its ninth and tenth arguments are the stdout and done paths it hands to
-  # `sh -c`; record them so the test can pin that both live inside the
-  # private directory rather than beside it.
+  # Its last two arguments are the stdout and done paths it hands to `sh -c`
+  # (the supervisor's own arguments come first); record every argument so the
+  # test can pin that both live inside the private directory rather than
+  # beside it.
   probe_paths="$BATS_TEST_TMPDIR/probe.paths"
   export CODERABBIT_PROBE_PATHS="$probe_paths"
   make_mock_timeout timeout '
-printf "%s\n" "$9" >> "$CODERABBIT_PROBE_PATHS"
-printf "%s\n" "${10}" >> "$CODERABBIT_PROBE_PATHS"
+printf "%s\n" "$@" >> "$CODERABBIT_PROBE_PATHS"
 shift 4
 exec "$@"
 '
@@ -870,8 +870,8 @@ exit 1
   assert_stderr --partial "mktemp failed"
   assert_fallback_reason mktemp-failed
   assert_equal "$(cut -d' ' -f1 "$mktemp_first_args")" "-d"
-  assert_equal "$(dirname "$(sed -n 1p "$probe_paths")")" "$allocated_temp"
-  assert_equal "$(dirname "$(sed -n 2p "$probe_paths")")" "$allocated_temp"
+  assert_equal "$(dirname "$(tail -n 2 "$probe_paths" | sed -n 1p)")" "$allocated_temp"
+  assert_equal "$(dirname "$(tail -n 1 "$probe_paths")")" "$allocated_temp"
   assert [ ! -e "$allocated_temp" ]
   assert_no_git_calls
 }
@@ -1743,6 +1743,139 @@ exit 1
   assert_equal 131 "$status"
   review_pid=$(cat "$review_pid_file")
   wait_until 10 "the review process to exit" process_is_gone "$review_pid"
+}
+
+# Signals the wrapper while its `coderabbit auth status --agent` probe hangs,
+# then checks the three things a cancelled probe must leave behind: the signal's
+# exit status, no private directory in TMPDIR, and no live probe process (the
+# mock and the sleeper it started). The probe is a background job that runs
+# through the review supervisor, so the handler fires at once and stops the
+# probe's whole process tree. The script is launched through its own shebang,
+# which is dash on Debian and Ubuntu and so on the CI runners, and through bash
+# and an explicit dash when they exist, since a shell's trap and exit
+# behaviour differs between them. The probe's timeout is set to 30 s and the
+# sleeper is bounded to 45 s, so a failing run leaves nothing behind for long.
+# $1 signal name, $2 expected exit status, $3 how to launch the script
+# (shebang, bash or dash).
+run_probe_cancellation() {
+  probe_signal="$1"
+  probe_expected="$2"
+  probe_runner="$3"
+  probe_tag="${probe_signal}-${probe_runner}"
+
+  case "$probe_runner" in
+    bash) probe_launch=(bash "$SCRIPT") ;;
+    dash) probe_launch=(dash "$SCRIPT") ;;
+    *) probe_launch=("$SCRIPT") ;;
+  esac
+  probe_pid_file="$BATS_TEST_TMPDIR/probe-$probe_tag.pids"
+  export CODERABBIT_PROBE_PID_FILE="$probe_pid_file"
+  export TMPDIR="$BATS_TEST_TMPDIR/tmp-$probe_tag"
+  mkdir -p "$TMPDIR"
+  export CODERABBIT_CRITIQUE_TIMEOUT=30
+  export CODERABBIT_CRITIQUE_BASE=master
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  sleep 45 &
+  printf "%s\\n%s\\n" "$$" "$!" > "$CODERABBIT_PROBE_PID_FILE"
+  wait
+fi
+exit 1
+'
+  case "$probe_signal" in
+    INT | QUIT | HUP)
+      probe_launch=("$(command -v perl)" -e "\$SIG{$probe_signal} = \"DEFAULT\"; exec @ARGV" "${probe_launch[@]}")
+      ;;
+  esac
+  start_wrapper_job "$BATS_TEST_TMPDIR/probe-$probe_tag.stdout" "$BATS_TEST_TMPDIR/probe-$probe_tag.stderr" \
+    "${probe_launch[@]}"
+  wait_for_file "$probe_pid_file" 10 "the probe to record its PIDs"
+
+  kill -"$probe_signal" "$script_pid"
+  if wait "$script_pid"; then
+    probe_status=0
+  else
+    probe_status=$?
+  fi
+
+  assert_equal "$probe_status" "$probe_expected"
+  run find "$TMPDIR" -name 'coderabbit-critique-auth.*'
+  assert_output ""
+  # shellcheck disable=SC2046 # the file holds exactly two PIDs, one per line
+  wait_until 5 "the probe and its sleeper to exit" all_processes_gone $(cat "$probe_pid_file")
+}
+
+# The launchers the cancellation tests run through, one per line.
+probe_runners() {
+  printf '%s\n' shebang
+  command -v bash >/dev/null 2>&1 && printf '%s\n' bash
+  command -v dash >/dev/null 2>&1 && printf '%s\n' dash
+  return 0
+}
+
+@test "stops a hung auth probe and removes its directory on TERM" {
+  if ! require_compatible_host_timer; then skip "requires GNU timeout or gtimeout"; fi
+  make_git_call_recorder
+  for runner in $(probe_runners); do run_probe_cancellation TERM 143 "$runner"; done
+}
+
+@test "stops a hung auth probe and removes its directory on HUP" {
+  if ! command -v perl >/dev/null 2>&1; then skip "requires perl to reset inherited SIGHUP disposition"; fi
+  if ! require_compatible_host_timer; then skip "requires GNU timeout or gtimeout"; fi
+  make_git_call_recorder
+  for runner in $(probe_runners); do run_probe_cancellation HUP 129 "$runner"; done
+}
+
+@test "stops a hung auth probe and removes its directory on INT" {
+  if ! command -v perl >/dev/null 2>&1; then skip "requires perl to reset inherited SIGINT disposition"; fi
+  if ! require_compatible_host_timer; then skip "requires GNU timeout or gtimeout"; fi
+  make_git_call_recorder
+  for runner in $(probe_runners); do run_probe_cancellation INT 130 "$runner"; done
+}
+
+@test "stops a hung auth probe and removes its directory on QUIT" {
+  if ! command -v perl >/dev/null 2>&1; then skip "requires perl to reset inherited SIGQUIT disposition"; fi
+  if ! require_compatible_host_timer; then skip "requires GNU timeout or gtimeout"; fi
+  make_git_call_recorder
+  for runner in $(probe_runners); do run_probe_cancellation QUIT 131 "$runner"; done
+}
+
+# The probe now runs through the review supervisor, which refuses a `timeout`
+# that did not give it a process group of its own. That is not the probe running
+# out of time, so it is reported the way the review path reports it.
+@test "reports a timeout that cannot isolate the auth probe as review-failed, not auth-timeout" {
+  make_git_call_recorder
+  # A timeout that only forwards the command: no process group of its own.
+  make_mock timeout '
+if [ "$1" = "--help" ]; then
+  printf -- "--kill-after --preserve-status\n"
+  exit 0
+fi
+shift 4
+exec "$@"
+'
+  make_mock coderabbit '
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  echo "{\"authenticated\":true}"
+  exit 0
+fi
+exit 1
+'
+  export CODERABBIT_CRITIQUE_BASE=master
+  export TMPDIR="$BATS_TEST_TMPDIR"
+  for command in awk cat date jq mkdir mktemp ps rm sh sleep tr; do
+    link_system_command "$command"
+  done
+
+  # Keep setsid out of the PATH so the supervisor must rely on timeout's group.
+  run --separate-stderr env PATH="$BATS_TEST_TMPDIR/bin" "$SCRIPT"
+
+  assert_failure
+  assert_stderr --partial "timeout did not provide an isolated process group"
+  assert_stderr --partial "could not supervise the authentication status probe"
+  refute_stderr --partial "authentication status timed out"
+  assert_fallback_reason review-failed
+  assert_no_git_calls
 }
 
 @test "wait_for_file fails at its deadline and names what it was waiting for" {
