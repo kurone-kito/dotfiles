@@ -1,5 +1,6 @@
-# Opt in to CodeRabbit's deep review mode when enabled in chezmoi data.
+# Opt in to CodeRabbit's deep review mode when data.coderabbit.review is
+# "deep" in chezmoi data (the deprecated deepReview = true still counts).
 
-{{ if (dig "coderabbit" "deepReview" false .) }}
+{{ if eq (includeTemplate "coderabbit-review-mode" . | trim) "deep" }}
 $env:CODERABBIT_CRITIQUE_DEEP = '1'
 {{ end }}

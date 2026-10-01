@@ -9,6 +9,12 @@
 # this file covers only what that one cannot: the Windows branch, on both
 # hosts.
 #
+# The delegate is opt-in through data.coderabbit.review, so every render
+# passes an explicit --config (the maintainer's own chezmoi data must never
+# leak into a test); the delegate contexts render with "lite", and one
+# context per OS renders "off" to check that the delegate disappears while
+# the telemetry hook stays.
+#
 # Skipped entirely when chezmoi is not available on PATH (e.g., minimal
 # Windows runners).
 #
@@ -37,10 +43,14 @@ BeforeAll {
     param(
       [string] $Os,
       [string] $ChezmoiPath = $script:ChezmoiSource,
-      [string] $PathOverride
+      [string] $PathOverride,
+      # data.coderabbit.review as JSON text, e.g. '"lite"' or 'false'
+      [string] $Review = '"lite"'
     )
     $dest = Join-Path ([IO.Path]::GetTempPath()) ("idd-skill-config-dest-{0}" -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    $configFile = Join-Path ([IO.Path]::GetTempPath()) ("idd-skill-config-data-{0}.json" -f [guid]::NewGuid())
+    [System.IO.File]::WriteAllText($configFile, ('{ "data": { "coderabbit": { "review": ' + $Review + ' } } }'), [System.Text.UTF8Encoding]::new($false))
     # --override-data-file rather than the inline --override-data string:
     # Windows PowerShell 5.1's native-command argument passing mangles
     # embedded double-quotes in a `{"chezmoi":{"os":"..."}}` style
@@ -56,6 +66,7 @@ BeforeAll {
         $env:PATH = $PathOverride
       }
       $output = & $ChezmoiPath execute-template --file $script:TemplatePath `
+        --config $configFile --config-format json `
         --override-data-file $overrideDataFile `
         --source $script:RepoHome --destination $dest 2>&1
       [pscustomobject]@{
@@ -64,7 +75,7 @@ BeforeAll {
       }
     } finally {
       $env:PATH = $originalPath
-      Remove-Item -Path $dest, $overrideDataFile -Recurse -Force -ErrorAction SilentlyContinue
+      Remove-Item -Path $dest, $overrideDataFile, $configFile -Recurse -Force -ErrorAction SilentlyContinue
     }
   }
 }
@@ -175,6 +186,66 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
     It 'telemetryHook has no mode field' {
       $script:Config.critiqueLoop.telemetryHook.PSObject.Properties.Name |
         Should -Not -Contain 'mode'
+    }
+  }
+
+  Context 'review off (the default) on Windows' {
+    BeforeAll {
+      $script:Render = Invoke-Render -Os 'windows' -Review 'false'
+      $script:Config = $script:Render.Output | ConvertFrom-Json
+    }
+
+    It 'renders successfully' {
+      $script:Render.ExitCode | Should -Be 0
+    }
+
+    It 'renders no delegate' {
+      $script:Config.critiqueLoop.PSObject.Properties.Name | Should -Not -Contain 'delegate'
+    }
+
+    It 'still renders the telemetry hook' {
+      $script:Config.critiqueLoop.telemetryHook.command |
+        Should -Match 'idd-critique-telemetry\.ps1"$'
+    }
+  }
+
+  Context 'review off (the default) on non-Windows' {
+    BeforeAll {
+      $script:Render = Invoke-Render -Os 'linux' -Review 'false'
+      $script:Config = $script:Render.Output | ConvertFrom-Json
+    }
+
+    It 'renders successfully' {
+      $script:Render.ExitCode | Should -Be 0
+    }
+
+    It 'renders no delegate' {
+      $script:Config.critiqueLoop.PSObject.Properties.Name | Should -Not -Contain 'delegate'
+    }
+
+    It 'still renders the telemetry hook' {
+      $script:Config.critiqueLoop.telemetryHook.command | Should -Match "idd-critique-telemetry'$"
+    }
+  }
+
+  Context 'review deep renders the same delegate as lite' {
+    It 'is byte-identical on <Os>' -ForEach @(
+      @{ Os = 'linux' }
+      @{ Os = 'windows' }
+    ) {
+      $lite = Invoke-Render -Os $Os -Review '"lite"'
+      $deep = Invoke-Render -Os $Os -Review '"deep"'
+      $lite.ExitCode | Should -Be 0
+      $deep.ExitCode | Should -Be 0
+      $deep.Output | Should -Be $lite.Output
+    }
+  }
+
+  Context 'an invalid review value' {
+    It 'fails the render' {
+      $render = Invoke-Render -Os 'linux' -Review '"bogus"'
+      $render.ExitCode | Should -Not -Be 0
+      $render.Output | Should -Match 'data\.coderabbit\.review'
     }
   }
 }

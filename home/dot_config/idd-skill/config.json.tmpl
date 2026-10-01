@@ -7,6 +7,11 @@ critiqueLoop.telemetryHook always overrides its own key here when present --
 each fragment only takes effect for a repository whose own
 .github/idd/config.json leaves that same key entirely unset.
 
+The delegate is opt-in: it is rendered only when data.coderabbit.review
+resolves to "lite" or "deep" (home/.chezmoitemplates/coderabbit-review-mode,
+docs/coderabbit-deep-review.md), because it may send the branch diff to an
+external service. critiqueLoop.telemetryHook is rendered in every mode.
+
 mode: "combined" runs both this delegate and the per-agent critique
 mechanism every C1 pass and unions their findings, rather than only
 falling back to the per-agent mechanism when this delegate fails --
@@ -51,11 +56,13 @@ and never gates C-phase control flow, unlike the delegate above.
 {{-   end -}}
 {{-   $binCommand = set $binCommand $bin $command -}}
 {{- end -}}
-{{- $config := dict
-      "critiqueLoop" (dict
-        "delegate" (dict
-          "command" (get $binCommand "coderabbit-critique")
-          "mode" "combined")
-        "telemetryHook" (dict
-          "command" (get $binCommand "idd-critique-telemetry"))) -}}
+{{- $critiqueLoop := dict
+      "telemetryHook" (dict
+        "command" (get $binCommand "idd-critique-telemetry")) -}}
+{{- if ne (includeTemplate "coderabbit-review-mode" . | trim) "off" -}}
+{{-   $critiqueLoop = set $critiqueLoop "delegate" (dict
+        "command" (get $binCommand "coderabbit-critique")
+        "mode" "combined") -}}
+{{- end -}}
+{{- $config := dict "critiqueLoop" $critiqueLoop -}}
 {{ $config | toPrettyJson }}
