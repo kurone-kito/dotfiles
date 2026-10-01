@@ -49,13 +49,29 @@ model (how `data.git.*` connects to `data.secret.gpg.*` and
 `data.secret.ssh.*`) and
 [Using ghq with multiple accounts](ghq-workflow.md) for `sshhost` routing.
 
-## CodeRabbit deep review (data.coderabbit)
+## CodeRabbit review (data.coderabbit)
 
-| Field      | Type    | Required | Default | Purpose                                                                 |
-| ---------- | ------- | -------- | ------- | ----------------------------------------------------------------------- |
-| deepReview | boolean | no       | false   | Enables the opt-in deep-review environment variable in shell profiles. |
+The CodeRabbit critique delegate is opt-in and off by default: nothing is
+deployed or wired until `review` is set.
 
-See [CodeRabbit deep-review mode](coderabbit-deep-review.md).
+| Field        | Type                          | Required | Default | Purpose                                                                                                                                                  |
+| ------------ | ----------------------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `review`     | boolean \| `"lite"` \| `"deep"` | no       | `false` | `false` deploys nothing; `true` or `"lite"` deploys the `coderabbit-critique` launchers and the user-global delegate; `"deep"` also sets `CODERABBIT_CRITIQUE_DEEP=1`. |
+| `deepReview` | boolean                       | no       | `false` | **Deprecated** alias for `review = "deep"`; every use prints a deprecation notice.                                                                       |
+
+`review` wins whenever it is present. The two keys resolve as follows:
+
+| `review`                                          | `deepReview`      | Resolved review mode              |
+| ------------------------------------------------- | ----------------- | --------------------------------- |
+| absent                                            | absent or `false` | `off`                             |
+| `false`                                           | `true` or `false` | `off`                             |
+| `true` or `"lite"`                                | `true` or `false` | `lite`                            |
+| `"deep"`                                          | `true` or `false` | `deep`                            |
+| absent                                            | `true`            | `deep`, plus a deprecation notice |
+| any other value (`"bogus"`, `"false"`, `1`, `""`) | any               | render error                      |
+| any                                               | not a Boolean     | render error                      |
+
+See [CodeRabbit critique delegate and review mode](coderabbit-deep-review.md).
 
 ## Secret manager (`data.secret`)
 
@@ -323,6 +339,9 @@ item = "MyApp - .env"
 filename = ".env"
 subpath = ""
 attachment = ".env"
+
+[data.coderabbit]
+review = "lite"  # false (default) | true | "lite" | "deep"; true means "lite"
 
 [data.zellij]
 simplified_ui = false

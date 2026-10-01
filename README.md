@@ -114,18 +114,21 @@ input line editing
 - [Grok Build](https://grok.com/)
 - [OpenAI Codex CLI](https://github.com/openai/codex)
 
-### CodeRabbit deep reviews
+### CodeRabbit critique delegate
 
-CodeRabbit uses standard review depth by default. Enable the opt-in deep
-review mode from chezmoi with this configuration:
+The user-global CodeRabbit critique delegate is off by default: a machine that
+applies this repository deploys no `coderabbit-critique` launcher until you opt
+in, because the delegate may send branch diffs to CodeRabbit. Enable it, and
+choose a review depth, from chezmoi with this configuration:
 
 ```toml
 [data.coderabbit]
-deepReview = true
+review = true   # false (default) | true | "lite" | "deep"; true means "lite"
 ```
 
-See the [CodeRabbit deep-review guide](docs/coderabbit-deep-review.md) for
-the configuration and apply steps.
+See the [CodeRabbit guide](docs/coderabbit-deep-review.md) for what each mode
+deploys, how to turn it off again, and the migration note for machines that
+relied on the old always-on deployment.
 
 ## Requirements
 
