@@ -137,13 +137,13 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Review temps are created later. The auth probe's stdout capture and done
-# token live inside a private directory, so removing that directory with its
-# contents is the whole auth cleanup; the EXIT trap installed below still
-# runs it when a later mktemp fails before that review chain's own trap
-# would have been installed. The probe itself writes the done token, and
-# nothing pre-creates it: a missing or empty token still means the probe
-# never finished.
+# Review temps are created later. The auth probe's stdout capture, done token,
+# and its supervisor script and bookkeeping files live inside a private
+# directory, so removing that directory with its contents is the whole auth
+# cleanup; the EXIT trap installed below runs it on every exit, including a
+# cancellation signal and a later mktemp that fails. The probe itself writes
+# the done token, and nothing pre-creates it: a missing or empty token still
+# means the probe never finished.
 cleanup_tmp_files() {
   for tmp in \
     "${stderr_tmp:-}" \
@@ -162,148 +162,19 @@ cleanup_tmp_files() {
   fi
 }
 
-auth_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/coderabbit-critique-auth.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot capture authentication status" >&2
-  exit 1
-}
-auth_stdout="${auth_tmpdir}/stdout"
-auth_done="${auth_tmpdir}/done"
-trap 'cleanup_tmp_files' EXIT
-
-# Same four-argument prefix as the review invocation. Bats mocks shift
-# those four arguments off before exec, and --preserve-status does not
-# return 124 when the child is killed, so a missing done token is the
-# timeout signal.
-set +e
-"$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
-  sh -c 'coderabbit auth status --agent >"$1" 2>/dev/null; rc=$?; printf "%s\n" done >"$2"; exit "$rc"' \
-  sh "$auth_stdout" "$auth_done"
-auth_rc=$?
-set -e
-
-if [ ! -s "$auth_done" ]; then
-  log_fallback_reason auth-timeout
-  echo "coderabbit-critique: authentication status timed out" >&2
-  exit 1
-fi
-
-if [ "$auth_rc" -ne 0 ]; then
-  log_fallback_reason auth-unsupported
-  echo "coderabbit-critique: authentication status command is unsupported or failed" >&2
-  exit 1
-fi
-
-auth_value="$(jq -r 'if type == "object" and (.authenticated | type == "boolean") then (if .authenticated then "true" else "false" end) else "malformed" end' "$auth_stdout" 2>/dev/null)" || auth_value="malformed"
-case "$auth_value" in
-  true) ;;
-  false)
-    log_fallback_reason unauthenticated
-    echo "coderabbit is not authenticated (run: coderabbit auth login)" >&2
-    exit 1
-    ;;
-  *)
-    log_fallback_reason auth-malformed
-    echo "coderabbit-critique: authentication status was not a boolean authenticated field" >&2
-    exit 1
-    ;;
-esac
-
-# A hardcoded default branch name would be wrong for any repository that
-# does not use it (this delegate is user-global, not dotfiles-specific).
-# Prefer the remote's actual recorded default; fall back to checking common
-# candidate names only if that is unset (e.g. `git remote set-head origin
-# -a` was never run); fail closed rather than guessing wrong and silently
-# diffing against a nonexistent or unintended base.
-BASE_BRANCH="${CODERABBIT_CRITIQUE_BASE:-}"
-if [ -z "$BASE_BRANCH" ]; then
-  BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')"
-fi
-if [ -z "$BASE_BRANCH" ]; then
-  # A first-match loop would silently pick "main" over "master" whenever
-  # a repository happens to have both remote-tracking refs (a rename in
-  # progress, a stale branch left over, etc.) even if the real default is
-  # "master" -- fail closed on that ambiguity instead of guessing.
-  main_exists=false
-  master_exists=false
-  git rev-parse --verify --quiet origin/main >/dev/null && main_exists=true
-  git rev-parse --verify --quiet origin/master >/dev/null && master_exists=true
-  if [ "$main_exists" = true ] && [ "$master_exists" = false ]; then
-    BASE_BRANCH=main
-  elif [ "$master_exists" = true ] && [ "$main_exists" = false ]; then
-    BASE_BRANCH=master
-  fi
-fi
-if [ -z "$BASE_BRANCH" ]; then
-  log_fallback_reason base-branch-unresolved
-  echo "coderabbit-critique: could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly" >&2
-  exit 1
-fi
-
-# `setsid` gives the review command a process group that is separate from
-# this supervisor and from `timeout` itself. The wrapper can then terminate
-# descendants left behind by a normally exiting CodeRabbit process, not only
-# the direct child that `wait` observes. macOS does not provide `setsid` in
-# the base system, but GNU `gtimeout` still puts its child in a dedicated
-# process group. In that case the wrapper uses `ps` to signal the group's
-# members while excluding the timeout and wrapper themselves.
-SESSION_CMD="$(command -v setsid 2>/dev/null || true)"
-if [ -z "$SESSION_CMD" ] && ! command -v ps >/dev/null 2>&1; then
-  log_fallback_reason review-failed
-  echo "coderabbit-critique: setsid and ps not found; cannot isolate and clean up the review process group" >&2
-  exit 1
-fi
-
-# stdout and stderr are captured separately (stderr via a temp file) so a
-# clean run's own stdout carries only the reviewed process's findings --
-# a progress line or diagnostic written to stderr must never reach C1 as
-# findings text, where C3 could score it as a real issue. `mktemp` is
-# already an accepted dependency in this repo's shell scripts (see
-# secret-deploy-state); failing to create it fails closed rather than
-# falling back to a merged capture that would reintroduce the leak this
-# split exists to close.
-stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
-  exit 1
-}
-trap 'cleanup_tmp_files' EXIT
-stdout_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stdout.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot capture review output" >&2
-  exit 1
-}
-deadline_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-deadline.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot track review deadline" >&2
-  exit 1
-}
-review_status_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-status.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot track review status" >&2
-  exit 1
-}
-review_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-wrapper.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot create the review supervisor" >&2
-  exit 1
-}
-review_members_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-members.XXXXXX")" || {
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: mktemp failed; cannot inspect the review process group" >&2
-  exit 1
-}
-
 # `timeout` must supervise a process that remains alive until CodeRabbit has
 # exited and forwards termination to that child. A direct `timeout coderabbit
 # ...` invocation can reap CodeRabbit while a descendant continues running,
 # so the caller would return while an unauthenticated browser/OAuth flow
 # remained orphaned. This small POSIX supervisor records a marker in the
-# timeout handler before forwarding TERM, isolates the review in its own
+# timeout handler before forwarding TERM, isolates the command in its own
 # session, and cleans that process group after the direct child exits. The
 # marker is an event from the timeout signal, not a wall-clock comparison, so
 # a natural review exit with status 124, 137, or 143 remains `review-failed`.
-if ! cat >"$review_wrapper_tmp" << 'EOF'
+# Both the auth probe and the review run through it, so a cancellation during
+# either reaches the same bounded cleanup. Usage: write_review_supervisor PATH
+write_review_supervisor() {
+  cat >"$1" << 'EOF'
 #!/bin/sh
 
 status_file=$1
@@ -582,13 +453,17 @@ fi
 printf '%s\n' "$child_status" >"$status_file" 2>/dev/null || true
 exit "$child_status"
 EOF
-then
-  log_fallback_reason mktemp-failed
-  echo "coderabbit-critique: could not create the review supervisor" >&2
-  exit 1
-fi
+}
 
 timeout_pid=""
+# Forward a cancellation to the `timeout` job that is running (the auth probe
+# first, then the review) and exit with the signal's status. The handlers are
+# installed before the first temporary directory exists so that no signal can
+# land between its creation and the EXIT trap, and an empty `timeout_pid`
+# makes them simply exit, which runs that trap. A shell defers a trap until
+# the foreground command it is running returns, so a signal that arrives
+# between the probe and the review (while `git`, `jq` or `mktemp` runs) takes
+# effect when that command finishes, not instantly.
 forward_review_signal() {
   signal=$1
   signal_status=$2
@@ -605,10 +480,181 @@ forward_review_signal() {
   fi
   exit "$signal_status"
 }
+
+trap 'cleanup_tmp_files' EXIT
 trap 'forward_review_signal TERM 143' TERM
 trap 'forward_review_signal INT 130' INT
 trap 'forward_review_signal HUP 129' HUP
 trap 'forward_review_signal QUIT 131' QUIT
+
+auth_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/coderabbit-critique-auth.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot capture authentication status" >&2
+  exit 1
+}
+auth_stdout="${auth_tmpdir}/stdout"
+auth_done="${auth_tmpdir}/done"
+probe_supervisor="${auth_tmpdir}/supervisor"
+probe_status="${auth_tmpdir}/status"
+probe_deadline="${auth_tmpdir}/deadline"
+probe_members="${auth_tmpdir}/members"
+
+# `setsid` gives the auth probe and the review command a process group that is
+# separate from this wrapper and from `timeout` itself. The wrapper can then
+# terminate descendants left behind by a normally exiting CodeRabbit process,
+# not only the direct child that `wait` observes. macOS does not provide
+# `setsid` in the base system, but GNU `gtimeout` still puts its child in a
+# dedicated process group. In that case the supervisor uses `ps` to signal the
+# group's members while excluding the timeout and itself. Checked before the
+# probe, which runs through the same supervisor.
+SESSION_CMD="$(command -v setsid 2>/dev/null || true)"
+if [ -z "$SESSION_CMD" ] && ! command -v ps >/dev/null 2>&1; then
+  log_fallback_reason review-failed
+  echo "coderabbit-critique: setsid and ps not found; cannot isolate and clean up the review process group" >&2
+  exit 1
+fi
+
+write_review_supervisor "$probe_supervisor" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: could not create the review supervisor" >&2
+  exit 1
+}
+
+# Same four-argument timeout prefix as the review invocation, and the same
+# supervisor: the probe is a background job this script waits on, so a
+# cancellation signal is handled at once (a foreground command would defer the
+# trap until the probe finished) and stops the probe together with everything
+# it started, then removes the private directory. The supervisor exits with
+# the probe's own status, so `auth_rc` keeps its meaning. Bats mocks shift the
+# four timeout arguments off before exec, and --preserve-status does not
+# return 124 when the child is killed, so a missing done token is the timeout
+# signal. The supervisor's stdout is not wanted; its stderr still carries an
+# isolation failure such as "timeout did not provide an isolated process
+# group", as it does for the review. Running through the supervisor also means
+# the probe reads stdin from /dev/null (a background job's default) and that a
+# descendant it leaves behind after a normal exit is stopped, which costs a
+# second only when one exists.
+set +e
+"$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
+  sh "$probe_supervisor" "$probe_status" "$probe_deadline" "$SESSION_CMD" "$probe_members" \
+  sh -c 'coderabbit auth status --agent >"$1" 2>/dev/null; rc=$?; printf "%s\n" done >"$2"; exit "$rc"' \
+  sh "$auth_stdout" "$auth_done" >/dev/null &
+timeout_pid=$!
+wait "$timeout_pid"
+auth_rc=$?
+timeout_pid=""
+set -e
+
+if [ ! -s "$auth_done" ]; then
+  # The supervisor exits 125 when it cannot isolate the process group, and so
+  # does a `timeout` that could not run it: neither is the probe running out
+  # of time. Report that as the review path does.
+  if [ "$auth_rc" -eq 125 ]; then
+    log_fallback_reason review-failed
+    echo "coderabbit-critique: could not supervise the authentication status probe" >&2
+    exit 1
+  fi
+  log_fallback_reason auth-timeout
+  echo "coderabbit-critique: authentication status timed out" >&2
+  exit 1
+fi
+
+if [ "$auth_rc" -ne 0 ]; then
+  log_fallback_reason auth-unsupported
+  echo "coderabbit-critique: authentication status command is unsupported or failed" >&2
+  exit 1
+fi
+
+auth_value="$(jq -r 'if type == "object" and (.authenticated | type == "boolean") then (if .authenticated then "true" else "false" end) else "malformed" end' "$auth_stdout" 2>/dev/null)" || auth_value="malformed"
+case "$auth_value" in
+  true) ;;
+  false)
+    log_fallback_reason unauthenticated
+    echo "coderabbit is not authenticated (run: coderabbit auth login)" >&2
+    exit 1
+    ;;
+  *)
+    log_fallback_reason auth-malformed
+    echo "coderabbit-critique: authentication status was not a boolean authenticated field" >&2
+    exit 1
+    ;;
+esac
+
+# A hardcoded default branch name would be wrong for any repository that
+# does not use it (this delegate is user-global, not dotfiles-specific).
+# Prefer the remote's actual recorded default; fall back to checking common
+# candidate names only if that is unset (e.g. `git remote set-head origin
+# -a` was never run); fail closed rather than guessing wrong and silently
+# diffing against a nonexistent or unintended base.
+BASE_BRANCH="${CODERABBIT_CRITIQUE_BASE:-}"
+if [ -z "$BASE_BRANCH" ]; then
+  BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')"
+fi
+if [ -z "$BASE_BRANCH" ]; then
+  # A first-match loop would silently pick "main" over "master" whenever
+  # a repository happens to have both remote-tracking refs (a rename in
+  # progress, a stale branch left over, etc.) even if the real default is
+  # "master" -- fail closed on that ambiguity instead of guessing.
+  main_exists=false
+  master_exists=false
+  git rev-parse --verify --quiet origin/main >/dev/null && main_exists=true
+  git rev-parse --verify --quiet origin/master >/dev/null && master_exists=true
+  if [ "$main_exists" = true ] && [ "$master_exists" = false ]; then
+    BASE_BRANCH=main
+  elif [ "$master_exists" = true ] && [ "$main_exists" = false ]; then
+    BASE_BRANCH=master
+  fi
+fi
+if [ -z "$BASE_BRANCH" ]; then
+  log_fallback_reason base-branch-unresolved
+  echo "coderabbit-critique: could not determine the default base branch (no origin/HEAD symref, no origin/main or origin/master); set CODERABBIT_CRITIQUE_BASE explicitly" >&2
+  exit 1
+fi
+
+# stdout and stderr are captured separately (stderr via a temp file) so a
+# clean run's own stdout carries only the reviewed process's findings --
+# a progress line or diagnostic written to stderr must never reach C1 as
+# findings text, where C3 could score it as a real issue. `mktemp` is
+# already an accepted dependency in this repo's shell scripts (see
+# secret-deploy-state); failing to create it fails closed rather than
+# falling back to a merged capture that would reintroduce the leak this
+# split exists to close.
+stderr_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stderr.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot separate stdout from stderr" >&2
+  exit 1
+}
+stdout_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-stdout.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot capture review output" >&2
+  exit 1
+}
+deadline_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-deadline.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot track review deadline" >&2
+  exit 1
+}
+review_status_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-status.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot track review status" >&2
+  exit 1
+}
+review_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-wrapper.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot create the review supervisor" >&2
+  exit 1
+}
+review_members_tmp="$(mktemp "${TMPDIR:-/tmp}/coderabbit-critique-members.XXXXXX")" || {
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: mktemp failed; cannot inspect the review process group" >&2
+  exit 1
+}
+
+if ! write_review_supervisor "$review_wrapper_tmp"; then
+  log_fallback_reason mktemp-failed
+  echo "coderabbit-critique: could not create the review supervisor" >&2
+  exit 1
+fi
 
 run_review() {
   "$TIMEOUT_CMD" --preserve-status --kill-after 2 "$TIMEOUT_SECONDS" \
