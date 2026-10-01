@@ -2,6 +2,9 @@
 autoMemoryReclaim=gradual
 sparseVhd=true
 
+[general]
+instanceIdleTimeout=-1
+
 [wsl2]
 autoProxy=true
 dnsTunneling=true
