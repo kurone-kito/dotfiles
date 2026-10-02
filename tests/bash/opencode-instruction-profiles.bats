@@ -11,6 +11,9 @@ setup() {
   CONFIG_TEMPLATE="$REPO_ROOT/.chezmoi.toml.tmpl"
   OPENCODE_TEMPLATE="$REPO_ROOT/home/dot_config/opencode/AGENTS.md.tmpl"
   if ! BASE_REF=$(git -C "$REPO_ROOT" merge-base HEAD origin/master); then
+    if [ -n "${CI:-}" ]; then
+      fail 'origin/master has no common ancestor for rendered-output comparisons'
+    fi
     skip 'origin/master has no common ancestor for rendered-output comparisons'
   fi
   TMP_CONFIG="$BATS_TEST_TMPDIR/chezmoi.json"

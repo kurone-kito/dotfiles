@@ -23,7 +23,8 @@ These defaults apply across repositories when OpenCode loads
 - Classify signing failures: pinentry/TTY (P), missing or unusable key
   (C), agent/socket/IPC or timeout without pinentry evidence (A), and
   unclear runner timeout (U).
-- For A or U only, restart `gpg-agent` once and retry once. Skip restart
+- For A or U only, run `gpgconf --kill gpg-agent` once and retry once;
+  never end the agent by process name. Skip restart
   if `gpgconf` is unavailable, the agent backs `SSH_AUTH_SOCK`, or this
   is non-interactive CI. Never loop on hardware prompts.
 - Then try one SSH fallback for any failure. Prefer a project alias such
