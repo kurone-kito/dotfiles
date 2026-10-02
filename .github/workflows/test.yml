@@ -74,7 +74,7 @@ jobs:
           key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
       - name: Install chezmoi
         if: steps.cache-chezmoi.outputs.cache-hit != 'true'
-        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
+        run: sh -c "$(curl --proto '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
       - name: Ensure chezmoi on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Install zsh if missing
