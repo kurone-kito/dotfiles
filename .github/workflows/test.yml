@@ -77,6 +77,12 @@ jobs:
         run: sh -c "$(curl --proto '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
       - name: Ensure chezmoi on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # `sh -c "$(curl ...)"` exits 0 when the download fails (an empty
+      # script succeeds), so confirm the binary exists, whether it came
+      # from the cache or from the install above, instead of letting the
+      # chezmoi-dependent tests self-skip silently.
+      - name: Verify chezmoi
+        run: chezmoi --version
       - name: Install zsh if missing
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
@@ -289,6 +295,12 @@ jobs:
         run: sh -c "$(curl --proto '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
       - name: Ensure chezmoi on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # `sh -c "$(curl ...)"` exits 0 when the download fails (an empty
+      # script succeeds), so confirm the binary exists, whether it came
+      # from the cache or from the install above, instead of letting the
+      # chezmoi-dependent tests self-skip silently.
+      - name: Verify chezmoi
+        run: chezmoi --version
       - name: Install Pester if needed
         shell: pwsh
         # Same bound as the Windows jobs: see the matching comment on
