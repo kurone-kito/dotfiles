@@ -54,6 +54,20 @@ that paragraph; it only points at `~/.gemini/GEMINI.md`.
 Edit the shared template for cross-agent changes. Edit a single
 `.tmpl` only for agent-specific wording.
 
+## OpenCode instruction profiles
+
+`data.opencode.extendedInstructions` in `chezmoi.toml` selects the
+OpenCode user-global profile. It defaults to `false`, which deploys
+compact instructions intended as a practical target for 2–4B models.
+Set it to `true` to deploy the full shared instructions; this option may
+suit users choosing 12–20B models. These ranges are heuristics, not
+guarantees of context sufficiency, instruction following, or reliable
+tool use.
+
+When synchronizing user-global guidance, preserve the compact default
+and full opt-in. Verify absent/false and true OpenCode renderings, and
+confirm the other agents' rendered outputs remain unchanged.
+
 The user-global layer is repository-independent and intentionally
 smaller than the canonical `.github/copilot-instructions.md`. It
 carries four sections available in any repository: Conversation
@@ -83,4 +97,7 @@ ladder), Coding standards, and Guardrails.
   user-global sources under `home/dot_copilot/`, `home/dot_codex/`,
   `home/dot_claude/`, `home/dot_gemini/`, and
   `home/dot_config/opencode/` together. Those sources are `.tmpl`
-  files plus `home/dot_gemini/AGENTS.md`.
+  files, the OpenCode compact template under `home/.chezmoitemplates/`,
+  and `home/dot_gemini/AGENTS.md`. Preserve OpenCode's compact default
+  and extended opt-in, and verify both OpenCode renders plus unchanged
+  peer-agent outputs.

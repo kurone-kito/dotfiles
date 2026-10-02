@@ -67,6 +67,24 @@ deepReview = true
 {{- end }}
 {{- end }}
 
+{{- /* Preserve the OpenCode instruction profile across `chezmoi init`.
+     Only an explicit Boolean true enables the longer shared instructions. */ -}}
+{{- $opencode := dig "opencode" dict . -}}
+{{- if not (kindIs "map" $opencode) -}}
+{{-   warnf "data.opencode is not a table; not re-emitting it" -}}
+{{-   $opencode = dict -}}
+{{- end -}}
+{{- if hasKey $opencode "extendedInstructions" -}}
+{{-   $extendedInstructions := get $opencode "extendedInstructions" -}}
+{{-   if kindIs "bool" $extendedInstructions }}
+
+[data.opencode]
+extendedInstructions = {{ $extendedInstructions }}
+{{-   else -}}
+{{-     warnf "data.opencode.extendedInstructions must be true or false; dropping %#v" $extendedInstructions -}}
+{{-   end -}}
+{{- end }}
+
 [data.secret]
 manager = {{ $secretManager | quote }}
 {{- if (dig "secret" "local_dir" "" .) }}

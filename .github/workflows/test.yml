@@ -66,6 +66,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: true
+          fetch-depth: 0
       - name: Cache chezmoi binary
         id: cache-chezmoi
         uses: actions/cache@v6

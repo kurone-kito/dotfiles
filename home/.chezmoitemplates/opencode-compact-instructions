@@ -1,0 +1,51 @@
+# OpenCode user-global instructions
+
+These defaults apply across repositories when OpenCode loads
+`~/.config/opencode/AGENTS.md`.
+
+**Repository instructions take precedence.** Follow a repository's own
+`AGENTS.md` wherever it differs or adds rules.
+
+## Conversation
+
+- Reply in the user's language. Write comments and documentation in
+  English unless the project has a clear reason to use another language.
+- Continue with low-risk work. Pause and ask when uncertainty or hidden
+  risk makes the next step unsafe.
+
+## Commits and signing
+
+- Use Conventional Commits: lowercase imperative subject, under 72
+  characters, no final period. Keep each commit focused.
+- Try the configured signer once. With GPG, skip the attempt as a
+  pinentry/TTY failure only when there is no TTY and loopback signing is
+  not already configured. Never enable loopback automatically.
+- Classify signing failures: pinentry/TTY (P), missing or unusable key
+  (C), agent/socket/IPC or timeout without pinentry evidence (A), and
+  unclear runner timeout (U).
+- For A or U only, restart `gpg-agent` once and retry once. Skip restart
+  if `gpgconf` is unavailable, the agent backs `SSH_AUTH_SOCK`, or this
+  is non-interactive CI. Never loop on hardware prompts.
+- Then try one SSH fallback for any failure. Prefer a project alias such
+  as `git commit-ssh`; otherwise use a one-command SSH signing override.
+  Respect existing SSH signing configuration, then a configured key
+  command, then the first non-certificate key from `ssh-add -L`. Never
+  invent a key path or persist a fallback in configuration.
+- Unsigned is the final fallback. Report whether configured signing,
+  agent restart, SSH alias/override, or unsigned was used. If unsigned,
+  report each signing failure and why restart or SSH was skipped or failed.
+- In CI, skip agent restart: try configured signing once, SSH once if
+  available, then unsigned. Never recommend automatic loopback setup.
+
+## Coding and guardrails
+
+- Follow repository conventions. Otherwise use LF, trim trailing
+  whitespace, and end files with a newline.
+- Do not change `CODE_OF_CONDUCT` or `CONTRIBUTING` documents without
+  explicit approval.
+- Report only commands and tests that actually ran.
+
+The compact profile targets 2–4B models; the extended profile may suit
+users choosing 12–20B models. These are heuristics: parameter count does
+not guarantee context sufficiency, instruction following, or reliable
+tool use.
