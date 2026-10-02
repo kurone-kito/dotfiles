@@ -476,7 +476,11 @@ Invoke-Pester tests/powershell/ -Output Detailed
 
 On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
 authoritative full PowerShell run remains Windows local execution and
-Windows CI.
+Windows CI: the required `PowerShell tests (Pester)` job (PowerShell 7)
+and the advisory `PowerShell 5.1 tests (Pester)` job (Windows
+PowerShell 5.1). The Unix-scoped tests (marked
+`-Skip:($IsWindows -ne $false)`) run on Linux in the advisory
+`PowerShell tests (Pester, Linux)` job.
 
 `scripts/run-validate.sh` runs both suites, but skips the PowerShell
 one when the current branch's diff touches no PowerShell-relevant
