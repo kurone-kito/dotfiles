@@ -74,9 +74,15 @@ jobs:
           key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
       - name: Install chezmoi
         if: steps.cache-chezmoi.outputs.cache-hit != 'true'
-        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
+        run: sh -c "$(curl --proto '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
       - name: Ensure chezmoi on PATH
         run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # `sh -c "$(curl ...)"` exits 0 when the download fails (an empty
+      # script succeeds), so confirm the binary exists, whether it came
+      # from the cache or from the install above, instead of letting the
+      # chezmoi-dependent tests self-skip silently.
+      - name: Verify chezmoi
+        run: chezmoi --version
       - name: Install zsh if missing
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
@@ -243,6 +249,74 @@ jobs:
         # this step. This job is advisory only (not a required check),
         # but keeping both jobs' failure semantics identical avoids a
         # confusing asymmetry.
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 -Force
+          Invoke-Pester tests/powershell/ -Output Detailed -CI
+
+  powershell-linux-tests:
+    name: PowerShell tests (Pester, Linux)
+    needs: detect-changes
+    # Advisory only: not registered in the ruleset's required-check set
+    # yet (#552), so a failure here does not block merges. It runs the
+    # whole suite on Linux so the Unix-scoped tests (marked
+    # `-Skip:($IsWindows -ne $false)`), which the two Windows jobs report
+    # as skipped, have a CI owner. Promotion to required is a later
+    # decision: it means editing `default_expected_contexts` in
+    # scripts/check-ruleset-drift.sh together with
+    # tests/bash/ruleset-drift-check.bats and its fixtures, the "Required
+    # status checks on `master`" section of docs/idd-policy.md and the
+    # ruleset itself.
+    # always() overrides the default "skip if a need failed" behavior
+    # so a failed/cancelled detect-changes fails open to running the
+    # real job, rather than silently skipping it (a skipped job reports
+    # success in the check rollup without ever having run).
+    if: |
+      always() &&
+      (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
+    runs-on: ubuntu-latest
+    env:
+      CHEZMOI_VERSION: v2.71.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Some tests render real chezmoi templates via
+      # `chezmoi execute-template` and self-skip when chezmoi is
+      # unavailable -- install the pinned version here (same cache key
+      # and install as bash-tests) so those suites actually execute.
+      - name: Cache chezmoi binary
+        id: cache-chezmoi
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/bin/chezmoi
+          key: chezmoi-${{ runner.os }}-${{ runner.arch }}-${{ env.CHEZMOI_VERSION }}
+      - name: Install chezmoi
+        if: steps.cache-chezmoi.outputs.cache-hit != 'true'
+        run: sh -c "$(curl --proto '=https' -fsLS https://get.chezmoi.io)" -- -b "$HOME/.local/bin" -t "$CHEZMOI_VERSION"
+      - name: Ensure chezmoi on PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # `sh -c "$(curl ...)"` exits 0 when the download fails (an empty
+      # script succeeds), so confirm the binary exists, whether it came
+      # from the cache or from the install above, instead of letting the
+      # chezmoi-dependent tests self-skip silently.
+      - name: Verify chezmoi
+        run: chezmoi --version
+      - name: Install Pester if needed
+        shell: pwsh
+        # Same bound as the Windows jobs: see the matching comment on
+        # powershell-tests' "Install Pester if needed" step.
+        run: |
+          if (-not (Get-Module -ListAvailable Pester |
+              Where-Object {
+                $_.Version -ge [version]'5.0' -and $_.Version -lt [version]'7.0'
+              })) {
+            Install-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 `
+              -Force -SkipPublisherCheck
+          }
+      - name: Run Pester tests
+        shell: pwsh
+        # Same import and -CI semantics as powershell-tests: see the
+        # matching comment on that job's "Run Pester tests" step.
         run: |
           Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 6.99.99 -Force
           Invoke-Pester tests/powershell/ -Output Detailed -CI
