@@ -25,5 +25,9 @@ issue_enrichment:
           rather than an actionable change.
 language: en
 reviews:
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  high_level_summary_in_walkthrough: true
   auto_review:
     enabled: true
