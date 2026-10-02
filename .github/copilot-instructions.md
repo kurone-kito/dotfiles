@@ -20,6 +20,10 @@ Gemini user-global instructions (pointer at `~/.gemini/AGENTS.md`),
 and OpenCode reads `~/.config/opencode/AGENTS.md`. See
 [docs/ai-strategy.md](../docs/ai-strategy.md).
 
+When synchronizing user-global guidance, preserve OpenCode's compact
+default and `data.opencode.extendedInstructions = true` opt-in. Verify
+both OpenCode renderings and confirm other agents' outputs are unchanged.
+
 ## Conversation
 
 - The conversational language should match the user's language.

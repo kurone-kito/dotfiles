@@ -73,6 +73,21 @@ deployed or wired until `review` is set.
 
 See [CodeRabbit critique delegate and review mode](coderabbit-deep-review.md).
 
+## OpenCode instructions (`data.opencode`)
+
+| Field                   | Type    | Required | Default | Purpose                                                                                                 |
+| ----------------------- | ------- | -------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `extendedInstructions`  | boolean | no       | `false` | `false` or absent deploys compact OpenCode guidance; `true` opts in to the full shared user-global text. |
+
+The compact profile is intended as a practical target for 2–4B models;
+the extended profile is an option for users choosing 12–20B models.
+These ranges are heuristics, not guarantees of context capacity,
+instruction following, or tool reliability. See
+[AI tooling strategy](ai-strategy.md#opencode-instruction-profiles).
+
+`chezmoi init` preserves valid Boolean values. Invalid values are
+reported and omitted; they never enable the extended profile.
+
 ## Secret manager (`data.secret`)
 
 | Field       | Type   | Required | Default                       | Purpose                                                                      |

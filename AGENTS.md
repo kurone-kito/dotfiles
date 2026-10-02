@@ -15,6 +15,9 @@ immediately, without depending on a redirect.
   stop and ask a concise question before proceeding.
 - Keep changes small and reviewable. If you create commits, follow the
   project's Conventional Commits rules and keep each commit atomic.
+- When synchronizing user-global guidance, preserve OpenCode's compact
+  default and `data.opencode.extendedInstructions = true` opt-in; verify
+  both OpenCode renders and unchanged outputs for the other agents.
 - Do not modify community documents (`CODE_OF_CONDUCT*`,
   `CONTRIBUTING*`) without explicit approval.
 - End only the processes you started, by a recorded PID or process

@@ -1,3 +1,20 @@
+{{- /* When syncing shared guidance, preserve this compact default and the
+     true opt-in, then verify both OpenCode renders and peer-agent outputs. */ -}}
+{{- $opencode := dig "opencode" dict . -}}
+{{- $extendedInstructions := false -}}
+{{- if kindIs "map" $opencode -}}
+{{-   if hasKey $opencode "extendedInstructions" -}}
+{{-     $value := get $opencode "extendedInstructions" -}}
+{{-     if kindIs "bool" $value -}}
+{{-       $extendedInstructions = $value -}}
+{{-     else -}}
+{{-       warnf "data.opencode.extendedInstructions must be true or false; using compact OpenCode instructions" -}}
+{{-     end -}}
+{{-   end -}}
+{{- else -}}
+{{-   warnf "data.opencode is not a table; using compact OpenCode instructions" -}}
+{{- end -}}
+{{- if $extendedInstructions -}}
 {{- template "ai-agent-user-global" (dict
   "agent" "OpenCode"
   "path" "~/.config/opencode/AGENTS.md"
@@ -8,3 +25,6 @@
   "noTtyPrecheck" true
   "copilotKeyDiscovery" false
   "signingMark" "*") -}}
+{{- else -}}
+{{- template "opencode-compact-instructions" . -}}
+{{- end -}}
