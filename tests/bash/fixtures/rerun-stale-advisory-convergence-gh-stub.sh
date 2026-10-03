@@ -80,16 +80,13 @@
 #     earlier attempt's expired/non-matching log alongside a later
 #     attempt's eligible one), else falls back to $GH_STUB_LOG_FIXTURE
 #     unchanged (every existing test that never sets the per-job
-#     variable keeps serving one fixture for every job id). Exits 1
-#     with a 404-shaped stderr message when $GH_STUB_LOG_FETCH_FAIL=1
-#     (simulating a real log-fetch failure -- expired logs, API error
-#     -- so a test can assert the real script treats that as a skip,
-#     never a rerun). Exits 1 with an "unknown flag" message if the
-#     invocation still carries the unsupported `--allow-escape-
-#     sequences` flag `gh api` never actually accepted -- this stub
-#     deliberately does NOT accept that flag, so a regression
-#     reintroducing it fails every log-fetch call instead of silently
-#     passing.
+#     variable keeps serving one fixture for every job id). Adds
+#     `--allow-escape-sequences` only when simulated gh help supports it,
+#     so ANSI-bearing logs work with old and new clients. Exits 1 with
+#     a 404-shaped stderr message
+#     when $GH_STUB_LOG_FETCH_FAIL=1 (simulating a real log-fetch
+#     failure -- expired logs, API error -- so a test can assert the
+#     real script treats that as a skip, never a rerun).
 #   - `gh run rerun <run-id>` -> pure recording no-op, exit 0 (or exit 1
 #     with no side effect when $GH_STUB_RERUN_FAIL=1, simulating the
 #     rerun call itself failing to start). Never talks to GitHub, so
@@ -125,16 +122,15 @@ case "${1:-} ${2:-}" in
     ;;
 esac
 
-# Real `gh api` never supported this flag; assert it stays gone rather
-# than silently accepting it the way an earlier version of this stub
-# did (the fixed script no longer passes it -- see the header comment
-# above).
-if printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
-  echo 'gh-stub: unknown flag: --allow-escape-sequences' >&2
-  exit 1
-fi
-
 if [ "${1:-}" = 'api' ]; then
+  if [ "${2:-}" = '--help' ]; then
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" = '1' ]; then
+      printf '%s\n' 'Usage: gh api [flags]' '      --allow-escape-sequences'
+    else
+      printf '%s\n' 'Usage: gh api [flags]'
+    fi
+    exit 0
+  fi
   if printf '%s\n' "$*" | grep -qE -- '/pulls/[0-9]+/reviews'; then
     jq_filter=''
     prev=''
@@ -187,6 +183,16 @@ if [ "${1:-}" = 'api' ]; then
     exit 0
   fi
   if printf '%s\n' "$*" | grep -q -- '/actions/jobs/.*/logs'; then
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" = '1' ] &&
+      ! printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
+      echo 'gh-stub: expected --allow-escape-sequences for supported gh versions' >&2
+      exit 1
+    fi
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" != '1' ] &&
+      printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
+      echo 'gh-stub: unsupported --allow-escape-sequences option' >&2
+      exit 1
+    fi
     if [ "${GH_STUB_LOG_FETCH_FAIL:-0}" = '1' ]; then
       echo 'gh: Not Found (HTTP 404)' >&2
       exit 1
