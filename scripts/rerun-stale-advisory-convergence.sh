@@ -676,7 +676,7 @@ main() {
       continue
     fi
 
-    if ! log=$(gh api "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null); then
+    if ! log=$(gh api --allow-escape-sequences "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null); then
       echo "SKIPPED=${job_id}:log-fetch-failed"
       idx=$((idx + 1))
       continue

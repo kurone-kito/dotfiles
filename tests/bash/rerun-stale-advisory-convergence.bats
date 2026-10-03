@@ -290,17 +290,29 @@ setup() {
   assert_output --partial 'RERUN_COUNT=1'
 }
 
-@test "never sends the unsupported --allow-escape-sequences flag on the log fetch" {
+@test "parses ANSI log output and reruns once when the existing safety gates pass" {
   export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
-  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match.txt"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match-ansi.txt"
   export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
   export GH_STUB_CONCLUSION_ATTEMPT_2=success
 
   run bash "$SCRIPT" 426
   assert_success
+  assert_output --partial "OLD_SHA=${OLD_SHA}"
+  assert_output --partial 'ACTED=5001:success'
+  assert_output --partial 'RERUN_COUNT=1'
 
-  run cat "$GH_CALL_LOG"
-  refute_output --partial '--allow-escape-sequences'
+  run bash -c "grep -c '^CALL: run rerun 5001\$' '$GH_CALL_LOG'"
+  assert_output '1'
+
+  run bash -c "grep -c '^CALL: pr view 426 --json headRefOid\$' '$GH_CALL_LOG'"
+  assert_output '3'
+
+  run bash -c "grep -c '^CALL: api repos/{owner}/{repo}/pulls/426/reviews --paginate --jq ' '$GH_CALL_LOG'"
+  assert_output '1'
+
+  run bash -c "grep -c '^CALL: api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/1001/logs\$' '$GH_CALL_LOG'"
+  assert_output '1'
 }
 
 @test "excludes a same-named check-run instance from a different app/integration" {
