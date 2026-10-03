@@ -80,9 +80,10 @@
 #     earlier attempt's expired/non-matching log alongside a later
 #     attempt's eligible one), else falls back to $GH_STUB_LOG_FIXTURE
 #     unchanged (every existing test that never sets the per-job
-#     variable keeps serving one fixture for every job id). Requires
-#     `--allow-escape-sequences` on this endpoint so ANSI-bearing logs
-#     are covered by tests. Exits 1 with a 404-shaped stderr message
+#     variable keeps serving one fixture for every job id). Adds
+#     `--allow-escape-sequences` only when simulated gh help supports it,
+#     so ANSI-bearing logs work with old and new clients. Exits 1 with
+#     a 404-shaped stderr message
 #     when $GH_STUB_LOG_FETCH_FAIL=1 (simulating a real log-fetch
 #     failure -- expired logs, API error -- so a test can assert the
 #     real script treats that as a skip, never a rerun).
@@ -122,6 +123,14 @@ case "${1:-} ${2:-}" in
 esac
 
 if [ "${1:-}" = 'api' ]; then
+  if [ "${2:-}" = '--help' ]; then
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" = '1' ]; then
+      printf '%s\n' 'Usage: gh api [flags]' '      --allow-escape-sequences'
+    else
+      printf '%s\n' 'Usage: gh api [flags]'
+    fi
+    exit 0
+  fi
   if printf '%s\n' "$*" | grep -qE -- '/pulls/[0-9]+/reviews'; then
     jq_filter=''
     prev=''
@@ -174,8 +183,14 @@ if [ "${1:-}" = 'api' ]; then
     exit 0
   fi
   if printf '%s\n' "$*" | grep -q -- '/actions/jobs/.*/logs'; then
-    if ! printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
-      echo 'gh-stub: expected --allow-escape-sequences for job logs' >&2
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" = '1' ] &&
+      ! printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
+      echo 'gh-stub: expected --allow-escape-sequences for supported gh versions' >&2
+      exit 1
+    fi
+    if [ "${GH_STUB_API_ALLOW_ESCAPE_SEQUENCES:-1}" != '1' ] &&
+      printf '%s\n' "$*" | grep -q -- '--allow-escape-sequences'; then
+      echo 'gh-stub: unsupported --allow-escape-sequences option' >&2
       exit 1
     fi
     if [ "${GH_STUB_LOG_FETCH_FAIL:-0}" = '1' ]; then

@@ -313,6 +313,29 @@ setup() {
 
   run bash -c "grep -c '^CALL: api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/1001/logs\$' '$GH_CALL_LOG'"
   assert_output '1'
+  run bash -c "grep -c '^CALL: api --help\$' '$GH_CALL_LOG'"
+  assert_output '1'
+}
+
+@test "parses ANSI logs with gh versions that do not support the escape flag" {
+  export GH_STUB_API_ALLOW_ESCAPE_SEQUENCES=0
+  export GH_STUB_CHECK_RUNS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-check-runs-candidate.json"
+  export GH_STUB_LOG_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-log-match-ansi.txt"
+  export GH_STUB_REVIEWS_FIXTURE="$FIXTURES/rerun-stale-advisory-convergence-reviews-covering.json"
+  export GH_STUB_CONCLUSION_ATTEMPT_2=success
+
+  run bash "$SCRIPT" 426
+  assert_success
+  assert_output --partial 'OLD_SHA=1111111111111111111111111111111111111111'
+  assert_output --partial 'ACTED=5001:success'
+  assert_output --partial 'RERUN_COUNT=1'
+
+  run bash -c "grep -c '^CALL: api repos/{owner}/{repo}/actions/jobs/1001/logs\$' '$GH_CALL_LOG'"
+  assert_output '1'
+  run bash -c "grep -c '^CALL: api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/1001/logs' '$GH_CALL_LOG' || true"
+  assert_output '0'
+  run bash -c "grep -c '^CALL: api --help\$' '$GH_CALL_LOG'"
+  assert_output '1'
 }
 
 @test "excludes a same-named check-run instance from a different app/integration" {

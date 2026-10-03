@@ -198,6 +198,22 @@
 # 5), so tests can drive them down to run near-instantly.
 set -euo pipefail
 
+GH_API_ALLOW_ESCAPE_SEQUENCES_SUPPORTED=''
+
+gh_api_supports_allow_escape_sequences() {
+  if [ -z "$GH_API_ALLOW_ESCAPE_SEQUENCES_SUPPORTED" ]; then
+    local api_help
+    api_help=$(gh api --help 2>&1 || true)
+    if [[ "$api_help" == *'--allow-escape-sequences'* ]]; then
+      GH_API_ALLOW_ESCAPE_SEQUENCES_SUPPORTED='true'
+    else
+      GH_API_ALLOW_ESCAPE_SEQUENCES_SUPPORTED='false'
+    fi
+  fi
+
+  [ "$GH_API_ALLOW_ESCAPE_SEQUENCES_SUPPORTED" = 'true' ]
+}
+
 CHECK_NAME='idd-advisory-convergence'
 REASON_REGEX='latest copilot review \(commit [0-9a-f]{40}\) does not cover current HEAD [0-9a-f]{40}'
 
@@ -676,7 +692,14 @@ main() {
       continue
     fi
 
-    if ! log=$(gh api --allow-escape-sequences "repos/{owner}/{repo}/actions/jobs/${job_id}/logs" 2>/dev/null); then
+    local log_endpoint="repos/{owner}/{repo}/actions/jobs/${job_id}/logs"
+    if gh_api_supports_allow_escape_sequences; then
+      if ! log=$(gh api --allow-escape-sequences "$log_endpoint" 2>/dev/null); then
+        echo "SKIPPED=${job_id}:log-fetch-failed"
+        idx=$((idx + 1))
+        continue
+      fi
+    elif ! log=$(gh api "$log_endpoint" 2>/dev/null); then
       echo "SKIPPED=${job_id}:log-fetch-failed"
       idx=$((idx + 1))
       continue
