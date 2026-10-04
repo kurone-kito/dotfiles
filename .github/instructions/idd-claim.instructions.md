@@ -79,6 +79,7 @@ canonical A5(c) evidence collector:
 node scripts/resume-claim-routing.mjs --issue <number> --fresh-claim-gate
 ```
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 For `package-manager` and `ephemeral-npx`, resolve the profile-selected
 `idd:resume-claim-routing` command from `docs/idd-helper-scripts.md`. In
 this repository's `ephemeral-npx` profile, use:
@@ -94,6 +95,7 @@ already-claimed | stale-reclaimable` with the winning `{claim-id}`:
 
 - `claimable` → proceed to the claim write below.
 - `stale-reclaimable` → proceed with takeover (the stale path below).
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 - `already-claimed` → a live competitor, raced claim, or occupied stale/
   released branch: allow lock takeover only when `winning_claim_id`
   matches this session's independently verified claim **and** the
@@ -254,8 +256,18 @@ issue (different slug variants).
 
 ## Claim execution
 
-If (c) found this session's claim, post none; keep its token/branch,
-heartbeat as needed; verify.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+Skip the `claimed-by` post in two cases, with different nonce behavior:
+
+- **Pre-check (c) found this session's claim**: this is a continuation,
+  not a fresh activation. Keep its recorded `{claim-id}` and branch; post
+  neither a new `claimed-by` nor a new activation nonce. Continue to Claim
+  verification (or Heartbeat posting when extending the stale clock).
+- **Forced-handoff adopt-verbatim**: the handoff marker already transferred
+  ownership, so no separate `claimed-by` post is required or allowed. This
+  is still a fresh activation; post and verify its activation nonce.
+
+All other routes that reach Claim execution post a `claimed-by` marker.
 
 Determine `{branch-name}`:
 

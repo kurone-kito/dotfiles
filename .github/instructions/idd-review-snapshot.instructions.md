@@ -57,6 +57,7 @@ author is a trusted marker actor per
 Never exclude an untrusted-author marker-shaped comment; flag it as
 suspicious if it affects a decision.
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 When helper runtime is enabled, prefer the read-only
 `review-activity-snapshot` helper to collect
 `{head-SHA}`, `{max-activity-updatedAt}`, `{total-item-count}`, and CI
@@ -97,14 +98,16 @@ heads need `LAST_COPILOT_COMMIT == PR_HEAD_SHA`; off-head `SATISFIED`
 requires fresh AW1 and `staleRequestRecovery.action`
 `not-applicable`/completed AW3-S/cap; `attempt` defers.
 
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 For this repository's `idd-advisory-convergence` check, a passing
 `ci-wait-state` rollup alone does not prove which workflow event produced
-the result. Before Step 2, verify an Actions run for this exact PR and
-Step 1 `{head-SHA}` whose event is `pull_request_target`, then inspect
-that run's jobs and require the `idd-advisory-convergence` job and its
+the result. Before Step 2, verify an Actions run for this exact PR whose
+event is `pull_request_target` and whose matching `pull_requests[]`
+entry's `head.sha` equals Step 1 `{head-SHA}`, then inspect that run's
+jobs and require the `idd-advisory-convergence` job and its
 `Run advisory-convergence check` step to conclude `success`. Use the
-matching run record's `event`, `head_sha`, and `pull_requests[]`, then
-its jobs endpoint's `steps[].conclusion`. A `workflow_dispatch` or
+matching run record's `event` and `pull_requests[].head.sha`, then its
+jobs endpoint's `steps[].conclusion`. A `workflow_dispatch` or
 companion-workflow run alone is not this proof. If the matching run or
 job/step conclusion is missing or unreadable, defer Step 2. The
 `ci-wait-state` helper remains authoritative for other required-check

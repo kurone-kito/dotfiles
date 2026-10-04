@@ -204,6 +204,7 @@ check name.
 If GH CLI cannot resolve a run ID, use Actions REST endpoints directly
 for the same run before posting a hold.
 
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 **`idd-advisory-convergence`** (as a required check): this repository's
 required workflow is PR-triggered only by `pull_request_target`; the
 companion `idd-advisory-convergence-comment.yml` handles

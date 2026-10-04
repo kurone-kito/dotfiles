@@ -65,6 +65,8 @@ This check never rebases, merges, or pushes.
 
 ## F2 — Pre-merge readiness (helper-read only)
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 1. Run the profile-selected `pre-merge-readiness` helper from
    `docs/idd-helper-scripts.md` with `--pr <pr-number>` and
    `--trusted-marker-logins <trusted-login-1>,<trusted-login-2>`. When

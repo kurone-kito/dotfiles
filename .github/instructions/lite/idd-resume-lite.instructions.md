@@ -51,9 +51,11 @@ Use GitHub **server** timestamps only. Stale age default: **24 h**
 
 ## Step 0 — Route classifier (first match wins)
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 | Condition                                                      | Action                                                            |
 | -------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Issue closed or PR merged                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then continue to F5 |
+| PR merged                                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then continue to F5 |
+| Issue closed with no merged PR                                 | Post a hold comment naming the state; STOP — never remove a worktree or branch |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                           |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                         |
 | Non-owned active claim + operator-present + input received     | Operator-present path (below); skip stall                         |

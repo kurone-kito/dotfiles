@@ -6,6 +6,7 @@ Lite profile for helper-enabled weak/local models. Read this file after
 handoff comment quoting that evidence, then read the repository's
 recorded `mergePolicy` only to decide whether to release the worker
 claim afterward. It never evaluates whether autonomous merge should
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 proceed and never continues to `idd-merge.instructions.md` (F3-F5);
 those stay out of scope for this profile. Apply the standard
 `idd-merge-handoff.instructions.md` actor and resume-condition checks

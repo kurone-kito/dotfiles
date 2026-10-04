@@ -466,6 +466,7 @@ keys preserve the distributed defaults. The outcome paths below are
 authoritative and override the shared helper's generic outcomes for this
 phase:
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 **While polling**: new review threads/comments → return to E1
 immediately. With no new review activity, follow the outcome-specific
 route below; CI completion alone does not select E1. On success, return

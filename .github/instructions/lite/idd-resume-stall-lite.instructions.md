@@ -35,6 +35,7 @@ NOW=$(node -e "console.log(new Date(process.argv[1]).toISOString().replace(/\.\d
   --claim-created-at <latest-valid-claimed-by-created_at>
 ```
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 Resolve both helper commands from `docs/idd-helper-scripts.md`; the
 literal `node scripts/...` forms apply only to source-repository or
 vendored-node profiles.
@@ -88,14 +89,27 @@ Takeover only if latest valid trusted `claimed-by` `created_at` is
 `heartbeatOverdue` is **diagnostic only**. It does not shorten the 24 h
 gate.
 
-Before S4/posting, rerun helper; require `stale`/`takeover`,
-`evidence.local_worktree.status: absent`; fail → **STOP** (#3141).
+Before S4/posting, use the profile-selected
+`resume-claim-routing` helper; require `state: stale`,
+`action: takeover`, and `evidence.local_worktree.status: absent`. Under
+`ephemeral-npx`, run:
+
+```sh
+npx --yes --package <helper-package-spec> \
+  idd-resume-claim-routing --issue <N>
+```
+
+An unavailable, nonzero, invalid, or other helper result → **STOP**
+(#3141).
 
 ## S4 — Race-safe recheck (immediately before write)
 
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
-2. Re-run `resume-claim-routing.mjs --issue <N>`.
+2. <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+   Immediately before the takeover write, re-run the profile-selected
+   `resume-claim-routing` helper for `<N>`; require `state: stale`,
+   `action: takeover`, and `evidence.local_worktree.status: absent`.
 3. Active claim still the same non-owned `{claim-id}`.
 4. Still stale (≥ 24 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not

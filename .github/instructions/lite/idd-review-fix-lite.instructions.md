@@ -339,6 +339,7 @@ self-critique and record risk.
      guard failure: stop and return to E1. Status `1`/`2` means primary
      registration is unproven/unreadable: stop/ask, not poll.
    - `REQUEST_NEEDED`, `copilotPending` `true` (a request is already
+     <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
      pending but unproven for current HEAD, with no same-head marker to
      anchor polling): consult `staleRequestRecovery`. `attempt` routes
      through the bounded AW3-S remove/re-request/verify/mark cycle in

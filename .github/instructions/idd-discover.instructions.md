@@ -226,6 +226,7 @@ the same arguments after `incomplete.recovery.notBefore` (null: see
 
 ## A1 — Find the roadmap
 
+<!-- dotfiles-divergence: cross-roadmap-discovery -->
 Use GH CLI or GH MCP to find the roadmap among open issues, identified
 by its `dotfiles-roadmap-id` marker for the default single-roadmap
 selection. The optional `--all-roadmaps` mode also recognizes the
@@ -360,6 +361,7 @@ Report every A2 execution candidate with its provenance paths (e.g.
 `#222 → #228 → #257`), any open roadmap nodes, cycles, duplicate
 references, and unresolvable references before passing to A3.
 
+<!-- dotfiles-divergence: cross-roadmap-discovery -->
 **Autopilot cross-roadmap union (optional, additive).** When A1 elected
 the cross-roadmap mode, take the de-duplicated **union** of open
 execution leaves from **each** open root (`sourceRoots` provenance).

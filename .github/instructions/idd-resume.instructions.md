@@ -36,9 +36,11 @@ Collect all signals before routing. Use GitHub server timestamps only.
 
 Evaluate in order; take the first matching row.
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 | Condition                                                                                 | Route                                                              |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Issue closed or PR merged                                                                 | Step 1 (§MC)                                                       |
+| PR merged                                                                                | Step 1 — run the claim-specific guarded F4 route in `idd-merge.instructions.md` |
+| Issue closed with no merged PR                                                           | Post a hold comment naming the state; STOP — never remove a worktree or branch |
 | `forced-handoff: human-gated` + valid evidence matching active/inheritable state          | Step 1 forced-handoff path (skip stall check)                      |
 | `forced-handoff: human-gated` + evidence exists but mismatches live claim/branch/PR state | STOP — report mismatch; do not claim, push, or mutate review state |
 | Non-owned active claim + operator-present predicate (below) met + input received          | Operator-present release path (below); skip the stall file         |
@@ -129,6 +131,7 @@ When helper runtime is enabled, you may collect Step 1 evidence with:
 node scripts/resume-claim-routing.mjs --issue {issue-number} [--claim-id {claim-id}] [--nonce {nonce}] [--worktree {path}]
 ```
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 This is the source-repository / vendored-node form. For
 `package-manager` and `ephemeral-npx`, resolve the profile-selected
 `idd:resume-claim-routing` command from `docs/idd-helper-scripts.md`; in
@@ -144,11 +147,11 @@ Pass `--claim-id` once this session recorded and verified one,
 claim-id, and `--worktree {path}` once the B1 worktree exists.
 
 When the issue is closed or its PR merged, skip the normal claim-state
-bullets below and route through the **entire** table (§MC). Do not limit
-the closed/merged fast path to the first three rows: a non-stale claim
-owned by another session still requires its matching STOP route. The
-helper's routing verdict (`state`/`action`) reflects claim state only,
-never merge or close state.
+bullets below and route through the **entire** routing table. A merged PR
+uses only the matching guarded F4 route; an issue closed without a merged
+PR is held and stopped. A non-stale claim owned by another session still
+requires its matching STOP route. The helper's routing verdict
+(`state`/`action`) reflects claim state only, never merge or close state.
 
 Use helper output as evidence, not as authority:
 
@@ -189,8 +192,8 @@ stop before re-claim or takeover; never treat failure as no match.
 
 | Claim state                                                                                    | Route                                                                                               |
 | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| PR merged; claim = this session's verified `{claim-id}`                                        | Run F4 steps 4-7 (guarded); also step 1 if non-default branch + open closing issue; STOP (§MC)      |
-| PR merged; claim released (no active claim); its branch = `{branch}`; no local worktree for it | Run F4 step 4 + step 5's `git branch -d` only (guarded); skip steps 6-7; STOP (§MC)                 |
+| PR merged; claim = this session's verified `{claim-id}`                                        | Run F4 steps 4-7 (guarded); also step 1 if non-default branch + open closing issue; then STOP      |
+| PR merged; claim released (no active claim); its branch = `{branch}`; no local worktree for it | Run F4 step 4 + step 5's `git branch -d` only (guarded); skip steps 6-7; then STOP                 |
 | FH evidence names this session's already-verified `{claim-id}`                                 | STOP — current session is displaced; do not push, comment, resolve, request reviewers, or merge     |
 | Issue closed with no PR merged, or any other closed/merged state                               | Post a hold comment naming the state; STOP — never remove a worktree or branch                      |
 | This session's claim; branch starts with `roadmap-audit/`                                      | Re-run A1.5; skip worktree creation; STOP (roadmap coordination only)                               |

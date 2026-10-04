@@ -170,6 +170,7 @@ above: **hold and stop**, exactly as any other non-stale claim. Do not
 treat a missed heartbeat as shortening the wait or as quiet-window
 evidence.
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 Before continuing to S4, apply the local-worktree safety gate. With helpers,
 run the profile-selected `resume-claim-routing` command from
 `docs/idd-helper-scripts.md` against a fresh snapshot and continue only

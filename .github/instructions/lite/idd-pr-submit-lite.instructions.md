@@ -430,9 +430,16 @@ than the run it supersedes. Once both have completed, the later
      not duplicate either mutation. When `copilotPending` is `true`,
      exit D4 to E1 so its current-head snapshot routes through the lite
      E14 decision table, including AW3-S and cap-exhaustion handling.
-     For `WAIT`, `RECOVERY_NEEDED`, `CAP_EXHAUSTED`, and off-head
-     `SATISFIED`, follow the lite E1/E14 routes; never treat them as a
-     code-caused CI failure or request another review directly here.
+     <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+     For `WAIT`, `RECOVERY_NEEDED`, `CAP_EXHAUSTED` with
+     `capExhaustedRoute: phase-specific`, and off-head `SATISFIED`, follow
+     the lite E1/E14 routes; never treat them as a code-caused CI failure
+     or request another review directly here. If `CAP_EXHAUSTED` selects
+     `capExhaustedRoute: hold` (`HOLD`), stop and ask instead of entering
+     E1. For on-head `SATISFIED` (`lastCopilotCommit == PR_HEAD_SHA`),
+     request nothing; use the profile-selected
+     `rerun-advisory-convergence` helper from `idd-ci.instructions.md`,
+     then resume D4 as for `WAIT`.
    - **Bot-gated `action_required`**: if instead `idd-advisory-convergence`
      is stuck at `action_required` from a gated bot-triggered run (for
      example Copilot's review event) pending approval, this is a

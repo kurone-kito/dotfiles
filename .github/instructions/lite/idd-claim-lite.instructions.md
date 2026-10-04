@@ -433,10 +433,12 @@ A matching `{claim-id}` re-acquires as a read-only check. A different
 `{claim-id}` is always a collision — run `--fresh-claim-gate` directly
 (not pre-check (c)):
 
-- `already-claimed` naming **your own** verified `{claim-id}`, with a
-  top-level `reason` that is not `released-claim-*`: only the local lock
-  drifted (crash / worktree recreation) — you still own the GitHub
-  claim. Retry the lock with `--takeover` directly.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+- `already-claimed` naming **your own** independently verified current
+  `{claim-id}`, with a top-level `reason` that does not begin
+  `released-claim-`: only the local lock drifted (crash / worktree
+  recreation) — you still own the GitHub claim. Retry the lock with
+  `--takeover` directly.
 - Every other result — a `released-claim-*` reason, `already-claimed`
   naming a different id, or `claimable`/`stale-reclaimable`: the claim
   itself was lost. **STOP** and report; post no new claim from this

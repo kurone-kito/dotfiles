@@ -196,6 +196,8 @@ Treat `stale` and `non-stale` in this section using the
   ready-to-start rules. A matching agent ID alone is not ownership
   proof, and neither is a token first learned by parsing the current
   roadmap comments.
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 - Before activating a roadmap claim (fresh claim or stale takeover),
   apply A5(a)'s issue-author approval gate to that roadmap with the
   profile-selected `claim-approval-gate --issue <roadmap-number>` helper
