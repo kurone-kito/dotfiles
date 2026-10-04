@@ -1974,13 +1974,16 @@ building "if #296 did not include it." #296 already included it, so
 this issue (#298) does not rebuild it; this section records that the
 criterion is satisfied by that existing evidence.
 
-### Issue authoring gate
+### Historical issue-author approval gate note (before roadmap #540)
 
-The `idd:ready` and `status:authoring` repository labels exist (both
-created via `gh label create` after onboarding). They are not
-exercised today because the issue-author approval gate is opted out
-(`skipIssueAuthorApprovalGate: true`); re-enabling the gate later
-would activate the labels without needing new repository state.
+This records the policy before roadmap #540's v0.14.0 re-import. At
+that time, the `idd:ready` and `status:authoring` repository labels
+existed, but `skipIssueAuthorApprovalGate: true` opted out of the
+issue-author approval gate. Track #563 superseded that state: the
+current gate posture is enabled as documented in
+[Issue-Author Approval Gate](#issue-author-approval-gate) above; the
+labels did not need to be recreated.
+
 [`.github/ISSUE_TEMPLATE/idd-task.yml`](../.github/ISSUE_TEMPLATE/idd-task.yml)
 ships the structured form for hand-filed IDD tasks.
 
