@@ -246,11 +246,16 @@ of that check. Review submissions use
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
 instance (see `#1745`). Rerun same-HEAD `CANCELLED`
 `rerun-eligible` siblings.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Ordinary plans hold `action_required`, `pending`, `unresolved`,
-`awaiting-fresh-review`, `rerun-budget-held`. If every withheld instance
-is a live-coverage recovery that was not promoted with used `rerun-once`
-budget (#3504), run `--refresh-latest --apply` once; poll; `hold` or
-mixed cases hold.
+`awaiting-fresh-review`, `rerun-budget-held`. The helper's ordinary
+plan already promotes the bounded `passedSiblingRecoveryPlan` case
+(`#3504`). A live-coverage recovery that remains
+`rerun-budget-held` after its `rerun-once` budget is spent and has no
+already-passing sibling stays held; do not use
+`--refresh-latest --apply` solely to bypass that hold. That mode is for
+a fresh review submission as stated above. Mixed or otherwise
+not promoted withheld instances also stay held.
 
 Note: this is a known Rulesets platform behavior, not an `idd-skill`
 dedup bug — GitHub can require every same-named instance non-failing,

@@ -213,10 +213,14 @@ failure, the active claim is unchanged; treat it under the rules above.
 
 ### (d) Open PR
 
-No helper. Re-check live GitHub state: an open PR may close or reference
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+No helper. Re-check live GitHub state. An open PR may close or reference
 this issue only when its head branch matches an inheritable claim — the
-verified active, stale, released, forced-handoff (matching branch and
-linked PR), or legacy migration source. Check linked issues and PR-body
+verified active, stale, released, forced-handoff, or legacy migration
+source — and its `headRepository.nameWithOwner` matches this repository.
+A verified forced-handoff may instead exempt only the exact linked PR
+number and head branch it records. Treat a missing head repository or an
+unverified PR binding as a conflict. Check linked issues and PR-body
 closing keywords (bare mentions and `Refs #N` do not count). A
 non-inheritable match → **STOP**.
 

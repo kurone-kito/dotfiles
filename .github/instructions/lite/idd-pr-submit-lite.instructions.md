@@ -274,13 +274,19 @@ loop instead of returning to this D1 rebase path.
    deliberate closing set (normally just `<N>`).
    - An extra entry usually means an unrelated `#M` sits next to a
      keyword elsewhere in the body — separate them.
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
    - A missing entry whose keyword matches step 3's regex for that
-     number, on a PR whose `createdAt` (`gh pr view {pr-number} --json
-     createdAt`) is under 4 hours before now (UTC), is GitHub's async
-     registration (`kurone-kito/idd-skill#3632`): do not edit the body,
-     toggle draft, or close and reopen; go on to D4 and poll
-     `closingIssuesReferences` the same way. Otherwise (keyword absent,
-     or still missing at 4 hours) apply step 4's path, re-placing the
+     number, on a PR whose REST `created_at` is under 4 hours before
+     GitHub's `Date` response header from the same header-bearing PR read
+     (`gh api --include repos/{owner}/{repo}/pulls/{pr-number}`), is
+     GitHub's async registration (`kurone-kito/idd-skill#3632`): do not
+     edit the body, toggle draft, or close and reopen; go on to D4 and
+     poll `closingIssuesReferences` the same way. Use the HTTP `Date`
+     header as server time, never the local wall clock. If the header is
+     absent or unparseable, repeat the read once; if still unavailable,
+     post a hold note and stop without taking either timing branch.
+     Otherwise (keyword absent or still missing once the server-time
+     window reaches 4 hours) apply step 4's path, re-placing the
      keyword line.
    - Repeat once after any edit. If it still fails (pending registration
      excepted), stop and post a hold note citing the PR URL.

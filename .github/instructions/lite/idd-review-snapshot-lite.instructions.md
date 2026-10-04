@@ -60,10 +60,13 @@ non-empty all-success `checks[]`; `pending`/`failing`/`missing` defer
 Step 2. Require `outcome: SATISFIED`, or `CAP_EXHAUSTED` with
 `capExhaustedRoute: phase-specific`; otherwise stop/ask. Require
 `copilotRecovery.activeClaimProvided: true`; same-head:
-`lastCopilotCommit == prHeadSha`, off-head needs
-`staleRequestRecovery.action` `not-applicable` or completed AW3-S/cap;
-`attempt`: stop and hand off to full; never E15; `hold` defers. Take
-Steps 1 and 3;
+`lastCopilotCommit == prHeadSha`.
+<!-- dotfiles-divergence: e1-stale-recovery-cap-route -->
+Off-head needs active-claim `staleRequestRecovery.action`
+`not-applicable` or completed AW3-S; `attempt`: stop and hand off to
+full, never E15. For `cap-exhausted`, apply `capExhaustedRoute`:
+`phase-specific` permits Step 2, while `hold` stops without posting a
+watermark. Take Steps 1 and 3;
 
 <!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 For this repository's `idd-advisory-convergence` check, also verify an
@@ -148,7 +151,9 @@ The manual six-field fallback — `--type watermark --target pr
 --apply` — stays available when `--from-pr` cannot run. Before using it,
 require each required `(checkName, workflowName)`
 producer to pass for `{head-SHA}` and verify advisory identity/event;
-raw names are insufficient. Otherwise skip Step 2 and use E15/E14.
+raw names are insufficient. Otherwise skip Step 2 and apply E3's
+deferred route: E14 advances to E15 when advisory coverage is not
+current; otherwise go straight to E15, then return to E1.
 
 The rendered body is exactly:
 
@@ -270,8 +275,10 @@ stale items into E3/E4.
 
 - **Empty, Step 2 ready** → `idd-pre-merge-lite.instructions.md` (F1);
   not triage.
-- **Empty, Step 2 deferred** → E15 for CI or E14 for advisory; both:
-  E14 first, then E1 before F1/F2.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+- **Empty, Step 2 deferred** → run E14 first when advisory coverage is
+  not current (E14 advances to E15); otherwise go straight to E15.
+  Return to E1 after E15, before F1/F2.
 - **Non-empty** → stop; hand off to `idd-review-triage.instructions.md`
   (E4).
 

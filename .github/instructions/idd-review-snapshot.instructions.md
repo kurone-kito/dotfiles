@@ -11,7 +11,11 @@ The active claim must still use your current `{claim-id}` — this also
 serves as E1's phase-entry self-check: E1 re-fetches all state from
 GitHub on every entry, so, unlike B1/B3, no local artifact can go stale.
 
-After E3, empty → branch-sync unless Step 2 deferred → E15/E14 then E1.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+After E3, empty → branch-sync unless Step 2 was deferred. For a
+deferred snapshot, run E14 first when advisory coverage is not current;
+E14 advances to E15. If advisory coverage is current, go straight to
+E15. Return to E1 after E15, before branch-sync/F1/F2.
 Non-empty → `idd-review-triage.instructions.md` (E4); a deferred handoff
 carries E1 Step 1 SHA, its activity baseline, `watermark deferred`, and
 reason; E14 uses that baseline (or its marker timestamp if empty) only as
@@ -94,9 +98,12 @@ stop/ask; else read rulesets/protection and normalize
 `gh pr checks {pr-number} --json name,state,bucket,startedAt,completedAt,link`
 against their union, including opt-in steps; unreadable policy/non-pass
 defers; empty output is not `no-required-checks`. Post after CI. Old
-heads need `LAST_COPILOT_COMMIT == PR_HEAD_SHA`; off-head `SATISFIED`
-requires fresh AW1 and `staleRequestRecovery.action`
-`not-applicable`/completed AW3-S/cap; `attempt` defers.
+heads need `LAST_COPILOT_COMMIT == PR_HEAD_SHA`.
+<!-- dotfiles-divergence: e1-stale-recovery-cap-route -->
+Off-head `SATISFIED` requires fresh AW1 and `staleRequestRecovery.action`
+`not-applicable` or completed AW3-S; `attempt` defers. For
+`cap-exhausted`, apply `CAP_EXHAUSTED_ROUTE`: `phase-specific` permits
+Step 2, while `hold` stops without posting a watermark.
 
 <!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 For this repository's `idd-advisory-convergence` check, a passing
@@ -113,7 +120,10 @@ job/step conclusion is missing or unreadable, defer Step 2. The
 `ci-wait-state` helper remains authoritative for other required-check
 topology and statuses.
 
-Incomplete: Steps 1/3, E2, E3—not F1/F2; E14 then E15. Empty
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+Incomplete: Steps 1/3, E2, E3—not F1/F2. When advisory coverage is not
+current, E14 advances to E15; otherwise go straight to E15. Then rerun
+E1 before F1/F2. Empty
 E3/E8-zero-A: wait, re-snapshot E1, post without review; CI after
 watermark forces E1↔F2.
 
@@ -291,9 +301,11 @@ When Step 2 was deferred, reread the live PR HEAD before E3. A mismatch
 with Step 1's `{head-SHA}` returns to E1 for a fresh snapshot; never route
 stale items into E3/E4.
 
-Empty + Step 2 ready → branch-sync. Empty + deferred → use the E15/E14
-route above, then E1. Non-empty → `idd-review-triage.instructions.md`
-(E4).
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+Empty + Step 2 ready → branch-sync. Empty + deferred → run E14 first
+when advisory coverage is not current (E14 advances to E15); otherwise
+go straight to E15. Return to E1 after E15, before branch-sync/F1/F2.
+Non-empty → `idd-review-triage.instructions.md` (E4).
 
 ## Cold-start ReviewItems_snapshot reconstruction
 

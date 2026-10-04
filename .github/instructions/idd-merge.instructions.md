@@ -26,8 +26,9 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      and stop.
    - `human_merge` or unknown policy: route to
      `idd-merge-handoff.instructions.md` and stop.
-3. Immediately before executing the merge command, do one final live
-   fetch using the **exact same activity-universe scope as E1 Step 1**
+3. Before the local D3.5/D3.7 re-verification below, do a live
+   review-currency preflight fetch using the **exact same activity-universe
+   scope as E1 Step 1**
    (all review threads, review bodies, and regular PR comments,
    excluding trusted agent operational marker comments), and compare it
    against the F2 snapshot carried forward from
@@ -45,8 +46,11 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    `{head-SHA}`, `{f2-max-activity-updatedAt}` for
    `{max-activity-updatedAt}`, `{f2-total-item-count}` for
    `{total-item-count}`, and `{f2-latest-ci-completed-at}` for
-   `{latest-ci-completed-at}` — this final fetch is the live side of
-   each comparison, exactly as F2's own live snapshot was.
+   `{latest-ci-completed-at}` — this preflight fetch is the live side of
+   each comparison, exactly as F2's own live snapshot was. This is a
+   preflight snapshot: after D3.5/D3.7 and any remediation below, repeat
+   this exact activity/HEAD comparison and unresolved-actionable count
+   as the final review-currency gate.
 
    The structural ack-only carve-out from F2 applies here verbatim:
    newer activity/count growth that helper evidence proves is
@@ -54,8 +58,9 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    (`ack-only-post-disposition`) does not force the return to E1; all
    other triggers above are unaffected.
 
-   From that same final fetch, compute `F3_UNRESOLVED_ACTIONABLE_COUNT`
-   using the exact F2 unresolved-thread rule and exceptions
+   From that same preflight fetch, compute
+   `F3_UNRESOLVED_ACTIONABLE_COUNT` using the exact F2
+   unresolved-thread rule and exceptions
    (non-awaiting-reviewer unresolved threads only; awaiting-reviewer
    classification must follow F2 verbatim, including AMD exclusion and
    conversation-resolution exception handling). If
@@ -70,9 +75,9 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    `pre-merge-readiness` `dispositionEvidence` shape here; E7 verifier
    fields (`passed`, `items[]`) are not merge-gate substitutes.
 
-   Execute the merge immediately after this final fetch **and the claim
-   re-validation and advisory state revalidation below**, with no other
-   actions in between. Re-validate claim: re-read the issue and confirm
+   The claim and advisory checks that follow are also preflight checks;
+   repeat them after the final review-currency gate below. Re-validate
+   claim: re-read the issue and confirm
    the active claim still uses your current `{claim-id}` — if not, the
    claim was lost, report and stop.
 
@@ -213,12 +218,27 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      (changing HEAD), return to E1 instead of just re-validating in
      place — F2's own snapshot is invalidated by a new HEAD. Otherwise
      repeat this field once; if it still fails, stop and do not merge.
+     After D3.5/D3.7 pass and any remediation, repeat the live
+     review-activity fetch in F3 step 3 using the exact E1/F2
+     activity-universe scope and compare it with the carried F2 snapshot.
+     Re-fetch the PR HEAD into `PR_HEAD_SHA_F3`, replacing the preflight
+     value, and require it to equal the carried F2 head. Recompute
+     `F3_UNRESOLVED_ACTIONABLE_COUNT` with the same F2 rules. If the HEAD
+     moved, any F2 review-currency return-to-E1 trigger applies, the
+     route is not `proceed`, or the actionable count is nonzero, return
+     to E1; do not merge. Then revalidate the active claim/nonce and
+     matching worktree-local lock/tokens and repeat the blocking AW1
+     check from F3 step 3 against that same freshly fetched HEAD
+     (escalating through AW2/AW3 when required). If any repeated check
+     reads a different HEAD, return to E1. Execute the merge immediately
+     after those final checks, with no intervening action.
 
    For the head-SHA field, use this **copy-paste-safe, fail-closed**
    check — both operands fully quoted, no glob, abort on mismatch —
    rather than re-deriving it ad hoc (a stray glob or unquoted operand
    can silently mis-gate this safety-sensitive step). `F2_HEAD_SHA` is
-   the carried `{f2-head-SHA}`; `PR_HEAD_SHA_F3` is step 3's re-fetch:
+   the carried `{f2-head-SHA}`; `PR_HEAD_SHA_F3` is the final post-D3.5/
+   D3.7 re-fetch that replaced the preflight value:
 
    ```sh
    F2_HEAD_SHA="{f2-head-SHA}"   # the head recorded in the F2 snapshot

@@ -102,11 +102,14 @@ or configured needs-decision label from `labels.needsDecisionLabelName`
   superseded by newer work, or the work was already completed or is in
   progress (including draft PRs). An open or draft PR whose head branch
   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
-  matches an inheritable claim branch from A5(d) — the stale active
-  claim, the verified active claim, the latest released claim, verified
-  forced-handoff evidence whose branch and linked PR match, or the
+  has a head repository matching this repository and a head branch
+  matching an inheritable claim branch from A5(d) — the stale active
+  claim, the verified active claim, the latest released claim, or the
   legacy migration source — is this issue's own work, not a duplicate.
-  Any other open or draft PR still fails
+  A cross-repository PR qualifies only when verified forced-handoff
+  evidence binds its exact PR number and head branch. Missing head-repo
+  evidence or an unverified binding remains a duplicate. Any other open
+  or draft PR still fails
 - **Outcome on fail**: `duplicate`
 
 #### High-confidence tier (#1484)

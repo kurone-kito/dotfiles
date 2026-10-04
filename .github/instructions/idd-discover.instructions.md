@@ -111,6 +111,16 @@ routing:
      than falling back to the next-ranked survivor. Extending this
      branch to retry a subsequent survivor on such a failure is out of
      scope here.
+   <!-- dotfiles-divergence: explicit-target-parked-check -->
+   Before steps 3-5 for a non-roadmap target, apply only A4 Step 1.5's
+   parked-issue check to this target number (once per pass); do not run
+   its active-claim pre-scan or candidate selection. If the target
+   appears in `parkedIssues`, report that it is parked and stop without
+   claiming or fallback. A failed/malformed read or
+   `parkedIssuesComplete: false` is a terminal discovery error; stop
+   before A5. Under `instructions-only`, use A4 Step 1.5's no-helper
+   exemption. A roadmap target follows its scoped A2 → A3 → A4 path,
+   whose normal Step 1.5 check covers execution candidates.
 3. Apply A3's readiness bullets to the target (the same blocked-by,
    human-coordination, and runtime-observation checks, resolved the
    same way) — plus one target-only check: no active, non-stale claim
@@ -304,10 +314,15 @@ descendants aren't hidden.
 **Permitted repo-wide queries** — only the following scoped lookups may
 touch issues outside the roadmap traversal graph:
 
+- <!-- dotfiles-divergence: explicit-target-parked-check -->
+  **A0-T/A4 Step 1.5 only**: `--parked-issues` membership checks against
+  the explicit non-roadmap target or already-enumerated candidates; they
+  only exclude an issue and never add candidates or widen the selection
+  scope.
 - **A0-T only**: the scoped body-content lookup needed to resolve
-  `dotfiles-blocked-by` markers on the explicit target.
-  The result is used solely to determine targeted readiness and is not
-  added to any candidate set.
+  `dotfiles-blocked-by` markers on the explicit target. The result is
+  used solely to determine targeted readiness and is not added to any
+  candidate set.
 - **A0-O only** (when `issue-scope` is `orphan-first`, or when
   `issue-scope` is `roadmap-first` and A0-O runs as the roadmap-path
   fallback): a repo-wide open-issue query to find issues without

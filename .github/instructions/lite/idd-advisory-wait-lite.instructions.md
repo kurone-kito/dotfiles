@@ -2,9 +2,12 @@
 
 Lite profile for helper-enabled weak/local models. Same semantics as
 `idd-advisory-wait.instructions.md`, for E14 and E1 Step 2's advisory
-precondition. E1 Step 2 accepts a matching `lastCopilotCommit` directly;
-off-head `SATISFIED` requires active-claim `staleRequestRecovery` to be
-`not-applicable` or its AW3-S/cap route complete. `hold` is ineligible.
+precondition. E1 Step 2 accepts a matching `lastCopilotCommit` directly.
+<!-- dotfiles-divergence: e1-stale-recovery-cap-route -->
+Off-head `SATISFIED` requires active-claim `staleRequestRecovery` to be
+`not-applicable` or its AW3-S route complete. For `cap-exhausted`, apply
+`capExhaustedRoute`: `phase-specific` permits Step 2; `hold` stops
+without a watermark.
 If the repository is `instructions-only`, use the full-size
 advisory-wait instructions instead.
 

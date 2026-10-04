@@ -137,12 +137,17 @@ bullets above — they resolve unclaimed-vs-stale status from the latest
 trusted legacy claim using this same 24 h threshold and the
 **already-claimed routing**.
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 **(d) Open PR** — A5(d) has no supported helper. Re-check live GitHub
 PR state with the written rules below. No open PR may close or
 reference this issue (check both linked issues and closing keywords in
 PR bodies; a bare prose mention or a `Refs` line is not a reference),
-unless that PR's head branch matches the `branch` field in an
-inheritable claim comment. An inheritable claim comment is either:
+unless its head branch matches the `branch` field in an inheritable
+claim comment and its `headRepository.nameWithOwner` matches this
+repository. A verified forced-handoff may instead exempt only the exact
+linked PR number and head branch it records. Treat a missing head
+repository or an unverified PR binding as a conflict. An inheritable
+claim comment is either:
 
 - the already verified active claim for this current session, or
 - the currently active stale claim you are taking over, or

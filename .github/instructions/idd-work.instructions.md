@@ -384,7 +384,11 @@ Implement the plan, running **fix-validate** before each atomic commit
 the [signed-commit merge wrapper](../../docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure)
 instead.
 
-**Validate.** Judge the run by its own exit status — see
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+**Validate.** Judge the validator's own exit status. A display filter
+(`tail`/`head`) alone cannot prove success; avoid piping or preserve the
+status with `set -o pipefail` or an immediate Bash
+`status=${PIPESTATUS[0]}` check. See
 [Project commands](idd-overview-core.instructions.md#project-commands).
 
 **Verify a commit actually landed before trusting a subsequent push.**
