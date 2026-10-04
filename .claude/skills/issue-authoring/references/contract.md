@@ -1310,7 +1310,8 @@ confirm the reference is a mere breadcrumb.
 
 ```sh
 node scripts/audit-authored-issue.mjs --shape <orphan|roadmap|child> \
-  --marker-prefix <resolved-target-prefix> --title <drafted-title> \
+  --marker-prefix <resolved-target-prefix> --current-repo <owner>/<repo> \
+  --title <drafted-title> \
   --body-file <path-to-drafted-body> [--label <label>]... \
   [--expect-bucket <needs-decision|blocked-by-human>]
 ```
@@ -1318,6 +1319,10 @@ node scripts/audit-authored-issue.mjs --shape <orphan|roadmap|child> \
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 In this repository, run the same flags with
 `npx --yes --package <helper-package-spec> idd-audit-authored-issue`.
+Always pass `--current-repo <owner>/<repo>` with the target repository's
+identity, including during local authoring when `GITHUB_REPOSITORY` is
+unset. This lets `dependency-line-grammar` reject cross-repository
+references instead of treating them as unverifiable.
 Pass `--stdin` instead of
 `--body-file` when the drafted body is not yet written to disk. Omit
 `--title` when the drafted body already leads with a `# <title>` line

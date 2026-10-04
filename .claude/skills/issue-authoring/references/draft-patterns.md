@@ -125,7 +125,8 @@ evaluate:
 ```sh
 npx --yes --package <helper-package-spec> \
   idd-audit-authored-issue --shape orphan \
-  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
+  --marker-prefix <resolved-target-prefix> --current-repo <owner>/<repo> \
+  --title "Drafted issue title" \
   --body-file draft.md
 ```
 
@@ -143,7 +144,8 @@ instead of a failure, since such a body is meant to be non-ready:
 ```sh
 npx --yes --package <helper-package-spec> \
   idd-audit-authored-issue --shape orphan \
-  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
+  --marker-prefix <resolved-target-prefix> --current-repo <owner>/<repo> \
+  --title "Drafted issue title" \
   --body-file draft.md \
   --expect-bucket needs-decision \
   --label status:needs-decision
