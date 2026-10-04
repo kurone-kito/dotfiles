@@ -69,15 +69,18 @@ node scripts/advisory-wait-state.mjs --pr <pr-number> --claim-id <claim-id> \
 Resolve the package-manager / ephemeral-npx equivalent from
 `docs/idd-helper-scripts.md`.
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Required fields (stop and ask if any are missing): `prHeadSha`,
 `lastCopilotCommit`, `copilotPending`,
-`copilotPendingCoversHead`, `outcome`, `f3Outcome`, `secondaryBotLogin`,
-`secondaryBotLogins`, `secondaryRequestLogins`, `secondaryRequestNeeded`,
-`earliestSameHeadAt`, `requestMarkerCount`, `requestCap`,
+`copilotPendingCoversHead`, `outcome`, `f3Outcome`, `earliestSameHeadAt`,
+`requestMarkerCount`, `requestCap`,
 `pendingWindowMinutes`, `settledWindowMinutes`, `pollIntervalMinutes`,
 `capExhaustedRoute`, `trustedMarkerSummary`. Every field is always
 present, even empty/false/`[]` — validate presence, not truthiness;
-include `staleRequestRecovery`; reject unbound output.
+include `staleRequestRecovery`; reject unbound output. Optional
+non-gating secondary-bot fields are `secondaryBotLogin`,
+`secondaryBotLogins`, `secondaryRequestLogins`, and
+`secondaryRequestNeeded`; use them only when emitted.
 
 The helper computes `outcome` directly from live evidence — never by
 hand from raw timestamps. Allowed values: `SATISFIED`,
@@ -151,12 +154,13 @@ duplicated here).
 
 ## Secondary advisory bot(s) (non-gating, optional)
 
-`secondaryBotLogin` accepts one login or a list. When
-`secondaryRequestNeeded` is `true`, request **every** login in
-`secondaryRequestLogins` once each (never only the first), using the
-same mechanics above. Post no `advisory-wait:` marker for any — none
-satisfy the primary gate or consume its cap. Skip when
-`secondaryRequestNeeded` is `false`.
+`secondaryBotLogin` accepts one login or a list. When the optional
+`secondaryRequestNeeded` field is `true`, request **every** login in the
+emitted `secondaryRequestLogins` once each (never only the first), using
+the same mechanics above. If these optional fields are absent, skip this
+supplement without stopping. Post no `advisory-wait:` marker for any —
+none satisfy the primary gate or consume its cap. Skip when
+`secondaryRequestNeeded` is `false` or absent.
 
 ## Marker hygiene (optional)
 

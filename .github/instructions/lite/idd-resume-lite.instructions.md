@@ -54,7 +54,7 @@ Use GitHub **server** timestamps only. Stale age default: **24 h**
 <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 | Condition                                                      | Action                                                            |
 | -------------------------------------------------------------- | ----------------------------------------------------------------- |
-| PR merged                                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then continue to F5 |
+| PR merged                                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then STOP |
 | Issue closed with no merged PR                                 | Post a hold comment naming the state; STOP — never remove a worktree or branch |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                           |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                         |
