@@ -625,14 +625,15 @@ for why this pre-scan exists.
 Among the surviving viable and unclaimed issues (after Step 1.5), pick
 the **highest authored autopilot-suitability score** (the
 `<!-- dotfiles-autopilot-suitability: N -->` footer, or the
-`discover-roadmap-graph` node's `autopilotSuitability`), tie-broken by
-**lowest issue number**. In autopilot runs, skip scores below
+`discover-roadmap-graph` node's `autopilotSuitability`). Resolve ties
+with the ordered preferences below. In autopilot runs, skip scores below
 `autopilotSuitability.floor` (default `3`) as human-oriented; a missing
 or out-of-range score defaults to the floor and is never skipped
 (subject to the scored-vs-unscored tie-breaker below). Advisory only —
 the pick still passes A4.5/A5 unchanged and never bypasses a gate. When
 `autopilotSuitability.enabled` is `false`, ignore the score entirely and
-select by **lowest issue number**.
+select by **lowest issue number**, without applying the score-based
+tie-breakers below.
 
 **Scored-vs-unscored floor tie-breaker.** When the highest-score tie
 band pairs an unscored candidate (missing or out-of-range score,
@@ -704,6 +705,16 @@ those; `discover-shared-file-overlap` (see
 empty set. See the
 [convention](../../docs/policy-constants.md#high-contention-shared-files)
 for the current bundle ids.
+
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+**Same-score tie-break precedence.** With score-based selection enabled,
+process the highest-score band in this order: scored-over-unscored floor
+preference, `selectionDesync` (when enabled and applicable), configured
+milestone match, lower effort, and no high-contention overlap. The lowest
+issue number is the final deterministic tie-break after the enabled
+preferences; each later preference only breaks ties left by the earlier
+rules. When score-based selection is disabled, ignore this sequence and
+select by lowest issue number.
 
 After picking, proceed to **A4.5** (`idd-suitability.instructions.md`).
 

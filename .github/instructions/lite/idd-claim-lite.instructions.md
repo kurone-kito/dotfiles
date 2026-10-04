@@ -147,12 +147,13 @@ verified released-owner retry), run write-gate before claim write:
 node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
 ```
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 <!-- dprint-ignore-start -->
 | Helper `fresh_claim_gate.verdict` | Action |
 | --- | --- |
 | `claimable` | Proceed to Claim execution (fresh) |
 | `stale-reclaimable` | Proceed to Claim execution (takeover) |
-| `already-claimed` | **STOP** unless `winning_claim_id` matches your verified released id |
+| `already-claimed` | **STOP** unless `winning_claim_id` matches your independently verified claim id and the helper's top-level `reason` does not begin with `released-claim-` |
 <!-- dprint-ignore-end -->
 
 Written fallback (`instructions-only` profile only — per the Helper

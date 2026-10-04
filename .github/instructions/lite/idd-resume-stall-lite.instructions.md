@@ -89,27 +89,35 @@ Takeover only if latest valid trusted `claimed-by` `created_at` is
 `heartbeatOverdue` is **diagnostic only**. It does not shorten the 24 h
 gate.
 
-Before S4/posting, use the profile-selected
+For helper-enabled profiles, before S4/posting use the profile-selected
 `resume-claim-routing` helper; require `state: stale`,
 `action: takeover`, and `evidence.local_worktree.status: absent`. Under
 `ephemeral-npx`, run:
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 ```sh
 npx --yes --package <helper-package-spec> \
   idd-resume-claim-routing --issue <N>
 ```
 
 An unavailable, nonzero, invalid, or other helper result → **STOP**
-(#3141).
+(#3141). Under `instructions-only`, perform the written local-worktree
+checks in `idd-claim-lite.instructions.md` pre-check (e); proceed only
+when the matching branch's worktree is explicitly absent. Missing,
+unreadable, unknown, or contradictory evidence → **STOP**.
 
 ## S4 — Race-safe recheck (immediately before write)
 
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
 2. <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
-   Immediately before the takeover write, re-run the profile-selected
-   `resume-claim-routing` helper for `<N>`; require `state: stale`,
-   `action: takeover`, and `evidence.local_worktree.status: absent`.
+   Immediately before the takeover write, helper-enabled profiles
+   re-run the profile-selected `resume-claim-routing` helper for `<N>`;
+   require `state: stale`, `action: takeover`, and
+   `evidence.local_worktree.status: absent`. Under `instructions-only`,
+   repeat the written local-worktree scan in `idd-claim-lite.instructions.md`
+   pre-check (e); the matching branch's worktree must still be explicitly
+   absent. Missing, unreadable, unknown, or contradictory evidence → STOP.
 3. Active claim still the same non-owned `{claim-id}`.
 4. Still stale (≥ 24 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not
