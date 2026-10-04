@@ -227,7 +227,10 @@ the same arguments after `incomplete.recovery.notBefore` (null: see
 ## A1 — Find the roadmap
 
 Use GH CLI or GH MCP to find the roadmap among open issues, identified
-by its `dotfiles-roadmap-id` marker. Under `roadmap` or
+by its `dotfiles-roadmap-id` marker for the default single-roadmap
+selection. The optional `--all-roadmaps` mode also recognizes the
+configured roadmap label and `discover.legacyRoots` as root signals.
+Under `roadmap` or
 `orphan-first` scope, report and abort if no roadmap issue exists. Under
 `roadmap-first` scope, this is **trigger (c)**: fall back to **A0-O**
 instead.
@@ -242,10 +245,12 @@ only to true orphans, since cross-roadmap leaves come from a parent
 roadmap's task list and never carry their own
 `dotfiles-roadmap-id` marker.
 
-**Legacy roots**: `--all-roadmaps` finds roots only by
-`dotfiles-roadmap-id` marker. Add the marker to a legacy
-umbrella, or configure **`discover.legacyRoots`** (issue numbers,
-deduped against marker roots; invalid fails safe to none). See
+**Legacy roots**: the `dotfiles-roadmap-id` marker is required for
+default single-roadmap discovery. `discover.legacyRoots` selects roots
+only in optional `--all-roadmaps` mode, alongside the configured
+roadmap label (issue numbers are deduped against label/marker roots;
+invalid input fails safe to none). Add the marker to a legacy umbrella
+or configure `discover.legacyRoots` when using `--all-roadmaps`. See
 `docs/idd-helper-scripts.md`.
 
 ## A1.5 — Audit completed roadmaps
@@ -551,8 +556,9 @@ ascending issue-number order:
 - **Parked-issue check (once per pass).** Per
   `provider-outage-park.mjs --parked-issues`, a candidate in its
   `parkedIssues` is **ineligible**, as a live claim is. A failed or
-  malformed read is Step 1.5 exhaustion (report it; last bullet's
-  routing). `parkedIssuesComplete: false` still skips listed issues —
+  malformed read is a terminal discovery error: report it and stop
+  without entering the exhaustion route or A0-O fallback.
+  `parkedIssuesComplete: false` still skips listed issues —
   name the gap in the run report; an unlisted parked issue may be
   picked. Under `instructions-only` (no park helper), this rule does
   not apply.
@@ -560,8 +566,21 @@ ascending issue-number order:
   `discover.activeClaimPreScanBatchSize` (distributed default: `10`).
 - For each candidate, fetch the issue and parse comments per the shared
   claim-state rules in `idd-claim.instructions.md`, including
-  forced-handoff and legacy markers. Loop
-  `resume-claim-routing.mjs --fresh-claim-gate`, or by hand.
+  forced-handoff and legacy markers. Run the fresh-claim gate for that
+  exact candidate before ranking:
+
+  ```sh
+  # source repo / vendored-node
+  node scripts/resume-claim-routing.mjs --issue <candidate-number> --fresh-claim-gate
+
+  # ephemeral-npx profile
+  npx --yes --package <helper-package-spec> \
+    idd-resume-claim-routing --issue <candidate-number> --fresh-claim-gate
+  ```
+
+  For `package-manager`, resolve the profile-selected
+  `idd:resume-claim-routing` command from `docs/idd-helper-scripts.md`.
+  The `--issue` argument is required.
   Hold `stop` until the probe below.
   A non-stale `claimed-by` with no `{claim-id}`
   is **ineligible**. Only when it is non-stale (see
@@ -578,11 +597,15 @@ ascending issue-number order:
 
 After scanning the current batch:
 
-- **At least one eligible candidate in the batch**: proceed to Step 2
-  to rank and select.
+- **At least one eligible candidate in the batch, with viable
+  survivors remaining**: continue with the next batch. Do not rank or
+  select until every viable candidate has been checked.
 - **All `N` in this batch are ineligible but viable survivors remain**:
   continue with the next batch (`N+1`–`2N`, then `2N+1`–`3N`, …) until
-  an eligible candidate is found.
+  the entire candidate set has been checked.
+- **Entire viable candidate set scanned, with one or more eligible
+  candidates**: proceed to Step 2 and rank only those checked eligible
+  candidates.
 - **Entire viable candidate set exhausted** (all surviving viable
   candidates are ineligible): if the A3.5 approval-needed bucket is
   non-empty, apply A3.5's own approval-needed routing, also reporting
@@ -694,8 +717,11 @@ discover phase:
 
 - **Roadmap identity** (`dotfiles-roadmap-id`): in the
   roadmap issue body; A3 uses it for `blocked-by` lookups, and it is
-  the only marker that identifies a roadmap — the configured roadmap
-  label is informational only.
+  the default identity marker. The configured roadmap label also
+  identifies roots in optional `--all-roadmaps` mode, while
+  `discover.legacyRoots` explicitly identifies configured legacy
+  roots. In default single-roadmap mode, the label is informational
+  only.
 - **Sequential dependency** (`dotfiles-blocked-by`): in an
   issue body — this issue **cannot start until** the roadmap with the
   matching `roadmap-id` is closed.

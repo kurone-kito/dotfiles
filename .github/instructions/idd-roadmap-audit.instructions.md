@@ -196,6 +196,16 @@ Treat `stale` and `non-stale` in this section using the
   ready-to-start rules. A matching agent ID alone is not ownership
   proof, and neither is a token first learned by parsing the current
   roadmap comments.
+- Before activating a roadmap claim (fresh claim or stale takeover),
+  apply A5(a)'s issue-author approval gate to that roadmap with the
+  profile-selected `claim-approval-gate --issue <roadmap-number>` helper
+  (`docs/idd-helper-scripts.md`). Require `approved: true`; if the helper
+  fails, is incomplete, or conflicts with live state, use A5(a)'s
+  written fallback. If neither path proves approval, do not claim or
+  mutate this roadmap. Continue child discovery only where the normal
+  A2/A3 rules allow it. A previously recorded and verified claim
+  already owned by this session is not a new activation and does not
+  re-run this gate.
 - If the roadmap is unclaimed or stale, post and verify a normal
   `claimed-by` comment for the roadmap issue using a
   `roadmap-audit/<number>-<slug>` branch field. This is a logical

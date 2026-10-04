@@ -129,14 +129,26 @@ When helper runtime is enabled, you may collect Step 1 evidence with:
 node scripts/resume-claim-routing.mjs --issue {issue-number} [--claim-id {claim-id}] [--nonce {nonce}] [--worktree {path}]
 ```
 
+This is the source-repository / vendored-node form. For
+`package-manager` and `ephemeral-npx`, resolve the profile-selected
+`idd:resume-claim-routing` command from `docs/idd-helper-scripts.md`; in
+this repository's `ephemeral-npx` profile, use:
+
+```sh
+npx --yes --package <helper-package-spec> \
+  idd-resume-claim-routing --issue {issue-number} [--claim-id {claim-id}] [--nonce {nonce}] [--worktree {path}]
+```
+
 Pass `--claim-id` once this session recorded and verified one,
 `--nonce {nonce}` when this session recorded one for that same
 claim-id, and `--worktree {path}` once the B1 worktree exists.
 
-When the issue is closed or its PR merged, skip every bullet below and
-go directly to the table's first three rows (§MC): the helper's routing
-verdict (`state`/`action`) reflects claim state only, never merge or
-close state.
+When the issue is closed or its PR merged, skip the normal claim-state
+bullets below and route through the **entire** table (§MC). Do not limit
+the closed/merged fast path to the first three rows: a non-stale claim
+owned by another session still requires its matching STOP route. The
+helper's routing verdict (`state`/`action`) reflects claim state only,
+never merge or close state.
 
 Use helper output as evidence, not as authority:
 
@@ -184,13 +196,13 @@ stop before re-claim or takeover; never treat failure as no match.
 | This session's claim; branch starts with `roadmap-audit/`                                      | Re-run A1.5; skip worktree creation; STOP (roadmap coordination only)                               |
 | Active claim = this session's verified `{claim-id}`                                            | Continue with same `{claim-id}`; ignore stale FH evidence citing a different `{claim-id}`; → Step 2 |
 | Forced-handoff recovery confirmed (§FH)                                                        | Re-claim via A5 after GitHub reflects handoff; cite evidence in digest `Authoritative by`; → Step 2 |
-| No active claim after release + matching local worktree is occupied or unreadable              | STOP — route to §LWR or verify owner-resume / forced-handoff successor claim-id                     |
+| No active claim after release + matching local worktree is occupied, unreadable, or unknown    | STOP — route to §LWR or verify owner-resume / forced-handoff successor claim-id                     |
 | No new-format claims + legacy `claimed-by` + later trusted `unclaimed-by` (same agent)         | Treat as unclaimed → fresh A5 claim → Step 2                                                        |
 | No new-format claims + legacy `claimed-by`, age < 24 h                                         | STOP — not inheritable even if agent-id matches                                                     |
 | No new-format claims + legacy `claimed-by`, age ≥ 24 h                                         | Migrate via A5 with `supersedes: none`; → Step 2                                                    |
 | No active claim                                                                                | Re-claim via A5; → Step 2                                                                           |
 | Active non-stale claim (< 24 h, other session)                                                 | STOP — not inheritable even if agent-id matches                                                     |
-| Active stale claim (≥ 24 h, other session) + matching local worktree is occupied or unreadable | STOP — route to §LWR or verify owner-resume / forced-handoff successor claim-id                     |
+| Active stale claim (≥ 24 h, other session) + matching local worktree is occupied, unreadable, or unknown | STOP — route to §LWR or verify owner-resume / forced-handoff successor claim-id                     |
 | Stale claim (other session); branch starts with `roadmap-audit/`                               | Takeover via A5 (`supersedes: <prior-id>`); re-run A1.5; STOP (roadmap-side only)                   |
 | Active stale claim (≥ 24 h, other session)                                                     | Takeover via A5 with `supersedes: <prior-id>`; → Step 2                                             |
 

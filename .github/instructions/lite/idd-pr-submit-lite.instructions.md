@@ -412,11 +412,27 @@ than the run it supersedes. Once both have completed, the later
 7. **`success`**: proceed to `idd-review-snapshot-lite.instructions.md`
    (E1).
 8. **Exception**: if `idd-advisory-convergence` is the only
-   non-passing required check, and that check's own run-log JSON verdict
-   reports `pending: false` with outstanding review reasons (thread
-   disposition or actionable item count on the latest review), this is
-   not a CI-wait state — it turns green only after E-phase disposition,
-   downstream of D4.
+   non-passing required check, read that check's own run-log JSON
+   verdict; its `pending` value is distinct from the GitHub check-run
+   status.
+   - `pending: false` with outstanding review reasons (thread
+     disposition or actionable item count on the latest review) is not
+     a CI-wait state — it turns green only after E-phase disposition,
+     downstream of D4. Exit to E1.
+   - `pending: true` is the expected timing race where CI evaluated
+     before Copilot's asynchronous review exists for this HEAD. Run the
+     profile-selected `advisory-wait-state` helper for this PR and read
+     `outcome`; only `REQUEST_NEEDED` adds work here. When
+     `copilotPending` is `false`, exit D4 and enter E14's guarded
+     registration path in `idd-review-fix-lite.instructions.md`
+     directly.
+     That path owns the reviewer request and same-head marker; D4 must
+     not duplicate either mutation. When `copilotPending` is `true`,
+     exit D4 to E1 so its current-head snapshot routes through the lite
+     E14 decision table, including AW3-S and cap-exhaustion handling.
+     For `WAIT`, `RECOVERY_NEEDED`, `CAP_EXHAUSTED`, and off-head
+     `SATISFIED`, follow the lite E1/E14 routes; never treat them as a
+     code-caused CI failure or request another review directly here.
    - **Bot-gated `action_required`**: if instead `idd-advisory-convergence`
      is stuck at `action_required` from a gated bot-triggered run (for
      example Copilot's review event) pending approval, this is a

@@ -17,14 +17,18 @@ Lite profile for weak/local models. Same semantics as
 
 ```sh
 # Claim state (before mutation)
-node scripts/resume-claim-routing.mjs --issue <N> [--claim-id <id>] [--nonce <nonce>] [--worktree <path>]
+<profile-selected-resume-claim-routing> --issue <N> [--claim-id <id>] [--nonce <nonce>] [--worktree <path>]
 
 # Fresh-claim gate immediately before any claim write
-node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
+<profile-selected-resume-claim-routing> --issue <N> --fresh-claim-gate
 
 # PR / CI / review resume route (when a PR may exist)
-node scripts/resume-route-selection.mjs --issue <N>
+<profile-selected-resume-route-selection> --issue <N>
 ```
+
+Resolve these commands from `docs/idd-helper-scripts.md`; the literal
+`node scripts/...` forms apply only to the source-repository or
+vendored-node profile.
 
 Pass `--claim-id` once this session recorded and verified one,
 `--nonce` if this session recorded one for that claim-id, and
@@ -49,7 +53,7 @@ Use GitHub **server** timestamps only. Stale age default: **24 h**
 
 | Condition                                                      | Action                                                            |
 | -------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Issue closed or PR merged                                      | STOP — report; do not remove worktree/branch                      |
+| Issue closed or PR merged                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then continue to F5 |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                           |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                         |
 | Non-owned active claim + operator-present + input received     | Operator-present path (below); skip stall                         |
@@ -113,7 +117,7 @@ Written table (`instructions-only` profile only): first matching row.
 | Active claim = this session's verified `{claim-id}`                                         | → Step 2                                                      |
 | Forced-handoff names this session's verified `{claim-id}` as displaced                      | STOP — displaced; no push/comment/resolve/merge               |
 | Forced-handoff recovery confirmed for this session                                          | A5 re-claim after GitHub shows handoff → Step 2               |
-| Stale/released + local worktree occupied or unreadable                                      | STOP — see §LWR; verify owner                                 |
+| Stale/released + local worktree occupied, unreadable, or unknown                            | STOP — see §LWR; verify owner                                 |
 | No active claim                                                                             | A5 re-claim → Step 2                                          |
 | Active non-stale claim (other session, < 24 h)                                              | STOP                                                          |
 | Active stale claim (other session, ≥ 24 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |

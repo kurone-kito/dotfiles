@@ -288,9 +288,13 @@ Judge a command-set run by exit status; when piping, check
 (#3139).
 
 **Tool availability**: run commands only when tools exist. For Node.js,
-prefer project scripts; use `npx <tool>` if Node.js and `npx` are available
-and no relevant script exists; else use `true`. For other tools, use
-`true` when absent.
+prefer project scripts. Resolve IDD helper commands through the selected
+helper-runtime profile in `docs/idd-helper-scripts.md`; never fall back to
+an unpinned `npx <tool>` invocation. For other Node.js tools, use a local
+lockfile-pinned dependency when available. If a required validator named
+in a command set (such as `markdownlint-cli2` or `cspell`) is unavailable,
+report validation as incomplete and stop for guidance; do not substitute
+`true`. For unrelated optional tools, use `true` when absent.
 
 ## Phase routing table
 

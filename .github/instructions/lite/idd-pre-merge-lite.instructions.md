@@ -65,12 +65,20 @@ This check never rebases, merges, or pushes.
 
 ## F2 — Pre-merge readiness (helper-read only)
 
-1. Run the pre-merge-readiness helper: `node
-   scripts/pre-merge-readiness.mjs --pr <pr-number> --claim-issue
-   <issue-number> --claim-id <claim-id> --trusted-marker-logins
-   <trusted-login-1>,<trusted-login-2>` (add `--agent-id <agent-id>` if
-   known — it tightens the claim check but is optional; add `--nonce
-   <nonce>` too, this session's own locally-recorded activation-nonce
+1. Run the profile-selected `pre-merge-readiness` helper from
+   `docs/idd-helper-scripts.md` with `--pr <pr-number>` and
+   `--trusted-marker-logins <trusted-login-1>,<trusted-login-2>`. When
+   the PR has a closing issue, pass `--claim-issue <issue-number>` and
+   `--claim-id <claim-id>`. For a PR with no linked issue
+   (`closingIssuesReferences` empty), or with a valid `reason:bootstrap`
+   out-of-loop marker, pass `--claimless` instead and omit both claim
+   flags. In the bootstrap case, the helper must validate the trusted,
+   unedited marker for this PR and confirm no closing issue has an
+   active claim. These modes are mutually exclusive; otherwise, a
+   non-empty closing-issue set requires `--claim-issue`. Add
+   `--agent-id <agent-id>` if known — it tightens the claim check but is
+   optional; add `--nonce <nonce>` too, this session's own
+   locally-recorded activation-nonce
    from claim time, whenever one was recorded for the active claim —
    omitting it silently skips the merge-time activation-nonce
    comparison), or the package-manager-profile

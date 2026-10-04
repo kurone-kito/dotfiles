@@ -64,6 +64,18 @@ Step 2. Require `outcome: SATISFIED`, or `CAP_EXHAUSTED` with
 `staleRequestRecovery.action` `not-applicable` or completed AW3-S/cap;
 `attempt`: stop and hand off to full; never E15; `hold` defers. Take
 Steps 1 and 3;
+
+For this repository's `idd-advisory-convergence` check, also verify an
+Actions run for this exact PR and Step 1 `{head-SHA}` whose event is
+`pull_request_target`. Inspect its run record and jobs: require the
+matching PR number in `pull_requests[]`, `head_sha` equal to `{head-SHA}`,
+and the `idd-advisory-convergence` job's `Run advisory-convergence
+check` step to conclude `success`. A `workflow_dispatch` or
+companion-workflow run alone is not proof. If the matching run or
+conclusion is missing or unreadable, defer Step 2. This supplements the
+helper's `requiredChecks.status`; it does not replace the required-check
+snapshot.
+
 use E15 for CI, E14 for advisory (E14 first when both pending).
 If incomplete, skip Step 2, wait before branch-sync/F2, then post from
 E1.

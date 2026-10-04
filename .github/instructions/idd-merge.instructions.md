@@ -173,23 +173,25 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
      that landed between F2 and this final gate, for example a
      required `{development-branch}` sync. `closing-set` (readiness)
-     evidences steps 6-7 here; D3.7 stays local. Before running them,
-     confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
-     exactly (after fetch, the claim gate must confirm
-     `git branch --show-current` is `{branch-name}`; else hold).
-     Require empty `git status --porcelain` and
-     `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`;
-     else hold. Run F2's
+     evidences steps 6-7 here; D3.7 stays local. First confirm
+     `git rev-parse --show-toplevel` is the expected sibling worktree
+     path for the claimed branch, that `git worktree list` identifies
+     that exact path, and that `git status --porcelain` is empty. If
+     `git branch --show-current` is empty (detached HEAD), require
+     `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"` before
+     reattaching with `git switch {branch-name}`. Before switching,
+     revalidate the active claim/nonce and matching worktree-local lock
+     and tokens; the branch-equality part of the claim gate is the
+     detached condition being repaired. If switching fails, hold. Then
+     confirm `git branch --show-current` equals `{branch-name}` and
+     rerun the full claim/worktree gate. In both the
+     attached and recovered cases, require a clean status and
+     `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`; else
+     hold. Run F2's
      shadow-path check against `${PR_HEAD_SHA_F3}`; any output or failure
      holds.
      <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
-     Use `git switch {branch-name}` (not detached) to reattach a
-     detached worktree, then confirm `git branch --show-current` is
-     `{branch-name}` — hold only if reattachment fails; after switching,
-     require `git merge-base --is-ancestor HEAD
-     "${PR_HEAD_SHA_F3}"` again (the branch just switched to can carry
-     different commits than the detached HEAD the first ancestry check
-     ran against) — hold if it fails; on pass, run `git reset --hard
+     After the checks above, run `git reset --hard
      "${PR_HEAD_SHA_F3}"` (an ancestry pass alone leaves the worktree
      at whatever ancestor commit it was already on, not necessarily
      this SHA) — D3.5/D3.7 read local state, not
@@ -361,13 +363,14 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      gates.
 
    **Mandatory apply decision tree** — follow this sequence; no path
-   may exit without a recorded reason when cleanup candidates exist. In
-   the idd-skill source repository, run the helper in dry-run mode
-   first; in adopter repositories, skip to the GraphQL fallback below
-   unless the helper scripts were explicitly installed.
+   may exit without a recorded reason when cleanup candidates exist.
+   When helper runtime is enabled, run the profile-selected
+   `audit-pr-cleanup` helper from `docs/idd-helper-scripts.md` in
+   dry-run mode first. Use the GraphQL fallback below only when the
+   repository has no helper runtime.
 
    ```sh
-   node scripts/audit-pr-cleanup.mjs --pr <pr-number> --dry-run --format table
+   <profile-selected-audit-pr-cleanup> --pr <pr-number> --dry-run --format table
    ```
 
    **In-flight cleanup-run wait (#2846)**: immediately before actually
@@ -442,7 +445,7 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      then run:
 
      ```sh
-     node scripts/audit-pr-cleanup.mjs --pr <pr-number> --apply \
+     <profile-selected-audit-pr-cleanup> --pr <pr-number> --apply \
        --claim-issue <issue-number> --claim-id <claim-id> --format table
      ```
 
@@ -499,10 +502,14 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    and fast-forward it:
 
    ```sh
-   git fetch origin
-   git switch {development-branch} || git switch -c {development-branch} --track origin/{development-branch} \
-     && git merge --ff-only origin/{development-branch}
+   git fetch origin && \
+     (git switch {development-branch} || \
+       git switch -c {development-branch} --track origin/{development-branch}) && \
+     git merge --ff-only origin/{development-branch}
    ```
+
+   A failed fetch stops this sequence before branch switching or merge;
+   never use a stale `origin/{development-branch}` ref as fallback.
 
    The switch falls back to a local tracking branch if the primary
    worktree has none yet (non-default `{development-branch}`: B1
@@ -549,10 +556,14 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    to primary; stay; revalidate:
 
    ```sh
-   node scripts/resume-claim-routing.mjs --issue <issue-number> \
+   <profile-selected-resume-claim-routing> --issue <issue-number> \
      --claim-id <claim-id> --nonce <nonce> \
      --worktree <issue-worktree-path>
    ```
+
+   Resolve the helper command from `docs/idd-helper-scripts.md`; the
+   literal `node scripts/...` form applies only to the source-repository
+   or vendored-node profile.
 
    `keep` / `already_owned` plus a matching lock means ours. Omitting
    `--worktree` (`owner_evidence_required` /

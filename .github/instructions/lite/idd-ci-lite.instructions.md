@@ -139,8 +139,8 @@ CI-polling shared helper file), never this one. Read
   `<run-id>` from the failing check's `link` field, or query the
   Actions API for runs filtered to the current PR head SHA and check
   name.
-- Required `idd-advisory-convergence` runs use `pull_request` /
-  `pull_request_target`; the non-required companion
+- This repository's required `idd-advisory-convergence` workflow is
+  PR-triggered only by `pull_request_target`; the non-required companion
   `idd-advisory-convergence-comment.yml` handles Copilot
   `pull_request_review` submissions, IDD-originated
   `pull_request_review_comment`, and qualifying `issue_comment` events.

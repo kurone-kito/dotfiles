@@ -6,19 +6,11 @@ Lite profile for helper-enabled weak/local models. Read this file after
 handoff comment quoting that evidence, then read the repository's
 recorded `mergePolicy` only to decide whether to release the worker
 claim afterward. It never evaluates whether autonomous merge should
-proceed and never continues to `idd-merge.instructions.md` (F3-F5) —
-those stay fully out of scope for this profile regardless of policy.
-Unlike the standard `idd-merge-handoff.instructions.md`, this file does
-not evaluate the standard file's step 5 prose-recorded sub-cases
-(whether the current session is the designated merge-capable actor, or
-whether an actor and resume condition are recorded) — it reads only the
-machine-readable
-`mergePolicy` value below. Consequently, when the repository records no
-merge-capable actor, releasing the claim here returns the issue to
-Discover with no designated merger, where the standard file would hold
-and keep the claim instead — expect repeated claim and handoff-comment
-churn on that issue until someone merges it. If the repository is
-`instructions-only`, use `idd-merge-handoff.instructions.md` instead.
+proceed and never continues to `idd-merge.instructions.md` (F3-F5);
+those stay out of scope for this profile. Apply the standard
+`idd-merge-handoff.instructions.md` actor and resume-condition checks
+before any claim release. If the repository is `instructions-only`, use
+that standard file instead.
 
 ## Stop-and-ask conditions
 
@@ -66,8 +58,9 @@ the same as a commit or push:
 
 1. Read the recorded merge policy before composing the comment below.
    <!-- dotfiles-divergence: master-branch -->
-   First run `git fetch origin master` (concurrent workers sharing one
-   clone: serialize this behind the clone-scoped lock,
+   First run `git fetch origin master:refs/remotes/origin/master`
+   (concurrent workers sharing one clone: serialize this behind the
+   clone-scoped lock,
    `docs/idd-helper-scripts.md#clone-scoped-lock`, the same as B1's own
    fetch). If the fetch itself fails, do not fall back to a
    possibly-stale local `origin/master` — an
@@ -125,8 +118,10 @@ the same as a commit or push:
    - `human_merge`, `fully_autonomous_merge`, or an unrecognized
      `mergePolicy` value: keep the claim (no release), regardless of
      `ready`.
-   - `mergePolicy` is `separate_merge_agent` **and** `ready: true` —
-     the only case that releases:
+   - `mergePolicy` is `separate_merge_agent`, `ready: true`, the
+     repository explicitly designates a different merge-capable actor,
+     and its resume condition is recorded and satisfied — the only case
+     that releases the worker claim:
      1. Repeat the pre-mutation guard in full (checks 1-4: the active
         claim still uses this session's `{claim-id}`; the activation
         nonce, if posted, still wins; the worktree is still the one
@@ -152,6 +147,11 @@ the same as a commit or push:
 
         Then re-read the issue and confirm the release is the latest
         trusted claim-state marker.
+   - If `mergePolicy` is `separate_merge_agent` but the designated
+     actor is missing, the resume condition is missing or unsatisfied,
+     or this session is itself the designated actor, keep the claim and
+     stop for the documented actor/resume condition. Never release it
+     solely because `ready` is `true`.
 5. Stop. Do not run `gh pr merge`, `idd-merge-execute.mjs`, or any
    other command that would merge, close, or otherwise mutate the PR
    beyond this comment and, when step 4 applies, the claim release —

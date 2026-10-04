@@ -204,7 +204,10 @@ check name.
 If GH CLI cannot resolve a run ID, use Actions REST endpoints directly
 for the same run before posting a hold.
 
-**`idd-advisory-convergence`** (as a required check): `workflow_dispatch`
+**`idd-advisory-convergence`** (as a required check): this repository's
+required workflow is PR-triggered only by `pull_request_target`; the
+companion `idd-advisory-convergence-comment.yml` handles
+`pull_request_review` and review/comment refresh events. `workflow_dispatch`
 does **not** reliably refresh the PR's required-check rollup for current
 HEAD — a manually dispatched run has no `pull_request` context to
 associate with the PR's HEAD SHA (full investigation: this repo's

@@ -467,8 +467,9 @@ authoritative and override the shared helper's generic outcomes for this
 phase:
 
 **While polling**: new review threads/comments → return to E1
-immediately; otherwise, after CI resolves (any outcome), return to E1
-before F — never skip triage.
+immediately. With no new review activity, follow the outcome-specific
+route below; CI completion alone does not select E1. On success, return
+to E1 before F so triage is never skipped.
 
 - **On success** → return to `idd-review-snapshot.instructions.md` (E1)
 - **On failure / code-caused**: fix, run **fix-validate**, commit

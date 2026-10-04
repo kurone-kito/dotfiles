@@ -79,6 +79,15 @@ canonical A5(c) evidence collector:
 node scripts/resume-claim-routing.mjs --issue <number> --fresh-claim-gate
 ```
 
+For `package-manager` and `ephemeral-npx`, resolve the profile-selected
+`idd:resume-claim-routing` command from `docs/idd-helper-scripts.md`. In
+this repository's `ephemeral-npx` profile, use:
+
+```sh
+npx --yes --package <helper-package-spec> \
+  idd-resume-claim-routing --issue <number> --fresh-claim-gate
+```
+
 It reuses the shared `resolveActiveClaim` / `evaluateResumeClaimRouting`
 resolver and returns a `fresh_claim_gate.verdict` of `claimable |
 already-claimed | stale-reclaimable` with the winning `{claim-id}`:
@@ -86,8 +95,10 @@ already-claimed | stale-reclaimable` with the winning `{claim-id}`:
 - `claimable` → proceed to the claim write below.
 - `stale-reclaimable` → proceed with takeover (the stale path below).
 - `already-claimed` → a live competitor, raced claim, or occupied stale/
-  released branch: use lock takeover only if `winning_claim_id` matches
-  this session's verified claim; otherwise apply the routing below:
+  released branch: allow lock takeover only when `winning_claim_id`
+  matches this session's independently verified claim **and** the
+  helper's top-level `reason` is not `released-claim-*` (a released
+  claim is lost even when its id matches). For every other result,
   return to Discover using the same selection mode that produced this
   target (orphan-first: continue the A0-O capable path; roadmap mode:
   continue the A3-ready path) and select the next eligible issue; for an

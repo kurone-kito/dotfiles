@@ -339,11 +339,16 @@ self-critique and record risk.
      guard failure: stop and return to E1. Status `1`/`2` means primary
      registration is unproven/unreadable: stop/ask, not poll.
    - `REQUEST_NEEDED`, `copilotPending` `true` (a request is already
-     pending but unproven for current HEAD, no same-head marker to
-     anchor polling): lite does not track the claim-id/agent-id the
-     full protocol's bounded `AW3-S` remove/re-request cycle requires —
-     stop and ask rather than remove, re-request, or enter the
-     marker-based polling loop below with no marker.
+     pending but unproven for current HEAD, with no same-head marker to
+     anchor polling): consult `staleRequestRecovery`. `attempt` routes
+     through the bounded AW3-S remove/re-request/verify/mark cycle in
+     `idd-advisory-wait.instructions.md` and its AW3-S shell fallback;
+     revalidate claim and HEAD before every mutation. `cap-exhausted`
+     performs no remove, re-request, secondary request, or marker; apply
+     `capExhaustedRoute` (`hold` stops, `phase-specific` continues to
+     E15) while leaving the outcome `REQUEST_NEEDED`. `not-applicable`
+     falls through to the polling loop only when an existing same-head
+     marker anchors it; otherwise stop and ask.
    - `CAP_EXHAUSTED`: apply step 10 first — it is a non-gating
      supplement that fires on cap exhaustion independent of the
      cap-exhausted route. Then, if the helper's `capExhaustedRoute` is

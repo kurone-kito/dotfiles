@@ -428,9 +428,20 @@ never clears by polling: follow its `detail`.
 - **Closing-set and impact-checklist re-verification**:
   `closingSet`/`closing-set` evidences this section's re-run of
   D3.5 steps 6-7 only; re-derive D3.7 below locally.
-  After fetch, the claim gate must confirm
-  `git branch --show-current` is `{branch-name}`; else hold.
-  Require empty `git status --porcelain` and
+  First confirm `git rev-parse --show-toplevel` is the expected sibling
+  worktree path for the claimed branch, `git worktree list` identifies
+  that exact path, and `git status --porcelain` is empty. If
+  `git branch --show-current` is non-empty and differs from
+  `{branch-name}`, hold; when it matches, run the full claim/worktree
+  gate before proceeding. An empty result means detached HEAD: before
+  reattaching, verify the active claim/nonce and matching worktree-local
+  lock and tokens; the branch-equality part of the claim gate is the
+  detached condition being repaired. Require
+  `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"` before switching;
+  then run `git switch {branch-name}` and hold if it fails. Confirm
+  `git branch --show-current` equals `{branch-name}` and rerun the full
+  claim/worktree gate. In both the attached and recovered cases,
+  require a clean status and
   `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"`; else hold. Under
   `set -o pipefail`, run
   `git ls-tree -r -z --full-tree --name-only "$PR_HEAD_SHA" |
@@ -438,15 +449,9 @@ never clears by polling: follow its `detail`.
   GIT_LITERAL_PATHSPECS=1 xargs -0 git ls-files -z -o --exclude-standard --)`
   and again with `-o -i`; any output or failure holds.
   <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
-  Use `git switch {branch-name}` (not detached) to reattach a detached
-  worktree, then confirm `git branch --show-current` is
-  `{branch-name}` — hold only if reattachment fails; after switching,
-  require `git merge-base --is-ancestor HEAD "$PR_HEAD_SHA"` again
-  (the branch just switched to can carry different commits than the
-  detached HEAD the first ancestry check ran against) — hold if it
-  fails; on pass, run `git reset --hard "$PR_HEAD_SHA"` (an ancestry
-  pass alone leaves the worktree at whatever ancestor commit it was
-  already on, not necessarily this SHA).
+  After the checks above, run `git reset --hard "$PR_HEAD_SHA"` (an
+  ancestry pass alone leaves the worktree at whatever ancestor commit
+  it was already on, not necessarily this SHA).
   — D3.5/D3.7 read local state, not the remote PR. Then re-run
   `idd-pr-submit.instructions.md`'s D3.5 steps
   6-7 (the `closingIssuesReferences` set comparison and the

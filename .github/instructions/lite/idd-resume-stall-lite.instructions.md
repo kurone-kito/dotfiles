@@ -21,7 +21,7 @@ takeover, return to resume lite Step 1.
 
 ```sh
 # Confirm non-owned claim
-node scripts/resume-claim-routing.mjs --issue <N>
+<profile-selected-resume-claim-routing> --issue <N>
 
 # Server-anchored now (required for quiet window)
 SERVER_NOW=$(gh api repos/<owner>/<repo>/issues/<N> --include \
@@ -29,11 +29,15 @@ SERVER_NOW=$(gh api repos/<owner>/<repo>/issues/<N> --include \
 NOW=$(node -e "console.log(new Date(process.argv[1]).toISOString().replace(/\.\d{3}Z$/, 'Z'))" "$SERVER_NOW")
 
 # Quiet-window evidence (always pass --now). Requires --pr; skip if none.
-node scripts/stalled-session-quiet-check.mjs \
+<profile-selected-stalled-session-quiet-check> \
   --pr <pr-number> \
   --now "$NOW" \
   --claim-created-at <latest-valid-claimed-by-created_at>
 ```
+
+Resolve both helper commands from `docs/idd-helper-scripts.md`; the
+literal `node scripts/...` forms apply only to source-repository or
+vendored-node profiles.
 
 No PR: do not invent `--pr`. Skip the helper (not a helper
 failure). Decide S2 from the written bullets using the claim

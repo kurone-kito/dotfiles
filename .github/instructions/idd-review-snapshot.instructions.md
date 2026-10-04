@@ -57,10 +57,13 @@ author is a trusted marker actor per
 Never exclude an untrusted-author marker-shaped comment; flag it as
 suspicious if it affects a decision.
 
-When helper runtime is enabled, prefer the read-only helper
-`node scripts/review-activity-snapshot.mjs --pr {pr-number}` to collect
+When helper runtime is enabled, prefer the read-only
+`review-activity-snapshot` helper to collect
 `{head-SHA}`, `{max-activity-updatedAt}`, `{total-item-count}`, and CI
-completion timestamps. Pass trusted marker actors with
+completion timestamps. In the source-repository / vendored-node profile,
+run `node scripts/review-activity-snapshot.mjs --pr {pr-number}`; for
+package-manager or ephemeral-npx, resolve the profile-selected command
+from `docs/idd-helper-scripts.md`. Pass trusted marker actors with
 `--trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"`.
 Helpers remain evidence collectors only: if helper execution fails,
 returns invalid JSON, omits required fields, or conflicts with live
@@ -93,6 +96,20 @@ defers; empty output is not `no-required-checks`. Post after CI. Old
 heads need `LAST_COPILOT_COMMIT == PR_HEAD_SHA`; off-head `SATISFIED`
 requires fresh AW1 and `staleRequestRecovery.action`
 `not-applicable`/completed AW3-S/cap; `attempt` defers.
+
+For this repository's `idd-advisory-convergence` check, a passing
+`ci-wait-state` rollup alone does not prove which workflow event produced
+the result. Before Step 2, verify an Actions run for this exact PR and
+Step 1 `{head-SHA}` whose event is `pull_request_target`, then inspect
+that run's jobs and require the `idd-advisory-convergence` job and its
+`Run advisory-convergence check` step to conclude `success`. Use the
+matching run record's `event`, `head_sha`, and `pull_requests[]`, then
+its jobs endpoint's `steps[].conclusion`. A `workflow_dispatch` or
+companion-workflow run alone is not this proof. If the matching run or
+job/step conclusion is missing or unreadable, defer Step 2. The
+`ci-wait-state` helper remains authoritative for other required-check
+topology and statuses.
+
 Incomplete: Steps 1/3, E2, E3—not F1/F2; E14 then E15. Empty
 E3/E8-zero-A: wait, re-snapshot E1, post without review; CI after
 watermark forces E1↔F2.
