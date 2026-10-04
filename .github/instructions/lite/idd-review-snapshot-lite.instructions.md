@@ -60,7 +60,11 @@ non-empty all-success `checks[]`; `pending`/`failing`/`missing` defer
 Step 2. Require `outcome: SATISFIED`, or `CAP_EXHAUSTED` with
 `capExhaustedRoute: phase-specific`; otherwise stop/ask. Require
 `copilotRecovery.activeClaimProvided: true`; same-head:
-`lastCopilotCommit == prHeadSha`.
+`lastCopilotCommit == prHeadSha`. Run AW1 and `ci-wait-state` after
+Step 1 stores `{head-SHA}`, and require AW1 `prHeadSha` and CI
+`headRefOid` to both equal that SHA. If either differs, discard the
+snapshot and restart Step 1; do not combine advisory or CI evidence
+from different heads.
 <!-- dotfiles-divergence: e1-stale-recovery-cap-route -->
 Off-head needs active-claim `staleRequestRecovery.action`
 `not-applicable` or completed AW3-S; `attempt`: stop and hand off to
@@ -98,7 +102,9 @@ E1.
    --trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"`, or its
    package-manager equivalent. It supplies Step 2 data and
    `embeddedFindings` for Step 3; raw triage fetch remains required.
-   Use `latestPassingCiCompletedAt`, not the latest completion.
+   Use `latestPassingCiCompletedAt`, not the latest completion. Require
+   its `headSha` to equal the `{head-SHA}` captured immediately before
+   it; otherwise discard the activity snapshot and restart Step 1.
 3. Independently fetch, in one pass before filtering: every review
    thread (resolved or not — paginate until `hasNextPage` is `false`,
    never stop at a fixed page size), every review body submission, and

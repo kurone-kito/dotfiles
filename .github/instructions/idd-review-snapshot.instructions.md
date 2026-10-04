@@ -74,7 +74,9 @@ Helpers remain evidence collectors only: if helper execution fails,
 returns invalid JSON, omits required fields, or conflicts with live
 GitHub state in this phase, discard helper output and run the portable
 gh/jq/API procedure below. The written instruction rules remain the
-authoritative decision path.
+authoritative decision path. Require the helper's `headSha` to equal
+the `{head-SHA}` captured immediately before it; otherwise discard the
+activity snapshot and restart Step 1.
 
 Also fetch the **current CI state** for `{head-SHA}`:
 `gh pr checks {pr-number} --json name,state,completedAt`. Record the
@@ -88,7 +90,11 @@ CI pass exists yet for this HEAD.
 `--pr {pr-number}`, `--claim-id {claim-id}`, `--agent-id {agent-id}`,
 and `--trusted-marker-logins <trusted-logins>`; then profile-selected
 `ci-wait-state` with `--pr {pr-number}` (see
-`docs/idd-helper-scripts.md`). Require `outcome: SATISFIED`, or
+`docs/idd-helper-scripts.md`). Run these calls after Step 1 stores
+`{head-SHA}`. Require AW1 `prHeadSha` and CI `headRefOid` to both equal
+that stored SHA; if either differs, discard the snapshot and restart
+E1 Step 1. Do not combine advisory or CI evidence from different heads.
+Require `outcome: SATISFIED`, or
 `CAP_EXHAUSTED` with `capExhaustedRoute: phase-specific`; otherwise
 defer. Require `copilotRecovery.activeClaimProvided: true`,
 `staleRequestRecovery.action`, and `requiredChecks.status: success` (or
