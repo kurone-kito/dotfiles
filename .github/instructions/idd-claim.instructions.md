@@ -102,38 +102,34 @@ already-claimed | stale-reclaimable` with the winning `{claim-id}`:
   stop instead of falling back to Discover, per
   `idd-discover.instructions.md`'s A0-T stop-don't-fallback rule.
 
-<!-- dotfiles-divergence: claim-timing -->
 GitHub comments lack compare-and-swap, so this only narrows claim→write
-TOCTOU window; the 12 h stale-takeover and same-second tie-break remain.
+TOCTOU window; the 24 h stale-takeover and same-second tie-break remain.
 If the helper is unavailable or malformed, use the authoritative rules
 below.
 
-<!-- dotfiles-divergence: claim-timing -->
 Use the `claim-stale-age` policy default from `docs/policy-constants.md`
-for these stale checks (distributed default: `12 h`).
+for these stale checks (distributed default: `24 h`).
 
-<!-- dotfiles-divergence: claim-timing -->
 - No active claim → unclaimed, proceed.
 - Active claim already uses a `{claim-id}` that this current session had
   recorded before this check and has now verified → already claimed; do
   not post a new claim. Continue with that same `{claim-id}`. A token
   first learned by parsing the current issue comments is not enough.
 - Any other active claim whose latest valid `claimed-by` comment has
-  GitHub `created_at` < 12 h → claimed by another live session, even
+  GitHub `created_at` < 24 h → claimed by another live session, even
   when the `agent-id` matches — apply the **already-claimed routing**
   above.
 - Any other active claim whose latest valid `claimed-by` comment has
-  GitHub `created_at` ≥ 12 h → stale, proceed with takeover.
+  GitHub `created_at` ≥ 24 h → stale, proceed with takeover.
 
 Only the GitHub `created_at` of the latest **valid** `claimed-by`
 comment in the active claim counts toward the stale calculation.
 
-<!-- dotfiles-divergence: claim-timing -->
 If the issue has no trusted new-format `claimed-by` comments but has
 legacy claim comments from trusted marker actors, apply the **Legacy
 claim migration** rules near the end of this file instead of the
 bullets above — they resolve unclaimed-vs-stale status from the latest
-trusted legacy claim using this same 12 h threshold and the
+trusted legacy claim using this same 24 h threshold and the
 **already-claimed routing**.
 
 **(d) Open PR** — A5(d) has no supported helper. Re-check live GitHub
@@ -393,8 +389,8 @@ own `{agent-id}` / `{claim-id}` (see
 before returning to Discover. You provably hold the active claim, so
 releasing it is safe and restores the issue to unclaimed — without this
 release, the issue would stay locked against mechanical reclaim
-<!-- dotfiles-divergence: claim-timing -->
-(including the 12 h stale-takeover) with no live owner, since the
+
+(including the 24 h stale-takeover) with no live owner, since the
 losing side of a different-second claim race never activates. Verify
 step 5 independently before releasing — do not infer "step 4 only"
 merely from a helper's single `reason` field, since a combined
@@ -728,10 +724,10 @@ Treat trusted legacy comments as **migration-only** inputs:
   followed by a later trusted legacy `unclaimed-by` comment from the
   same agent. If so, treat the issue as **unclaimed**; skip directly to
   posting a fresh new-format claim with `supersedes: none`.
-<!-- dotfiles-divergence: claim-timing -->
+
 - Otherwise, compare the latest trusted legacy `claimed-by` comment's
   GitHub `created_at` against the `claim-stale-age` threshold
-  (distributed default: `12 h`): younger → claimed by another live
+  (distributed default: `24 h`): younger → claimed by another live
   session, even when `{agent-id}` matches — apply the
   **already-claimed routing** above; older → stale, proceed and replace
   it with a new-format claim. A matching legacy agent ID is not enough

@@ -168,10 +168,9 @@ may be the selected roadmap or the deepest completed nested roadmap
 discovered beneath it. Before any such side effect, coordinate on the
 **exact roadmap issue being mutated**:
 
-<!-- dotfiles-divergence: claim-timing -->
 Treat `stale` and `non-stale` in this section using the
 `claim-stale-age` policy default from `docs/policy-constants.md`
-(distributed default: `12 h`).
+(distributed default: `24 h`).
 
 - Roadmap claim ownership gates roadmap-side mutations only. Do not
   treat a non-stale roadmap claim as a global lock over A2/A3 child
@@ -187,6 +186,13 @@ Treat `stale` and `non-stale` in this section using the
   ready-to-start rules. A matching agent ID alone is not ownership
   proof, and neither is a token first learned by parsing the current
   roadmap comments.
+- Before posting or replacing a roadmap-audit claim, apply the issue-
+  author approval gate in `idd-discover.instructions.md` A3.5 to the
+  roadmap issue. Reuse its configured actor policy, approval signals,
+  and fail-closed handling. If approval is missing, do not claim or make
+  roadmap-side changes; report the approval-needed result and continue
+  through the normal roadmap-first/default discovery route. Do not apply
+  A5's assignee or project readiness checks to a roadmap-audit claim.
 - If the roadmap is unclaimed or stale, post and verify a normal
   `claimed-by` comment for the roadmap issue using a
   `roadmap-audit/<number>-<slug>` branch field. This is a logical

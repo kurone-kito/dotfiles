@@ -1,6 +1,6 @@
 {
   "$schema": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
-  "iddVersion": "0.12.2",
+  "iddVersion": "0.14.0",
   "markerPrefix": "dotfiles",
   "developmentBranch": "master",
   "mergePolicy": "fully_autonomous_merge",
@@ -9,8 +9,8 @@
   "threadResolutionPolicy": "fast-agent-resolve",
   "authoringLanguage": "en",
   "claimTiming": {
-    "staleAge": "PT12H",
-    "heartbeatInterval": "PT6H"
+    "staleAge": "PT24H",
+    "heartbeatInterval": "PT12H"
   },
   "forcedHandoff": {
     "mode": "human-gated",
@@ -35,7 +35,7 @@
   },
   "helperRuntime": {
     "profile": "ephemeral-npx",
-    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3"
+    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d"
   },
   "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",
@@ -70,13 +70,13 @@
   "providerOutage": {
     "declarationTarget": 393
   },
-  "skipIssueAuthorApprovalGate": true,
   "maintainerApprovalActorPolicy": "owners-and-maintainers-only",
   "autopilotSuitability": {
     "floor": 3
   },
   "critiqueLoop": {
     "deferAfterRounds": 5,
+    "deferByUrgency": "severity-tiered",
     "delegate": {
       "command": "coderabbit-critique",
       "mode": "combined"
@@ -99,5 +99,14 @@
   },
   "upstreamEscalation": {
     "enabled": true
+  },
+  "githubApi": {
+    "readCache": {
+      "enabled": true
+    },
+    "loadControl": {
+      "enabled": true,
+      "maxConcurrent": 4
+    }
   }
 }

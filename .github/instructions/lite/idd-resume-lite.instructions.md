@@ -50,8 +50,7 @@ status/HEAD. When an open PR backs the claim, the proof must also have
 issue-only handoff is insufficient. Never invent or post forced-handoff
 markers.
 
-<!-- dotfiles-divergence: claim-timing -->
-Use GitHub **server** timestamps only. Stale age default: **12 h**
+Use GitHub **server** timestamps only. Stale age default: **24 h**
 (`claim-stale-age` / `claimTiming.staleAge`).
 
 ## Step 0 — Route classifier (first match wins)
@@ -65,8 +64,7 @@ Use GitHub **server** timestamps only. Stale age default: **12 h**
 | Non-owned active claim, no valid forced-handoff                    | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
 | Otherwise                                                          | Step 1                                                                 |
 
-<!-- dotfiles-divergence: claim-timing -->
-Quiet-window evidence never bypasses the 12 h stale threshold.
+Quiet-window evidence never bypasses the 24 h stale threshold.
 
 ### Operator-present release
 
@@ -119,8 +117,6 @@ Written table (`instructions-only` profile only): first matching row.
 
 A stale or released claim with a local worktree is STOP — verify claim-id.
 
-<!-- dotfiles-divergence: claim-timing -->
-
 | Claim state                                                                                 | Action                                                        |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Closed / PR merged                                                                          | Remove local worktree/branch → STOP                           |
@@ -130,9 +126,9 @@ A stale or released claim with a local worktree is STOP — verify claim-id.
 | Forced-handoff recovery confirmed for this session                                          | A5 re-claim after GitHub shows handoff → Step 2               |
 | Stale/released + local worktree occupied, unreadable, or unknown                            | STOP — recover; verify owner                                  |
 | No active claim                                                                             | A5 re-claim → Step 2                                          |
-| Active non-stale claim (other session, < 12 h)                                              | STOP                                                          |
-| Active stale claim (other session, ≥ 12 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |
-| Active stale claim (other session, ≥ 12 h)                                                  | A5 takeover `supersedes: <prior-id>` → Step 2                 |
+| Active non-stale claim (other session, < 24 h)                                              | STOP                                                          |
+| Active stale claim (other session, ≥ 24 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |
+| Active stale claim (other session, ≥ 24 h)                                                  | A5 takeover `supersedes: <prior-id>` → Step 2                 |
 
 All claim writes use A5 post-and-verify (`post-idd-marker` / claim helper
 settle delay). Same-agent non-stale claims are **not** inheritable by
