@@ -93,11 +93,12 @@ field here isn't "config absent" — it's a malformed helper response
 
 ## E14 outcome → action
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 <!-- dprint-ignore-start -->
 | Outcome | E14 action |
 | --- | --- |
 | `SATISFIED` | proceed to CI wait |
-| `REQUEST_NEEDED` | `copilotPending`: false → registration-proven request + marker, then poll; true (no marker) → no `AW3-S` here — stop and ask |
+| `REQUEST_NEEDED` | `copilotPending`: false → registration-proven request + marker, then poll; true (no marker) → consult `staleRequestRecovery`: `attempt` → bounded AW3-S, then poll; `cap-exhausted` → follow `capExhaustedRoute` (`phase-specific`: CI wait; `hold`: stop and ask); `not-applicable` → poll only with a same-head marker, otherwise stop and ask |
 | `RECOVERY_NEEDED` | post the recovery marker (do not request another review), then poll |
 | `CAP_EXHAUSTED` | `phase-specific` (default): proceed to CI wait. `hold`: stop and ask (`HOLD`'s only route; see above) |
 | `WAIT` | keep polling |

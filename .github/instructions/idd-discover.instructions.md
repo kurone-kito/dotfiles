@@ -575,6 +575,7 @@ ascending issue-number order:
   # source repo / vendored-node
   node scripts/resume-claim-routing.mjs --issue <candidate-number> --fresh-claim-gate
 
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
   # ephemeral-npx profile
   npx --yes --package <helper-package-spec> \
     idd-resume-claim-routing --issue <candidate-number> --fresh-claim-gate
