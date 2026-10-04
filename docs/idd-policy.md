@@ -350,6 +350,16 @@ _(We've since updated to the latest LTS version)_
 - **Missing-approval behavior**: explicit-target runs stop before claim;
   discovery may report the issue in its approval-needed fallback bucket.
 
+The pinned v0.14.0 claim helper has an upstream permission-outage
+exception for issue-author self-authorization: if the collaborators
+permission lookup is unavailable, `OWNER` author association always
+self-authorizes, and `MEMBER` does so under either supported actor
+policy. This exception applies only to the issue author's own signal;
+ready-label and approval-comment actors still require a successful
+permission lookup. As a result, an organization member without
+repository-level write access may self-authorize an issue during that
+API outage, despite the configured `owners-and-maintainers-only` policy.
+
 This default keeps unattended agents from claiming issues without
 authorization while preserving self-authorization for issues filed by
 the maintainer.
