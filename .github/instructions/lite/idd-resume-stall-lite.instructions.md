@@ -17,14 +17,6 @@ takeover, return to resume lite Step 1.
 - **`instructions-only`**: use the written S1–S5 steps without helpers,
   still with a server-anchored `now` for the quiet window.
 
-Every `node scripts/<name>.mjs` command below is the **source-repo /
-vendored-node** invocation form. Under `package-manager` /
-`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
-command's profile-selected equivalent from
-`docs/idd-helper-scripts.md`. A helper missing on the active profile
-is a missing-helper case under the rule above (hold and stop), not a
-reason to fall through.
-
 ## Helper-first commands (helper-enabled profiles)
 
 ```sh
@@ -99,12 +91,7 @@ Before S4/posting, rerun helper; require `stale`/`takeover`,
 
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
-2. Re-run `resume-claim-routing.mjs --issue <N>` (resolve the exact
-   command from `docs/idd-helper-scripts.md` if unsure). Same
-   fail-closed requirement as the pre-S4 check above: the result must
-   still show `state: stale`, `action: takeover`, and
-   `evidence.local_worktree.status: absent`; occupied, unreadable,
-   unknown, missing, or contradictory evidence means STOP.
+2. Re-run `resume-claim-routing.mjs --issue <N>`.
 3. Active claim still the same non-owned `{claim-id}`.
 4. Still stale (≥ 24 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not
@@ -117,16 +104,17 @@ Any failure → STOP and restart. Do not post takeover on stale evidence.
 
 ## S5 — Takeover
 
-1. Post claim (fresh `{claim-id}`, `supersedes: <prior-claim-id>`) via
-   `post-idd-marker --type claim ... --apply`, then an
-   activation-nonce (`idd-claim-lite.instructions.md` step 5).
-2. Wait settle delay; re-parse; confirm claim and nonce winner are
-   yours.
-3. Lost → STOP. Verified → record nonce; return to
-   `idd-resume-lite.instructions.md` Step 1, Step 2/3.
+Route through `idd-claim-lite.instructions.md`: pre-checks (a)-(e) in
+full, then Claim execution with `supersedes: <prior-claim-id>`
+(`--record-tokens` before the post and the activation-nonce), then
+Claim verification.
+
+Lost → STOP. Verified → return to `idd-resume-lite.instructions.md`
+Step 1 with `--claim-id`/`--nonce`.
 
 ## Hold behavior
 
 On S2/S3 hold, missing helper, unanchored timestamps, or ambiguous
-claim/forced-handoff: session log only (no issue/PR comment). Never
-invent forced-handoff consent.
+claim/forced-handoff: session log only (no issue/PR comment); on
+`local_worktree_occupied` (S3/S4), include §LWR fields
+(`docs/idd-resume-detail.md`). Never invent forced-handoff consent.

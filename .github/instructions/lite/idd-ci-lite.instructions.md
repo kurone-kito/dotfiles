@@ -24,6 +24,8 @@ CI-polling instructions instead of this file.
   check whose provenance the helper cannot verify — its name may be
   unresolvable, or resolvable-and-passing but not confirmably from the
   pinned source).
+- `requiredChecks.status` is `unreadable` (a protection/ruleset read
+  could not be determined) — never fall back to `checks[]`.
 - A non-pass check is not clearly code-caused or recognized
   infra-flaky/pre-existing, except the sole-failing
   `idd-advisory-convergence` exception the caller's own routing names.
@@ -56,20 +58,14 @@ CI-polling instructions instead of this file.
 ## Timing defaults
 
 For context only — the policy helper above already resolves and
-emits these; the distributed defaults below are what it falls back to
-when the repository sets no `ciWait.*` config, not values to derive by
-hand:
-
-- `ciWait.runningTimeout`: `PT30M` — max time a running required check
-  may stay running, measured from its server `startedAt`, before the
-  stalled-run route applies.
-- `ciWait.generationTimeout`: `PT10M` — max time to wait for required
-  checks to appear at all, or for a `startedAt` to appear on a
-  started-less running state.
-- `ciWait.rerunPolicy`: `rerun-once` — the first eligible infra or
-  stalled route reruns exactly once; the next recurrence stops and
-  asks. `hold` never auto-reruns; it stops and asks at the first
-  eligible route.
+emits these; not values to derive by hand. Distributed fallbacks when
+the repository sets no `ciWait.*` config: `runningTimeout` `PT30M`
+(max time a required check may stay running, from its server
+`startedAt`), `generationTimeout` `PT10M` (max time to wait for a
+required check to appear, or for `startedAt` to appear on a
+started-less running state), `rerunPolicy` `rerun-once` (the first
+eligible infra/stalled route reruns once; `hold` always stops and asks
+instead).
 
 ## Required-check discovery
 
@@ -95,6 +91,7 @@ CI-polling shared helper file), never this one. Read
   `pending`); any `failure`, or `checks[]` itself empty → stop and ask.
   Never treat an empty required-check set as a vacuous pass.
 - `source-pinned`: stop and ask (see Stop-and-ask conditions above).
+- `unreadable`: stop and ask (see Stop-and-ask conditions above).
 
 ## Polling algorithm
 
@@ -142,8 +139,8 @@ CI-polling shared helper file), never this one. Read
   `<run-id>` from the failing check's `link` field, or query the
   Actions API for runs filtered to the current PR head SHA and check
   name.
-- Required `idd-advisory-convergence` runs use `pull_request_target`
-  (#501 dropped the transitional `pull_request` trigger); the non-required companion
+- Required `idd-advisory-convergence` runs use `pull_request` /
+  `pull_request_target`; the non-required companion
   `idd-advisory-convergence-comment.yml` handles Copilot
   `pull_request_review` submissions, IDD-originated
   `pull_request_review_comment`, and qualifying `issue_comment` events.
@@ -157,12 +154,12 @@ CI-polling shared helper file), never this one. Read
   required-check rollup for the current HEAD SHA. Rerun the existing
   non-bot PR-linked run for that HEAD instead of dispatching a new one;
   never rerun a gated bot run.
-- If same-HEAD `CANCELLED` siblings remain, rerun only those the plan
-  marks `rerun-eligible`. For the ordinary plan, leave `action_required`,
-  `pending`, `unresolved`, `awaiting-fresh-review`, and
-  `rerun-budget-held` instances withheld; the review exception
-  `--refresh-latest --apply` may rerun a budget-held pull_request-family
-  instance unless `ciWait.rerunPolicy` is `hold`.
+- Rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible`.
+  Ordinary plans hold `action_required`, `pending`, `unresolved`,
+  `awaiting-fresh-review`, `rerun-budget-held`. If every withheld
+  instance is a live-coverage recovery that was not promoted with used
+  `rerun-once` budget (#3504), run `--refresh-latest --apply` once; poll;
+  `hold` or mixed cases hold.
 - Helper-first diagnosis (read-only): `node
   scripts/rerun-advisory-convergence.mjs --pr <n>`. Resolve the
   package-manager equivalent from `docs/idd-helper-scripts.md`.
@@ -172,8 +169,11 @@ CI-polling shared helper file), never this one. Read
 Schedule one wake at the expected completion interval, or background
 the wait only when the topology is confirmed to route completion back
 to this turn; otherwise wait synchronously. Before a heavy local
-command expected to run long, set an execution-timeout override near
-the tool's ceiling, not its default (`#2933`). Never blindly re-issue
+command expected to run long, set an execution-timeout override — the
+tool's own per-invocation timeout (e.g. Claude Code's Bash
+`timeout` parameter), not an in-command utility (issue `#3449`) —
+near the tool's ceiling, not its default (`#2933`). Never blindly
+re-issue
 an already-backgrounded heavy command — check first if it's still
 running, then await or reuse it. Batch every post-wait
 action (disposition, replies, marker, next gate) into one turn. Do not

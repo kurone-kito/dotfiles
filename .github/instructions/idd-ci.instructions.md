@@ -151,13 +151,11 @@ that set instead of re-deriving it.
 
    **Label-gated or other opt-in gate surfacing as a job step, not a
    check.** `gh pr checks` (and `ci-wait-state`) lists jobs/checks, not
-   the steps inside them. An opt-in heavy CI gate wired to run as a
-   step inside an already-present job — rather than its own discrete
-   check — never appears as a new entry there; only the parent job
-   does, and only once, regardless of whether the gated step ran. Do
-   not conclude such a gate is not-running or already-done solely
-   because `gh pr checks` shows no new check for it; confirm it
-   actually executed by inspecting the job's own steps instead:
+   the steps inside them. An opt-in heavy gate wired as a step inside an
+   already-present job, not its own check, shows only as that parent job,
+   once, whether or not the step ran. Do not conclude such a gate is
+   not-running or already-done solely because `gh pr checks` shows no new
+   check for it; confirm it executed by inspecting the job's own steps:
 
    ```sh
    gh run view {run-id} --json jobs
@@ -221,7 +219,7 @@ A second cause: GitHub gates bot-triggered runs to `action_required`
 `idd-advisory-convergence-comment.yml` companion run for Copilot's
 `pull_request_review`/`pull_request_review_comment` event), so the
 companion cannot refresh the required check. Rerun the existing non-bot
-required `pull_request_target`-triggered run for
+required `pull_request`- or `pull_request_target`-triggered run for
 this HEAD (subject to `ciWait.rerunPolicy`), never the gated bot run
 itself (approve it via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` only if needed).
@@ -231,20 +229,18 @@ comments are filtered, although `issue_comment` is subscribed.
 
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several
-`idd-advisory-convergence` check-run instances: the required
-`pull_request_target` run can coexist with companion reruns of that
-instance. #501 dropped the transitional `pull_request` trigger, so a
-new push no longer creates a second required run from that event.
-Review submissions use
+`idd-advisory-convergence` check-run instances: required
+`pull_request`/`pull_request_target` runs can coexist with companion
+reruns of those instances. Review submissions use
 `--refresh-latest --apply`; comment paths use plain `--apply`.
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
-instance (see `#1745`). If it leaves the block,
-rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible` (`gh run
-rerun <run-id>`). For the ordinary plan, hold `action_required`,
-`pending`, `unresolved`, `awaiting-fresh-review`, and
-`rerun-budget-held` instances; the review exception
-`--refresh-latest --apply` may rerun a budget-held pull_request-family
-instance unless `ciWait.rerunPolicy` is `hold`.
+instance (see `#1745`). Rerun same-HEAD `CANCELLED`
+`rerun-eligible` siblings.
+Ordinary plans hold `action_required`, `pending`, `unresolved`,
+`awaiting-fresh-review`, `rerun-budget-held`. If every withheld instance
+is a live-coverage recovery that was not promoted with used `rerun-once`
+budget (#3504), run `--refresh-latest --apply` once; poll; `hold` or
+mixed cases hold.
 
 Note: this is a known Rulesets platform behavior, not an `idd-skill`
 dedup bug — GitHub can require every same-named instance non-failing,
@@ -355,10 +351,11 @@ requires — CI polling, bot/advisory review waits, and local
 build/test/lint runs alike (see the local-command guidance below,
 issue `#2798`).
 
-**Portability**: under supervisor/worker topologies, a background
-wait's completion notification often reaches only the supervisor, so
-the worker's turn stalls until re-prompted — the topology-safety
-condition below accounts for this.
+**Portability**: a background wait's completion notification may reach
+only the supervisor, so the worker can stall until re-prompted; the
+topology-safety condition below covers this.
+
+See [REST](../../docs/idd-helper-scripts.md#rest).
 
 - **No interim polling turns** — schedule one wake at the **expected**
   completion, or background only if the topology is confirmed to route
@@ -368,11 +365,11 @@ condition below accounts for this.
   **but only once** [Required-check discovery](#required-check-discovery)
   has resolved `noRequiredChecksConfigured: false`. When Required-check
   discovery has instead resolved `noRequiredChecksConfigured: true`,
-  `--watch --required` returns immediately, non-blocking, printing a
-  "no required checks
-  reported" message even while real CI is still running — block with
+  `--watch --required` returns immediately, printing a "no required
+  checks reported" message even while real CI is still running —
+  block with
   the bare `gh pr checks <pr-number> --watch` (no `--required`)
-  instead. That bare form still returns once every visible check
+  instead. That bare form returns once every visible check
   reaches a terminal GitHub state, which is not the same as "safe to
   proceed" — a lone `CANCELLED` check with no same-producer successor
   is one such terminal-but-`pending` case (#2714). None of the three
@@ -383,22 +380,23 @@ condition below accounts for this.
   regardless of which form blocked the wait — track elapsed time and
   apply its rerun-or-hold
   decision if a watch outlasts it. Issue that blocking call with an
-  execution-timeout override set at or near the calling tool's own
-  execution-timeout ceiling, not the tool's default, which can
+  execution-timeout override — the calling tool's own per-invocation
+  timeout control, not a timeout utility run inside the command
+  (Claude Code's Bash `timeout` parameter is one example, not a
+  requirement for every harness; issue `#3449`) — set at or near the
+  calling tool's own execution-timeout ceiling, not the tool's
+  default, which can
   hard-kill the wait well short of `ciWait.runningTimeout`; a
   tool-timeout kill of the watch call is not a CI verdict — re-issue
   the same blocking watch, keep accumulating elapsed time against the
   bound above, and do not fall back to `run_in_background` or another
   detached/backgrounded mechanism just because of the kill. This
   reissue-on-timeout guidance is scoped to an idempotent, read-only
-  remote poll like the watch call above. The same preventive override
-  applies before issuing a heavy local command (a full build, test,
-  lint, or doctor run) expected to run long: set an explicit
-  execution-timeout override at or near the calling tool's own
-  execution-timeout ceiling before the command starts, rather than
-  relying on the tool's default and discovering the auto-background
-  only after the fact — this has repeatedly stalled a session's turn
-  in practice (issue `#2933`). Never blindly re-issue a
+  remote poll like the watch call above. The same override applies
+  before a heavy local command (a full build, test, lint, or doctor
+  run) expected to run long, rather than discovering the
+  auto-background only after the fact (issue `#2933`). Never blindly
+  re-issue a
   heavy local command (a full build, test, or lint run) that
   auto-backgrounds past the tool's default timeout — being idempotent
   does not make it safe to run twice at once; two concurrent instances
@@ -410,10 +408,12 @@ condition below accounts for this.
   review state either — see
   `idd-advisory-wait.instructions.md`, whose Scope section also covers
   why a non-primary bot's review must not gate a custom wait either. A
-  bare `sleep` may be sandboxed or blocked in some runtimes (preventive; no observed
-  incident yet); a `run_in_background` Bash task or other
-  detached/backgrounded mechanism must not be used for this wait
-  unless the topology-safety condition above is confirmed. Never
+  bare `sleep` may be refused (observed 2026-09-30 in Claude Code, issue
+  `#3673`: `sleep 30` refused, `sleep 5` ran); in such a runtime, block a CI wait
+  with the `--watch` forms above. A `run_in_background` Bash task or other
+  detached/backgrounded mechanism (a background until-loop included) must
+  not be used for this wait unless the topology-safety condition above is
+  confirmed. Never
   insert "is it done yet?" turns or end this turn assuming an
   unconfirmed background/async notification resumes it — that stalls
   silently under supervisor/worker topologies.

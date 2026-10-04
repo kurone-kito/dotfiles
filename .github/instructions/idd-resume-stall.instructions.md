@@ -5,6 +5,10 @@ rate-limited session and needs a dedicated, safety-first decision path.
 This path relies only on externally observable state. It never depends
 on the prior session posting a graceful shutdown.
 
+A live session that still owns its claim but is unsure what to check next
+mid E/F-phase should use the [E/F orientation]
+(../../docs/idd-workflow.md#live-session-ef-orientation) instead.
+
 This file applies only to unattended stale-takeover evidence for a
 non-owned claim. Human-gated forced handoff is a separate recovery path
 and is routed from `idd-resume.instructions.md` before this file runs.
@@ -167,9 +171,8 @@ treat a missed heartbeat as shortening the wait or as quiet-window
 evidence.
 
 Before continuing to S4, apply the local-worktree safety gate. With helpers,
-run `node scripts/resume-claim-routing.mjs --issue <N>` (resolve the
-exact command from `docs/idd-helper-scripts.md` if unsure) against a
-fresh snapshot and continue only when it still reports `state: stale` with
+run `node scripts/resume-claim-routing.mjs --issue <N>` against a fresh
+snapshot and continue only when it still reports `state: stale` with
 `action: takeover` and `evidence.local_worktree.status: absent` for the
 claimed branch. `local_worktree_occupied` / `stop` (including `occupied`,
 `unreadable`, or unknown worktree evidence), missing evidence, or contradictory
@@ -206,9 +209,8 @@ Immediately before posting takeover:
    verify sequence: wait for the configured settle delay from
    `.github/idd/config.json` `claim.verifySettleDelay`
    (distributed default: `PT5S`) after posting, re-parse
-   chronologically, apply same-second lexicographic `{claim-id}`
-   tie-break, and reject later trusted competing `claimed-by` markers
-   with different `{claim-id}` values.
+   chronologically, and apply the same-second lexicographic `{claim-id}`
+   tie-break.
 
 If any check fails, stop and restart from Resume discovery/routing.
 Do not post takeover with stale evidence.
@@ -229,12 +231,15 @@ After successful verification, run `idd-resume.instructions.md` Step 1
 to preserve closed/merged cleanup and `roadmap-audit/*` special-case
 routing before continuing to Step 2/Step 3.
 
-## Hold behavior (when S2/S3 is not satisfied)
+## Hold behavior (when S2/S3/S4 is not satisfied)
 
 In this non-owned-claim path, do not post hold notes on the issue/PR.
-Record evidence in session logs only and stop. Posting hold notes here
-would violate the shared claim revalidation gate and can reset
-quiet-window evidence.
+Record evidence in session logs only and stop; when the hold traces to
+a `local_worktree_occupied` stop (S3's gate or S4's re-check), that
+evidence is the §LWR wake-condition record
+(`docs/idd-resume-detail.md`). Posting hold
+notes here would violate the shared claim revalidation gate and can
+reset quiet-window evidence.
 
 Keep claim safety strict: no early takeover before the shared stale
 threshold.

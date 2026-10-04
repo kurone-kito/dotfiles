@@ -1,15 +1,13 @@
 # IDD — Merge Execution Phase (F3–F5)
 
-Read only after `idd-merge-handoff.instructions.md` routes the current
-claim to the autonomous merge path. Covers executing the merge (F3),
-cleanup (F4), and looping back to discover (F5).
+Read after `idd-merge-handoff.instructions.md` routes the claim.
+Covers executing the merge (F3), cleanup (F4), and F5.
 
-The final merge-gate timing defaults are named in
-[IDD policy constants](../../docs/policy-constants.md); the merge logic
-itself stays here.
+See [IDD policy constants](../../docs/policy-constants.md).
 
 Before any mutating action in F3, apply the
 [shared claim revalidation gate](idd-overview-core.instructions.md#claim-revalidation-gate).
+F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-development-branch-livelock-under-fast-moving-development-branch).
 
 ## F3 — Merge
 
@@ -127,7 +125,9 @@ Before any mutating action in F3, apply the
    **Preferred path (helper runtime enabled)**: run the F3 merge helper
    documented in
    [`docs/idd-helper-scripts.md`](../../docs/idd-helper-scripts.md#merge-execution-f3).
-   First run it in dry-run (no `--apply`) and confirm `ready: true` with
+   Pass `--closing-issues <n>,<m>` for a multi-issue close
+   (forwarded to the collector). First run it in dry-run
+   (no `--apply`) and confirm `ready: true` with
    an empty `blockers[]` — it wraps the read-only `pre-merge-readiness`
    gate and adds no new authority. Then re-run with `--apply`: when
    `ready`, it re-fetches the head SHA and re-validates the claim
@@ -172,28 +172,27 @@ Before any mutating action in F3, apply the
    - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
      been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
      that landed between F2 and this final gate, for example a
-     required `{development-branch}` sync.
-     <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
-     Before running them,
+     required `{development-branch}` sync. `closing-set` (readiness)
+     evidences steps 6-7 here; D3.7 stays local. Before running them,
      confirm the local worktree is checked out at `${PR_HEAD_SHA_F3}`
-     exactly: require empty `git status --porcelain` and
+     exactly (after fetch, the claim gate must confirm
+     `git branch --show-current` is `{branch-name}`; else hold).
+     Require empty `git status --porcelain` and
      `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`;
-     else hold. For paths in
-     `git ls-tree --full-tree -r --name-only "${PR_HEAD_SHA_F3}"`, run
-     `git ls-files -o --exclude-standard -- ":(top)$path"` and again
-     with `-i` added (`git ls-files -o -i --exclude-standard --
-     ":(top)$path"` — `-i` alone is invalid without `-o`/`-c`); either
-     output holds. Use `git switch {branch-name}` (not
-     detached) to reattach a detached worktree, then confirm
-     `git branch --show-current` is `{branch-name}` — hold only if
-     reattachment fails; after switching, require `git merge-base
-     --is-ancestor HEAD "${PR_HEAD_SHA_F3}"` again (the branch just
-     switched to can carry different commits than the detached HEAD
-     the first ancestry check ran against) — hold if it fails; on
-     pass, run `git reset --hard "${PR_HEAD_SHA_F3}"` (an ancestry
-     pass alone leaves the worktree at whatever ancestor commit it
-     was already on, not necessarily this SHA) — D3.5/D3.7 read local
-     state, not
+     else hold. Run F2's
+     shadow-path check against `${PR_HEAD_SHA_F3}`; any output or failure
+     holds.
+     <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
+     Use `git switch {branch-name}` (not detached) to reattach a
+     detached worktree, then confirm `git branch --show-current` is
+     `{branch-name}` — hold only if reattachment fails; after switching,
+     require `git merge-base --is-ancestor HEAD
+     "${PR_HEAD_SHA_F3}"` again (the branch just switched to can carry
+     different commits than the detached HEAD the first ancestry check
+     ran against) — hold if it fails; on pass, run `git reset --hard
+     "${PR_HEAD_SHA_F3}"` (an ancestry pass alone leaves the worktree
+     at whatever ancestor commit it was already on, not necessarily
+     this SHA) — D3.5/D3.7 read local state, not
      the remote PR. Skip
      D3.5 steps 6-7 under the
      same non-default-`{development-branch}` exemption D3.5 itself
@@ -490,98 +489,112 @@ Before any mutating action in F3, apply the
    See `docs/idd-comment-minimization.md` for the evidence comment
    format, cleanup-failure comment format, permission-blocked comment
    format, and fallback GraphQL commands.
-4. Concurrent workers sharing one clone: serialize this step's fetch
-   and step 5's `worktree remove` behind the
+4. Concurrent workers sharing one clone: serialize this fetch and
+   step 5's `worktree remove` behind the
    [clone-scoped lock](../../docs/idd-helper-scripts.md#clone-scoped-lock).
-   From the **primary worktree** — the worktree being cleaned up is
-   still checked out to its issue branch at this point, so running
-   this elsewhere would fast-forward the wrong branch — switch to
-   `{development-branch}` (the PR's own validated target branch;
-   resolved in `idd-work.instructions.md`'s B1
-   [Resolve the development branch](idd-work.instructions.md#b1--create-worktree-with-branch)
-   step) explicitly before fast-forwarding it, rather than assuming it
-   is already checked out there:
+   From the **primary worktree** (elsewhere would fast-forward the
+   wrong branch), switch to `{development-branch}` (the PR's
+   validated target; see
+   [B1 Worktree creation Step 2](idd-work.instructions.md#b1--create-worktree-with-branch))
+   and fast-forward it:
 
    ```sh
-   git fetch origin {development-branch}
-   git switch {development-branch} || git switch -c {development-branch} --track origin/{development-branch}
-   git merge --ff-only origin/{development-branch}
+   git fetch origin
+   git switch {development-branch} || git switch -c {development-branch} --track origin/{development-branch} \
+     && git merge --ff-only origin/{development-branch}
    ```
 
-   The switch falls back to creating a local tracking branch when the
-   primary worktree has no local `{development-branch}` yet (expected
-   whenever it differs from the repository default, since B1 branches
-   new worktrees straight from `origin/{development-branch}` without
-   ever checking it out in the primary worktree).
+   The switch falls back to a local tracking branch if the primary
+   worktree has none yet (non-default `{development-branch}`: B1
+   branches worktrees from origin).
 
-   Doing this before worktree/branch deletion (next step) ensures
-   WorkTrunk's own merge-status check, which reads the local
-   `{development-branch}` rather than `origin/{development-branch}`,
-   sees the just-merged branch as already merged on its first attempt
-   instead of reporting `branch_outcome: retained_unmerged` and
-   declining to delete it (`#2331`). This local checkout is a plain git
-   operation over the merged feature branch's own target and is
-   unrelated to the trusted-checkout-source concern in B1 Step 1 — if
-   `{development-branch}` differs from the repository's default branch,
-   switch the primary worktree back to the default branch
-   (`git switch <default-branch>`) once the remaining F4 cleanup steps
-   below complete, so the next B1 pass finds the primary worktree on
-   its expected trusted checkout.
-5. Run from the **primary worktree**, never from inside the worktree
-   being removed. Any removal (plain or `--force`) silently discards
-   ignored files too, including inside a submodule. Scope Git
-   commands to `<path>`. Inspect leftover files under a `-`
-   submodule path directly (not a repo).
+   If the switch or fast-forward refuses over dirty primary-worktree
+   paths, re-validate the claim, hold per
+   [Hold / suspend](idd-overview-appendix.instructions.md#hold--suspend)
+   as `primary-worktree-dirty` (the operator cleans those paths — never
+   stash/discard them — then re-run step 4 through step 7), and
+   stop before step 5 — primary-worktree state, so never remove the
+   issue worktree because of it.
 
-   Use `--untracked-files=normal` (not `all`). A clean submodule
-   worktree can still hide a stash or unpushed commit:
+   Two more failures (stop before step 5; see
+   [detail](../../docs/idd-helper-scripts.md#f4-branch-failure-routes)):
+
+   - `already used by worktree` → hold as `development-branch-in-use`;
+     name the path, don't touch it.
+   - `Not possible to fast-forward, aborting.` → hold as
+     `development-branch-diverged`; don't reset/rebase.
+
+   Off-default `{development-branch}`: `git switch <default-branch>`
+   once F4 completes/holds, for B1's checkout.
+5. Run from the **primary worktree**, not one being removed.
+   Removal discards ignored submodule data. Scope
+   to `<path>`. Inspect leftovers under `-` (not a repo).
+
+   Use `--untracked-files=normal` (not `all`). A clean submodule can
+   still hide a stash or unpushed commit; tag-only detached history is
+   not counted; local refs are:
 
    - `git -C <path> status --porcelain --ignored --untracked-files=normal`
    - `git -C <path> submodule status --recursive`
-   - `git -C <path> submodule foreach --recursive 'git status
-     --porcelain --ignored --untracked-files=normal; git stash list;
-     git rev-list --all --not --remotes --count'`
+   - Probe:
 
-   Generated output is disposable only when a configured command
-   reproduces it; preserve anything else. Copy secrets (e.g. `.env`)
-   out — never commit or push them. Copy other work to a different
-   ref or path; delete `<branch-name>` next.
-   Before each `git worktree remove`, `cd` to the surviving primary
-   worktree; keep that cwd for every removal and remaining F4 work
-   (branch/remote deletion, digest, revalidation, unclaim, and
-   `gh`/helper calls). Before each removal, revalidate the claim and
-   worktree lock (`idd-claim.instructions.md`); stop if either is not
-   ours. If it fails with `fatal: working trees containing submodules
-   cannot be moved or removed`, retry
-   `git worktree remove --force <path>` from that cwd only after
-   preserving anything worth keeping. Then remove the worktree, then
-   its branch:
+     ```sh
+     git -C <path> submodule foreach --recursive 'git status
+     --porcelain --ignored --untracked-files=normal; git stash list; git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes || exit; git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count'
+     ```
+
+   Discard only reproducible configured-command output; preserve all else.
+   Copy secrets (`.env`) outside `<path>` — never commit or push them.
+   Preserve work in backup ref or external path. Before removal, `cd`
+   to primary; stay; revalidate:
+
+   ```sh
+   node scripts/resume-claim-routing.mjs --issue <issue-number> \
+     --claim-id <claim-id> --nonce <nonce> \
+     --worktree <issue-worktree-path>
+   ```
+
+   `keep` / `already_owned` plus a matching lock means ours. Omitting
+   `--worktree` (`owner_evidence_required` /
+   `claim-id-match-without-independent-owner-evidence`) is incomplete:
+   re-run with the flag. A remaining `stop` means do
+   not remove the worktree. `git worktree remove --force` runs only
+   after failure `working trees containing submodules cannot be moved
+   or removed`, and only after leftovers are preserved. Revalidate
+   `--worktree` immediately before that retry.
+   [Removed-cwd](../../docs/idd-helper-scripts.md#f4-branch-failure-routes).
+   Then:
 
    - `git worktree remove <path>`.
-   - `git branch -d <branch-name>` (the baseline permission profile
-     denies `-D`; see `docs/permissions.md`). Local `{development-branch}`
-     was already fast-forwarded to the merge commit by the previous
-     step, so this should not fail with `error: the branch
-     '<branch-name>' is not fully merged`; if it still does,
-     investigate before retrying rather than assuming a stale local
-     `{development-branch}` is the cause.
+   - `git branch -d <branch-name>` (`-D` is denied; see
+     `docs/permissions.md`). Local `{development-branch}`
+     was fast-forwarded in step 4, so this shouldn't fail with
+     `error: the branch '<branch-name>' is not fully merged`. If it
+     still does, compare `git rev-parse <branch-name>` with `gh pr
+     view {pr-number} --json state,headRefOid`: matching `MERGED`
+     head → keep it, re-validate claim, comment: operator may run
+     `git branch -D <branch-name>`, continue to step 6 (`Next action:
+     none`); otherwise hold `local-branch-unmerged-commits`, stop
+     before step 7, keep claim.
 
 6. If GitHub auto-delete is disabled: delete the remote branch too.
-   (WorkTrunk may be used for steps 5–6, the deletion steps —
-   step 4's local `{development-branch}` update is a plain git
-   operation, not a WorkTrunk one.)
+   (WorkTrunk may run steps 5–6; step 4 stays a plain git operation.)
 7. Re-validate the active claim before each mutation below. If it
    still uses your `{claim-id}`, upsert the claimed issue's own digest
    with `Phase: F4 complete`, `Claim: none`, `Branch: none`, `Open
    blockers: none`, `Next action: none`, and `Authoritative by`
-   pointing to the merge commit — mirroring F3's own PR-digest upsert
-   but targeting the issue instead, so a closed/merged issue never
-   stays stuck at a stale digest phase (`#3079`). Proceed only when
+   pointing to the merge commit — mirroring F3's own PR-digest
+   upsert, but for the issue, so a closed/merged issue never sticks
+   at a stale digest phase (`#3079`). Proceed only when
    the upsert reports `create`, `update`, or `noop`; on `duplicate` or
    any other failure, keep the claim, re-validate, then post a hold
    comment with the helper output, and stop for repair. Re-validate
-   again; if it still
-   uses your `{claim-id}`, post `unclaimed-by` for your own
+   again; if it still uses your `{claim-id}`, for each issue in step
+   1's closing set (none: skip), read
+   `gh issue view {issue-number} --json state` once; if open,
+   re-validate, then close it as step 1 does (a racing close counts); if
+   either fails, hold as above with its error (no `unclaimed-by`, no
+   retry). Then post `unclaimed-by` for your own
    `{agent-id}` / `{claim-id}` (see
    [Unclaim format](idd-overview-core.instructions.md#unclaim-format))
    to release the claim now that cleanup is complete (`#2220`). If
