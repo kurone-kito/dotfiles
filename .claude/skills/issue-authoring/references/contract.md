@@ -1565,6 +1565,18 @@ Binding rules:
 
 ## Authoring hold and release
 
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+**Dotfiles helper-version override (v0.14.0):** the pinned
+`idd-authoring-set-members` helper silently skips trusted owner markers
+GitHub minimized with reason `outdated` without checking for a later
+marker in the same continuity chain, and its result does not report
+skipped markers. Therefore, even `soleMember: true` cannot authorize the round-count
+auto-release exception in this repository. Require an explicit human
+release request for every held issue set while this version is pinned.
+Re-enable the upstream exception only after the adopted helper verifies
+same-chain supersession and fails closed when continuity cannot be
+proven.
+
 Issue authoring uses a two-stage contract: drafting and publishing
 happen together under an authoring hold; release from that hold is the
 only approval boundary.
@@ -2086,8 +2098,9 @@ only approval boundary.
   any published body; the `audit-authored-issue` linter (or its manual
   fallback) is green on every published body in the set. Keep the authoring
   label in place until the checklist passes and the user explicitly requests
-  release from the authoring hold, except for the narrow auto-release
-  exception below. Keep the set anchor held until every other
+  release from the authoring hold. The upstream auto-release exception below
+  is unavailable in this repository's profile under the local override above.
+  Keep the set anchor held until every other
   target's label removal is verified, and remove the anchor label last. For
   every target, first re-fetch owner comments during release-marker preflight.
   **Mandatory release-time hide-on-supersede sweep (#2896, #2935).** At
@@ -2443,7 +2456,13 @@ only approval boundary.
   release either; it only ensures a fully-silent skip never happens even
   in the one failure mode the mechanical signal cannot itself cover.
 - **Narrow auto-release exception (review-fix-loop-cutoff).** A
-  follow-up issue whose body carried the exact marker
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  This upstream exception is disabled for this repository while helper
+  v0.14.0 is pinned. Its sole-member result cannot prove that a minimized
+  owner marker was superseded in the same continuity chain; require the
+  explicit human release request described above.
+  For profiles where it remains enabled, a follow-up issue whose body
+  carried the exact marker
   `<!-- <marker-prefix>-authoring-defer-source: review-fix-loop-cutoff -->` at
   Stage 1 publication time — part of the initial `authoring-publication` body
   write, never added by a later edit — may complete the full Stage 2
@@ -2522,8 +2541,8 @@ passes the completed-draft adversarial review and then the mechanical
 [Authoring hold and release](#authoring-hold-and-release) above for the
 full two-stage contract. Removing the authoring label and starting the
 IDD execution loop both require the user's explicit hold-release
-request, except the narrow auto-release exception documented in
-[Authoring hold and release](#authoring-hold-and-release) above; nothing
-else authorizes either.
+request in this repository's installed profile; the upstream exception
+documented in [Authoring hold and release](#authoring-hold-and-release)
+above is disabled by the local helper-version override there.
 
 [issue-authoring-review-input-schema]: https://kurone-kito.github.io/idd-skill/schemas/issue-authoring-review-input.schema.json

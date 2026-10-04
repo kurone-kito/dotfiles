@@ -376,11 +376,13 @@ in particular, `authoring-set-members` maps to
 
 ### Stage 2: Release (the single approval boundary)
 
-- The user's explicit hold-release request is the only approval this
-  bundle's workflow requires — except the narrow review-fix-loop-cutoff
-  auto-release exception in
-  [Authoring hold and release](contract.md#authoring-hold-and-release) —
-  and it authorizes IDD execution for the released issues
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+- In this repository's installed helper profile, the user's explicit
+  hold-release request is the only approval this bundle requires and it
+  authorizes IDD execution for the released issues. The upstream
+  review-fix-loop-cutoff auto-release exception is disabled while this
+  repository is pinned to helper v0.14.0; see the local safety override
+  in [Authoring hold and release](contract.md#authoring-hold-and-release)
 - Before removing the authoring label, bundled skill runs a release
   checklist that absorbs the rigor of the dropped middle step:
   - every child issue is referenced from its parent roadmap's
@@ -403,8 +405,12 @@ in particular, `authoring-set-members` maps to
   retries, requiring the exact current owner, set, anchor, session, and marker
   body. If that guard is not found conclusively, leave all labels in place and
   stop. The guard suppresses Discover for the whole set during the provisional
-  label-removal window; it does not close the set. When this release is
-  proceeding under the narrow review-fix-loop-cutoff auto-release
+  label-removal window; it does not close the set. For profiles where
+  the upstream round-count exception remains enabled, the following
+  sole-member and provenance checks apply to that release path. In this
+  repository, their passing result still cannot waive the explicit
+  request requirement above.
+  When a release is proceeding under the narrow review-fix-loop-cutoff auto-release
   exception in
   [Authoring hold and release](contract.md#authoring-hold-and-release)
   instead of an explicit human release request, also verify here --
@@ -475,11 +481,9 @@ in particular, `authoring-set-members` maps to
   set-level recovery hold and never claim a partial release.
 - Bundled skill removes the authoring label from all published issues
   only after the release checklist passes and the user's release
-  request is explicit, except the narrow review-fix-loop-cutoff
-  auto-release exception in
-  [Authoring hold and release](contract.md#authoring-hold-and-release)
-- Release remains a human action; nothing in this bundle auto-releases
-  a held issue set, except that same narrow, marker-scoped exception
+  request is explicit
+- Release remains a human action; this repository's installed profile
+  does not auto-release a held issue set
 - For an ordinary human-gated release, under an orchestrator and
   delegated-worker split, the release action itself must be
   performed by whichever party directly holds the verified user's
@@ -490,11 +494,9 @@ in particular, `authoring-set-members` maps to
   variant. A delegated worker that receives only a relayed release
   claim, even from its own orchestrator, must refuse to act on it and
   require the party holding the actual request to release directly.
-  This rule does not extend to the narrow review-fix-loop-cutoff
-  auto-release exception above, which by design runs with no user
-  release request for any party to hold in the first place — see
-  [Authoring hold and release](contract.md#authoring-hold-and-release)
-  (observed 2026-09-17, kurone-kito/idd-skill#3102)
+  The upstream review-fix-loop-cutoff auto-release exception is
+  unavailable in this repository's installed helper profile; every
+  release requires the party holding the actual user request
 
 ## A4.5 Gate Timing
 
@@ -542,16 +544,13 @@ time and report the specific failure (unclear, invalid, duplicate).
 - publish a body that has not passed the completed-draft adversarial
   review and then the mechanical `audit-authored-issue` gate
 - remove the authoring label from any issue without an explicit
-  release request, except the narrow review-fix-loop-cutoff
-  auto-release exception in
-  [Authoring hold and release](contract.md#authoring-hold-and-release)
+  release request
 
 ## Handoff to execution
 
 Once the authoring label is removed from every issue in a released
-set — via the user's explicit release request, or, for a single
-marked target only, the narrow review-fix-loop-cutoff auto-release
-exception — execution is authorized: the repository's normal entry
+set via the user's explicit release request, execution is authorized:
+the repository's normal entry
 file and routed `.github/instructions/*.instructions.md` phase files
 (Discover, Claim, Work) may pick up the released issue(s). This bundle
 does not itself start that loop.
