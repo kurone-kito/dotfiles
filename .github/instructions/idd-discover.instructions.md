@@ -283,14 +283,23 @@ referenced issues. Collect only **open** issues.
 - Incidental narrative mentions (e.g., "Similar to #NNN") lacking an
   explicit task, sub-issue, or dependency relationship
 
-Traverse referenced issues regardless of open/closed state. An issue
-carrying an `<!-- dotfiles-roadmap-id: ... -->` marker
-is a **roadmap node**; any other issue — including one carrying only
-the configured roadmap label — is an **execution leaf**. Include
-only open execution leaves in the candidate set; never advance roadmap
-nodes to A3/A4/A4.5/A5, but traverse closed nodes too (so descendants
-aren't hidden). The A1 root roadmap starts the traversal and is
-excluded from the open roadmap-node set.
+<!-- dotfiles-divergence: cross-roadmap-discovery -->
+Traverse referenced issues regardless of open/closed state. In the
+default single-root mode, an issue carrying an
+`<!-- dotfiles-roadmap-id: ... -->` marker is a **roadmap node**; the A1
+root is always excluded from candidates. In `--all-roadmaps` mode, the
+open root set selected at A1 (marker, configured roadmap label, or
+`discover.legacyRoots`) also defines roadmap nodes, even when an
+unmarked root appears as a descendant in another traversal. Continue
+traversing those nodes so their descendants remain visible, but never
+include them as execution candidates or advance them to A3/A4/A4.5/A5.
+If a configured-label root from A1 is missing from the helper's
+`--all-roadmaps` `roots` list, enumerate it with the profile-selected
+single-root `discover-roadmap-graph --issue <root-number>` command and
+merge its open descendants by issue number, preserving that root in
+each descendant's provenance. Include only open non-root execution
+leaves in the candidate set; traverse closed nodes too so their
+descendants aren't hidden.
 
 **Permitted repo-wide queries** — only the following scoped lookups may
 touch issues outside the roadmap traversal graph:
@@ -575,8 +584,10 @@ ascending issue-number order:
   ```sh
   # source repo / vendored-node
   node scripts/resume-claim-routing.mjs --issue <candidate-number> --fresh-claim-gate
+  ```
 
   <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  ```sh
   # ephemeral-npx profile
   npx --yes --package <helper-package-spec> \
     idd-resume-claim-routing --issue <candidate-number> --fresh-claim-gate
@@ -684,8 +695,11 @@ Resolve `<profile-selected-select-desynced-index-command>` from
 non-vendored profiles); the formula above is the canonical fallback
 when the helper is unavailable. It reorders **only within** a single
 score tie band, never across bands, and never bypasses A4.5/A5. With
-`off`, a single-entry band, or no applicable score, keep the
-deterministic **lowest issue number** pick.
+`off` or a single-entry band, skip only the desync rotation and continue
+through the remaining enabled tie-breakers below. Use the deterministic
+**lowest issue number** only after all enabled preferences leave a tie.
+When score-based selection is disabled, Step 2's explicit lowest-number
+rule applies without score-based tie-breakers.
 
 **Configured milestone-scope preference.** `discover.milestoneScope`
 (`#2340`) prefers a same-score-band candidate whose OPEN milestone

@@ -495,21 +495,33 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    See `docs/idd-comment-minimization.md` for the evidence comment
    format, cleanup-failure comment format, permission-blocked comment
    format, and fallback GraphQL commands.
-4. Concurrent workers sharing one clone: serialize this fetch and
-   step 5's `worktree remove` behind the
-   [clone-scoped lock](../../docs/idd-helper-scripts.md#clone-scoped-lock).
+4. Concurrent workers sharing one clone: serialize each shared-clone
+   mutation behind the
+   [clone-scoped lock](../../docs/idd-helper-scripts.md#clone-scoped-lock):
+   this fetch/primary-worktree branch switch/fast-forward, every Step 5
+   worktree removal and local branch deletion, and any off-default
+   restoration switch.
    From the **primary worktree** (elsewhere would fast-forward the
-   wrong branch), switch to `{development-branch}` (the PR's
-   validated target; see
+   wrong branch), switch to `{development-branch}` (the PR's validated
+   target; see
    [B1 Worktree creation Step 2](idd-work.instructions.md#b1--create-worktree-with-branch))
-   and fast-forward it:
+   and fast-forward it under one lock acquisition:
 
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
    ```sh
-   git fetch origin && \
-     (git switch {development-branch} || \
-       git switch -c {development-branch} --track origin/{development-branch}) && \
-     git merge --ff-only origin/{development-branch}
+   <profile-selected-clone-lock-command> --exec --agent-id {agent-id} \
+     --repo <primary-worktree-path> -- sh -c '
+       git fetch origin &&
+       (git switch "$1" || git switch -c "$1" --track "origin/$1") &&
+       git merge --ff-only "origin/$1"
+     ' sh '<shell-quoted-development-branch>'
    ```
+
+   Resolve `<profile-selected-clone-lock-command>` from
+   `docs/idd-helper-scripts.md`. Pass the validated development branch
+   as a shell-quoted positional argument; never interpolate it into the
+   shell script text. This keeps fetch, switch, and fast-forward
+   serialized together with other shared-clone worktree operations.
 
    A failed fetch stops this sequence before branch switching or merge;
    never use a stale `origin/{development-branch}` ref as fallback.
@@ -534,8 +546,17 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    - `Not possible to fast-forward, aborting.` → hold as
      `development-branch-diverged`; don't reset/rebase.
 
-   Off-default `{development-branch}`: `git switch <default-branch>`
-   once F4 completes/holds, for B1's checkout.
+   Off-default `{development-branch}`: once F4 completes or holds,
+   restore B1's primary-worktree checkout by running `git switch
+   <default-branch>` through the clone lock from that worktree:
+
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+   ```sh
+   <profile-selected-clone-lock-command> --exec --agent-id {agent-id} \
+     --repo <primary-worktree-path> -- \
+     git switch '<shell-quoted-default-branch>'
+   ```
+
 5. Run from the **primary worktree**, not one being removed.
    Removal discards ignored submodule data. Scope
    to `<path>`. Inspect leftovers under `-` (not a repo).
@@ -572,20 +593,42 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    literal `node scripts/...` form applies only to the source-repository
    or vendored-node profile.
 
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
    `keep` / `already_owned` plus a matching lock means ours. Omitting
    `--worktree` (`owner_evidence_required` /
    `claim-id-match-without-independent-owner-evidence`) is incomplete:
    re-run with the flag. A remaining `stop` means do
-   not remove the worktree. `git worktree remove --force` runs only
+   not remove the worktree. Resolve
+   `<profile-selected-clone-lock-command>` from
+   `docs/idd-helper-scripts.md`; revalidate the claim immediately before
+   each shared-clone mutation and acquire a fresh lock for each command
+   from the primary worktree. Run the normal removal as:
+
+   ```sh
+   <profile-selected-clone-lock-command> --exec --agent-id {agent-id} \
+     --repo <primary-worktree-path> -- \
+     git worktree remove '<shell-quoted-path>'
+   ```
+
+   `git worktree remove --force` runs only
    after failure `working trees containing submodules cannot be moved
    or removed`, and only after leftovers are preserved. Revalidate
-   `--worktree` immediately before that retry.
+   `--worktree` immediately before that retry, then run the forced
+   removal through a fresh clone-lock acquisition:
+
+   ```sh
+   <profile-selected-clone-lock-command> --exec --agent-id {agent-id} \
+     --repo <primary-worktree-path> -- \
+     git worktree remove --force '<shell-quoted-path>'
+   ```
+
    [Removed-cwd](../../docs/idd-helper-scripts.md#f4-branch-failure-routes).
    Then:
 
-   - `git worktree remove <path>`.
-   - `git branch -d <branch-name>` (`-D` is denied; see
-     `docs/permissions.md`). Local `{development-branch}`
+   - After removal succeeds, re-validate and run
+     `git branch -d '<shell-quoted-branch-name>'` through a fresh
+     clone-lock acquisition from the primary worktree (`-D` is denied;
+     see `docs/permissions.md`). Local `{development-branch}`
      was fast-forwarded in step 4, so this shouldn't fail with
      `error: the branch '<branch-name>' is not fully merged`. If it
      still does, compare `git rev-parse <branch-name>` with `gh pr
@@ -597,28 +640,44 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
 
 6. If GitHub auto-delete is disabled: delete the remote branch too.
    (WorkTrunk may run steps 5–6; step 4 stays a plain git operation.)
-7. Re-validate the active claim before each mutation below. If it
-   still uses your `{claim-id}`, upsert the claimed issue's own digest
-   with `Phase: F4 complete`, `Claim: none`, `Branch: none`, `Open
-   blockers: none`, `Next action: none`, and `Authoritative by`
-   pointing to the merge commit — mirroring F3's own PR-digest
-   upsert, but for the issue, so a closed/merged issue never sticks
-   at a stale digest phase (`#3079`). Proceed only when
-   the upsert reports `create`, `update`, or `noop`; on `duplicate` or
-   any other failure, keep the claim, re-validate, then post a hold
-   comment with the helper output, and stop for repair. Re-validate
-   again; if it still uses your `{claim-id}`, for each issue in step
-   1's closing set (none: skip), read
+7. Re-validate the active claim before each mutation below.
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+   If it still uses your `{claim-id}`, first upsert the claimed issue's own
+   digest with `Phase: F4 cleanup`, `Claim: {claim-id}`, `Branch: none`,
+   the step 1 closing set in `Open blockers`, `Next action: close the
+   closing issues, then release the claim`, and `Authoritative by`
+   pointing to the merge commit. Keeping the active claim in this
+   digest means a failed issue lookup or close cannot leave a false
+   `Claim: none` while the claim is retained. Proceed only when the
+   upsert reports `create`, `update`, or `noop`; on `duplicate` or any
+   other failure, keep the claim, re-validate, then post a hold comment
+   with the helper output, and stop for repair. Re-validate again; if
+   it still uses your `{claim-id}`, for each issue in step 1's closing
+   set (none: skip), read
    `gh issue view {issue-number} --json state` once; if open,
    re-validate, then close it as step 1 does (a racing close counts); if
-   either fails, hold as above with its error (no `unclaimed-by`, no
-   retry). Then post `unclaimed-by` for your own
+   either fails, hold as above with its error (retain the claim; no
+   `unclaimed-by`, no retry). After every closing issue is confirmed
+   closed, re-validate and post `unclaimed-by` for your own
    `{agent-id}` / `{claim-id}` (see
    [Unclaim format](idd-overview-core.instructions.md#unclaim-format))
    to release the claim now that cleanup is complete (`#2220`). If
    either re-validation finds anything other than your `{claim-id}`
    — including no active claim — stop that mutation: the claim was
    lost.
+
+   Only after GitHub confirms that release and the issue is still
+   unclaimed, update the digest to `Phase: F4 complete`, `Claim: none`,
+   `Branch: none`, `Open blockers: none`, `Next action: none`, and the
+   merge commit as `Authoritative by`. Use
+   `live-status-digest --issue <issue-number> --phase "F4 complete"
+   --claim none --branch none --open-blockers none --next-action none
+   --authoritative-by <merge-commit> --skip-claim-check --apply` for
+   this post-release update only; this narrow maintainer override is
+   necessary because the active claim no longer exists. If any newer
+   claim is present, leave the digest for its owner and stop. If this
+   final digest update fails, report it without reclaiming or changing
+   marker state.
 
 ## F5 — Loop
 

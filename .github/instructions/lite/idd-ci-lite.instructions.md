@@ -150,11 +150,13 @@ CI-polling shared helper file), never this one. Read
   `--refresh-latest --apply`; comment paths use plain `--apply`. Only
   IDD-originated review-thread replies or qualifying IDD-originated PR
   comments refresh; ordinary comments/replies are filtered.
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 - The required `idd-advisory-convergence` workflow's `workflow_dispatch`
   trigger does not reliably refresh the PR's
   required-check rollup for the current HEAD SHA. Rerun the existing
-  non-bot PR-linked run for that HEAD instead of dispatching a new one;
-  never rerun a gated bot run.
+  non-bot `pull_request_target`-triggered PR-linked run for that HEAD
+  instead of dispatching a new one or rerunning a legacy `pull_request`
+  run; never rerun a gated bot run.
 - Rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible`.
   Ordinary plans hold `action_required`, `pending`, `unresolved`,
   `awaiting-fresh-review`, `rerun-budget-held`. If every withheld

@@ -215,17 +215,22 @@ associate with the PR's HEAD SHA (full investigation: this repo's
 dogfooded
 [`.github/workflows/idd-advisory-convergence.yml`](https://github.com/kurone-kito/idd-skill/blob/main/.github/workflows/idd-advisory-convergence.yml)
 header comment — not present in the portable stub this template
-ships). For a stuck or stale rollup entry, rerun the _existing_
-PR-linked run (`gh run rerun <run-id>`) instead of `workflow_dispatch`.
+ships).
+
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+For a stuck or stale rollup entry, rerun the _existing_ non-bot
+`pull_request_target` run for this HEAD
+(`gh run rerun <run-id>`) instead of `workflow_dispatch` or a legacy
+`pull_request` run.
 
 A second cause: GitHub gates bot-triggered runs to `action_required`
 (for example, the non-required
 `idd-advisory-convergence-comment.yml` companion run for Copilot's
 `pull_request_review`/`pull_request_review_comment` event), so the
 companion cannot refresh the required check. Rerun the existing non-bot
-required `pull_request`- or `pull_request_target`-triggered run for
-this HEAD (subject to `ciWait.rerunPolicy`), never the gated bot run
-itself (approve it via `POST
+required `pull_request_target`-triggered run for this HEAD (subject to
+`ciWait.rerunPolicy`), never a legacy `pull_request` run or the gated bot
+run itself (approve it via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` only if needed).
 The required check self-heals on a push or companion refresh from
 IDD-originated review-thread replies or qualifying PR comments. Ordinary

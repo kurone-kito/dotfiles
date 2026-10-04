@@ -258,11 +258,22 @@ and review evidence used for the routing decision.
 ## Step 3 — Determine PR and CI/review state
 
 When helper runtime is enabled, you may collect Step 3 routing evidence
-with:
+with the profile-selected command:
 
 ```sh
+# source repo / vendored-node profile
 node scripts/resume-route-selection.mjs --issue {issue-number}
 ```
+
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+```sh
+# ephemeral-npx profile
+npx --yes --package <helper-package-spec> \
+  idd-resume-route-selection --issue {issue-number}
+```
+
+For `package-manager`, resolve the profile-selected
+`idd:resume-route-selection` command from `docs/idd-helper-scripts.md`.
 
 Map helper `route` to the Step 3 table outcomes:
 
