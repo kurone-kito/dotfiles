@@ -555,15 +555,16 @@ Before selecting from the surviving viable issues, eliminate candidates
 with a concurrent active non-stale claim or an unsafe stale takeover, in
 ascending issue-number order:
 
-- **Parked-issue check (once per pass).** Per
+- <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+  **Parked-issue check (once per pass).** Per
   `provider-outage-park.mjs --parked-issues`, a candidate in its
   `parkedIssues` is **ineligible**, as a live claim is. A failed or
   malformed read is a terminal discovery error: report it and stop
-  without entering the exhaustion route or A0-O fallback.
-  `parkedIssuesComplete: false` still skips listed issues —
-  name the gap in the run report; an unlisted parked issue may be
-  picked. Under `instructions-only` (no park helper), this rule does
-  not apply.
+  without entering the exhaustion route or A0-O fallback. A
+  `parkedIssuesComplete: false` result means the helper may have omitted
+  a parked issue; report the gap and stop before ranking or selecting any
+  issue. Do not treat unlisted candidates as clear of a park. Under
+  `instructions-only` (no park helper), this rule does not apply.
 - Scan the **top N** survivors, where `N` is `.github/idd/config.json`
   `discover.activeClaimPreScanBatchSize` (distributed default: `10`).
 - For each candidate, fetch the issue and parse comments per the shared
@@ -635,22 +636,26 @@ the pick still passes A4.5/A5 unchanged and never bypasses a gate. When
 select by **lowest issue number**, without applying the score-based
 tie-breakers below.
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 **Scored-vs-unscored floor tie-breaker.** When the highest-score tie
 band pairs an unscored candidate (missing or out-of-range score,
 defaulted to the floor as defined above) against a candidate genuinely
-scored exactly at the floor value, the genuinely-scored candidate wins
-the tie: an explicit author judgment outranks a default fallback. See
+scored exactly at the floor value, apply this preference first and limit
+the band to genuinely-scored-at-floor candidates: an explicit author
+judgment outranks a default fallback. Then apply the remaining enabled
+tie-breakers to that band. See
 [rationale](../../docs/idd-design-rationale.md#a4--scored-vs-unscored-floor-tie-breaker-what-still-ties-afterward)
 for how the remaining tie-breakers below apply after this rule.
 
 **Concurrent-selection desync (opt-in, off by default).** When
 `discover.selectionDesync` is `session-offset` (default `off`) and the
-highest-score tie band has more than one eligible candidate, pick the
-band entry at index `selectDesyncedIndex(session-token, band-size)`
-instead of index 0 — FNV-1a 32-bit over the token's UTF-16 code units
-(offset basis `0x811c9dc5`, prime `0x01000193`, wrap to 32 bits after
-every multiply, then unsigned right-shift and modulo `band-size`) over
-the band ordered by ascending issue number.
+remaining highest-score tie band after the scored-vs-unscored preference
+has more than one eligible candidate, pick the band entry at index
+`selectDesyncedIndex(session-token, band-size)` instead of index 0 —
+FNV-1a 32-bit over the token's UTF-16 code units (offset basis
+`0x811c9dc5`, prime `0x01000193`, wrap to 32 bits after every multiply,
+then unsigned right-shift and modulo `band-size`) over that remaining
+band ordered by ascending issue number.
 
 `session-token` **must be per-session-unique**: the bare, session-shared
 `{agent-id}` from `idd-overview-core.instructions.md` alone is **not** a
@@ -687,8 +692,11 @@ deterministic **lowest issue number** pick.
 matches, after desync and before effort — see
 [rationale](../../docs/idd-design-rationale.md#a4-step-2--rationale-milestone-scope-preference).
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 **Author-recorded effort hint (soft tie-breaker).** When tied after
-score/desync/milestone, prefer **lower-effort**, then lowest issue number.
+score/desync/milestone, prefer **lower-effort**. Continue through the
+high-contention overlap preference below before using issue number as
+the final fallback.
 Read the `<!-- dotfiles-effort: S|M|L -->` footer (or
 `discover-roadmap-graph`'s `effort`): `S` < `M` < `L`; missing/invalid
 is **neutral** (`M`). **Soft**: reorders only within one score tie

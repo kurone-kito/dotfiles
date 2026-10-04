@@ -55,7 +55,7 @@ Use GitHub **server** timestamps only. Stale age default: **24 h**
 | Condition                                                      | Action                                                            |
 | -------------------------------------------------------------- | ----------------------------------------------------------------- |
 | PR merged                                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then STOP |
-| Issue closed with no merged PR                                 | Post a hold comment naming the state; STOP — never remove a worktree or branch |
+| Issue closed with no merged PR                                 | After the shared claim-revalidation gate passes, post a hold naming the state; if no active claim is verified for this session, STOP and report without posting — never remove a worktree or branch |
 | Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                           |
 | Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                         |
 | Non-owned active claim + operator-present + input received     | Operator-present path (below); skip stall                         |
@@ -98,15 +98,22 @@ On helper-enabled profiles, run the Claim-state command above
 against occupied, unreadable, or unknown local worktree state
 (#3141).
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Forced-handoff: pass `new_claim_id` into Step 1. On
 `non_inheritable`/`stop`, `stale`/`takeover`, or
 `local_worktree_occupied`/`stop` with `evidence.forced_handoff`, retry
 `--claim-id <evidence.forced_handoff.new_claim_id>` before STOP.
 Retry `already_owned`: STOP if `new_agent_id` is not this
 session or `old_claim_id` is this session's claim (displaced).
-Else adopt the pair; unless this session recorded a nonce for
-`new_claim_id`, post one; wait settle; confirm the nonce winner;
-Step 2.
+Else adopt the pair. If this session already recorded a nonce for
+`new_claim_id`, follow Claim-lite's **Already-owned continuation**
+authoring guard; do not post another nonce, and continue to Step 2 only
+after that guard passes. If no nonce is recorded, complete Claim-lite's
+**Forced-handoff adopt-verbatim** activation path: run its authoring
+guard before posting the nonce, wait the settle delay and verify the
+nonce winner, then repeat the authoring guard. Continue to Step 2 only
+after both guards and nonce verification pass; otherwise use Claim-lite's
+forced-handoff failure route.
 
 After any helper map, `roadmap-audit/*` is still A1.5-only (no
 worktree; child issues are not locked).

@@ -40,7 +40,7 @@ Evaluate in order; take the first matching row.
 | Condition                                                                                 | Route                                                              |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | PR merged                                                                                | Step 1 — run the claim-specific guarded F4 route in `idd-merge.instructions.md` |
-| Issue closed with no merged PR                                                           | Post a hold comment naming the state; STOP — never remove a worktree or branch |
+| Issue closed with no merged PR                                                           | After the shared claim-revalidation gate passes, post a hold naming the state; if no active claim is verified for this session, STOP and report without posting — never remove a worktree or branch |
 | `forced-handoff: human-gated` + valid evidence matching active/inheritable state          | Step 1 forced-handoff path (skip stall check)                      |
 | `forced-handoff: human-gated` + evidence exists but mismatches live claim/branch/PR state | STOP — report mismatch; do not claim, push, or mutate review state |
 | Non-owned active claim + operator-present predicate (below) met + input received          | Operator-present release path (below); skip the stall file         |
@@ -190,12 +190,13 @@ this table is the instructions-only fallback.
 If that scan fails, is malformed, or is unreadable, treat it as unknown and
 stop before re-claim or takeover; never treat failure as no match.
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 | Claim state                                                                                    | Route                                                                                               |
 | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | PR merged; claim = this session's verified `{claim-id}`                                        | Run F4 steps 4-7 (guarded); also step 1 if non-default branch + open closing issue; then STOP      |
 | PR merged; claim released (no active claim); its branch = `{branch}`; no local worktree for it | Run F4 step 4 + step 5's `git branch -d` only (guarded); skip steps 6-7; then STOP                 |
 | FH evidence names this session's already-verified `{claim-id}`                                 | STOP — current session is displaced; do not push, comment, resolve, request reviewers, or merge     |
-| Issue closed with no PR merged, or any other closed/merged state                               | Post a hold comment naming the state; STOP — never remove a worktree or branch                      |
+| Issue closed with no PR merged, or any other closed/merged state                               | After the shared claim-revalidation gate passes, post a hold naming the state; if no active claim is verified for this session, STOP and report without posting — never remove a worktree or branch |
 | This session's claim; branch starts with `roadmap-audit/`                                      | Re-run A1.5; skip worktree creation; STOP (roadmap coordination only)                               |
 | Active claim = this session's verified `{claim-id}`                                            | Continue with same `{claim-id}`; ignore stale FH evidence citing a different `{claim-id}`; → Step 2 |
 | Forced-handoff recovery confirmed (§FH)                                                        | Re-claim via A5 after GitHub reflects handoff; cite evidence in digest `Authoritative by`; → Step 2 |

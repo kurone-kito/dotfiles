@@ -194,7 +194,10 @@ unpushed E9 fixes.
 
 Run **post-fix-validate**.
 
-**Validate.** Judge the run by its own exit status — see
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+**Validate.** Run validators without piping their output when practical.
+If output is piped, use `set -o pipefail` or check
+`${PIPESTATUS[0]}` so the validator's status is preserved; see
 [Project commands](idd-overview-core.instructions.md#project-commands).
 
 Then push the feature branch normally (E11 uses merge commits, not
@@ -342,8 +345,12 @@ login).
 
 2. Run **AW1** using the profile-selected command from
    `docs/idd-helper-scripts.md` with `--pr`, `--claim-id`, `--agent-id`,
-   and `--trusted-marker-logins`. **SATISFIED** → E14 advisory-bot
-   processing is done; proceed to E15.
+   and `--trusted-marker-logins`.
+   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+   **SATISFIED** here means AW1's proven-coverage fast path
+   (`LAST_COPILOT_COMMIT == PR_HEAD_SHA`); E14 advisory-bot processing
+   is done, so proceed to E15. The elapsed-window `SATISFIED` result
+   from AW3 below still follows step 4's recovery table.
 3. Run **AW2** to fetch markers.
 4. Apply the **AW3** decision table:
    - **SATISFIED**, `COPILOT_PENDING` `"false"`, `COPILOT_PENDING_COVERS_HEAD`

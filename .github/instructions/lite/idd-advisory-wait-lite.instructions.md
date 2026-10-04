@@ -101,7 +101,7 @@ field here isn't "config absent" — it's a malformed helper response
 | Outcome | E14 action |
 | --- | --- |
 | `SATISFIED` | proceed to CI wait |
-| `REQUEST_NEEDED` | `copilotPending`: false → registration-proven request + marker, then poll; true (no marker) → consult `staleRequestRecovery`: `attempt` → bounded AW3-S, then poll; `cap-exhausted` → follow `capExhaustedRoute` (`phase-specific`: CI wait; `hold`: stop and ask); `not-applicable` → poll only with a same-head marker, otherwise stop and ask |
+| `REQUEST_NEEDED` | `copilotPending`: false → registration-proven request + marker, then poll; true (no marker) → consult `staleRequestRecovery`: `attempt` → hand off the bounded AW3-S remove/re-request/verify/mark cycle to the full-size AW3-S procedure, then poll; `cap-exhausted` → follow `capExhaustedRoute` (`phase-specific`: CI wait; `hold`: stop and ask); `not-applicable` → poll only with a same-head marker, otherwise stop and ask |
 | `RECOVERY_NEEDED` | post the recovery marker (do not request another review), then poll |
 | `CAP_EXHAUSTED` | `phase-specific` (default): proceed to CI wait. `hold`: stop and ask (`HOLD`'s only route; see above) |
 | `WAIT` | keep polling |

@@ -169,11 +169,12 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      not paraphrased here;
    - all required CI checks pass for the current head;
    - claim ownership still uses your `{claim-id}`;
-   - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) have
-     been re-run against `${PR_HEAD_SHA_F3}` (#2749) — covers commits
-     that landed between F2 and this final gate, for example a
-     required `{development-branch}` sync. `closing-set` (readiness)
-     evidences steps 6-7 here; D3.7 stays local. First confirm
+   - D3.5 steps 6-7 and D3.7 (`idd-pr-submit.instructions.md`) must be
+     re-run against the exact `${PR_HEAD_SHA_F3}` (#2749) by the
+     procedure below — this covers commits
+     that landed between F2 and this final gate, for example a required
+     `{development-branch}` sync. `closing-set` (readiness) evidences
+     D3.5 steps 6-7 here; D3.7 stays local. First confirm
      `git rev-parse --show-toplevel` is the expected sibling worktree
      path for the claimed branch, that `git worktree list` identifies
      that exact path, and that `git status --porcelain` is empty. If
@@ -184,32 +185,34 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
      and tokens; the branch-equality part of the claim gate is the
      detached condition being repaired. If switching fails, hold. Then
      confirm `git branch --show-current` equals `{branch-name}` and
-     rerun the full claim/worktree gate. In both the
-     attached and recovered cases, require a clean status and
+     rerun the full claim/worktree gate. In both the attached and
+     recovered cases, require a clean status and
      `git merge-base --is-ancestor HEAD "${PR_HEAD_SHA_F3}"`; else
-     hold. Run F2's
-     shadow-path check against `${PR_HEAD_SHA_F3}`; any output or failure
-     holds.
+     hold.
+     Run F2's shadow-path check against `${PR_HEAD_SHA_F3}` before any
+     reset; any output or failure holds. This checks for untracked files
+     that could be overwritten or removed by the reset.
      <!-- dotfiles-divergence: post-switch-ancestry-reset-guard -->
-     After the checks above, run `git reset --hard
-     "${PR_HEAD_SHA_F3}"` (an ancestry pass alone leaves the worktree
-     at whatever ancestor commit it was already on, not necessarily
-     this SHA) — D3.5/D3.7 read local state, not
-     the remote PR. Skip
-     D3.5 steps 6-7 under the
-     same non-default-`{development-branch}` exemption D3.5 itself
-     carries. On a mismatch, fix it per D3.5/D3.7's own documented
-     handling. Any fix here — whether or not it changes HEAD, since a
-     PR-body edit alone (D3.7's remediation, or D3.5 step 6's) still
-     counts — invalidates step 3's own **Re-validate claim** ("confirm
-     the active claim still uses your current `{claim-id}`") and
-     **Advisory state revalidation** (re-run AW1, escalating through
+     Before any local D3.5/D3.7 checks, revalidate the active
+     claim/nonce and matching worktree-local lock and tokens, then run
+     `git reset --hard "${PR_HEAD_SHA_F3}"`. An ancestry pass alone
+     leaves the worktree at whatever ancestor it was already on, not
+     necessarily this SHA. Confirm `git rev-parse HEAD` equals
+     `${PR_HEAD_SHA_F3}` and `git status --porcelain` is empty; otherwise
+     hold. Now run D3.5 steps 6-7 and D3.7 on this exact checkout.
+     Skip D3.5 steps 6-7 under the same non-default-`{development-branch}`
+     exemption D3.5 itself carries. On a mismatch, fix it per
+     D3.5/D3.7's own
+     documented handling. Any fix here — whether or not it changes
+     HEAD, since a PR-body edit alone (D3.7's remediation, or D3.5 step
+     6's) still counts — invalidates step 3's own **Re-validate claim**
+     ("confirm the active claim still uses your current `{claim-id}`")
+     and **Advisory state revalidation** (re-run AW1, escalating through
      AW2/AW3 as needed) checks above; re-run both of those before
      merging. If the fix additionally amended or rebased a commit
-     (changing HEAD),
-     return to E1 instead of just re-validating in place — F2's own
-     snapshot is invalidated by a new HEAD. Otherwise repeat this field
-     once; if it still fails, stop and do not merge.
+     (changing HEAD), return to E1 instead of just re-validating in
+     place — F2's own snapshot is invalidated by a new HEAD. Otherwise
+     repeat this field once; if it still fails, stop and do not merge.
 
    For the head-SHA field, use this **copy-paste-safe, fail-closed**
    check — both operands fully quoted, no glob, abort on mismatch —
@@ -545,9 +548,13 @@ F3 apply follows [the livelock rule](idd-review-triage.instructions.md#merge-dev
    - `git -C <path> submodule status --recursive`
    - Probe:
 
+     <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+
      ```sh
-     git -C <path> submodule foreach --recursive 'git status
-     --porcelain --ignored --untracked-files=normal; git stash list; git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes || exit; git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count'
+     git -C <path> submodule foreach --recursive 'git status --porcelain --ignored --untracked-files=normal &&
+     git stash list &&
+     git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes &&
+     (git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count)'
      ```
 
    Discard only reproducible configured-command output; preserve all else.
