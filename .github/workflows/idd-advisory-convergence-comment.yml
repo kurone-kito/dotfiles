@@ -6,12 +6,12 @@ name: IDD advisory-convergence comment refresh
 # concurrency group -- it cannot overwrite that SHA verdict or cancel
 # an in-flight required run.
 #
-# Compared against both of kurone-kito/idd-skill's copies of this file
-# at pin c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2; #473 bumped
-# from the prior v0.12.0 pin set by #459. The file is unchanged versus
-# upstream v0.12.2, so this bump is the invocation pin only; #384's
-# adoption round remains the source of the simplified ephemeral-npx
-# shape): its own root
+# Historical comparison: #473 checked both upstream copies of this file
+# at c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2), after #459's
+# v0.12.0 pin. At that time the file matched upstream v0.12.2, so #473
+# changed only the invocation pin. The active CLI calls below follow
+# the v0.14.0 package pin in `.github/idd/config.json`. #384's adoption
+# round remains the source of the simplified ephemeral-npx shape: its own root
 # `.github/workflows/idd-advisory-convergence-comment.yml` (the simpler
 # dogfooded original -- a single, non-branching `node scripts/*.mjs`
 # call per step, no profile-resolution scaffolding) and the
@@ -277,7 +277,7 @@ jobs:
           # content classification.
           COMMENT_BODY: ${{ github.event.review.body || github.event.comment.body }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
             idd-review-comment-origin
       - name: Check for newer qualifying event
         id: debounce
@@ -324,7 +324,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
             idd-advisory-comment-debounce --pr "$PR_NUMBER" --triggered-at "$TRIGGERED_AT"
       - name: Rerun required HEAD check
         # The explicit `success() &&` on the comment-family branch is
@@ -373,5 +373,5 @@ jobs:
           fi
           # shellcheck disable=SC2086 # REFRESH_FLAG is a single trusted
           # word ("--refresh-latest" or empty); see env: above.
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
             idd-rerun-advisory-convergence --pr "$PR_NUMBER" $REFRESH_FLAG --apply
