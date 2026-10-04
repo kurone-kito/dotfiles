@@ -76,7 +76,13 @@ needs-decision, blocked-by-human, and out-of-scope.
    in
    [Completed-draft adversarial review](references/contract.md#completed-draft-adversarial-review).
    Send only the exact title and body plus that bounded packet. Resolve
-   `idd-issue-authoring-delegate` when a helper runtime can run it; the
+   <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+   `idd-issue-authoring-delegate` with
+   `npx --yes --package <helper-package-spec> idd-issue-authoring-delegate`
+   when a helper runtime can run it; resolve the package spec from
+   `.github/idd/config.json#helperRuntime.packageSpec` and see
+   [`docs/idd-policy.md`](../../../docs/idd-policy.md#helper-runtime-profile).
+   The
    helper does not invoke the command. If the resolver cannot be run,
    or `usable` is false, use the agent-native reviewer or a structured
    self-critique. That is not a failed review. When `usable` is true,

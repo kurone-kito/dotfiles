@@ -35,14 +35,18 @@ an afterthought once a marker is already half-drafted.
 
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 This repository uses the `ephemeral-npx` helper profile. The
-`node scripts/...` commands below are upstream source-repository forms;
-run the matching `idd-*` binary through the pinned package instead.
-Resolve the package spec from `.github/idd/config.json` and the literal
-command map from [`docs/idd-helper-scripts.md`](../../../../docs/idd-helper-scripts.md).
+`node scripts/...` commands below are upstream source-repository forms.
+Run the matching binary with
+`npx --yes --package <helper-package-spec> <idd-* command> [arguments]`.
+Resolve `<helper-package-spec>` from
+`.github/idd/config.json#helperRuntime.packageSpec` and the binary names
+from [`docs/idd-helper-scripts.md`](../../../../docs/idd-helper-scripts.md).
+See [`docs/idd-policy.md`'s Helper Runtime Profile](../../../../docs/idd-policy.md#helper-runtime-profile)
+for the profile contract.
 The issue-authoring flow uses `idd-audit-authored-issue`,
 `idd-issue-authoring-delegate`, `idd-authoring-set-members`,
-`idd-minimize-superseded-markers`, and
-`idd-sweep-authoring-markers`.
+`idd-minimize-superseded-markers`, `idd-sweep-authoring-markers`, and
+`idd-authoring-owner-provenance`.
 
 ## Trigger policy
 
@@ -1000,10 +1004,22 @@ this packet:
 - confirmed constraints and design choices
 - relevant evidence or file references
 - relationship context for a multi-issue set
+- the target repository's process-termination safety rule
 - the issue-authoring critique checklist below
 
 The packet does not include the whole conversation or unbounded work
 instructions.
+
+When shell tooling is available, include this process-termination rule
+in the reviewer prompt: never terminate a process by name or
+command-line pattern (`pkill`, `killall`, or
+`pgrep -f ... | xargs kill`). Stop only processes started by the
+reviewer, using a recorded PID (`$!` or a PID file) or recorded
+process group. Walking children of a recorded PID with `pgrep -P` is
+allowed. Names and patterns can match the reviewer's own command or
+other sessions on a shared host. The only exception is the signing
+ladder's bounded `gpgconf --kill gpg-agent` step, which stops the
+daemon through `gpgconf`, not through the process table.
 
 **Issue-authoring critique checklist.**
 
@@ -1022,8 +1038,8 @@ instructions.
 ### Resolver
 
 When a helper runtime can run it, resolve the delegate with
-`idd-issue-authoring-delegate`. In this source repository the
-equivalent is:
+`npx --yes --package <helper-package-spec> idd-issue-authoring-delegate`.
+In this source repository the equivalent is:
 
 ```sh
 node scripts/idd-issue-authoring-delegate.mjs [--policy <path>] [--no-user-global]
@@ -1299,8 +1315,10 @@ node scripts/audit-authored-issue.mjs --shape <orphan|roadmap|child> \
   [--expect-bucket <needs-decision|blocked-by-human>]
 ```
 
-Or, for npx/package-manager profiles, the equivalent
-`idd-audit-authored-issue` command. Pass `--stdin` instead of
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+In this repository, run the same flags with
+`npx --yes --package <helper-package-spec> idd-audit-authored-issue`.
+Pass `--stdin` instead of
 `--body-file` when the drafted body is not yet written to disk. Omit
 `--title` when the drafted body already leads with a `# <title>` line
 (the local convention `evaluateSuitabilityLocal`'s own dry-run mode
@@ -1998,8 +2016,9 @@ only approval boundary.
     --apply
   ```
 
-  Or, for npx/package-manager profiles, the equivalent
-  `idd-minimize-superseded-markers` command.
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  In this repository, run the same flags with
+  `npx --yes --package <helper-package-spec> idd-minimize-superseded-markers`.
 
   **Best-effort, never blocking.** A permission error, an unreadable
   comment list, or an unavailable helper runtime (`instructions-only`
@@ -2100,9 +2119,11 @@ only approval boundary.
   `--issue` instead of a bare number -- that one `--issue` is fetched
   from its own repository while every bare-number `--issue` in the same
   invocation still uses the current repository (or `--owner`/`--repo`,
-  given together or not at all). Or, for
-  npx/package-manager profiles, the equivalent
-  `idd-sweep-authoring-markers` command. One invocation performs the
+  given together or not at all).
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  For this repository's installed profile, run the same flags with
+  `npx --yes --package <helper-package-spec> idd-sweep-authoring-markers`.
+  One invocation performs the
   whole sweep that used to be an ~8-step manual procedure (#2935): it
   fetches each `--issue`'s comments via GraphQL (selecting `isMinimized`
   directly -- REST's issue-comments endpoint never carries that field,
@@ -2163,7 +2184,11 @@ only approval boundary.
   anchor), and the read-only `authoring-set-members` helper reports
   that this target is the only issue whose trusted `authoring-owner`
   marker carries that exact `set`
-  (`node scripts/authoring-set-members.mjs --set <id>`). A zero exit
+  (`node scripts/authoring-set-members.mjs --set <id>`). The installed
+  profile command is
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  `npx --yes --package <helper-package-spec> idd-authoring-set-members --set <id>`;
+  a zero exit
   whose JSON has `soleMember: true` and `issues` equal to that one
   target is the only passing result. The helper exits non-zero when
   enumeration does not finish, including a search response with
@@ -2256,8 +2281,13 @@ only approval boundary.
   removal in step (4): first, verify that this sole target really is
   the sole member of its authoring set -- it carries no
   `<marker-prefix>-roadmap-id` marker, and
+  the source-repository command
   `node scripts/authoring-set-members.mjs --set <id>` reports
-  `soleMember: true` with `issues` equal to this one target; that
+  `soleMember: true` with `issues` equal to this one target; for the
+  installed profile, run
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  `npx --yes --package <helper-package-spec> idd-authoring-set-members --set <id>`.
+  That command must return the same sole-member result; that
   helper is exactly the mechanical proof this fast path's own
   `|set|==1` premise rests on, so skipping it here would be a genuine
   weakening, not a condensation, and a non-zero exit (including
@@ -2326,6 +2356,10 @@ only approval boundary.
     --trusted-marker-logins <trusted-login-1,...> \
     --deadline-ms 300000 --apply || true
   ```
+
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  For this repository's installed profile, run the same flags with
+  `npx --yes --package <helper-package-spec> idd-sweep-authoring-markers`.
 
   Same attempted-not-blocking framing (and the same `|| true` reasoning
   above): a failed invocation here does not reopen the set or roll back
@@ -2438,10 +2472,15 @@ only approval boundary.
   each removal for owner/set/anchor/session and the expected
   label/body snapshot -- so a body edit landing between an earlier
   check and the actual removal cannot silently bypass this
-  precondition. The `authoring-owner-provenance` helper (`node
-  scripts/authoring-owner-provenance.mjs --issue <number>`; see
-  `docs/idd-helper-scripts.md`) performs and verifies this comparison
-  mechanically (`#2891`). This
+  precondition. The `authoring-owner-provenance` helper's
+  source-repository form is
+  `node scripts/authoring-owner-provenance.mjs --issue <number>` (see
+  `docs/idd-helper-scripts.md`). With this repository's installed
+  profile, run
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  `npx --yes --package <helper-package-spec>
+  idd-authoring-owner-provenance --issue <number>`.
+  It performs and verifies this comparison mechanically (`#2891`). This
   exists because
   `idd-review-triage.instructions.md`'s round-count or
   adopt-now-urgency defer trigger files this exact marker on a

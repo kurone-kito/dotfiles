@@ -7,12 +7,15 @@ approval boundary that hands off to IDD execution.
 
 <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
 This repository uses the pinned `ephemeral-npx` profile. In the
-source-repository examples below, invoke the corresponding `idd-*`
-binary from the profile package instead of expecting its helper scripts to
-be vendored locally. See the helper command map in
-[`docs/idd-helper-scripts.md`](../../../../docs/idd-helper-scripts.md);
+source-repository examples below, run the corresponding binary as
+`npx --yes --package <helper-package-spec> <idd-* command> [arguments]`,
+resolving the package spec from `.github/idd/config.json#helperRuntime.packageSpec`.
+See the helper command map in
+[`docs/idd-helper-scripts.md`](../../../../docs/idd-helper-scripts.md) and
+[`docs/idd-policy.md`'s Helper Runtime Profile](../../../../docs/idd-policy.md#helper-runtime-profile);
 in particular, `authoring-set-members` maps to
-`idd-authoring-set-members`.
+`idd-authoring-set-members`, and `authoring-owner-provenance` maps to
+`idd-authoring-owner-provenance`.
 
 ## Two-stage contract
 
@@ -409,8 +412,13 @@ in particular, `authoring-set-members` maps to
   removal is a non-anchor target's or the anchor's own -- that the
   marked target is the sole member of its authoring set: it carries no
   `<marker-prefix>-roadmap-id` marker (never a roadmap anchor), and
+  the source-repository command
   `node scripts/authoring-set-members.mjs --set <id>` reports
-  `soleMember: true` with `issues` equal to that one target. The
+  `soleMember: true` with `issues` equal to that one target. For this
+  repository's installed profile, run
+  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  `npx --yes --package <helper-package-spec> idd-authoring-set-members --set <id>`;
+  require that same result. The
   helper exits non-zero when enumeration does not finish, including a
   search response with `incomplete_results` or an index-lag window
   that does not finish. The candidate search is the owner-marker
