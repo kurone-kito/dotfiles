@@ -14,19 +14,25 @@ onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), the
 0.5.0/0.6.0 re-import (roadmap #239), the 0.7.0 re-import
 (roadmap #292), the 0.9.0 re-import (roadmap #380), the 0.11.0
 re-import (roadmap #419), the 0.12.0 re-import
-(roadmap #446), and the 0.12.2 re-import (roadmap #469). The
+(roadmap #446), the 0.12.2 re-import (roadmap #469), and the v0.14.0 re-import
+(roadmap #540, starting with #563). The
 machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/ae16f497434a5023dfaa28f965fc2af92ebf055d/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Pinned upstream commit**: `c11c3642319b3283293e4e681861bf7899c32ed3`
-(abbreviated `c11c364`; tag `v0.12.2`), confirmed as the current latest
-tag and audited by roadmap #469's final-verification track
+**Current pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
+(tag `v0.14.0`), selected by roadmap #540's re-import, starting with
+Track A (#563). Sibling imports and final lockstep verification are
+sequenced by the same roadmap.
+
+**Previous pinned upstream commit**: `c11c3642319b3283293e4e681861bf7899c32ed3`
+(abbreviated `c11c364`; tag `v0.12.2`), confirmed at the time as the
+latest tag and audited by roadmap #469's final-verification track
 ([`#475`](https://github.com/kurone-kito/dotfiles/issues/475)), which
 supersedes the `v0.12.0`-round pin recorded by roadmap #446's
 final-verification track (#452). Roadmap #469's five resync tracks
@@ -89,12 +95,12 @@ and `src/scripts/advisory-convergence.mts` computes the report's
 `review-clause.mts` alone computes.
 
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
-is now `0.12.2` — the 2026-09-22 hearing (roadmap
-[`#469`](https://github.com/kurone-kito/dotfiles/issues/469), tracked
-by [`#470`](https://github.com/kurone-kito/dotfiles/issues/470)) bumped
-it from `0.12.0` (see [New 0.12.2 Policy
-Alignment](#new-0122-policy-alignment) below for that round's own
-verification detail). It had previously read `0.12.0`, bumped by
+is now `0.14.0` — roadmap
+[`#540`](https://github.com/kurone-kito/dotfiles/issues/540), starting with
+config track [`#563`](https://github.com/kurone-kito/dotfiles/issues/563),
+bumped it from `0.12.2` (see [New 0.14.0 Policy
+Alignment](#new-0140-policy-alignment) below for this track's policy
+record). Before the 0.12.2 round, it read `0.12.0`, bumped by
 roadmap #446's schema/config-audit track
 ([`#447`](https://github.com/kurone-kito/dotfiles/issues/447)) from
 `0.11.0` (see [New 0.12.0 Schema
@@ -203,15 +209,13 @@ unchanged; it resolves only where the launcher is deployed), and
 
 ## Claim Timing
 
-- **`claim-stale-age`**: `12h` (shortened from the `24h` distributed
-  default).
-- **`claim-heartbeat-interval`**: `6h` (shortened from the `12h`
-  distributed default).
+- **`claim-stale-age`**: `24h` (the distributed default).
+- **`claim-heartbeat-interval`**: `12h` (the distributed default).
 
-Rationale: this repository runs lightweight CI (cspell, markdownlint,
-bats, Pester, lua syntax). Stale-claim takeover cost is low because a
-single maintainer can revalidate quickly, so a tighter clock keeps
-parallel sessions from leaving idle claims sitting around half a day.
+Rationale: roadmap #540 adopts upstream dogfooding's longer ownership
+windows for this repository. This replaces the 12h/6h override recorded
+by roadmap #469 and gives a long-running session more time before a
+stale takeover becomes eligible.
 
 ## CI Wait Policy
 
@@ -244,7 +248,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/c11c3642319b3283293e4e681861bf7899c32ed3 \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -331,26 +335,24 @@ _(We've since updated to the latest LTS version)_
 
 ## Issue-Author Approval Gate
 
-- **Gate posture**: `opted-out`.
-- **`skipIssueAuthorApprovalGate`**: `true` (machine-readable mirror in
+- **Gate posture**: enabled (the default when
+  `skipIssueAuthorApprovalGate` is omitted).
+- **`skipIssueAuthorApprovalGate`**: omitted (machine-readable mirror in
   [`.github/idd/config.json`](../.github/idd/config.json)).
 - **`maintainer-approval-actors` policy**:
-  `owners-and-maintainers-only` (recorded for future re-enablement;
-  moot while the gate is opted out).
-- **Approval signals**: not exercised while the gate is opted out.
-- **`approvalSignals.readyLabelName`**: not configured (default `idd:ready`
-  would apply if the gate is re-enabled later).
+  `owners-and-maintainers-only`.
+- **Approval signals**: an issue author may self-authorize; otherwise a
+  fresh explicit approval signal from an authorized maintainer is required
+  before claim.
+- **`approvalSignals.readyLabelName`**: not configured (default `idd:ready`).
 - **`approvalSignals.labelFreshnessMode`**: not configured (default
-  `presence-only` would apply if the gate is re-enabled later).
-- **Missing-approval behavior**: gate inactive — explicit-target runs
-  and discovery may proceed without an approval signal.
+  `presence-only`).
+- **Missing-approval behavior**: explicit-target runs stop before claim;
+  discovery may report the issue in its approval-needed fallback bucket.
 
-Rationale: this is a single-maintainer dotfiles repository. The
-issue-author approval gate exists to keep unattended agents from
-auto-picking up issues filed by strangers; with only the maintainer
-filing issues, the gate is overhead. Re-enable it (and create the
-`idd:ready` label) before opening this repository to multi-author
-collaboration.
+This default keeps unattended agents from claiming issues without
+authorization while preserving self-authorization for issues filed by
+the maintainer.
 
 ## Issue-Authoring Companion
 
@@ -897,6 +899,35 @@ Track D left out of scope was closed by
 [`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
 active Track A transition.
 
+## New 0.14.0 Policy Alignment
+
+Roadmap [#540](https://github.com/kurone-kito/dotfiles/issues/540)
+adopts upstream `v0.14.0` dogfooding policy while preserving this
+repository's confirmed runtime and workflow overlays. Config track
+[#563](https://github.com/kurone-kito/dotfiles/issues/563) records
+these choices before the sibling instruction, documentation, and
+helper-import tracks complete the release-wide resync.
+
+### Adopted this round
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `iddVersion` | **explicit: `"0.14.0"`** (was `"0.12.2"`) | Roadmap #540's import baseline. |
+| `helperRuntime.packageSpec` | **explicit: v0.14.0 commit archive** | Pinned to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d`; `helperRuntime.profile` remains `ephemeral-npx`. |
+| `claimTiming.staleAge` / `claimTiming.heartbeatInterval` | **explicit: `PT24H` / `PT12H`** | Matches upstream dogfooding defaults and retires the local `PT12H` / `PT6H` override. |
+| `skipIssueAuthorApprovalGate` | **omitted** | The v0.14.0 schema default keeps the approval gate enabled; `maintainerApprovalActorPolicy` remains `owners-and-maintainers-only`. |
+| `critiqueLoop.deferByUrgency` | **explicit: `severity-tiered`** | Adopts the upstream dogfooding policy. `critiqueLoop.deferAfterRounds` remains the maintainer-confirmed `5` from the 2026-09-22 hearing. |
+| `githubApi.readCache.enabled` | **explicit: `true`** | Enables the v0.14.0 GitHub API read cache. |
+| `githubApi.loadControl` | **explicit: `enabled: true`, `maxConcurrent: 4`** | Adopts upstream dogfooding concurrency control. |
+
+The repository keeps its `ephemeral-npx` helper runtime, local command
+strings, marker prefix, development branch, fully autonomous merge
+policy, Copilot advisory review policy and reviewer login, trusted
+marker actors, CodeRabbit delegate, critique telemetry hook, worktree
+guard, issue-authoring journal, and provider-outage target. Historical
+sections below retain the policy state as recorded for their own
+re-import rounds.
+
 ## New 0.12.2 Policy Alignment
 
 Confirmed by the 2026-09-22 hearing (roadmap
@@ -1025,7 +1056,6 @@ Current slugs:
 
 | Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `claim-timing`                       | The `12h`/`6h` claim-stale-age/heartbeat-interval override, in place of the `24h`/`12h` distributed defaults                                                                                                                                                                                                                                                                                                            | #145, #196, #232, #233, #294, #295, #382, #383, #421, #422 |
 | `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233, #295, #383, #424                   |
 | `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297, #386, #423                   |
 | `local-docs-index`                   | The "Local pages" table `docs/index.md` appends below upstream's generated OKF table, covering this repository's own locally-authored, non-upstream `docs/` pages upstream's generator has no knowledge of. The row's original retirement trigger -- the synced pages gaining OKF frontmatter of their own -- held as of the `v0.7.0` baseline already; the `v0.9.0` round (#383) adopted the generated table itself, so this row now marks only the residual local-page extension, not a whole-file exclusion | #283, #383                                     |

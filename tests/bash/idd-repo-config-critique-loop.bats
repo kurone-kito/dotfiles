@@ -26,6 +26,10 @@
 #   values (issue #470): the 2026-09-22 hearing's (roadmap #469)
 #   config update. Same lockstep-companion rationale as the 0.12.0 row
 #   above.
+# - IDD v0.14.0 package pin, default claim timing and approval gate,
+#   severity-tiered critique deferral, and GitHub API read caching/load
+#   control (issue #563, roadmap #540): schema-aligned adoption while
+#   keeping the repository's established overlays.
 
 bats_require_minimum_version 1.5.0
 
@@ -52,7 +56,7 @@ assert delegate.get('mode') == 'combined', delegate
 " "$CONFIG_PATH"
 }
 
-@test ".github/idd/config.json declares the v0.12.2 iddVersion and its adopted schema keys" {
+@test ".github/idd/config.json declares the v0.14.0 iddVersion and its adopted schema keys" {
   assert_file_exists "$CONFIG_PATH"
 
   python3 -c "
@@ -61,7 +65,7 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 
-assert config.get('iddVersion') == '0.12.2', config.get('iddVersion')
+assert config.get('iddVersion') == '0.14.0', config.get('iddVersion')
 
 helper_runtime = config.get('helperRuntime', {})
 # helperRuntime.profile determines how packageSpec is actually consumed
@@ -72,10 +76,21 @@ assert helper_runtime.get('profile') == 'ephemeral-npx', helper_runtime
 package_spec = helper_runtime.get('packageSpec')
 assert package_spec == (
     'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
-    'c11c3642319b3283293e4e681861bf7899c32ed3'
+    'ae16f497434a5023dfaa28f965fc2af92ebf055d'
 ), package_spec
 
+claim_timing = config.get('claimTiming', {})
+assert claim_timing.get('staleAge') == 'PT24H', claim_timing
+assert claim_timing.get('heartbeatInterval') == 'PT12H', claim_timing
+assert 'skipIssueAuthorApprovalGate' not in config, config
+assert config.get('maintainerApprovalActorPolicy') == 'owners-and-maintainers-only', config
+
+advisory_bots = config.get('advisoryBotLogins', [])
+assert 'copilot-pull-request-reviewer[bot]' in advisory_bots, advisory_bots
+
 assert config.get('critiqueLoop', {}).get('deferAfterRounds') == 5, \
+    config.get('critiqueLoop')
+assert config.get('critiqueLoop', {}).get('deferByUrgency') == 'severity-tiered', \
     config.get('critiqueLoop')
 
 telemetry_hook = config.get('critiqueLoop', {}).get('telemetryHook')
@@ -98,6 +113,12 @@ assert config.get('labels', {}).get('untrustedLabelerLogins') == ['coderabbitai[
 
 assert config.get('upstreamEscalation', {}).get('enabled') is True, \
     config.get('upstreamEscalation')
+
+github_api = config.get('githubApi', {})
+assert github_api.get('readCache', {}).get('enabled') is True, github_api
+load_control = github_api.get('loadControl', {})
+assert load_control.get('enabled') is True, load_control
+assert load_control.get('maxConcurrent') == 4, load_control
 
 advisory_wait = config.get('advisoryWait', {})
 assert advisory_wait.get('convergenceScope') == 'idd-claimed', advisory_wait

@@ -587,15 +587,15 @@ default below is unchanged.
     `discover-orphan-filter.mjs` emit this exact shape under
     `--with-claim-state`. `heartbeatOverdue` (#1433) is `true` when the
     latest valid `claimed-by`/heartbeat `created_at` is at or past the
-    configured <!-- dotfiles-divergence: claim-timing -->
-    `claimTiming.heartbeatInterval` (`PT6H` in this repository;
-    upstream distributed default `PT12H`), with no later trusted
+    configured
+    `claimTiming.heartbeatInterval` (`PT12H` in this repository, matching
+    the upstream distributed default), with no later trusted
     heartbeat; `false` otherwise, including whenever `present` is
     `false`. It is **purely diagnostic**: unlike `stale`, it never
     feeds `claimEligible` or `readiness.startable` below, and it never
-    changes the <!-- dotfiles-divergence: claim-timing --> stale-takeover
-    threshold (`PT12H` in this repository; upstream distributed default
-    `24h`/`PT24H`; `idd-resume-stall.instructions.md` S3). `--with-readiness` adds
+    changes the stale-takeover
+    threshold (`PT24H` in this repository, matching the upstream distributed
+    default; `idd-resume-stall.instructions.md` S3). `--with-readiness` adds
     `readiness: { ready: boolean, reasons: string[], authoringHeld: boolean,`
     `startable: boolean }` — the A3 startability of each open leaf (dependency
     resolution across visible `Blocked by #N` / `Depends on #N` / task-list refs

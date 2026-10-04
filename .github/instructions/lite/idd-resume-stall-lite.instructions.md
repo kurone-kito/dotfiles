@@ -79,18 +79,17 @@ Helper fields: `quiet_window_met`, `reason`, `latest_activity`.
 
 Quiet window alone never authorizes takeover.
 
-<!-- dotfiles-divergence: claim-timing -->
 ## S3 — Stale threshold (ownership gate)
 
 Takeover only if latest valid trusted `claimed-by` `created_at` is
-**≥ 12 h** ago (`claim-stale-age`).
+**≥ 24 h** ago (`claim-stale-age`).
 
 | Claim age | Action            |
 | --------- | ----------------- |
-| < 12 h    | **Hold and stop** |
-| ≥ 12 h    | Continue to S4    |
+| < 24 h    | **Hold and stop** |
+| ≥ 24 h    | Continue to S4    |
 
-`heartbeatOverdue` is **diagnostic only**. It does not shorten the 12 h
+`heartbeatOverdue` is **diagnostic only**. It does not shorten the 24 h
 gate.
 
 Before S4/posting, rerun helper; require `stale`/`takeover`,
@@ -107,7 +106,7 @@ Before S4/posting, rerun helper; require `stale`/`takeover`,
    `evidence.local_worktree.status: absent`; occupied, unreadable,
    unknown, missing, or contradictory evidence means STOP.
 3. Active claim still the same non-owned `{claim-id}`.
-4. <!-- dotfiles-divergence: claim-timing --> Still stale (≥ 12 h) now.
+4. Still stale (≥ 24 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not
    helper); if new activity, STOP and restart from resume discovery.
 6. Issue still open; PR not merged.

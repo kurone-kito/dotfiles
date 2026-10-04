@@ -51,10 +51,9 @@ unclaimed state are inheritable by the next agent (see
 
 ## Hold / suspend
 
-<!-- dotfiles-divergence: claim-timing -->
 Keep the claim. Post the hold reason and resume condition. After
 re-validating ownership, re-post the claim comment with the same
-`{claim-id}` every 6 h as heartbeat. Then upsert the digest with the
+`{claim-id}` every 12 h as heartbeat. Then upsert the digest with the
 hold phase, the blocking condition in `Open blockers`, and the resume
 condition in `Next action`. The digest does not reset the stale clock.
 
@@ -63,7 +62,7 @@ For an externally owned blocker (sibling PR/issue, maintainer-owned
 check, base-branch health), phrase the resume condition as a checkable
 invariant (e.g. a named check passing on master) rather than the sibling
 alone, since the proxy may resolve differently or never; this keeps the
-claim and 6 h heartbeat active.
+claim and 12 h heartbeat active.
 
 **Needs-decision claim release.** When no further session-side action
 is expected before a human responds, the holding session may apply the
@@ -79,8 +78,7 @@ issue), pause further per-issue escalation and audit the shared root
 cause's full scope once, bringing one consolidated decision to the
 human instead of re-escalating per newly discovered layer.
 
-<!-- dotfiles-divergence: claim-timing -->
-**Provider-outage park**: release the claim immediately, no 6 h
+**Provider-outage park**: release the claim immediately, no 12 h
 heartbeat -- see idd-ci.instructions.md's Hold-and-report failure shapes.
 
 **Parked-change bound** (conditional, only when responding to a known

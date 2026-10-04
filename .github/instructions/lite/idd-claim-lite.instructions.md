@@ -172,17 +172,17 @@ active claim is ignored as invalid — it is **not** a heartbeat
 (heartbeat branch invariant; claim-id is public, not a secret). An
 `unclaimed-by` releases only when both
 `{agent-id}` and `{claim-id}` match the active claim.
-<!-- dotfiles-divergence: claim-timing -->
+
 **Stale** =
 latest valid `claimed-by`'s GitHub `created_at` is
-≥ 12 h ago (`claim-stale-age`, default `12 h`). No active claim →
+≥ 24 h ago (`claim-stale-age`, default `24 h`). No active claim →
 unclaimed, proceed fresh. Active claim already using a `{claim-id}`
 this session **itself already recorded and verified** (a token merely
 read from the current issue comments is never enough) → already
 claimed by this session, continue with it (no new claim; use heartbeat
-rules below). Any other active claim < 12 h old → **STOP**, even when
+rules below). Any other active claim < 24 h old → **STOP**, even when
 its `{agent-id}` matches yours — same-agent restarts never silently
-inherit a non-stale claim. Any other active claim ≥ 12 h old → stale,
+inherit a non-stale claim. Any other active claim ≥ 24 h old → stale,
 proceed with takeover.
 
 **Legacy claims** (no `{claim-id}`): if the latest trusted legacy
@@ -346,9 +346,8 @@ differently for step 5:
 
 ## Heartbeat posting
 
-<!-- dotfiles-divergence: claim-timing -->
 Only when this session already owns the active claim and is extending
-its stale clock (holding past 6 h, or a phase will exceed 6 h):
+its stale clock (holding past 12 h, or a phase will exceed 12 h):
 repost using the **same command and body as step 4 above**, with
 `{branch}` copied **verbatim** from the original claim (never
 recompute), `{claim-id}` / `{agent-id}` matching exactly, and

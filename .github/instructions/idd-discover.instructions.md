@@ -560,10 +560,10 @@ ascending issue-number order:
   resolver (resolve the exact command from `docs/idd-helper-scripts.md`
   if unsure), passing each candidate's own issue number in turn, or
   apply those rules manually.
-  <!-- dotfiles-divergence: claim-timing -->
+
   A candidate is **ineligible** when the latest valid
   `claimed-by` is non-stale (`created_at > now - claim-stale-age`; this
-  repository's configured `claim-stale-age` is `12 h`; see
+  repository's configured `claim-stale-age` is `24 h`; see
   `docs/policy-constants.md`), or when a stale or released claim's same-clone
   worktree probe finds a live match, is unreadable, or is unknown, without
   verified owner resume or authorized handoff (#3141, Round 21 report).

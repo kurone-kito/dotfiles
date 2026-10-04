@@ -168,10 +168,9 @@ may be the selected roadmap or the deepest completed nested roadmap
 discovered beneath it. Before any such side effect, coordinate on the
 **exact roadmap issue being mutated**:
 
-<!-- dotfiles-divergence: claim-timing -->
 Treat `stale` and `non-stale` in this section using the
 `claim-stale-age` policy default from `docs/policy-constants.md`
-(distributed default: `12 h`).
+(distributed default: `24 h`).
 
 - Roadmap claim ownership gates roadmap-side mutations only. Do not
   treat a non-stale roadmap claim as a global lock over A2/A3 child
