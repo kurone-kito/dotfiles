@@ -236,11 +236,12 @@ The required check self-heals on a push or companion refresh from
 IDD-originated review-thread replies or qualifying PR comments. Ordinary
 comments are filtered, although `issue_comment` is subscribed.
 
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several
-`idd-advisory-convergence` check-run instances: required
-`pull_request`/`pull_request_target` runs can coexist with companion
-reruns of those instances. Review submissions use
+`idd-advisory-convergence` check-run instances: the required instance
+comes from `pull_request_target` and can coexist with companion reruns
+of that check. Review submissions use
 `--refresh-latest --apply`; comment paths use plain `--apply`.
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
 instance (see `#1745`). Rerun same-HEAD `CANCELLED`
