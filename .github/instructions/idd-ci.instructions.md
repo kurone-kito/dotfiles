@@ -221,7 +221,8 @@ ships).
 For a stuck or stale rollup entry, rerun the _existing_ non-bot
 `pull_request_target` run for this HEAD
 (`gh run rerun <run-id>`) instead of `workflow_dispatch` or a legacy
-`pull_request` run.
+`pull_request` run. Apply the exact run-record provenance gate below to
+this and every other recovery path for this check.
 
 A second cause: GitHub gates bot-triggered runs to `action_required`
 (for example, the non-required
@@ -241,11 +242,30 @@ comments are filtered, although `issue_comment` is subscribed.
 rollup (`#1745`)**: a HEAD can carry several
 `idd-advisory-convergence` check-run instances: the required instance
 comes from `pull_request_target` and can coexist with companion reruns
-of that check. Review submissions use
-`--refresh-latest --apply`; comment paths use plain `--apply`.
+of that check. Review submissions use `--refresh-latest` for diagnosis;
+comment paths use the plain diagnosis command. Do not append `--apply`
+to either route.
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
-instance (see `#1745`). Rerun same-HEAD `CANCELLED`
-`rerun-eligible` siblings.
+instance (see `#1745`).
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+For every recovery of this check—including stuck/stale entries,
+review/comment refreshes, and same-HEAD `CANCELLED` siblings—use the
+generic rerun helper for diagnosis only. Its documented output does not
+prove the run event, actor, or PR association, and `--apply` executes its
+whole plan. Do not pass `--apply` on any route for this check. For each
+proposed run, first confirm it remains eligible in the current plan
+under `ciWait.rerunPolicy`, then read the PR's current HEAD and
+`GET /repos/{owner}/{repo}/actions/runs/{run_id}`. Rerun only when the
+run has `event: pull_request_target`, `actor.type: User`, `head_sha`
+equal to the current PR HEAD, and one `pull_requests[]` entry whose
+`number` is this PR number and whose `head.sha` is the same HEAD. Use
+`gh run rerun <run-id>` for that individually verified run. Wait for its
+new attempt to finish, regenerate the read-only plan, and repeat only
+while the rollup remains unresolved. Preserve both the per-run
+`rerun-once` policy and the helper's aggregate `MAX_APPLY_RERUNS` cap
+across every plan section. Missing, unreadable, stale, or mismatched
+evidence means hold; exclude `workflow_dispatch`, `workflow_call`,
+legacy `pull_request`, and gated companion runs.
 <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Ordinary plans hold `action_required`, `pending`, `unresolved`,
 `awaiting-fresh-review`, `rerun-budget-held`. The helper's ordinary
@@ -253,9 +273,9 @@ plan already promotes the bounded `passedSiblingRecoveryPlan` case
 (`#3504`). A live-coverage recovery that remains
 `rerun-budget-held` after its `rerun-once` budget is spent and has no
 already-passing sibling stays held; do not use
-`--refresh-latest --apply` solely to bypass that hold. That mode is for
-a fresh review submission as stated above. Mixed or otherwise
-not promoted withheld instances also stay held.
+`--refresh-latest` to bypass that hold. For a fresh review submission,
+use it only for diagnosis under the local provenance gate above. Mixed
+or otherwise not promoted withheld instances also stay held.
 
 Note: this is a known Rulesets platform behavior, not an `idd-skill`
 dedup bug — GitHub can require every same-named instance non-failing,
@@ -263,7 +283,9 @@ not just the dedup-selected latest.
 
 **Helper-first**: prints this diagnosis and ordered rerun plan, read-only
 by default; pass `--apply` to also execute it — the preferred recovery
-path when available. `--apply` reruns each
+path for other checks when available. For this repository's
+`idd-advisory-convergence` recovery, follow the local provenance gate
+above and never use `--apply`. `--apply` reruns each
 rerun-eligible instance in order (recovery-refresh first when one
 applies), waits for each to reach a terminal state before starting the
 next, and stops early as soon as the rollup resolves — never a
@@ -274,15 +296,16 @@ zero-pending checks; see helper docs.
 
 ```sh
 # source repo / vendored-node profile
-node scripts/rerun-advisory-convergence.mjs --pr <n> [--apply]
+node scripts/rerun-advisory-convergence.mjs --pr <n>
 
 # package-manager / ephemeral-npx profile
-<profile-selected-rerun-advisory-convergence-command> --pr <n> [--apply]
+<profile-selected-rerun-advisory-convergence-command> --pr <n>
 ```
 
 On `instructions-only` (no helper runtime), fall back to the manual
-sequence: run the diagnostic, then `gh run rerun <run-id>` on each plan
-entry, waiting for each to finish before the next.
+sequence under the local provenance gate above: rerun only individually
+verified, eligible plan entries, preserve the per-run and aggregate
+rerun budgets, and regenerate the plan after each completed attempt.
 
 **Terminal-waiver recheck (`#1570`)**: once a maintainer waives a proven
 `COPILOT_UNAVAILABLE` state

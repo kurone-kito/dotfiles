@@ -147,7 +147,8 @@ CI-polling shared helper file), never this one. Read
   `pull_request_review_comment`, and qualifying `issue_comment` events.
   Its bot-triggered run can be `action_required`
   and cannot refresh the required check. For a review submission use
-  `--refresh-latest --apply`; comment paths use plain `--apply`. Only
+  `--refresh-latest` for diagnosis; comment paths use the plain diagnosis
+  command. Do not append `--apply` to either route. Only
   IDD-originated review-thread replies or qualifying IDD-originated PR
   comments refresh; ordinary comments/replies are filtered.
 <!-- dotfiles-divergence: local-pr-target-ci-provenance -->
@@ -157,7 +158,26 @@ CI-polling shared helper file), never this one. Read
   non-bot `pull_request_target`-triggered PR-linked run for that HEAD
   instead of dispatching a new one or rerunning a legacy `pull_request`
   run; never rerun a gated bot run.
-- Rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible`.
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+- For every recovery of this check—including stuck/stale entries,
+  review/comment refreshes, and same-HEAD `CANCELLED` siblings—use the
+  generic rerun helper for diagnosis only. Its documented output does
+  not prove the run event, actor, or PR association, and `--apply`
+  executes its whole plan. Do not pass `--apply` on any route for this
+  check. For each proposed run, first confirm it remains eligible in the
+  current plan under `ciWait.rerunPolicy`, then read the PR's current
+  HEAD and `GET /repos/{owner}/{repo}/actions/runs/{run_id}`. Rerun only
+  when the run has `event: pull_request_target`, `actor.type: User`,
+  `head_sha` equal to the current PR HEAD, and one `pull_requests[]`
+  entry whose `number` is this PR number and whose `head.sha` is the same
+  HEAD. Use `gh run rerun <run-id>` for that individually verified run.
+  Wait for its new attempt to finish, regenerate the read-only plan, and
+  repeat only while the rollup remains unresolved. Preserve both the
+  per-run `rerun-once` policy and the helper's aggregate
+  `MAX_APPLY_RERUNS` cap across every plan section. Missing, unreadable,
+  stale, or mismatched evidence means hold; exclude
+  `workflow_dispatch`, `workflow_call`, legacy `pull_request`, and
+  gated companion runs.
   <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
   Ordinary plans hold `action_required`, `pending`, `unresolved`,
   `awaiting-fresh-review`, `rerun-budget-held`. The helper's ordinary
@@ -165,9 +185,9 @@ CI-polling shared helper file), never this one. Read
   (`#3504`). A live-coverage recovery that remains
   `rerun-budget-held` after its `rerun-once` budget is spent and has no
   already-passing sibling stays held; do not use
-  `--refresh-latest --apply` solely to bypass that hold. That mode is
-  for a fresh review submission as stated above. Mixed or otherwise
-  not promoted withheld instances also stay held.
+  `--refresh-latest` to bypass that hold. For a fresh review submission,
+  use it only for diagnosis under the local provenance gate above. Mixed
+  or otherwise not promoted withheld instances also stay held.
 - Helper-first diagnosis (read-only): `node
   scripts/rerun-advisory-convergence.mjs --pr <n>`. Resolve the
   package-manager equivalent from `docs/idd-helper-scripts.md`.

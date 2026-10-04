@@ -109,16 +109,17 @@ Step 2, while `hold` stops without posting a watermark.
 For this repository's `idd-advisory-convergence` check, a passing
 `ci-wait-state` rollup alone does not prove which workflow event produced
 the result. Before Step 2, verify an Actions run for this exact PR whose
-event is `pull_request_target` and whose matching `pull_requests[]`
-entry's `head.sha` equals Step 1 `{head-SHA}`, then inspect that run's
+event is `pull_request_target`, whose `actor.type` is `User`, and whose
+`pull_requests[]` contains an entry with `number` equal to `{pr-number}`
+and `head.sha` equal to Step 1 `{head-SHA}`. Then inspect that run's
 jobs and require the `idd-advisory-convergence` job and its
-`Run advisory-convergence check` step to conclude `success`. Use the
-matching run record's `event` and `pull_requests[].head.sha`, then its
-jobs endpoint's `steps[].conclusion`. A `workflow_dispatch` or
-companion-workflow run alone is not this proof. If the matching run or
-job/step conclusion is missing or unreadable, defer Step 2. The
-`ci-wait-state` helper remains authoritative for other required-check
-topology and statuses.
+`Run advisory-convergence check` step to conclude `success`. Use that
+matching run record's `event`, PR number, actor type, and head SHA, then
+its jobs endpoint's `steps[].conclusion`. A run associated with a different PR,
+`workflow_dispatch`, or a companion workflow alone is not this proof. If
+the matching run or job/step conclusion is missing or unreadable, defer
+Step 2. The `ci-wait-state` helper remains authoritative for other
+required-check topology and statuses.
 
 <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Incomplete: Steps 1/3, E2, E3—not F1/F2. When advisory coverage is not

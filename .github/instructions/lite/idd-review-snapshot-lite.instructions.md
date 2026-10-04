@@ -70,13 +70,13 @@ watermark. Take Steps 1 and 3;
 
 <!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 For this repository's `idd-advisory-convergence` check, also verify an
-Actions run for this exact PR whose event is `pull_request_target` and
-whose matching `pull_requests[]` entry's `head.sha` equals Step 1
-`{head-SHA}`. Inspect its run record and jobs: require the matching PR
-number, then require the `idd-advisory-convergence` job's
-`Run advisory-convergence check` step to conclude `success`. A
-`workflow_dispatch` or
-companion-workflow run alone is not proof. If the matching run or
+Actions run for this exact PR whose event is `pull_request_target`, whose
+`actor.type` is `User`, and whose `pull_requests[]` contains an entry
+with `number` equal to this PR number and `head.sha` equal to Step 1
+`{head-SHA}`. Inspect that same run record and jobs, then require the
+`idd-advisory-convergence` job's `Run advisory-convergence check` step
+to conclude `success`. A `workflow_dispatch` or companion-workflow run
+alone is not proof. If the matching run or
 conclusion is missing or unreadable, defer Step 2. This supplements the
 helper's `requiredChecks.status`; it does not replace the required-check
 snapshot.
