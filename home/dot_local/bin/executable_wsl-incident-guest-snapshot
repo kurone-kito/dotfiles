@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# cspell:ignore pgscan kswapd pgsteal pswpin pgmajfault
+# Read a bounded set of memory and VM counters from procfs without changing
+# guest state. Output contains numeric counters only; it never includes paths
+# or distribution identity.
+set -euo pipefail
+
+proc_root=/proc
+previous_file=
+previous_stdin=0
+previous_input=
+previous_input_limit=4096
+interval_seconds=
+
+usage() {
+  cat <<'EOF'
+Usage: wsl-incident-guest-snapshot [--proc-root DIR] [--previous FILE | --previous-stdin] [--interval-seconds N]
+
+Read memory, pressure, swap, and VM counters from procfs and emit one JSON
+snapshot. Previous counters use this helper's private key/value format.
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --proc-root)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      proc_root=$2
+      shift 2
+      ;;
+    --previous)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      previous_file=$2
+      shift 2
+      ;;
+    --previous-stdin)
+      previous_stdin=1
+      shift
+      ;;
+    --interval-seconds)
+      (($# >= 2)) || { usage >&2; exit 2; }
+      interval_seconds=$2
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ! [[ -d $proc_root ]]; then
+  printf '{"schemaVersion":1,"status":"unavailable","error":"procfs-unavailable"}\n'
+  exit 0
+fi
+
+if ! command -v awk >/dev/null 2>&1; then
+  printf '{"schemaVersion":1,"status":"unavailable","error":"required-command-missing"}\n'
+  exit 0
+fi
+
+if [[ -n $interval_seconds ]] && ! [[ $interval_seconds =~ ^([1-9][0-9]?|[1-5][0-9]{2}|600)$ ]]; then
+  usage >&2
+  exit 2
+fi
+
+if ((previous_stdin)); then
+  IFS= LC_ALL=C read -r -N "$((previous_input_limit + 1))" previous_input || true
+  if ((${#previous_input} > previous_input_limit)); then
+    previous_input=
+    previous_stdin=0
+  fi
+fi
+
+read_mem() {
+  local key=$1
+  local value
+  value=$(awk -v key="$key" '$1 == key ":" { print $2; found = 1; exit } END { if (!found) exit 1 }' "$proc_root/meminfo" 2>/dev/null) || return 1
+  [[ $value =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$value"
+}
+
+read_vmstat() {
+  local key=$1
+  local value
+  value=$(awk -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }' "$proc_root/vmstat" 2>/dev/null) || return 1
+  [[ $value =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$value"
+}
+
+previous_value() {
+  local key=$1
+  local value=
+  if [[ -n $previous_file && -f $previous_file ]]; then
+    value=$(awk -F '\t' -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }' "$previous_file" 2>/dev/null) || return 1
+  elif ((previous_stdin)); then
+    value=$(printf '%s' "$previous_input" | awk -F '\t' -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }') || return 1
+  else
+    return 1
+  fi
+  [[ $value =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$value"
+}
+
+number_or_null() {
+  if [[ $1 =~ ^[0-9]+$ ]]; then
+    printf '%s' "$1"
+  else
+    printf 'null'
+  fi
+}
+
+decimal_or_null() {
+  if [[ $1 =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s' "$1"
+  else
+    printf 'null'
+  fi
+}
+
+mem_total=$(read_mem MemTotal || true)
+mem_available=$(read_mem MemAvailable || true)
+swap_total=$(read_mem SwapTotal || true)
+swap_free=$(read_mem SwapFree || true)
+if [[ -z $mem_total ]]; then
+  printf '{"schemaVersion":1,"status":"unavailable","error":"memory-data-unavailable"}\n'
+  exit 0
+fi
+
+psi_some='null'
+psi_full='null'
+if [[ -r $proc_root/pressure/memory ]]; then
+  psi_some=$(awk '$1 == "some" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg60"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg300"] ~ /^[0-9]+([.][0-9]+)?$/ && values["total"] ~ /^[0-9]+$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' "$proc_root/pressure/memory" 2>/dev/null || true)
+  psi_full=$(awk '$1 == "full" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg60"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg300"] ~ /^[0-9]+([.][0-9]+)?$/ && values["total"] ~ /^[0-9]+$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' "$proc_root/pressure/memory" 2>/dev/null || true)
+fi
+[[ -n $psi_some ]] || psi_some='null'
+[[ -n $psi_full ]] || psi_full='null'
+
+counter_keys=(pgscan_kswapd pgscan_direct pgsteal_kswapd pgsteal_direct workingset_refault pswpin pswpout pgfault pgmajfault)
+declare -A current previous deltas rates
+for key in "${counter_keys[@]}"; do
+  current[$key]=$(read_vmstat "$key" || true)
+  previous[$key]=$(previous_value "$key" || true)
+  deltas[$key]=
+  rates[$key]=
+  if [[ -n ${current[$key]} && -n ${previous[$key]} && -n $interval_seconds ]]; then
+    if (( current[$key] >= previous[$key] )); then
+      deltas[$key]=$((current[$key] - previous[$key]))
+      rates[$key]=$(LC_ALL=C awk -v delta="${deltas[$key]}" -v seconds="$interval_seconds" 'BEGIN { printf "%.3f", delta / seconds }')
+    fi
+  fi
+done
+
+overall_status=ok
+[[ -n $mem_available && -n $swap_total && -n $swap_free ]] || overall_status=partial
+
+printf '{"schemaVersion":1,"status":"%s",' "$overall_status"
+printf '"memory":{"status":"%s","unit":"kB","total":%s,"available":%s},' \
+  "$([[ -n $mem_available ]] && printf ok || printf partial)" \
+  "$(number_or_null "$mem_total")" "$(number_or_null "$mem_available")"
+printf '"swap":{"status":"%s","unit":"kB","total":%s,"used":%s},' \
+  "$([[ -n $swap_total && -n $swap_free ]] && printf ok || printf unavailable)" \
+  "$(number_or_null "$swap_total")" \
+  "$(if [[ -n $swap_total && -n $swap_free ]] && (( swap_total >= swap_free )); then printf '%s' "$((swap_total - swap_free))"; else printf null; fi)"
+printf '"psi":{"status":"%s","some":%s,"full":%s},' \
+  "$([[ $psi_some != null || $psi_full != null ]] && printf ok || printf unavailable)" \
+  "$psi_some" "$psi_full"
+printf '"counters":{'
+separator=
+for key in "${counter_keys[@]}"; do
+  printf '%s"%s":%s' "$separator" "$key" "$(number_or_null "${current[$key]}")"
+  separator=,
+done
+printf '},"deltas":{'
+separator=
+for key in "${counter_keys[@]}"; do
+  printf '%s"%s":{"status":"%s","value":%s,"perSecond":%s}' \
+    "$separator" "$key" \
+    "$([[ -n ${deltas[$key]} ]] && printf ok || printf unavailable)" \
+    "$(number_or_null "${deltas[$key]}")" \
+    "$(decimal_or_null "${rates[$key]}")"
+  separator=,
+done
+printf '}}\n'
