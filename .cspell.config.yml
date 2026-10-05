@@ -2,7 +2,7 @@
 # base dictionaries, cache, ignore path, and vocabulary alongside the
 # repository-specific dictionaries, ignores, and words. #238's
 # full-repository `npx cspell lint "**"` sweep (broader than the
-# incremental-only scan `cspell-action@v8` runs in CI by default)
+# incremental-only scan `cspell-action@v9.1.0` runs in CI by default)
 # separately found pre-existing false positives outside the IDD surface
 # across home/, tests/, and .vscode/; those local terms remain below.
 allowCompoundWords: true
