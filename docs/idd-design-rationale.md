@@ -146,6 +146,55 @@ candidate at the same second, then race the same-second tie-break;
 the pre-scan moves the resolution earlier in the pipeline so most
 sessions never touch the same issue.
 
+**Own-orphaned-claim near miss (kurone-kito/idd-skill#3322).**
+Observed 2026-09-23/24 in a
+public adopter run (`kurone-kito/vpm`, field-feedback gist round 40): a
+session's own Discover pass read its own orphaned claim's `claimed-by`
+comment as a non-stale foreign claim and moved on to the next
+candidate, per the pre-scan rule above, exactly as the rule is
+designed to behave for two genuinely different sessions. Only a
+follow-up review of the transcript caught it; a manual
+`claim-lock.mjs --read-tokens` check found a recorded token matching
+the "foreign" claim-id, prompting the operator to resume it correctly
+by hand.
+
+The fix checks `idd-claim.instructions.md`'s `--read-tokens` form
+against Discover's **own current cwd** — the primary worktree, since
+Discover has no per-issue implementation worktree of its own yet —
+never an explicit different worktree's path, so it needs no exception
+to the existing `--read-tokens` scope contract (`claim-lock.mts`'s own
+"Scope of the ownership proof" header comment,
+kurone-kito/idd-skill#2879 review, Codex P1;
+`docs/idd-helper-scripts.md`'s matching note). A fresh `A5` claim
+always records its token into the primary worktree's admin directory
+before any sibling worktree exists, so this check reaches the same
+recovery evidence the original incident found by hand, without probing
+a worktree Discover isn't running from. That same header comment is
+also explicit that a hit is corroborating bootstrap evidence only, not
+sole proof of current-session ownership by itself — when several
+sessions share one clone, a different, still-live sibling session's
+own A5 claim can leave an indistinguishable record at that same shared
+path. `{agent-id}` is shared across sessions of the same agent type
+and never proves ownership (`idd-overview-core.instructions.md`), so
+Step 1.5 does **not** gate this route on `record.agentId`. It does
+**not** adopt the recorded pair outright; it stops silently discarding
+the candidate as an ordinary foreign claim and routes a well-formed
+`present: true` result to `idd-resume.instructions.md`. Resume
+Step 0 sends a non-owned active claim with no forced-handoff
+evidence to `idd-resume-stall.instructions.md` before Step 1, so
+this route does not finish ownership by itself. A refusal there
+is not a terminal end of Discover: the candidate stays ineligible
+and Step 1.5 keeps scanning.
+
+This finding is upstream of kurone-kito/idd-skill#3273 (Resume Step 1
+not threading an already-known claim-id through to
+`resume-claim-routing.mjs`) and kurone-kito/idd-skill#3274 (operator
+recovery for a stale/released claim whose local worktree is still
+occupied). kurone-kito/idd-skill#3273's gap is that Resume Step 0
+stalls before Step 1 unless the session already holds a verified
+claim-id. Passing the probe's claim-id through that entry stays in
+that issue, not this change.
+
 ### A4 Step 2 — Rationale: concurrent-selection desync
 
 A4 Step 1.5 (active-claim pre-scan) and A5(e) (collision detection plus
@@ -253,7 +302,14 @@ and that difference is intentional policy, not drift:
   (kurone-kito/idd-skill#1058, an issue-only handoff predating the PR). The
   merge gate re-validates an _already-verified_ session and must tolerate a
   maintainer-authorized handoff relayed by a separate automation actor;
-  authorization then rests on `isAuthorizedForcedHandoff` alone.
+  authorization then rests on `isAuthorizedForcedHandoff` alone. The
+  external-check waiver (`resolveLinkedIssueCandidates` in
+  `external-check-waiver.mts`) is one of these lenient merge-side callers and
+  passes `prFirstCommitAt` too (kurone-kito/idd-skill#3675: without it a
+  successor of an issue-only handoff could not use the waiver on its own PR,
+  observed 2026-09-30 in a private adopter). The marker planner calls the same
+  `resolveHelperActiveClaim` without it on purpose, so its PR-scoped replay
+  keeps rejecting an issue-only marker.
 
 Because the two callers apply different strictness, they can return **different
 verdicts for the same corrected-handoff state** — resume may report
@@ -267,6 +323,39 @@ shared `resolveActiveClaim`, and forcing both sides strict would break the
 legitimate relay use-case. Any future change here must preserve the single
 resolver (do not fork `resolveActiveClaim`) and the resume-side
 self-signed-hijack block.
+
+**Failed linked-PR lookup on the resume side (kurone-kito/idd-skill#3276).**
+Resume routing's own PR-backed-claim detection
+(`fetchOpenLinkedPrReferences`) used the unpaginated, fail-open
+`getConnectedPullRequestEventsSingle`, whose GitHub adapter swallows every
+lookup error and returns an empty event list — indistinguishable from "no
+connected PR." Combined with `buildForcedHandoffEnableGate`'s
+`expectedLinkedPrReferences.size === 0` shortcut, a transient lookup
+failure could silently honor an `issue-only` forced handoff against a claim
+a PR actually backs, the exact case the strictness split above exists to
+reject. The fix moved the lookup to the already-throwing paginated
+`getConnectedPullRequestEventsPage` and threads an explicit
+`linkedPrLookupFailed` flag through resume routing's own gate: a failed
+lookup now rejects an `issue-only` handoff as "PR state unknown" (fail
+closed) instead of the prior fail-open behavior, and neither side of a
+handoff blocked this way (the displaced original owner's `oldClaimId` nor
+the would-be successor's `newClaimId`) may read a `--claim-id` check as an
+ordinary claim-state outcome — both route to an explicit `stop` with a
+dedicated `forced-handoff-linked-pr-lookup-failed` reason, for as long as
+the rejected marker's `oldClaimId` still names the current active claim
+(re-derived live on every `--claim-id` check, not a one-time flag — the
+`linkedPrLookupFailureMatch` override inside `evaluateResumeClaimRouting`).
+A later, unrelated claim transition makes that historical marker no longer
+a live match, so it stops applying; a genuine takeover still reaches
+`already-claimed` → `stale-reclaimable` via `--fresh-claim-gate` and a
+freshly minted claim-id, which the override never touches. Scoped to
+`issue-only` handoffs only, matching the Groom hearing decision that
+introduced it: `buildForcedHandoffEnabledGate`'s wrapper delegates an
+`issue-plus-pr` handoff straight to the pre-existing shared gate
+regardless of `linkedPrLookupFailed`, so its behavior is unchanged. The
+merge-side `summarizeClaimValidation` path (and its `prFirstCommitAt`
+Part-B allowance above) never shared this lookup either, and is untouched
+by this fix.
 
 ### Activation-nonce: why a separate marker, and what stays deferred
 
@@ -294,12 +383,17 @@ no `claimed-by` and so never enters _Claim verification_ at all — the
 adopt-verbatim paragraph in `idd-claim.instructions.md` carries its own
 inline verify-then-compare instruction, the one path #1480 actually
 exercises. Beyond the AC's letter, `evaluateResumeClaimRouting`
-(`resume-claim-routing.mts`) also accepts `--claim-id`/`--nonce` and is
-unit-tested, anticipating Resume Step 1 wiring — but the documented Resume
-Step 1 invocation (`idd-resume.instructions.md`) never threads either flag
-through, and a resumed process has no local memory of which nonce was its
-own to compare against in the first place. Cold recovery
-(kurone-kito/idd-skill#1529) now fail-closes: a resume that holds no
+(`resume-claim-routing.mts`) also accepts `--claim-id`, `--nonce`, and
+`--worktree`, and is unit-tested. kurone-kito/idd-skill#3273 wired the
+documented Resume Step 1 invocation, in both the standard
+(`idd-resume.instructions.md`) and lite
+(`lite/idd-resume-lite.instructions.md`) profiles, to thread
+`--claim-id` whenever this session already recorded and verified one,
+plus `--nonce` when this session also recorded one for that same
+claim-id, and `--worktree` once the B1 worktree exists, so the helper
+reads independent owner evidence instead of treating a bare re-fetch
+as a live competitor. Cold recovery
+(kurone-kito/idd-skill#1529) still fail-closes: a resume that holds no
 local nonce treats 2+ trusted activation-nonce markers for the active
 claim-id as `disputed`/`stop` rather than guessing an owner.
 The merge write-gate half landed separately: `summarizeClaimValidation`
@@ -588,6 +682,25 @@ unsuitable, or fails) without inventing a wall-clock or tool-call cap,
 and require the critique brief to name the files or diff under review
 so an unsuitable pass is easier to distinguish from a thorough one.
 
+### C1/B2 — Bound delegated critique waits
+
+The no-cap stance from
+`kurone-kito/idd-skill#2825` covered slow but returning Grok passes:
+the observed 387-second, 575-second, and 172-second passes all produced
+usable findings. A later field-feedback report from the dotfiles run found a
+delegated Cursor pass that waited about 32 minutes without returning a findings
+list, leaving the unattended loop unable to reach its structured fallback
+(observed 2026-09-26, `kurone-kito/idd-skill#3542`). The
+default `critiqueLoop.subagentWaitCeiling = PT20M` addresses that hang
+case without treating the slower returning passes from
+`kurone-kito/idd-skill#2825` as failures. The parent must apply the ceiling
+through the harness's own
+per-invocation timeout control, rather than wrapping the delegated
+command in a timeout utility as the failure mode documented by
+`kurone-kito/idd-skill#3449`
+warns against. A harness that cannot bound its delegation primitive must
+record that residual risk and use structured self-critique instead.
+
 ### B2.1 — Premise verification (decision-transcription issues)
 
 Field evidence showed a worker asked to transcribe a maintainer's
@@ -767,7 +880,26 @@ non-blocking).
 
 ## Review triage
 
-### Merge-main livelock under fast-moving `master`
+### E1 Step ordering made review triage wait for CI (2026-09-28)
+
+An operator report from an unnamed adopter described E-phase leaving
+unresolved review items while the loop waited for CI. Investigation of
+the current corpus found a verified textual/logical gap, rather than
+adopter-side confirmation: full-profile E1's opening sentence and the
+lite profile's precondition led workers to wait before fetching, while
+the full profile's actual CI condition only gates Step 2's watermark
+(issue kurone-kito/idd-skill#3577). The drift traces through
+kurone-kito/idd-skill#988, #1297, and #3465, which progressively
+delayed Step 2 without stating that Steps 1 and 3 were independent;
+the lite profile's 2026-07-22 authoring commit `9a95e5858` also placed
+the condition before Step 1.
+
+The correction keeps the watermark safety gate and lets review snapshot
+and triage proceed while CI or the expected advisory re-review is
+incomplete. The next full E1 entry records the deferred watermark after
+those signals resolve.
+
+### Merge-main livelock under fast-moving `main`
 
 <!-- dotfiles-divergence: master-branch -->
 Under heavy concurrent-session load, `master` can advance before one
@@ -779,6 +911,48 @@ the `review-watermark` as the last action before F3's
 after — a CI rerun settling, a new disposition reply, another `master`
 advance — stales it and fails `--apply` closed on `review-currency`
 rather than merging on data the retry has since invalidated.
+
+### Bot-comment wording matchers need a real-sample evidence bar
+
+IDD classifies advisory-bot output (CodeRabbit, Copilot, Codex) by
+exact wording, and every classifier's own detection patterns were
+added one wording at a time, each after a separate field report —
+with no consistent evidence bar for how many real samples justified
+adding one. `kurone-kito/idd-skill#2641` derived its courtesy-
+acknowledgment template from 18 of 18 real samples;
+`kurone-kito/idd-skill#2710` was closed as not planned on a 10-of-10
+sample that showed the proposed signal never appears on its own;
+`kurone-kito/idd-skill#3193` was accepted on a single second-hand
+report from a private repository, with the key sentence never even
+captured verbatim (matched structurally instead). No committed copy of
+any real bot body backed any of these decisions, so nothing would have
+noticed if live vendor output later drifted from what a matcher
+expected — a suppressed-comments parser going stale unnoticed is
+exactly that failure mode realized.
+
+A single rule resolves the inconsistency, applied going forward: a new
+wording enters the registered wording-classifier list only with at
+least 3 real samples from at least 2 distinct PRs, added to a
+committed bot-comment corpus fixture in the same PR, each entry
+recording its own provenance (bot login, PR number, review or comment
+id, and the revision's edit timestamp when the body came from an
+edit-history query) so anyone can re-fetch and re-verify it. A
+network-free contract test enforces the bar mechanically: it re-runs
+every registered classifier over every corpus entry that names it, and
+separately checks each classifier's own real-positive-sample count and
+distinct-PR count against the floor. A classifier that predates this
+rule with fewer real samples than the bar requires is not
+retroactively broken by it — it is named on a test-pinned grandfather
+list instead, each entry stating its originating issue and the search
+that found too few samples, so widening that list is a visible,
+reviewable edit rather than a silent exception.
+
+Copilot review coverage is a companion fix from the same roadmap, not
+part of this wording-matcher rule: it moved from a denylist (every
+review counts as covering except one exact error template) to a
+positive signature (a recognized-review-body-shape check), closing the
+same fail-open direction a wording denylist has — an error message in
+new wording no longer silently counts as a covering review.
 
 ### Zero-Accepted-PATH-A advisory re-review gate
 
@@ -902,6 +1076,70 @@ marker, its `Refs #<N>` reference is resolved the same way an ordinary
 `Blocked by #<N>` line is — excluded from Discover while `#<N>` stays
 open. An unmarked issue's `Refs` lines are completely unaffected.
 
+#### Reconciling the deferred follow-up with its pull request (kurone-kito/idd-skill#3624)
+
+E5 defers a finding by filing one follow-up issue, and the source review
+thread then gets a `**Rejected** — deferred to follow-up issue #<n>`
+reply. The reply needs the issue number, so it can only be posted after
+the follow-up exists. That order fails toward a duplicate, never toward
+a lost finding: replying first would leave a resolved thread naming a
+follow-up nobody created. Filing is several non-atomic remote writes
+(journal record, issue creation, identity record, owner marker, member
+record) and the reply comes after all of them, so nothing reconciled the
+two halves when a session stopped between them.
+
+Observed 2026-09-29 to 2026-09-30, follow-up #3615 for the pull request
+that implemented #3591 (#3604). Copilot opened a review thread at 16:12Z.
+The first session filed #3615 for it and posted its owner marker at
+16:54:20Z, but the journal record stayed `pending` and the deferral reply
+was never posted. After a forced handoff the successor saw an unreplied
+thread, judged it fresh, and fixed it in the pull request itself; nothing
+pointed it at #3615. When the pull request merged and #3591 closed, the
+`Refs #3591` line stopped holding marked follow-ups back in Discover
+(#2877), so only the authoring label still kept #3615 out of Discover,
+although it described work already delivered. It was closed by hand as
+not planned. The successor's own follow-up for the same pull request
+(#3617) carried its reply, so the sequence works when uninterrupted.
+
+Frequency, from a GitHub search over the marker text on 2026-09-30 (the
+search index may undercount): 17 issues carry the marker since
+2026-09-10. Two are excluded, #3398 (its findings came from an E2 critique
+pass, so no thread exists) and #3394 (no parseable `Refs` line). Of the
+remaining 15, 14 have a matching `deferred to follow-up issue` reply on
+the originating pull request and #3615 is the one that does not. That is
+one confirmed incident in 15, so low frequency, but nothing automated
+would ever catch it: F3's unresolved-thread gate only forces someone to
+answer the thread, not to notice the follow-up.
+
+Decision: `pre-merge-readiness` reports every open marked follow-up whose
+sole `Refs` line names the pull request's origin issue as `deferFollowUps`,
+and F3 blocks on `deferred-followup-unreconciled` until the pull request
+names it (body, conversation comment, review body, or any review-thread
+comment, resolved ones included), and on `deferred-followup-unverified`
+when the follow-up set cannot be enumerated completely. Either repair
+clears the first gate: a reply on the source thread when the finding is
+still deferred, or a pull request comment when it was fixed in the pull
+request or is no longer needed. Any author counts, because this proves the
+pull request names the follow-up, not that the choice was right. A trusted
+IDD-operational comment is the exception: the live status digest lists the
+open blockers, this gate's own follow-up number included, so counting it would
+let the digest entry for the blocker clear the blocker (preventive; no
+observed incident yet).
+
+Rejected alternatives:
+
+- **Reply-first ordering.** It leaves a resolved thread naming a follow-up
+  nobody created, which is worse than a duplicate follow-up.
+- **Detecting the gap at successor resume or E1.** It needs an instruction
+  pointer that the bundles at the context ceiling cannot hold, and it only
+  helps when a successor exists.
+- **Clearing only on the exact reply format.** A fix made in the pull
+  request is a valid outcome that never produces that reply, so requiring
+  it would force a false "deferred" reply.
+- **Enumerating through the origin issue's timeline.** It pages through
+  every comment event of the origin issue, where the marker search is one
+  call.
+
 #### 2026-09-15 recalibration to 12, using a month of real data (kurone-kito/idd-skill#2999)
 
 After a month of historical review-fix-loop data accumulated in this
@@ -936,6 +1174,89 @@ sharply once a session handoff/resume resets the claim-scoped count.
 The round-count cutoff now compares against the pull request's total
 review-submission count, PR-wide and fully paginated, instead. See
 kurone-kito/idd-skill#3162 for the observed counts.
+
+### E4/E5 adopt-now urgency defer
+
+E4 scores each PATH A item on one axis, severity/relevance to PR
+intent. A finding that is minor but genuinely _in scope_ is not Low
+under that definition, so it lands in Medium's "judge by context"
+branch and is typically accepted because it is correct — and every
+Accepted PATH A fix is a push, with E14 requesting a fresh review
+after every push, so each such fix can buy one more review wave whose
+own diff surfaces new findings. The round-count cutoff above doesn't
+cover this case: it only fires after its own round threshold, for Low
+items only, and most review waves in this repository's own dogfooding
+history happened well before that cutoff could act (observed
+2026-09-24; see kurone-kito/idd-skill#3222 for the full baseline).
+
+A code-review bot's severity label, where one is exposed, typically
+has no published definition, no configuration, and no API field, so
+an agent's own E4 tier must stay authoritative; the bot's label can
+only raise the defer-eligibility floor, never substitute for it.
+
+`critiqueLoop.deferByUrgency` adds a second, independent trigger,
+active from round 1, gated on this opt-in key. See
+kurone-kito/idd-skill#3222 for the live baseline behind the decisions
+below.
+
+#### Groom hearing decisions (2026-09-24, kurone-kito/idd-skill#3222)
+
+- Add a second triage axis, "worth another Copilot review wave in this
+  PR" (adopt-now urgency), and defer a finding whose adopt-now urgency
+  is low to a bundled follow-up issue, the same way the round-count
+  cutoff does, but from round 1.
+- The severity ceiling for this new trigger is Low plus Medium (mode
+  `low-and-medium`); High is never deferred under `low` or
+  `low-and-medium`. This supersedes a Low-only ceiling **for this new
+  trigger only**; the round-count cutoff above stays unchanged and
+  Low-only.
+- Keep the round-count cutoff as an unchanged backstop; the new rule
+  is an independent trigger applying from the first E4/E5 pass.
+- Apply to every PATH A actor, not only a code-review bot, with the
+  agent's own E4 tier authoritative and any bot severity label
+  recorded as evidence only.
+- The adopt-now allowlist is exactly (a) a regression this PR
+  introduced, (b) an unmet claimed-issue acceptance criterion or
+  requirement, (c) correctness, safety, or CI-stability, and (d)
+  piggybacking on a push that is already certain -- condition (d)
+  keeps new diff surface, and the fresh findings it can attract,
+  bounded.
+- Distribute as an opt-in policy key with default `off`; a repository
+  opts in per its own review-cost profile.
+- A follow-up filed by either trigger carries the
+  `review-fix-loop-cutoff` defer-source marker. The issue-authoring
+  skill's Stage 2 narrow auto-release exception releases that hold
+  immediately, so the deferred issue does not wait for a human
+  release request.
+
+#### Severity-tiered urgency (kurone-kito/idd-skill#3589)
+
+`severity-tiered` is a third `deferByUrgency` value. It replaces the
+binary adopt-now allowlist with an ordinal urgency score (`very-low`
+< `low` < `medium` < `high`) beside the E4 severity. High defers only
+at `very-low`. Medium, including unknown severity, defers at
+`very-low`, `low`, or `medium`. Low defers at every scored urgency.
+An unscored urgency does not defer. `low` and `low-and-medium` still
+never defer High, so the hearing bullet above applies to those two
+modes only. That bullet's condition (d), piggybacking on an already
+certain push, belongs to the binary allowlist and has no counterpart
+here: the matrix alone decides.
+
+PR #3550 and PR #3574 motivated the High cell as context only; neither
+is a dependency. On 2026-09-28 those pull requests had review
+submissions on many distinct commits: PR #3550 had Copilot on 94,
+Codex on 79, and CodeRabbit on 4; PR #3574 had Copilot on 95, Codex on
+82, and CodeRabbit on 4. Those counts show repeated re-evaluation.
+They are not the number of unique findings, and they carry no
+severity breakdown or per-finding marginal wave cost, so they cannot
+show how often a High finding was truly `very-low` urgency.
+
+Two review-history observations shaped the wording instead. Copilot's
+overview on PR #3550 reported no findings on `fcc6e1620` before Codex
+reported three safety findings on that same commit, so E4/E5 must
+inspect every actionable PATH A finding even when an overview is
+empty. PR #3574 drew repeated Medium correctness findings during its
+review cycle.
 
 ### review-ack worked example
 
@@ -1129,6 +1450,55 @@ this is then an **accepted risk**; adopter repos that keep a human
 merge step retain that human as the backstop the autonomous path lacks. A
 repository that reaches this same conclusion independently should record
 it here rather than re-litigating it on every structural audit.
+
+### F4 checks that the closing set is closed before it releases the claim
+
+F4 step 1 closes the closing set's issues explicitly only when
+`{development-branch}` is not the default branch. For the default branch
+it relies on GitHub closing each linked issue at merge, and step 7 used
+to post `unclaimed-by` without checking that GitHub had done so
+(observed 2026-09-30).
+
+Of the nine pull requests merged that day, each with a `Closes #N` line
+in its body, four closed their issue within 2 s of the merge
+(kurone-kito/idd-skill#3604, kurone-kito/idd-skill#3614,
+kurone-kito/idd-skill#3612, kurone-kito/idd-skill#3613) and five did
+not. An IDD session closed each of the five by hand with a
+`Merged via #N` comment, 135 to 481 s after the merge:
+kurone-kito/idd-skill#3624 (PR kurone-kito/idd-skill#3632, 135 s),
+kurone-kito/idd-skill#3617 (PR kurone-kito/idd-skill#3618, 189 s),
+kurone-kito/idd-skill#3592 (PR kurone-kito/idd-skill#3603, 193 s),
+kurone-kito/idd-skill#3597 (PR kurone-kito/idd-skill#3605, 462 s) and
+kurone-kito/idd-skill#3585 (PR kurone-kito/idd-skill#3610, 481 s). The
+day before, all nine pull requests with closing references that merged
+closed their issue within 2 s. No late auto-close was observed for the
+five, and the cause is not established: the current
+`closingIssuesReferences` of every one of the nine lists its issue, and
+the bodies show no difference. One unconfirmed lead, from the sessions'
+own notes and not visible on GitHub: for kurone-kito/idd-skill#3632 the
+reference registered only about two hours after the PR was created and
+shortly before the merge, and for kurone-kito/idd-skill#3618 about a
+minute after a body edit; whether the other three registered late is not
+known.
+
+Each session improvised the same repair at a different point of its run
+(for kurone-kito/idd-skill#3597 and kurone-kito/idd-skill#3624 after
+`unclaimed-by`; for kurone-kito/idd-skill#3617,
+kurone-kito/idd-skill#3592 and kurone-kito/idd-skill#3585 before it),
+because nothing in F4 asked for it. Step 7 now reads each closing-set
+issue's state once, closes an open one as step 1 does, and holds without
+posting `unclaimed-by` when the read or the close fails, right before it
+releases the claim. The check lives in step 7 and not step 1 because
+step 1 is skipped on a resume for a default branch while step 7 runs on
+every resume that still holds the claim, and running last also gives
+GitHub's own auto-close time to fire first. It is a single read, never a
+wait or a poll. The digest upsert stays first, so a failed close leaves
+the digest at `F4 complete` with the claim held; a resume re-runs steps
+4-7, where the upsert reports `noop` and the check runs again. The
+exposure is small (an open, unclaimed, already-merged issue is mostly
+caught by A4.5's supersession signals; the one documented window is
+about three minutes, for kurone-kito/idd-skill#3597), so the rule rests
+on the repeated hand repairs, not on the window.
 
 ## Instruction delivery
 

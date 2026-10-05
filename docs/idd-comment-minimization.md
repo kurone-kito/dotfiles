@@ -37,6 +37,31 @@ untrusted actor or a digest whose text disagrees with trusted markers is
 ignored for workflow decisions and repaired only after the authoritative
 state has been re-read.
 
+The ordinary digest helper (`live-status-digest.mjs`) enforces this
+author boundary mechanically: only a current-digest comment authored by
+a trusted marker actor is ever updated or counted toward the
+duplicate-digest check. Review-activity counting
+(`buildActivitySnapshotSummary`) excludes a digest-marker comment only
+when its author is that same trusted marker actor. Unreplied-comment
+and disposition-evidence counting (`summarizeRegularCommentsForGate`,
+`summarizeDispositionEvidenceForGate`) instead exclude a digest-marker
+comment when its author is a trusted marker actor OR a recognized
+IDD-agent author -- otherwise an agent's own digest posted outside the
+trusted set would count as a genuine reply and wrongly clear earlier,
+still-unanswered feedback as already addressed. A digest-marker comment
+whose author is in neither set is left alone by the ordinary helper --
+it neither rewrites nor deletes it -- and counts as ordinary PR/issue
+activity requiring the normal review disposition, exactly like any
+other stranger's comment. A recognized IDD-agent author who is not a
+trusted marker actor is also left alone by that helper, but those same
+unreplied-comment and disposition-evidence gates still exclude that
+digest, so it does not count as ordinary activity. The
+maintainer-gated repair path below is the one exception: it
+deliberately sees and can retire every current-marker comment
+regardless of author, since its whole purpose is clearing a
+duplicate-digest state a maintainer has already reviewed
+(kurone-kito/idd-skill#3337).
+
 Each digest should contain these fields in a compact, editable form:
 
 | Field              | Meaning                                                             |
@@ -301,9 +326,13 @@ node scripts/audit-pr-cleanup.mjs --pr <N> --apply --skip-claim-check --format j
 ```
 
 It then parses the report and posts the canonical
-`<!-- idd-cleanup-evidence: ... -->` comment so every actually-merged
-PR receives evidence within a few minutes even when the agent did
-not run F4 manually.
+`<!-- idd-cleanup-evidence: ... -->` comment so a merged PR still
+receives evidence when the agent did not run F4 manually. Across 395
+successful runs from 2026-09-01 through 2026-09-23, elapsed time
+(`updatedAt` minus `createdAt`) was p50 71 s, p90 136 s, p95 157 s,
+and max 352 s. A cleanup step that reaches its own timeout still
+posts `timeout` evidence before the job cap, instead of leaving no
+marker.
 
 The template (`idd-template/`) ships a generic counterpart at
 `idd-template/.github/workflows/post-merge-cleanup.yml`, part of the
@@ -339,11 +368,16 @@ never suppress this run's own non-success evidence), and the agent F4
 step skips its own post under that same both-converged rule —
 including when the workflow itself posted the prior success record. A
 trusted comment recording any other status (`failed`, `incomplete`,
-`permission-blocked`, `rescan-failed`, `recheck-failed`) does not
+`permission-blocked`, `rescan-failed`, `time-budget-exhausted`,
+`recheck-failed`, `helper-error`, `timeout`) does not
 suppress either side,
 so a `workflow_dispatch` rerun after a `rescan-failed` post still
 posts fresh evidence (preventive; no observed incident yet — issue
-`#2043`). The workflow's PR-keyed `concurrency` group only serializes
+`#2043`). `helper-error` and `timeout` are server-side fallback
+statuses with cleanup-failure meaning: the workflow ran but printed
+no parseable report, or the cleanup step ended without reporting.
+Neither is a successful apply, so neither suppresses a later post.
+The workflow's PR-keyed `concurrency` group only serializes
 workflow runs against each other; it does not gate the agent's local
 F4.
 
@@ -434,11 +468,12 @@ gh pr checks <pr-number> --json workflow,bucket --jq \
 - **`true`**: the run is in flight. Poll the same query at a reasonable
   interval until it returns `false`, bounded by
   `ciWait.generationTimeout` (default `PT10M`) measured from this
-  first `true` observation. A single bound suffices here — unlike the
-  longer-running checks `idd-ci.instructions.md`'s own polling
-  algorithm bounds with the queued/running split, this workflow's job
-  completes in roughly 15 seconds, so distinguishing a merely queued
-  run from an actually running one buys nothing at that scale. Past
+  first `true` observation. A single bound suffices here. The source
+  workflow's job cap is 10 minutes, which this default already covers,
+  so a queued-versus-running split does not change the wait. The
+  template job cap is longer because that copy installs dependencies
+  before an 8-minute cleanup step; past this bound the existing
+  fail-open still applies. Past
   that bound with the run still in flight, treat it the same as
   "not in flight" and continue to the duplicate-success-record skip
   rule unchanged — a resulting duplicate comment is this check's
@@ -519,6 +554,16 @@ Current safe classes are:
 - CodeRabbit review-trigger acknowledgements after a later IDD
   disposition that names CodeRabbit confirms the requested review
   completed
+- A Codex usage-limit notice (from the Codex connector) that has a
+  later trusted IDD disposition explicitly bound to that exact notice
+  via its `(source: #issuecomment-{id})` reference and naming the
+  Codex connector, mirroring the CodeRabbit disposition-evidence
+  requirement above. The binding is exact, never order- or count-based
+  -- a disposition that does not carry this notice's own id never
+  resolves it, even when it names the right bot. This is an
+  F4-cleanup-only recognition path -- the F2/F3 merge-gate readiness
+  checks carry their own separate, multi-bot-safe disposition
+  carry-forward for the same notice and do not opt into it.
 
 Bot review parent bodies with no associated review threads are skipped
 by design, including Copilot error review bodies. They remain visible
@@ -566,6 +611,8 @@ this manual `OUTDATED` fallback (full reasoning in each entry's own
 - `<!-- idd-provider-outage-park:` -- needs claim-lineage-aware
   supersession the marker carries no reference for (roadmap #2751
   Background).
+- `<!-- idd-out-of-loop:` -- live authorization evidence for the
+  bootstrap PR, like the waiver marker above (kurone-kito/idd-skill#3328).
 
 Always skip candidates when any of these are true:
 
@@ -577,6 +624,21 @@ Always skip candidates when any of these are true:
   maintainers
 - the comment is non-operational human discussion
 - the comment still participates in an active F2 or F3 gate
+
+## Side-effects on authoring-owner scan
+
+When `authoring-set-members` scans for issue-authoring ownership
+markers, it evaluates every trusted `authoring-owner` comment it
+finds. Minimizing one of these comments as `OUTDATED` (GitHub returns
+the reason in lowercase: `outdated`) causes the scan to **skip** that
+comment rather than failing closed on an unparseable or malformed
+body. The comment is not counted as a set member and does not block
+the evaluation. Any other `minimizedReason`, including `resolved` and
+absent, leaves the ordinary fail-closed behavior in place. Observed
+2026-09-27, issue kurone-kito/idd-skill#3553: a minimized comment
+with an empty `body-sha256` on closed issue #2689 caused
+`authoring-set-members` to fail closed on the Stage 2 release of
+issue #3547.
 
 ## Dry Run Shape
 
@@ -675,7 +737,9 @@ merge does not re-block the merge; it is an explicit record only.
 
 ### Cleanup evidence comment
 
-Post this comment to the PR after a successful or partial apply. The
+Post this comment to the PR after a successful or partial apply, and
+when the workflow's cleanup step ends with no apply report
+(`helper-error` or `timeout`). The
 HTML comment token on the first line acts as a stable machine-readable
 marker so a resuming agent — or a concurrent `post-merge-cleanup`
 workflow run — can detect that evidence was already posted. The
@@ -693,11 +757,13 @@ successful outcome (`applied` / `clean`) and this run's own outcome is
 also `applied`/`clean`** (issue `#2213`'s both-converged rule) —
 narrowing, not fully preventing, duplicate success records; a prior
 success record alone must never suppress this run's own
-`failed`/`incomplete`/`rescan-failed`/`recheck-failed` evidence, even
+`failed`/`incomplete`/`rescan-failed`/`time-budget-exhausted`/`recheck-failed`/`helper-error`/`timeout`
+evidence, even
 when this run's own apply returned `applied` for residual markers the
 other side already minimized first; still post when no prior success
 record exists, or to correct an existing `failed` / `incomplete` /
-`permission-blocked` / `rescan-failed` / `recheck-failed` record — a
+`permission-blocked` / `rescan-failed` / `time-budget-exhausted` /
+`recheck-failed` record — a
 `rescan-failed`
 record in particular invites a retry, so a later `workflow_dispatch`
 rerun (or agent F4 re-run) must post fresh evidence for its own
@@ -709,15 +775,15 @@ record (preventive; no observed incident yet — issue `#2043`):
 
 **F4 Cleanup Evidence**
 
-| Field                            | Value                                                 |
-| -------------------------------- | ----------------------------------------------------- |
-| Status                           | applied / clean / failed / incomplete / rescan-failed |
-| Applied                          | N                                                     |
-| Failed                           | N                                                     |
-| Skipped                          | N                                                     |
-| Permission-blocked               | N                                                     |
-| Retry attempts (bound-exhausted) | N (true / false)                                      |
-| Notes                            | reason for any failed or skipped items                |
+| Field                            | Value                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Status                           | applied / clean / failed / incomplete / rescan-failed / time-budget-exhausted / helper-error / timeout |
+| Applied                          | N                                                                                                      |
+| Failed                           | N                                                                                                      |
+| Skipped                          | N                                                                                                      |
+| Permission-blocked               | N                                                                                                      |
+| Retry attempts (bound-exhausted) | N (true / false)                                                                                       |
+| Notes                            | reason for any failed or skipped items                                                                 |
 ```
 
 `retry-attempts` / `retry-bound-exhausted` mirror
@@ -729,6 +795,17 @@ fresh rescan still found candidates after the bound, not that
 anything went wrong. A `rescan-failed` status (below) always takes the
 cleanup-failure path regardless of `retry-bound-exhausted`, since the
 confirming rescan itself never completed.
+
+A `time-budget-exhausted` status (`--time-budget-seconds`,
+kurone-kito/idd-skill#3321) means this run's own apply-pass wall-time
+budget ran out mid-pass: every row already applied before that point is
+preserved, the remaining candidates are listed as-is, and no confirming
+rescan runs for this invocation — a later invocation (a
+`workflow_dispatch` rerun or a local F4 pass) rescans from scratch. It
+never collapses into `applied`, `clean`, or `incomplete`, and it is not
+itself a cleanup failure (below); local F4 never passes
+`--time-budget-seconds`, so this status is only ever reported by the
+server-side `post-merge-cleanup.yml` invocation.
 
 ### Cleanup-failure comment
 
@@ -802,7 +879,11 @@ pass may re-run the re-check to confirm convergence.
 
 A `recheck-failed` record does not suppress a later run's own success
 post, the same non-suppression behavior `failed`/`incomplete`/
-`rescan-failed` already have.
+`rescan-failed`/`helper-error`/`timeout` already have. The
+`Apply status (actual)` row above lists only the agent recheck
+apply enum (`applied` / `clean` / `failed` / `incomplete` /
+`rescan-failed`). `helper-error` and `timeout` are workflow
+evidence statuses, not apply outcomes, so that row excludes them.
 
 ### Cleanup-permission-blocked comment
 
