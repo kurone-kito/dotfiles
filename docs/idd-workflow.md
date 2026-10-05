@@ -1638,10 +1638,11 @@ Code session:
    arrived when the session acts is used. If the launch returned no agent
    id or `TaskStop` fails, the session records the residual risk and takes
    the same fallback, because it cannot confirm the stop.
-5. <!-- dotfiles-divergence: subagent-process-cleanup --> Before
-   launching background work, the subagent records each child PID and,
-   when it launches a process group, that group ID in a uniquely named
-   file under the scratch directory. Once the pass has returned, been
+5. <!-- dotfiles-divergence: subagent-process-cleanup --> When it
+   launches background work, the subagent records each returned child
+   PID and, when it launches a process group, that group ID immediately
+   in a uniquely named file under the scratch directory, before waiting
+   or starting other work. Once the pass has returned, been
    stopped, or the stop could not be confirmed, the parent reads only
    those recorded identities and ends only those processes or groups;
    `pgrep -P` may walk descendants from a recorded PID. It never
