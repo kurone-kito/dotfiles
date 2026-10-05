@@ -7,9 +7,10 @@ tags: [onboarding, policy-decisions]
 
 # Onboarding Reference — Policy Decisions
 
-Use this reference alongside `idd-template/ONBOARDING.md` when you need
-the detailed policy-decision guidance that the thin onboarding entry
-point now links to.
+Use this reference alongside
+[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/ae16f497434a5023dfaa28f965fc2af92ebf055d/idd-template/ONBOARDING.md)
+when you need the detailed policy-decision guidance that the thin
+onboarding entry point now links to.
 
 This page is the detailed companion for:
 
