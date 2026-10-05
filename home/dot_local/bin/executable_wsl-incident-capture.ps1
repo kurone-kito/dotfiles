@@ -241,8 +241,18 @@ function Enter-DotfilesCollectorLock {
     if (Test-Path -LiteralPath $metadataPath) {
       try {
         $old = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
-        if ($null -eq $old.processId -or $null -eq $old.startTimeTicks -or [string]::IsNullOrWhiteSpace([string]$old.runId)) {
+        $oldProcessId = 0
+        $oldStartTimeTicks = [long]0
+        if (-not [int]::TryParse([string]$old.processId, [ref]$oldProcessId) -or $oldProcessId -le 0 -or
+          -not [long]::TryParse([string]$old.startTimeTicks, [ref]$oldStartTimeTicks) -or $oldStartTimeTicks -le 0 -or
+          [string]::IsNullOrWhiteSpace([string]$old.runId)) {
           throw 'lock-metadata-ambiguous'
+        }
+        $sameOwner = Test-DotfilesExactProcessIdentity -ProcessId $oldProcessId -StartTimeTicks $oldStartTimeTicks
+        if ($null -eq $sameOwner) { throw 'lock-metadata-ambiguous' }
+        if ($sameOwner) {
+          $lockHandle.Dispose()
+          return @{ Acquired = $false; Reason = 'already-running'; Handle = $null }
         }
       }
       catch {
@@ -299,7 +309,10 @@ function Exit-DotfilesCollectorLock {
 }
 
 function Read-DotfilesInhibitions {
-  param([Parameter(Mandatory = $true)][string]$StateDirectory)
+  param(
+    [Parameter(Mandatory = $true)][string]$StateDirectory,
+    [string]$CurrentRunId
+  )
 
   $path = Join-Path $StateDirectory 'inhibitions.json'
   if (-not (Test-Path -LiteralPath $path)) { return @() }
@@ -310,15 +323,31 @@ function Read-DotfilesInhibitions {
     foreach ($entry in @($parsed)) { [void]$stored.Add($entry) }
     $remaining = New-Object System.Collections.ArrayList
     foreach ($entry in $stored) {
-      if ($null -eq $entry.source -or $null -eq $entry.processId -or $null -eq $entry.startTimeTicks) {
+      $source = [string]$entry.source
+      if ($source -notin @('*', 'cpu', 'memory', 'disk', 'hyperv', 'guest')) {
         [void]$remaining.Add(@{ source = '*'; cleanupUnverified = $true; processId = -1; startTimeTicks = 0 })
+        continue
+      }
+      $processId = 0
+      $startTimeTicks = [long]0
+      $placeholder = $false
+      if ([int]::TryParse([string]$entry.processId, [ref]$processId) -and [long]::TryParse([string]$entry.startTimeTicks, [ref]$startTimeTicks)) {
+        $placeholder = $processId -eq -1 -and $startTimeTicks -eq 0 -and $entry.cleanupUnverified -and -not [string]::IsNullOrWhiteSpace([string]$entry.runId)
+      }
+      if (-not $placeholder -and ($processId -le 0 -or $startTimeTicks -le 0)) {
+        [void]$remaining.Add(@{ source = '*'; cleanupUnverified = $true; processId = -1; startTimeTicks = 0 })
+        continue
+      }
+      if (-not [string]::IsNullOrWhiteSpace($CurrentRunId) -and [string]$entry.runId -eq $CurrentRunId) { continue }
+      if ($placeholder) {
+        [void]$remaining.Add($entry)
         continue
       }
       if ($entry.cleanupUnverified) {
         [void]$remaining.Add($entry)
         continue
       }
-      $same = Test-DotfilesExactProcessIdentity -ProcessId ([int]$entry.processId) -StartTimeTicks ([long]$entry.startTimeTicks)
+      $same = Test-DotfilesExactProcessIdentity -ProcessId $processId -StartTimeTicks $startTimeTicks
       if ($null -eq $same -or $same) { [void]$remaining.Add($entry) }
     }
     return @($remaining.ToArray())
@@ -332,16 +361,17 @@ function Write-DotfilesInhibitions {
   param(
     [Parameter(Mandatory = $true)][string]$StateDirectory,
     [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Entries,
-    [Parameter(Mandatory = $true)][string]$RunId
+    [Parameter(Mandatory = $true)][string]$RunId,
+    [AllowEmptyCollection()][object[]]$WorkerJournal = @()
   )
 
   $path = Join-Path $StateDirectory 'inhibitions.json'
-  if ($Entries.Count -eq 0) {
+  $entryArray = [object[]]@($Entries) + [object[]]@($WorkerJournal)
+  if ($entryArray.Count -eq 0) {
     if (Test-Path -LiteralPath $path) { [IO.File]::Delete($path) }
     return
   }
   $temporary = Join-Path $StateDirectory ('.inhibitions.' + $RunId + '.tmp')
-  $entryArray = [object[]]@($Entries)
   $json = ConvertTo-Json -InputObject $entryArray -Compress -Depth 4
   [IO.File]::WriteAllText($temporary, $json, $script:Utf8NoBom)
   if (Test-Path -LiteralPath $path) {
@@ -496,23 +526,61 @@ function Start-DotfilesOwnedProcess {
   try { $startInfo.StandardErrorEncoding = [Text.Encoding]::UTF8 } catch { }
 
   $process = New-Object Diagnostics.Process
-  $process.StartInfo = $startInfo
-  if (-not $process.Start()) { throw 'process-start-failed' }
-  $startTicks = $process.StartTime.ToUniversalTime().Ticks
-  $stdoutTask = [DotfilesIncident.BoundedStreamReader]::CaptureAsync($process.StandardOutput, 65536)
-  $stderrTask = [DotfilesIncident.BoundedStreamReader]::DrainAsync($process.StandardError)
-  if ($null -ne $StandardInputText) {
-    $process.StandardInput.Write($StandardInputText)
+  $started = $false
+  $startTicks = [long]0
+  $stdoutTask = $null
+  $stderrTask = $null
+  try {
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw 'process-start-failed' }
+    $started = $true
+    $startTicks = $process.StartTime.ToUniversalTime().Ticks
+    $stdoutTask = [DotfilesIncident.BoundedStreamReader]::CaptureAsync($process.StandardOutput, 65536)
+    $stderrTask = [DotfilesIncident.BoundedStreamReader]::DrainAsync($process.StandardError)
+    if ($null -ne $StandardInputText) {
+      $process.StandardInput.Write($StandardInputText)
+    }
+    $process.StandardInput.Close()
+    return @{
+      Process = $process
+      ProcessId = $process.Id
+      StartTimeTicks = $startTicks
+      Source = $Source
+      StdoutTask = $stdoutTask
+      StderrTask = $stderrTask
+      StartedAtMilliseconds = Get-DotfilesMonotonicMilliseconds
+    }
   }
-  $process.StandardInput.Close()
-  return @{
-    Process = $process
-    ProcessId = $process.Id
-    StartTimeTicks = $startTicks
-    Source = $Source
-    StdoutTask = $stdoutTask
-    StderrTask = $stderrTask
-    StartedAtMilliseconds = Get-DotfilesMonotonicMilliseconds
+  catch {
+    $mayRemain = $false
+    if ($started) {
+      if ($startTicks -gt 0) {
+        try {
+          $partialOwned = @{ Process = $process; ProcessId = $process.Id; StartTimeTicks = $startTicks; Source = $Source }
+          $cleanup = Stop-DotfilesOwnedProcess -Owned $partialOwned -GraceMilliseconds 1000
+          $mayRemain = -not [bool]$cleanup.Exited
+        }
+        catch { $mayRemain = $true }
+      }
+      else {
+        try {
+          if (-not $process.HasExited) {
+            $process.Kill()
+            $null = $process.WaitForExit(1000)
+          }
+        }
+        catch { }
+        # Without a stable start time, the root can be stopped by its retained
+        # handle but its descendants cannot be reconciled safely.
+        $mayRemain = $true
+      }
+      foreach ($task in @($stdoutTask, $stderrTask)) {
+        if ($null -ne $task) { try { $null = $task.Wait(1000) } catch { } }
+      }
+    }
+    try { $_.Exception.Data['DotfilesOwnedProcessMayRemain'] = [bool]$mayRemain } catch { }
+    $process.Dispose()
+    throw
   }
 }
 
@@ -729,9 +797,21 @@ function Stop-DotfilesOwnedProcess {
 }
 
 function Get-DotfilesCimInstances {
-  param([Parameter(Mandatory = $true)][string]$ClassName)
+  param(
+    [Parameter(Mandatory = $true)][string]$ClassName,
+    [string]$TargetName
+  )
   try {
-    return @{ Status = 'ok'; Items = @(Get-CimInstance -Namespace 'root/cimv2' -ClassName $ClassName -ErrorAction Stop) }
+    if (-not [string]::IsNullOrWhiteSpace($TargetName)) {
+      $escapedTarget = $TargetName.Replace("'", "''")
+      $targetItems = @(Get-CimInstance -Namespace 'root/cimv2' -ClassName $ClassName -Filter "Name = '$escapedTarget'" -ErrorAction Stop | Select-Object -First 1)
+      $targetItem = if ($targetItems.Count -gt 0) { $targetItems[0] } else { $null }
+      return @{ Status = 'ok'; Items = @($targetItems); TargetItem = $targetItem; OverflowCount = 0 }
+    }
+    $boundedItems = @(Get-CimInstance -Namespace 'root/cimv2' -ClassName $ClassName -ErrorAction Stop | Select-Object -First 17)
+    $overflowCount = if ($boundedItems.Count -gt 16) { 1 } else { 0 }
+    if ($boundedItems.Count -gt 16) { $boundedItems = @($boundedItems | Select-Object -First 16) }
+    return @{ Status = 'ok'; Items = $boundedItems; TargetItem = $null; OverflowCount = $overflowCount }
   }
   catch [UnauthorizedAccessException] {
     return @{ Status = 'unavailable'; Error = 'access-denied'; Items = @() }
@@ -786,16 +866,20 @@ function Get-DotfilesHostSourceSnapshot {
 
   switch ($Source) {
     'cpu' {
-      $query = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfOS_Processor'
-      $instance = @($query.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1)
-      if ($query.Status -ne 'ok' -or $instance.Count -eq 0) {
+      $query = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfOS_Processor' -TargetName '_Total'
+      $instance = $query.TargetItem
+      if ($null -eq $instance) {
+        $matches = @($query.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1)
+        if ($matches.Count -gt 0) { $instance = $matches[0] }
+      }
+      if ($query.Status -ne 'ok' -or $null -eq $instance) {
         $reason = if ($query.Error) { $query.Error } else { 'counter-unavailable' }
         return @{ source = 'cpu'; status = 'unavailable'; error = $reason; metrics = @{} }
       }
       return @{ source = 'cpu'; status = 'ok'; metrics = @{
-        percentProcessorTime = Get-DotfilesPropertyValue $instance[0] 'PercentProcessorTime'
-        percentPrivilegedTime = Get-DotfilesPropertyValue $instance[0] 'PercentPrivilegedTime'
-        timestampSys100Ns = Get-DotfilesPropertyValue $instance[0] 'Timestamp_Sys100NS'
+        percentProcessorTime = Get-DotfilesPropertyValue $instance 'PercentProcessorTime'
+        percentPrivilegedTime = Get-DotfilesPropertyValue $instance 'PercentPrivilegedTime'
+        timestampSys100Ns = Get-DotfilesPropertyValue $instance 'Timestamp_Sys100NS'
       } }
     }
     'memory' {
@@ -805,17 +889,19 @@ function Get-DotfilesHostSourceSnapshot {
         $reason = if ($query.Error) { $query.Error } else { 'counter-unavailable' }
         return @{ source = 'memory'; status = 'unavailable'; error = $reason; metrics = @{} }
       }
-      $paging = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfOS_PagingFile'
-      $pagingInstance = @($paging.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1)
+      $paging = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfOS_PagingFile' -TargetName '_Total'
+      $pagingInstance = $paging.TargetItem
+      if ($null -eq $pagingInstance) { $pagingInstance = @($paging.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1) }
       $pagingUsage = $null
-      if ($pagingInstance.Count -gt 0) {
-        $usageRaw = Get-DotfilesPropertyValue $pagingInstance[0] 'PercentUsage'
-        $usageBase = Get-DotfilesPropertyValue $pagingInstance[0] 'PercentUsage_Base'
+      if ($pagingInstance -is [array]) { $pagingInstance = if ($pagingInstance.Count -gt 0) { $pagingInstance[0] } else { $null } }
+      if ($null -ne $pagingInstance) {
+        $usageRaw = Get-DotfilesPropertyValue $pagingInstance 'PercentUsage'
+        $usageBase = Get-DotfilesPropertyValue $pagingInstance 'PercentUsage_Base'
         if ($null -ne $usageRaw -and $null -ne $usageBase -and $usageBase -gt 0) {
           $pagingUsage = [Math]::Min(100.0, 100.0 * $usageRaw / $usageBase)
         }
       }
-      $sourceStatus = if ($paging.Status -eq 'ok' -and $pagingInstance.Count -gt 0) { 'ok' } else { 'partial' }
+      $sourceStatus = if ($paging.Status -eq 'ok' -and $null -ne $pagingInstance) { 'ok' } else { 'partial' }
       return @{ source = 'memory'; status = $sourceStatus; metrics = @{
         availableBytes = Get-DotfilesPropertyValue $instance[0] 'AvailableBytes'
         committedBytes = Get-DotfilesPropertyValue $instance[0] 'CommittedBytes'
@@ -830,34 +916,37 @@ function Get-DotfilesHostSourceSnapshot {
       } }
     }
     'disk' {
-      $physical = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfDisk_PhysicalDisk'
-      $physicalInstance = @($physical.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1)
+      $physical = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfDisk_PhysicalDisk' -TargetName '_Total'
+      $physicalInstance = $physical.TargetItem
+      if ($null -eq $physicalInstance) { $physicalInstance = @($physical.Items | Where-Object { [string]$_.Name -eq '_Total' } | Select-Object -First 1) }
       $os = Get-DotfilesCimInstances -ClassName 'Win32_OperatingSystem'
-      $logical = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfDisk_LogicalDisk'
       $systemDrive = ''
       if ($os.Items.Count -gt 0) { $systemDrive = [string]$os.Items[0].SystemDrive }
-      $systemVolume = @($logical.Items | Where-Object { [string]$_.Name -eq $systemDrive } | Select-Object -First 1)
-      if ($physical.Status -ne 'ok' -and ($systemVolume.Count -eq 0)) {
+      $logical = Get-DotfilesCimInstances -ClassName 'Win32_PerfRawData_PerfDisk_LogicalDisk' -TargetName $systemDrive
+      $systemVolume = $logical.TargetItem
+      if ($null -eq $systemVolume) { $systemVolume = @($logical.Items | Where-Object { [string]$_.Name -eq $systemDrive } | Select-Object -First 1) }
+      if ($physical.Status -ne 'ok' -and ($systemVolume -is [array] -and $systemVolume.Count -eq 0)) {
         return @{ source = 'disk'; status = 'unavailable'; error = 'counter-unavailable'; metrics = @{} }
       }
+      if ($physicalInstance -is [array]) { $physicalInstance = if ($physicalInstance.Count -gt 0) { $physicalInstance[0] } else { $null } }
+      if ($systemVolume -is [array]) { $systemVolume = if ($systemVolume.Count -gt 0) { $systemVolume[0] } else { $null } }
       $physicalMetrics = $null
-      if ($physicalInstance.Count -gt 0) {
+      if ($null -ne $physicalInstance) {
         $physicalMetrics = @{
-          readBytesCounter = Get-DotfilesPropertyValue $physicalInstance[0] 'DiskReadBytesPerSec'
-          writeBytesCounter = Get-DotfilesPropertyValue $physicalInstance[0] 'DiskWriteBytesPerSec'
-          timestampPerfTime = Get-DotfilesPropertyValue $physicalInstance[0] 'Timestamp_PerfTime'
-          frequencyPerfTime = Get-DotfilesPropertyValue $physicalInstance[0] 'Frequency_PerfTime'
-          queueLength = Get-DotfilesPropertyValue $physicalInstance[0] 'CurrentDiskQueueLength'
+          readBytesCounter = Get-DotfilesPropertyValue $physicalInstance 'DiskReadBytesPerSec'
+          writeBytesCounter = Get-DotfilesPropertyValue $physicalInstance 'DiskWriteBytesPerSec'
+          timestampPerfTime = Get-DotfilesPropertyValue $physicalInstance 'Timestamp_PerfTime'
+          frequencyPerfTime = Get-DotfilesPropertyValue $physicalInstance 'Frequency_PerfTime'
+          queueLength = Get-DotfilesPropertyValue $physicalInstance 'CurrentDiskQueueLength'
         }
       }
       $systemMetrics = $null
-      if ($systemVolume.Count -gt 0) {
+      if ($null -ne $systemVolume) {
         $systemMetrics = @{
-          readBytesCounter = Get-DotfilesPropertyValue $systemVolume[0] 'DiskReadBytesPerSec'
-          writeBytesCounter = Get-DotfilesPropertyValue $systemVolume[0] 'DiskWriteBytesPerSec'
-          timestampPerfTime = Get-DotfilesPropertyValue $systemVolume[0] 'Timestamp_PerfTime'
-          frequencyPerfTime = Get-DotfilesPropertyValue $systemVolume[0] 'Frequency_PerfTime'
-          queueLength = Get-DotfilesPropertyValue $systemVolume[0] 'CurrentDiskQueueLength'
+          readBytesCounter = Get-DotfilesPropertyValue $systemVolume 'DiskReadBytesPerSec'
+          writeBytesCounter = Get-DotfilesPropertyValue $systemVolume 'DiskWriteBytesPerSec'
+          timestampPerfTime = Get-DotfilesPropertyValue $systemVolume 'Timestamp_PerfTime'
+          frequencyPerfTime = Get-DotfilesPropertyValue $systemVolume 'Frequency_PerfTime'
           instanceAlias = if ([string]::IsNullOrWhiteSpace($AliasSalt)) { 'system-volume' } else { Get-DotfilesPerRunAlias -Identity $systemDrive -Salt $AliasSalt -Prefix 'volume' }
         }
       }
@@ -886,7 +975,7 @@ function Get-DotfilesHostSourceSnapshot {
           frequencyPerfTime = Get-DotfilesPropertyValue $item 'Frequency_PerfTime'
         })
       }
-      return @{ source = 'hyperv'; status = 'ok'; metrics = @{ virtualStorage = @($devices.ToArray()); overflowCount = [Math]::Max(0, $query.Items.Count - $devices.Count) } }
+      return @{ source = 'hyperv'; status = 'ok'; metrics = @{ virtualStorage = @($devices.ToArray()); overflowCount = [int]$query.OverflowCount } }
     }
   }
 }
@@ -1300,9 +1389,10 @@ function Get-DotfilesMemoryMetrics {
   }
   $rateStatus = 'ok'
   if (@($rates.Values | Where-Object { $_.status -ne 'ok' }).Count -gt 0) { $rateStatus = 'partial' }
+  $rateError = if (@($rates.Values | Where-Object { $_.error -eq 'counter-reset' }).Count -gt 0) { 'counter-reset' } else { 'first-sample' }
   return @{
     status = if ($Snapshot.status -eq 'partial' -or $rateStatus -ne 'ok') { 'partial' } else { 'ok' }
-    error = if ($rateStatus -ne 'ok') { 'first-sample' } else { $null }
+    error = if ($rateStatus -ne 'ok') { $rateError } else { $null }
     metrics = @{
       availableBytes = $raw.availableBytes
       committedBytes = $raw.committedBytes
@@ -1574,6 +1664,8 @@ function Invoke-DotfilesIncidentCollector {
   $logsDirectory = $null
   $lock = $null
   $ownedWorkers = @{}
+  $workerJournal = @{}
+  $blockedSources = @{}
   $inhibitions = @()
   $runId = [Guid]::NewGuid().ToString('N')
   $runStartedMilliseconds = Get-DotfilesMonotonicMilliseconds
@@ -1618,13 +1710,13 @@ function Invoke-DotfilesIncidentCollector {
     [void][IO.Directory]::CreateDirectory($logsBase)
     $logsDirectory = Initialize-DotfilesPrivateDirectory -Path (Join-Path $logsBase 'dotfiles-wsl-incident-telemetry')
     Repair-DotfilesPartialLogs -Directory $logsDirectory -MaximumBytes $MaximumLogBytes
-    $inhibitions = @(Read-DotfilesInhibitions -StateDirectory $stateDirectory)
-    Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId
+    $inhibitions = @(Read-DotfilesInhibitions -StateDirectory $stateDirectory -CurrentRunId $runId)
+    Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
     $stamp = (Get-DotfilesUtcNow).ToString('yyyyMMddTHHmmssZ')
     $logPath = Join-Path $logsDirectory ($script:LogPrefix + $stamp + '-' + $runId + '-0000.jsonl')
     while (((Get-DotfilesMonotonicMilliseconds) - $runStartedMilliseconds) / 1000.0 -lt $DurationSeconds) {
       $tickStart = Get-DotfilesMonotonicMilliseconds
-      $inhibitions = @(Read-DotfilesInhibitions -StateDirectory $stateDirectory)
+      $inhibitions = @(Read-DotfilesInhibitions -StateDirectory $stateDirectory -CurrentRunId $runId)
       if ([string]::IsNullOrWhiteSpace($GuestDistro)) {
         $latestSources.guest = @{ status = 'unavailable'; error = 'not-requested'; metrics = @{} }
       }
@@ -1633,18 +1725,36 @@ function Invoke-DotfilesIncidentCollector {
       }
       $guestCompletedSinceRecord = $false
       foreach ($source in @('cpu', 'memory', 'disk', 'hyperv')) {
-        $blocked = @($inhibitions | Where-Object { $_.source -eq '*' -or $_.source -eq $source }).Count -gt 0
+        $blocked = $blockedSources.ContainsKey($source) -or @($inhibitions | Where-Object { $_.source -eq '*' -or $_.source -eq $source }).Count -gt 0
         if ($blocked) {
           $latestSources[$source] = @{ status = 'unavailable'; error = 'inhibited'; metrics = @{} }
           continue
         }
         if ($ownedWorkers.ContainsKey($source)) { continue }
         $latestSources[$source] = @{ status = 'unavailable'; error = 'provider-unavailable'; metrics = @{} }
-        try { $ownedWorkers[$source] = Start-DotfilesHostWorker -Source $source }
-        catch { $latestSources[$source] = @{ status = 'unavailable'; error = 'worker-start-failed'; metrics = @{} } }
+        $workerJournal[$source] = @{ source = $source; processId = -1; startTimeTicks = 0; cleanupUnverified = $true; runId = $runId; launchState = 'starting' }
+        Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
+        try { $owned = Start-DotfilesHostWorker -Source $source }
+        catch {
+          $mayRemain = $false
+          try { $mayRemain = [bool]$_.Exception.Data['DotfilesOwnedProcessMayRemain'] } catch { }
+          if ($mayRemain) {
+            $blockedSources[$source] = $true
+            $latestSources[$source] = @{ status = 'unavailable'; error = 'inhibited'; metrics = @{} }
+          }
+          else {
+            $workerJournal.Remove($source)
+            $latestSources[$source] = @{ status = 'unavailable'; error = 'worker-start-failed'; metrics = @{} }
+            Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
+          }
+          continue
+        }
+        $ownedWorkers[$source] = $owned
+        $workerJournal[$source] = @{ source = $source; processId = [int]$owned.ProcessId; startTimeTicks = [long]$owned.StartTimeTicks; cleanupUnverified = $false; runId = $runId; launchState = 'running' }
+        Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
       }
 
-      $guestBlocked = @($inhibitions | Where-Object { $_.source -eq '*' -or $_.source -eq 'guest' }).Count -gt 0
+      $guestBlocked = $blockedSources.ContainsKey('guest') -or @($inhibitions | Where-Object { $_.source -eq '*' -or $_.source -eq 'guest' }).Count -gt 0
       if ($guestBlocked) {
         $latestSources.guest = @{ status = 'unavailable'; error = 'inhibited'; metrics = @{} }
       }
@@ -1654,12 +1764,16 @@ function Invoke-DotfilesIncidentCollector {
         $guestPreviousCounters = ''
         if ($null -ne $guestIntervalSeconds) { $guestPreviousCounters = Get-DotfilesGuestBaseline -Snapshot $lastGuest }
         else { $guestIntervalSeconds = 0 }
+        $workerJournal.guest = @{ source = 'guest'; processId = -1; startTimeTicks = 0; cleanupUnverified = $true; runId = $runId; launchState = 'preflight' }
+        Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         $guestStart = Start-DotfilesGuestProbe -Distribution $GuestDistro -IntervalSeconds $guestIntervalSeconds -PreviousCounters $guestPreviousCounters
         if ($guestStart.Status -eq 'pending') {
           $guestProcess = $guestStart.Process
+          $workerJournal.guest = @{ source = 'guest'; processId = [int]$guestProcess.ProcessId; startTimeTicks = [long]$guestProcess.StartTimeTicks; cleanupUnverified = $true; runId = $runId; launchState = 'running' }
           $latestSources.guest = @{ status = 'pending'; error = $null; metrics = @{} }
         }
         else {
+          $workerJournal.Remove('guest')
           $latestSources.guest = @{ status = $guestStart.Status; error = $guestStart.Error; metrics = @{} }
           if ($guestStart.Status -eq 'timeout') {
             $guestSuppressed = $true
@@ -1668,6 +1782,10 @@ function Invoke-DotfilesIncidentCollector {
             $guestSuppressed = $true
             $inhibitions += @($guestStart.Cleanup.Entries)
           }
+          Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
+        }
+        if ($guestStart.Status -eq 'pending') {
+          Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         }
       }
 
@@ -1682,8 +1800,10 @@ function Invoke-DotfilesIncidentCollector {
             $result = Get-DotfilesWorkerResult -Owned $owned
             $latestSources[$source] = Get-DotfilesSanitizedSource -Result $result
             if ($result.Cleanup -and -not $result.Cleanup.Exited) { $inhibitions += @($result.Cleanup.Entries) }
+            $workerJournal.Remove($source)
             $owned.Process.Dispose()
             $ownedWorkers.Remove($source)
+            Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
           }
           else { $pending = $true }
         }
@@ -1697,8 +1817,10 @@ function Invoke-DotfilesIncidentCollector {
             }
             $guestSuppressed = $guestUpdate.Suppressed
             $inhibitions += @($guestUpdate.Inhibitions)
+            $workerJournal.Remove('guest')
             $guestProcess.Process.Dispose()
             $guestProcess = $null
+            Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
           }
         }
         if (-not $pending) { break }
@@ -1711,14 +1833,18 @@ function Invoke-DotfilesIncidentCollector {
           $result = Get-DotfilesWorkerResult -Owned $owned
           $latestSources[$source] = Get-DotfilesSanitizedSource -Result $result
           if ($result.Cleanup -and -not $result.Cleanup.Exited) { $inhibitions += @($result.Cleanup.Entries) }
+          $workerJournal.Remove($source)
           $owned.Process.Dispose()
           $ownedWorkers.Remove($source)
+          Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         }
         else {
           $cleanup = Stop-DotfilesOwnedProcess -Owned $owned -GraceMilliseconds $script:CleanupGraceMilliseconds
           $latestSources[$source] = @{ status = 'timeout'; error = 'timeout'; metrics = @{} }
           if (-not $cleanup.Exited) { $inhibitions += @($cleanup.Entries) }
+          $workerJournal.Remove($source)
           $ownedWorkers.Remove($source)
+          Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         }
       }
 
@@ -1732,8 +1858,10 @@ function Invoke-DotfilesIncidentCollector {
           }
           $guestSuppressed = $guestUpdate.Suppressed
           $inhibitions += @($guestUpdate.Inhibitions)
+          $workerJournal.Remove('guest')
           $guestProcess.Process.Dispose()
           $guestProcess = $null
+          Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         }
       }
 
@@ -1794,7 +1922,7 @@ function Invoke-DotfilesIncidentCollector {
         if ($write.Error -in @('log-budget-exhausted', 'log-segment-limit')) { break }
       }
       else { $logPath = $write.Path }
-      Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId
+      Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
 
       $sampleDeadline = [Math]::Min($durationDeadline, $tickStart + ($IntervalSeconds * 1000.0))
       $remaining = $sampleDeadline - (Get-DotfilesMonotonicMilliseconds)
@@ -1810,10 +1938,11 @@ function Invoke-DotfilesIncidentCollector {
             }
             $guestSuppressed = $guestUpdate.Suppressed
             $inhibitions += @($guestUpdate.Inhibitions)
+            $workerJournal.Remove('guest')
             $guestProcess.Process.Dispose()
             $guestProcess = $null
             $guestCompletedSinceRecord = $true
-            Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId
+            Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
           }
         }
         $remaining = $sampleDeadline - (Get-DotfilesMonotonicMilliseconds)
@@ -1832,15 +1961,17 @@ function Invoke-DotfilesIncidentCollector {
       $owned = $ownedWorkers[$source]
       $cleanup = Stop-DotfilesOwnedProcess -Owned $owned -GraceMilliseconds $script:CleanupGraceMilliseconds
       if (-not $cleanup.Exited) { $inhibitions += @($cleanup.Entries) }
+      $workerJournal.Remove($source)
       $owned.Process.Dispose()
     }
     if ($null -ne $guestProcess) {
       $cleanup = Stop-DotfilesOwnedProcess -Owned $guestProcess -GraceMilliseconds $script:CleanupGraceMilliseconds
       if (-not $cleanup.Exited) { $inhibitions += @($cleanup.Entries) }
+      $workerJournal.Remove('guest')
       $guestProcess.Process.Dispose()
     }
     if ($null -ne $stateDirectory -and $null -ne $lock -and $lock.Acquired) {
-      try { Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId } catch { }
+      try { Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values) } catch { }
     }
     if ($null -ne $lock) { Exit-DotfilesCollectorLock -Lock $lock }
   }

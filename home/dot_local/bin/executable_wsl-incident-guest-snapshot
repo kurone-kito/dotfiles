@@ -10,6 +10,7 @@ previous_file=
 previous_stdin=0
 previous_input=
 previous_input_limit=4096
+proc_input_limit=65536
 interval_seconds=
 
 usage() {
@@ -68,54 +69,81 @@ if [[ -n $interval_seconds ]] && ! [[ $interval_seconds =~ ^([1-9][0-9]?|[1-5][0
   exit 2
 fi
 
-if ((previous_stdin)); then
-  IFS= LC_ALL=C read -r -N "$((previous_input_limit + 1))" previous_input || true
+read_bounded_file() {
+  local path=$1
+  local limit=$2
+  local content=
+  local LC_ALL=C
+  [[ -r $path ]] || return 1
+  IFS= read -r -N "$((limit + 1))" content <"$path" || true
+  ((${#content} <= limit)) || return 2
+  printf '%s' "$content"
+}
+
+if [[ -n $previous_file ]]; then
+  if [[ -f $previous_file ]]; then
+    previous_input=$(read_bounded_file "$previous_file" "$previous_input_limit" 2>/dev/null) || previous_input=
+  fi
+elif ((previous_stdin)); then
+  read_status=0
+  IFS= LC_ALL=C read -r -N "$((previous_input_limit + 1))" -t 0.1 previous_input || read_status=$?
+  if ((read_status > 128)); then
+    previous_input=
+    previous_stdin=0
+  fi
   if ((${#previous_input} > previous_input_limit)); then
     previous_input=
     previous_stdin=0
   fi
 fi
 
+meminfo_input=$(read_bounded_file "$proc_root/meminfo" "$proc_input_limit" 2>/dev/null) || meminfo_input=
+vmstat_input=$(read_bounded_file "$proc_root/vmstat" "$proc_input_limit" 2>/dev/null) || vmstat_input=
+psi_input=$(read_bounded_file "$proc_root/pressure/memory" "$proc_input_limit" 2>/dev/null) || psi_input=
+
 read_mem() {
   local key=$1
   local value
-  value=$(awk -v key="$key" '$1 == key ":" { print $2; found = 1; exit } END { if (!found) exit 1 }' "$proc_root/meminfo" 2>/dev/null) || return 1
+  value=$(printf '%s\n' "$meminfo_input" | awk -v key="$key" '$1 == key ":" { print $2; found = 1; exit } END { if (!found) exit 1 }' 2>/dev/null) || return 1
   [[ $value =~ ^[0-9]+$ ]] || return 1
+  while [[ ${#value} -gt 1 && $value == 0* ]]; do value=${value#0}; done
   printf '%s' "$value"
 }
 
 read_vmstat() {
   local key=$1
   local value
-  value=$(awk -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }' "$proc_root/vmstat" 2>/dev/null) || return 1
+  value=$(printf '%s\n' "$vmstat_input" | awk -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }' 2>/dev/null) || return 1
   [[ $value =~ ^[0-9]+$ ]] || return 1
+  while [[ ${#value} -gt 1 && $value == 0* ]]; do value=${value#0}; done
   printf '%s' "$value"
 }
 
 previous_value() {
   local key=$1
   local value=
-  if [[ -n $previous_file && -f $previous_file ]]; then
-    value=$(awk -F '\t' -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }' "$previous_file" 2>/dev/null) || return 1
-  elif ((previous_stdin)); then
+  if [[ -n $previous_file || $previous_stdin -eq 1 ]]; then
     value=$(printf '%s' "$previous_input" | awk -F '\t' -v key="$key" '$1 == key { print $2; found = 1; exit } END { if (!found) exit 1 }') || return 1
   else
     return 1
   fi
   [[ $value =~ ^[0-9]+$ ]] || return 1
+  while [[ ${#value} -gt 1 && $value == 0* ]]; do value=${value#0}; done
   printf '%s' "$value"
 }
 
 number_or_null() {
   if [[ $1 =~ ^[0-9]+$ ]]; then
-    printf '%s' "$1"
+    local value=$1
+    while [[ ${#value} -gt 1 && $value == 0* ]]; do value=${value#0}; done
+    printf '%s' "$value"
   else
     printf 'null'
   fi
 }
 
 decimal_or_null() {
-  if [[ $1 =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  if [[ $1 =~ ^(0|[1-9][0-9]*)([.][0-9]+)?$ ]]; then
     printf '%s' "$1"
   else
     printf 'null'
@@ -133,9 +161,9 @@ fi
 
 psi_some='null'
 psi_full='null'
-if [[ -r $proc_root/pressure/memory ]]; then
-  psi_some=$(awk '$1 == "some" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg60"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg300"] ~ /^[0-9]+([.][0-9]+)?$/ && values["total"] ~ /^[0-9]+$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' "$proc_root/pressure/memory" 2>/dev/null || true)
-  psi_full=$(awk '$1 == "full" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg60"] ~ /^[0-9]+([.][0-9]+)?$/ && values["avg300"] ~ /^[0-9]+([.][0-9]+)?$/ && values["total"] ~ /^[0-9]+$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' "$proc_root/pressure/memory" 2>/dev/null || true)
+if [[ -n $psi_input ]]; then
+  psi_some=$(printf '%s\n' "$psi_input" | awk '$1 == "some" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["avg60"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["avg300"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["total"] ~ /^(0|[1-9][0-9]*)$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' 2>/dev/null || true)
+  psi_full=$(printf '%s\n' "$psi_input" | awk '$1 == "full" { for (i = 2; i <= NF; i++) { split($i, pair, "="); values[pair[1]] = pair[2] } if (values["avg10"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["avg60"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["avg300"] ~ /^(0|[1-9][0-9]*)(\.[0-9]+)?$/ && values["total"] ~ /^(0|[1-9][0-9]*)$/) printf "{\"avg10\":%s,\"avg60\":%s,\"avg300\":%s,\"totalUsec\":%s}", values["avg10"], values["avg60"], values["avg300"], values["total"]; exit }' 2>/dev/null || true)
 fi
 [[ -n $psi_some ]] || psi_some='null'
 [[ -n $psi_full ]] || psi_full='null'
@@ -157,6 +185,10 @@ done
 
 overall_status=ok
 [[ -n $mem_available && -n $swap_total && -n $swap_free ]] || overall_status=partial
+[[ $psi_some != null || $psi_full != null ]] || overall_status=partial
+for key in "${counter_keys[@]}"; do
+  [[ -n ${current[$key]} ]] || overall_status=partial
+done
 
 printf '{"schemaVersion":1,"status":"%s",' "$overall_status"
 printf '"memory":{"status":"%s","unit":"kB","total":%s,"available":%s},' \

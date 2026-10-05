@@ -91,6 +91,19 @@ EOF
   [ "$(printf '%s' "$output" | wc -c)" -le 4096 ]
 }
 
+@test "discards an oversized file baseline and continues without rates" {
+  previous="$BATS_TEST_TMPDIR/oversized-previous-file.tsv"
+  {
+    printf 'pgscan_kswapd\t14\n'
+    head -c 4097 /dev/zero | tr '\0' x
+  } >"$previous"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT" --interval-seconds 1 --previous "$previous"
+
+  assert_success
+  assert_output --partial '"pgscan_kswapd":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
 @test "does not wait for an oversized stdin producer to close" {
   timeout_cmd=$(command -v timeout || command -v gtimeout || true)
   [[ -n $timeout_cmd ]] || skip "timeout or gtimeout is unavailable"
@@ -107,6 +120,58 @@ EOF
   assert_success
   assert_output --partial '"memory":{"status":"ok","unit":"kB","total":100000,"available":40000}'
   assert_output --partial '"pgscan_kswapd":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
+@test "ignores a previous-counter FIFO without opening or waiting for it" {
+  previous="$BATS_TEST_TMPDIR/previous.pipe"
+  mkfifo "$previous"
+  exec 9<>"$previous"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT" --interval-seconds 1 --previous "$previous"
+  exec 9>&-
+
+  assert_success
+  assert_output --partial '"pgscan_kswapd":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
+@test "discards a short stdin baseline when its producer stays open" {
+  timeout_cmd=$(command -v timeout || command -v gtimeout || true)
+  [[ -n $timeout_cmd ]] || skip "timeout or gtimeout is unavailable"
+
+  previous="$BATS_TEST_TMPDIR/previous-short.pipe"
+  mkfifo "$previous"
+  exec 9<>"$previous"
+  printf 'pgscan_kswapd\t14\n' >&9
+
+  run "$timeout_cmd" 2 "$SNAPSHOT" --proc-root "$PROC_ROOT" --interval-seconds 1 --previous-stdin <"$previous"
+  exec 9>&-
+
+  assert_success
+  assert_output --partial '"pgscan_kswapd":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
+@test "normalizes integer counters and rejects non-JSON PSI numeric forms" {
+  cat >"$PROC_ROOT/meminfo" <<'EOF'
+MemTotal: 010 kB
+MemAvailable: 08 kB
+SwapTotal: 000 kB
+SwapFree: 000 kB
+EOF
+  cat >"$PROC_ROOT/pressure/memory" <<'EOF'
+some avg10=00.10 avg60=0.20 avg300=0.30 total=0900
+full avg10=0.01 avg60=0.02 avg300=0.03 total=90
+EOF
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '"memory":{"status":"ok","unit":"kB","total":10,"available":8}'
+  assert_output --partial '"psi":{"status":"ok","some":null'
+  refute_output --partial '00.10'
+  refute_output --partial '"total":0900'
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s\n' "$output" | jq -e . >/dev/null
+  fi
 }
 
 @test "formats rates with a dot decimal regardless of awk caller locale" {
@@ -159,6 +224,36 @@ EOF
   refute_output --partial "$PROC_ROOT"
 }
 
+@test "marks otherwise complete memory data partial when PSI is unavailable" {
+  rm "$PROC_ROOT/pressure/memory"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '"schemaVersion":1,"status":"partial"'
+  assert_output --partial '"psi":{"status":"unavailable","some":null,"full":null}'
+}
+
+@test "marks otherwise complete memory data partial when VM counters are unavailable" {
+  rm "$PROC_ROOT/vmstat"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '"schemaVersion":1,"status":"partial"'
+  assert_output --partial '"pgscan_kswapd":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
+@test "rejects oversized procfs files before parsing their contents" {
+  printf 'MemTotal: 1000 kB\nMemAvailable: 500 kB\nSwapTotal: 10 kB\nSwapFree: 5 kB\n' >"$PROC_ROOT/meminfo"
+  head -c 65537 /dev/zero | tr '\0' x >>"$PROC_ROOT/meminfo"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output '{"schemaVersion":1,"status":"unavailable","error":"memory-data-unavailable"}'
+}
+
 @test "reports missing procfs as a stable unavailable record" {
   run "$SNAPSHOT" --proc-root "$BATS_TEST_TMPDIR/no-such-proc"
 
@@ -197,4 +292,9 @@ _render_ignore() {
   assert_success
   assert_output --partial '.local/bin/wsl-incident-guest-snapshot'
   refute_output --partial '.local/bin/wsl-incident-capture.ps1'
+
+  run --separate-stderr _render_ignore darwin
+  assert_success
+  assert_output --partial '.local/bin/wsl-incident-guest-snapshot'
+  assert_output --partial '.local/bin/wsl-incident-capture.ps1'
 }

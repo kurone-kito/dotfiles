@@ -50,6 +50,13 @@ If an owned process exits before its descendants can be verified, or a
 post-cleanup snapshot finds a new or reused PID under an owned PID, the
 collector records a durable cleanup inhibition for that source in
 `$env:LOCALAPPDATA\Dotfiles\wsl-incident-telemetry\inhibitions.json`.
+Before launching a provider worker or guest preflight, it first writes a
+source-specific journal marker; after launch it replaces that marker with
+the exact PID and start time. If the collector stops between these writes,
+the uncertain source remains inhibited on the next run instead of silently
+starting a second worker. Verified provider exits are removed from the
+journal, while guest cleanup that cannot be proven remains inhibited for
+manual review.
 Sources remain inhibited while the file contains an entry for that source
 or `*` (which inhibits every source). On a later run, the collector
 retains every `cleanupUnverified` entry for manual review, even when its
@@ -127,10 +134,14 @@ Host evidence contains:
 
 - total and privileged CPU percentages;
 - available and committed memory, commit limit, pagefile usage, and
-  paging rates when the needed counters exist;
+paging rates when the needed counters exist;
 - physical-disk and system-volume read/write throughput and queue
   length; and
 - optional Hyper-V virtual-storage throughput and operation rates.
+The collector retains at most 16 CIM instances per query and stops after
+the first additional instance. Hyper-V `overflowCount` is `1` when one or
+more devices were omitted and `0` otherwise. Named aggregate instances are
+queried directly so they remain available beyond that retention limit.
 
 With `-GuestDistro`, guest evidence contains available and total memory,
 swap use, memory PSI, and interval deltas/rates for supported reclaim,
@@ -139,8 +150,13 @@ commands produce unavailable fields rather than guessed values. Partial
 samples can still establish counter baselines when usable counters exist.
 If more than 10 minutes elapse between successful samples, the next sample
 starts a new baseline and its counter rates remain unavailable. The stdin
-baseline is capped at 4 KiB; a larger baseline is discarded and the sample
-continues without rates.
+and file baselines are each capped at 4 KiB; a larger baseline is discarded
+and the sample continues without rates. Each procfs input is read into a
+64 KiB maximum buffer; an oversized source is reported as unavailable, and
+the overall guest sample is marked partial when PSI or VM counters are
+missing. A previous-counter file is opened only when it is a regular file;
+stdin baseline reads have a short deadline and a timed-out partial baseline
+is discarded.
 
 The collector redacts virtual-storage identities into random per-run
 aliases before writing. Guest JSON is reduced to a fixed schema of

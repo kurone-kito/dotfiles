@@ -52,9 +52,10 @@ link-powershell-profile.ps1
 .local/bin/idd-critique-telemetry.cmd
 .local/bin/idd-critique-telemetry-report.cmd
 {{- end }}
-{{- if eq .chezmoi.os "windows" }}
+{{- if ne .chezmoi.os "linux" }}
 .local/bin/wsl-incident-guest-snapshot
-{{- else }}
+{{- end }}
+{{- if ne .chezmoi.os "windows" }}
 .local/bin/wsl-incident-capture.ps1
 {{- end }}
 {{- if ne .chezmoi.os "linux" }}

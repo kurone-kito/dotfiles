@@ -124,6 +124,17 @@ Describe 'wsl incident capture metric handling' {
     $result.metrics.pagingRates.counters.pagesOutputPerSecond.value | Should -Be 5
   }
 
+  It 'preserves counter-reset errors in memory summaries' {
+    $previous = @{ status = 'ok'; metrics = @{ pageReadsCounter = 10; pagesInputCounter = 10; pageWritesCounter = 3; pagesOutputCounter = 4; timestampPerfTime = 10; frequencyPerfTime = 10 } }
+    $current = @{ status = 'ok'; metrics = @{ availableBytes = 400; committedBytes = 700; commitLimitBytes = 1200; pageFilePercentUsage = 20; pageReadsCounter = 5; pagesInputCounter = 11; pageWritesCounter = 8; pagesOutputCounter = 9; timestampPerfTime = 20; frequencyPerfTime = 10 } }
+
+    $result = Get-DotfilesMemoryMetrics -Snapshot $current -Previous $previous
+
+    $result.status | Should -Be 'partial'
+    $result.error | Should -Be 'counter-reset'
+    $result.metrics.pagingRates.counters.pageReadsPerSecond.error | Should -Be 'counter-reset'
+  }
+
   It 'marks rates unavailable when a disk instance changes' {
     $previous = @{ status = 'ok'; metrics = @{ physicalTotal = @{ readBytesCounter = 20; writeBytesCounter = 30; timestampPerfTime = 10; frequencyPerfTime = 10; queueLength = 1 }; systemVolume = @{ readBytesCounter = 10; writeBytesCounter = 20; timestampPerfTime = 10; frequencyPerfTime = 10; queueLength = 1; instanceAlias = 'volume-old' } } }
     $current = @{ status = 'ok'; metrics = @{ physicalTotal = @{ readBytesCounter = 120; writeBytesCounter = 230; timestampPerfTime = 20; frequencyPerfTime = 10; queueLength = 2 }; systemVolume = @{ readBytesCounter = 50; writeBytesCounter = 70; timestampPerfTime = 20; frequencyPerfTime = 10; queueLength = 1; instanceAlias = 'volume-new' } } }
@@ -650,6 +661,51 @@ Describe 'wsl incident capture guest and writer behavior' {
     $entries[0].source | Should -Be 'guest'
   }
 
+  It 'journals a prelaunch placeholder and ignores only its own run marker' {
+    $state = Join-Path $TestDrive 'worker-journal-state'
+    [void][IO.Directory]::CreateDirectory($state)
+    $entry = @{ source = 'guest'; processId = -1; startTimeTicks = 0; cleanupUnverified = $true; runId = 'active-run'; launchState = 'preflight' }
+
+    Write-DotfilesInhibitions -StateDirectory $state -Entries @() -RunId 'active-run' -WorkerJournal @($entry)
+    $sameRun = @(Read-DotfilesInhibitions -StateDirectory $state -CurrentRunId 'active-run')
+    $newRun = @(Read-DotfilesInhibitions -StateDirectory $state -CurrentRunId 'next-run')
+
+    $sameRun.Count | Should -Be 0
+    $newRun.Count | Should -Be 1
+    $newRun[0].source | Should -Be 'guest'
+    $newRun[0].cleanupUnverified | Should -BeTrue
+  }
+
+  It 'converts an unknown inhibition source to a persistent wildcard' {
+    $state = Join-Path $TestDrive 'unknown-inhibition-source'
+    [void][IO.Directory]::CreateDirectory($state)
+    $entry = @{ source = 'guest-worker'; processId = 456; startTimeTicks = 789; cleanupUnverified = $false }
+    [IO.File]::WriteAllText((Join-Path $state 'inhibitions.json'), (ConvertTo-Json -InputObject ([object[]]@($entry)) -Compress), $script:Utf8NoBom)
+
+    $entries = @(Read-DotfilesInhibitions -StateDirectory $state)
+
+    $entries.Count | Should -Be 1
+    $entries[0].source | Should -Be '*'
+    $entries[0].cleanupUnverified | Should -BeTrue
+    $entries[0].processId | Should -Be -1
+  }
+
+  It 'converts malformed inhibition identities to persistent wildcards' {
+    $state = Join-Path $TestDrive 'malformed-inhibition-identities'
+    [void][IO.Directory]::CreateDirectory($state)
+    $fixtures = @(
+      @{ source = 'cpu'; processId = -1; startTimeTicks = 10; cleanupUnverified = $false },
+      @{ source = 'memory'; processId = 12; startTimeTicks = 0; cleanupUnverified = $false },
+      @{ source = 'disk'; processId = 'not-a-pid'; startTimeTicks = 99; cleanupUnverified = $false }
+    )
+    [IO.File]::WriteAllText((Join-Path $state 'inhibitions.json'), (ConvertTo-Json -InputObject ([object[]]$fixtures) -Compress), $script:Utf8NoBom)
+
+    $entries = @(Read-DotfilesInhibitions -StateDirectory $state)
+
+    $entries.Count | Should -Be 3
+    @($entries | Where-Object { $_.source -eq '*' -and $_.cleanupUnverified -and $_.processId -eq -1 }).Count | Should -Be 3
+  }
+
   It 'replaces an existing inhibition file without dropping the new entry' {
     $state = Join-Path $TestDrive 'replace-inhibition-state'
     [void][IO.Directory]::CreateDirectory($state)
@@ -788,7 +844,7 @@ Describe 'wsl incident capture guest and writer behavior' {
       [void]$script:InitializationOrder.Add('worker')
       $fake = [pscustomobject]@{ Id = 6000; HasExited = $true }
       Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake }
+      return @{ Source = $Source; Process = $fake; ProcessId = 6000; StartTimeTicks = 6000 }
     }
     Mock Get-DotfilesWorkerResult {
       param($Owned)
@@ -1103,7 +1159,7 @@ Describe 'wsl incident output directory paths' {
 }
 
 Describe 'wsl incident collector lock' {
-  It 'replaces live-owner metadata when the exclusive lock handle is available' {
+  It 'does not replace metadata for the exact live lock owner' {
     $state = Join-Path $TestDrive 'live-owner-lock-state'
     [void][IO.Directory]::CreateDirectory($state)
     $current = [Diagnostics.Process]::GetCurrentProcess()
@@ -1122,9 +1178,10 @@ Describe 'wsl incident collector lock' {
     try {
       $lock = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '11111111111111111111111111111111'
 
-      $lock.Acquired | Should -BeTrue
+      $lock.Acquired | Should -BeFalse
+      $lock.Reason | Should -Be 'already-running'
       $metadata = Get-Content -LiteralPath (Join-Path $state 'collector.lock.json') -Raw | ConvertFrom-Json
-      $metadata.runId | Should -Be '11111111111111111111111111111111'
+      $metadata.runId | Should -Be 'old-live-run'
       $second = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '22222222222222222222222222222222'
       $second.Acquired | Should -BeFalse
       $second.Reason | Should -Be 'already-running'
@@ -1132,6 +1189,21 @@ Describe 'wsl incident collector lock' {
     finally {
       if ($null -ne $lock) { Exit-DotfilesCollectorLock -Lock $lock }
     }
+  }
+
+  It 'fails closed when the recorded lock owner identity is ambiguous' {
+    $state = Join-Path $TestDrive 'ambiguous-owner-lock-state'
+    [void][IO.Directory]::CreateDirectory($state)
+    $marker = @{ processId = 123; startTimeTicks = 456; runId = 'old-run'; acquiredAtUtc = '2026-01-01T00:00:00Z' } | ConvertTo-Json -Compress
+    $path = Join-Path $state 'collector.lock.json'
+    [IO.File]::WriteAllText($path, $marker, $script:Utf8NoBom)
+    Mock Test-DotfilesExactProcessIdentity { return $null }
+
+    $lock = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '11111111111111111111111111111111'
+
+    $lock.Acquired | Should -BeFalse
+    $lock.Reason | Should -Be 'lock-metadata-ambiguous'
+    (Get-Content -LiteralPath $path -Raw) | Should -Be $marker
   }
 }
 
@@ -1184,6 +1256,80 @@ Describe 'wsl incident collector lock failure handling' {
 
 if ($script:WindowsHost) {
   Describe 'wsl incident capture Windows coordination' {
+  It 'streams CIM instances with a fixed retention bound and finds a late target' {
+    Mock Get-CimInstance {
+      param($Filter)
+      if ($Filter) { return [pscustomobject]@{ Name = '_Total' } }
+      1..40 | ForEach-Object {
+        $script:CimInstancesSeen++
+        [pscustomobject]@{ Name = "instance-$_" }
+      }
+    }
+
+    $script:CimInstancesSeen = 0
+    $query = Get-DotfilesCimInstances -ClassName 'FixtureClass'
+    $target = Get-DotfilesCimInstances -ClassName 'FixtureClass' -TargetName '_Total'
+
+    $query.Items.Count | Should -Be 16
+    $query.OverflowCount | Should -Be 1
+    $script:CimInstancesSeen | Should -Be 17
+    $target.TargetItem.Name | Should -Be '_Total'
+  }
+
+  It 'persists worker ownership before launch and keeps host-only capture available after restart' {
+    $script:FixtureState = Join-Path $TestDrive 'restart-journal-state'
+    $script:FixtureOutput = Join-Path $TestDrive 'restart-journal-output'
+    $script:FakeClock = 0.0
+    $script:ClockProvider = { [double]$script:FakeClock }
+    $script:SleepProvider = { param($Milliseconds) $script:FakeClock += $Milliseconds }
+    $script:GuestStartCount = 0
+    [void][IO.Directory]::CreateDirectory($script:FixtureState)
+    $oldGuest = @{ source = 'guest'; processId = 123456; startTimeTicks = 987654; cleanupUnverified = $true; runId = 'previous-run'; launchState = 'running' }
+    Write-DotfilesInhibitions -StateDirectory $script:FixtureState -Entries @($oldGuest) -RunId 'previous-run'
+    Mock Test-DotfilesWindowsHost { return $true }
+    Mock Get-DotfilesDefaultStateDirectory { return $script:FixtureState }
+    Mock Initialize-DotfilesPrivateDirectory {
+      param($Path)
+      [void][IO.Directory]::CreateDirectory($Path)
+      return $Path
+    }
+    Mock Start-DotfilesHostWorker {
+      param($Source)
+      $persisted = @(Get-Content -LiteralPath (Join-Path $script:FixtureState 'inhibitions.json') -Raw | ConvertFrom-Json)
+      $placeholder = @($persisted | Where-Object { $_.source -eq $Source -and $_.processId -eq -1 -and $_.startTimeTicks -eq 0 -and $_.launchState -eq 'starting' })
+      if ($placeholder.Count -ne 1) { throw 'worker-journal-not-durable-before-launch' }
+      $fake = [pscustomobject]@{ Id = 1000; HasExited = $true }
+      Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
+      return @{ Source = $Source; Process = $fake; ProcessId = 1000; StartTimeTicks = 2000 }
+    }
+    Mock Get-DotfilesWorkerResult {
+      param($Owned)
+      return @{ source = $Owned.Source; status = 'unavailable'; error = 'counter-unavailable'; metrics = @{} }
+    }
+    Mock Start-DotfilesGuestProbe {
+      $script:GuestStartCount++
+      throw 'guest-probe-started-despite-persisted-inhibition'
+    }
+
+    try {
+      $exitCode = Invoke-DotfilesIncidentCollector -IntervalSeconds 1 -DurationSeconds 1 -MaximumLogBytes 65536 -OutputDirectory $script:FixtureOutput -GuestDistro 'FixtureDistro'
+    }
+    finally {
+      $script:ClockProvider = $null
+      $script:SleepProvider = $null
+    }
+
+    $exitCode | Should -Be 0
+    $script:GuestStartCount | Should -Be 0
+    $path = Get-ChildItem -LiteralPath (Join-Path $script:FixtureOutput 'dotfiles-wsl-incident-telemetry') -Filter '*.jsonl' | Select-Object -First 1
+    $records = @(Get-Content -LiteralPath $path.FullName | ForEach-Object { $_ | ConvertFrom-Json })
+    $records.Count | Should -BeGreaterThan 0
+    $records[0].host.cpu.status | Should -Be 'unavailable'
+    $records[0].guest.error | Should -Be 'inhibited'
+    $persisted = @(Get-Content -LiteralPath (Join-Path $script:FixtureState 'inhibitions.json') -Raw | ConvertFrom-Json)
+    @($persisted | Where-Object { $_.source -eq 'guest' -and $_.runId -eq 'previous-run' }).Count | Should -Be 1
+  }
+
   It 'serializes per-user starts across output paths and reconciles a reused PID' {
     $state = Join-Path $TestDrive 'lock-state'
     [void][IO.Directory]::CreateDirectory($state)
@@ -1243,11 +1389,14 @@ if ($script:WindowsHost) {
     }
   }
 
-  It 'kills only its verified child tree and leaves an unrelated sentinel alive' {
+  It 'stops the verified owned root and leaves an unrelated sentinel alive' {
     $exe = Get-DotfilesPowerShellExecutable
-    $sentinel = Start-DotfilesOwnedProcess -FileName $exe -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 30') -Source 'sentinel'
-    $owned = Start-DotfilesOwnedProcess -FileName $exe -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 30') -Source 'fixture'
+    $sleepArguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[System.Threading.Thread]::Sleep(30000)')
+    $sentinel = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'sentinel'
+    $owned = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'fixture'
+    Mock Get-DotfilesProcessTreeSnapshot { return @() }
     try {
+      $owned.Process.WaitForExit(100) | Should -BeFalse
       $result = Stop-DotfilesOwnedProcess -Owned $owned -GraceMilliseconds 3000
       $result.Exited | Should -BeTrue
       $sentinel.Process.HasExited | Should -BeFalse
@@ -1255,6 +1404,10 @@ if ($script:WindowsHost) {
     finally {
       if (-not $sentinel.Process.HasExited) { $sentinel.Process.Kill(); $null = $sentinel.Process.WaitForExit(3000) }
       $sentinel.Process.Dispose()
+      if (Test-DotfilesExactProcessIdentity -ProcessId $owned.ProcessId -StartTimeTicks $owned.StartTimeTicks) {
+        $leftover = [Diagnostics.Process]::GetProcessById($owned.ProcessId)
+        try { $leftover.Kill(); $null = $leftover.WaitForExit(3000) } finally { $leftover.Dispose() }
+      }
       $owned.Process.Dispose()
     }
   }
@@ -1340,7 +1493,7 @@ if ($script:WindowsHost) {
       }
       $fake = [pscustomobject]@{ Id = 5000; HasExited = $true }
       Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake }
+      return @{ Source = $Source; Process = $fake; ProcessId = 5000; StartTimeTicks = 5000 }
     }
     Mock Get-DotfilesWorkerResult {
       param($Owned)
@@ -1389,7 +1542,7 @@ if ($script:WindowsHost) {
       if (-not $script:ActiveSources.Add($Source)) { throw 'same-source-overlap' }
       $fake = [pscustomobject]@{ Id = 1000; HasExited = ($Source -ne 'cpu') }
       Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake; StartedAtMilliseconds = $script:FakeClock }
+      return @{ Source = $Source; Process = $fake; ProcessId = 1000; StartTimeTicks = 1000; StartedAtMilliseconds = $script:FakeClock }
     }
     Mock Get-DotfilesWorkerResult {
       param($Owned)
@@ -1454,7 +1607,7 @@ if ($script:WindowsHost) {
       param($Source)
       $fake = [pscustomobject]@{ Id = 3000; HasExited = $true }
       Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake }
+      return @{ Source = $Source; Process = $fake; ProcessId = 3000; StartTimeTicks = 3000 }
     }
     Mock Get-DotfilesWorkerResult {
       param($Owned)
@@ -1486,7 +1639,7 @@ if ($script:WindowsHost) {
       param($Source)
       $fake = [pscustomobject]@{ Id = 4000; HasExited = $true }
       Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake }
+      return @{ Source = $Source; Process = $fake; ProcessId = 4000; StartTimeTicks = 4000 }
     }
     Mock Get-DotfilesWorkerResult {
       param($Owned)
