@@ -58,7 +58,12 @@ Run AW1 with `--pr`, `--claim-id`, `--agent-id`,
 `requiredChecks.status: success`; `no-required-checks` only with
 non-empty all-success `checks[]`; `pending`/`failing`/`missing` defer
 Step 2. Require `outcome: SATISFIED`, or `CAP_EXHAUSTED` with
-`capExhaustedRoute: phase-specific`; otherwise stop/ask. Require
+`capExhaustedRoute: phase-specific`, to permit Step 2. `WAIT`,
+`REQUEST_NEEDED`, and `RECOVERY_NEEDED` defer Step 2 through E3's E14/E15
+route below; `HOLD` or `CAP_EXHAUSTED` with `capExhaustedRoute: hold`
+stops/asks.
+<!-- dotfiles-divergence: lite-e1-advisory-outcome-deferral -->
+Missing or invalid helper output still stops/asks. Require
 `copilotRecovery.activeClaimProvided: true`; same-head:
 `lastCopilotCommit == prHeadSha`. Run AW1 and `ci-wait-state` after
 Step 1 stores `{head-SHA}`, and require AW1 `prHeadSha` and CI
