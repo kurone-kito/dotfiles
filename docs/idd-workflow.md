@@ -1568,8 +1568,15 @@ subsection describes for the issue-authoring reviewer.
    the operator's notes and per-user agent memory files; for the claim
    lock file, the `idd-generated-*` files and the parent session's
    transcript: preventive; no observed incident yet.
-5. **No background process left running.** The subagent ends every
-   background process the subagent itself started before it returns.
+5. **No background process left running; safe process cleanup.**
+   <!-- dotfiles-divergence: subagent-process-cleanup --> The subagent
+   ends every background process it started before it returns, using
+   only a PID or process group it recorded when launching that process.
+   Never select a process to end by name, working directory, or
+   command-line pattern: those can match the parent shell and other
+   sessions on a shared host. `pgrep -P` is allowed only to walk the
+   children of a recorded PID. The repository's bounded
+   `gpgconf --kill gpg-agent` signing step is the explicit exception.
    Observed 2026-10-01, during the plan critique for
    `kurone-kito/idd-skill#3705` (no issue records the incident itself).
 
@@ -1631,16 +1638,21 @@ Code session:
    arrived when the session acts is used. If the launch returned no agent
    id or `TaskStop` fails, the session records the residual risk and takes
    the same fallback, because it cannot confirm the stop.
-5. Once the pass has returned, been stopped, or the stop could not be
-   confirmed, lists the processes left running and ends by process id only
-   those whose working directory or command line is under the scratch
-   directory, never the session's own shell or the listing command itself.
-   It reports any other leftover as residual risk, without ending it, and
-   it never ends processes by a name pattern. It removes the scratch
-   directory by its exact literal path (never a possibly unset shell
-   variable) only after that cleanup and only when no process under it
-   remains; otherwise it leaves the directory and records the residual
-   risk.
+5. <!-- dotfiles-divergence: subagent-process-cleanup --> Before
+   launching background work, the subagent records each child PID and,
+   when it launches a process group, that group ID in a uniquely named
+   file under the scratch directory. Once the pass has returned, been
+   stopped, or the stop could not be confirmed, the parent reads only
+   those recorded identities and ends only those processes or groups;
+   `pgrep -P` may walk descendants from a recorded PID. It never
+   discovers cleanup targets by working directory, process name, or
+   command-line pattern, since those can match the parent shell and
+   other sessions on a shared host. If a process has no recorded
+   identity, the parent leaves it running and reports it as residual
+   risk. It removes the scratch directory by its exact literal path
+   (never a possibly unset shell variable) only after the recorded
+   processes are gone; otherwise it leaves the directory and records
+   the residual risk.
 
 In a session that passed the check in item 1, stopping with `TaskStop` and
 this cleanup are how the Claude Code pattern meets the equivalence
