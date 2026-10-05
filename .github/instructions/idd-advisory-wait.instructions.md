@@ -67,17 +67,17 @@ The package-manager / ephemeral-npx equivalent takes the same options.
 Contract: `docs/idd-helper-scripts.md#stable-helper-evidence-outputs`
 and `schemas/advisory-wait-state.schema.json`.
 
+<!-- dotfiles-divergence: advisory-response-schema -->
 Required helper fields: `prHeadSha`, `lastCopilotCommit`,
 `copilotPending`, `copilotPendingCoversHead`, `outcome`, `f3Outcome`,
 `earliestSameHeadAt`, `requestMarkerCount`, `requestCap`,
 `pendingWindowMinutes`, `settledWindowMinutes`, `pollIntervalMinutes`,
-`capExhaustedRoute`, `trustedMarkerSummary`.
-
-Optional non-gating secondary-bot fields (not in the `outcome`/
-`f3Outcome` enums; see **Secondary advisory bot supplement** below):
-`secondaryBotLogin` (single login only), `secondaryBotLogins` (full
-list), `secondaryRequestLogins` (still-unrequested subset), and
-`secondaryRequestNeeded` (true iff non-empty).
+`capExhaustedRoute`, `trustedMarkerSummary`, `secondaryBotLogin`,
+`secondaryBotLogins`, `secondaryRequestLogins`, and
+`secondaryRequestNeeded`. The pinned v0.14.0 schema requires all four
+secondary-bot fields even when the optional secondary feature is unset;
+validate schema-valid empty or `false` values. These fields remain
+non-gating and do not change the `outcome`/`f3Outcome` enums.
 
 Allowed `outcome`/`f3Outcome` values: `SATISFIED`, `REQUEST_NEEDED`,
 `RECOVERY_NEEDED`, `CAP_EXHAUSTED`, `WAIT`. `HOLD` is a protocol-level
@@ -116,8 +116,9 @@ outage (e.g. via status page or an org admin surface) before retrying.
 Orthogonal to the table above: changes no `outcome`/`f3Outcome` or
 route, never satisfies the primary gate, posts no `advisory-wait`
 marker. A bot check alone never confirms review of current HEAD.
-`secondaryBotLogin` accepts one login or a list; request every
-`secondaryRequestLogins` entry, not only the first, never polling any.
+`secondaryBotLogins` is the complete list; `secondaryBotLogin` is its
+single-login convenience mirror. Request every `secondaryRequestLogins`
+entry, not only the first, never polling any.
 Trigger condition and per-login procedure:
 `idd-review-fix.instructions.md`'s E14 step 5 — never poll/wait there,
 E1, or E2; only F2's `secondary-quiet-window` blocker
