@@ -8,7 +8,7 @@ tags: [onboarding, bootstrap]
 # Onboarding Reference — Issue-Mediated Bootstrap
 
 Use this reference alongside
-[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md)
+[`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/v0.14.0/idd-template/ONBOARDING.md)
 when the operator wants an audited bootstrap trail instead of the
 distributed default direct-import ("theirs-flow") path. This page is
 the detailed companion for the pointer subsection between Step 1C and
@@ -39,7 +39,7 @@ an operator who simply prefers not to grant an agent a direct-commit
 path even for the first action. Treat this as an explicit operator
 choice made alongside the other Step 1B policy decisions (see
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)),
+Decisions](policy-decisions.md)),
 not an automatic upgrade applied whenever a review bot happens to be
 available.
 If the operator does not state a preference, propose theirs-flow (the
@@ -66,13 +66,13 @@ there is no `.github/idd/config.json` yet in the target repository for
 an executing session to read those values from — the target repository
 is still pre-import. Embed the confirmed values for the placeholders
 listed in [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/placeholders.md)
+Values](placeholders.md)
 directly in the issue body (the resolved values themselves, not a
 reference to where they live), together with
 the confirmed Step 1B decisions (merge policy, PR review profile,
 review-thread resolution policy, and the rest of the list in
 [Onboarding Reference — Policy
-Decisions](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/policy-decisions.md)).
+Decisions](policy-decisions.md)).
 
 **Pin the process reference.** The issue's process section must point
 at idd-skill's own canonical `idd-template/ONBOARDING.md` Steps 2
@@ -424,7 +424,7 @@ Replace `<marker-prefix>` in the marker with the confirmed marker-prefix
 value from the hearing before publishing — see the `PROJECT_MARKER_PREFIX`
 placeholder in
 [Onboarding Reference — Placeholder
-Values](https://github.com/kurone-kito/idd-skill/blob/c11c3642319b3283293e4e681861bf7899c32ed3/idd-template/docs/onboarding/placeholders.md)
+Values](placeholders.md)
 for how that value is derived. The suitability score of `1` reflects that
 Discover structurally cannot route this issue pre-import, not a quality
 judgment about the change itself; per the issue-authoring skill's
@@ -502,7 +502,7 @@ examples ("start issue authoring to implement {inferred gap}", "run the
 IDD loop"). Derive `{inferred gap}` and the other prompt content using
 the same repository-evidence-read method the optional Dry-run readiness
 report already performs
-([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.12.2/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
+([Dry-run — Readiness assessment](https://github.com/kurone-kito/idd-skill/blob/v0.14.0/idd-template/ONBOARDING.md#dry-run--readiness-assessment))
 — detected package manager, missing prerequisites, and so on — rather
 than inventing a new inference mechanism. Run that read **fresh, after
 this merge**, not reused from the pre-import dry-run's stored output:
@@ -546,6 +546,13 @@ explicitly not the full autonomous Discover -> Claim -> Work loop:
   protection, or review bot the target repository already had before
   choosing IDD — those keep gating the bootstrap PR exactly as they did
   before, and this note is never grounds for disregarding them.
+- **A local `idd-doctor` run flags the same condition** (2026-09-23;
+  issue `#3229`): with no sibling worktree, the primary worktree's
+  `issue/*` HEAD trips B1 too — a WARN ("likely a past B1 violation")
+  without `--strict`, or an ERROR ("B1 violation: this branch must
+  live in a sibling worktree...", non-zero exit) under `--strict`;
+  neither is a real problem. Both clear once the primary worktree
+  checks out the default branch after merge.
 
 On an active target repository, also expect
 [concurrent default-branch drift](#concurrent-base-branch-drift-during-the-bootstrap-pr)
@@ -631,6 +638,15 @@ Disposition:
   review profile requires a reviewer or maintainer resolution, not
   merely an approval. Do not patch the vendored copy just to silence
   the comment.
+- **`resolve-review-thread.mjs --claimless` refuses this PR** — it
+  closes its own bootstrap issue, so `--claimless` fails closed
+  (2026-09-23; issue `#3229`). Recover: (a) a fresh, trusted-actor
+  `claimed-by` marker (`supersedes: none`) bound to the PR's head
+  branch, unlocking `--claim-issue`/`--claim-id`, released
+  (`unclaimed-by`) afterward; or (b) reply to the thread's top-level
+  comment (REST `.../comments/{root-id}/replies`) in E13's
+  disposition form (`idd-helper-scripts.md`), then resolve its
+  thread id via GraphQL `resolveReviewThread`.
 - **After merge, qualify before escalating.**
   [Upstream-candidate escalation][upstream-candidate] is opt-in
   (`upstreamEscalation.enabled`, default `false`) and only accepts

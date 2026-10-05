@@ -1,7 +1,7 @@
 ---
 type: index
 title: IDD Documentation Index
-description: Is the entry point and topic map for the IDD documentation bundle this repository imports into its own docs/.
+description: Provides the entry point and topic map for the IDD documentation bundle this repository imports into its own docs/.
 ---
 
 # IDD Documentation Index
@@ -16,15 +16,6 @@ frontmatter convention this table is generated from — see
 [Customizing IDD § Docs Bundle Frontmatter Convention
 (OKF)](customization.md#docs-bundle-frontmatter-convention-okf) before
 adding a page of your own.
-
-<!-- dotfiles-divergence: onboarding-doc-trim -->
-The generated table below omits two upstream pages this repository
-does not vendor locally — `onboarding/placeholders.md` and
-`onboarding/policy-decisions.md` (self-corrupting once their
-placeholder tokens are substituted; see the `onboarding-doc-trim`
-[Divergence Register](idd-policy.md#divergence-register) entry) —
-every in-bundle reference to either links the pinned upstream copy
-instead.
 
 ## Reference Map
 
@@ -46,6 +37,8 @@ instead.
 | reference | [Onboarding Reference — Agent Entry and Verification](onboarding/agent-entry-and-verification.md) | Provides the detailed agent-entry examples and verification checklist referenced by ONBOARDING.md steps 5 and 6. |
 | reference | [Onboarding Reference — Issue-Mediated Bootstrap](onboarding/issue-mediated-bootstrap.md) | Documents an opt-in alternate bootstrap path that imports the IDD template through a reviewed issue-branch-PR cycle instead of theirs-flow's direct, unreviewed commit. |
 | reference | [Onboarding Reference — Optional Host Setup](onboarding/optional-host-setup.md) | Documents the optional host-level setup steps (worktree guard, idd-doctor CI gate, advisory-convergence CI workflow, vendored-bundle linguist attributes) that ONBOARDING.md now only points to. |
+| reference | [Onboarding Reference — Placeholder Values](onboarding/placeholders.md) | Provides the full derivation and replacement rules for every template placeholder used during onboarding. |
+| reference | [Onboarding Reference — Policy Decisions](onboarding/policy-decisions.md) | Provides the detailed policy-decision guidance behind ONBOARDING.md's operator-confirmation steps. |
 | reference | [Onboarding Reference — Project Tuning](onboarding/project-tuning.md) | The post-hearing judgment calls idd-onboard's CLI does not automate — agent-entry file surgery, non-default profile artifacts, extra trusted marker actors, claim-timing/label-name overrides, the reserved-label guard, the issue-authoring companion install, and command-row retuning. |
 | reference | [Template Distribution Maintainer Reference](onboarding/template-distribution.md) | Explains how the template's generated file-distribution lists in ONBOARDING.md stay correct as files are added, removed, or moved. |
 | reference | [IDD Policy Constants](policy-constants.md) | Inventories the distributed IDD policy defaults and names which configuration surface owns each one. |
