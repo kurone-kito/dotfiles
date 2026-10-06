@@ -41,22 +41,22 @@ assert len(starts) == 2, len(starts)
 site = text[starts[0] + len(marker):].split('\n\n', 1)[0]
 
 assert re.search(
-    r'end(?:s|ed|ing)?\b.{0,220}\brecord(?:ed|ing)?\b.{0,60}\b(?:launch|start)',
+    r'end(?:s|ed|ing)?.{0,180}only.{0,40}PID.{0,40}process group.{0,40}record(?:ed|ing)?.{0,40}(?:launch|start)',
     site,
     re.I | re.S,
-), 'critique site does not end a process with an identity recorded at launch'
-assert re.search(r'\bonly\b.{0,40}\bPID\b.{0,40}process group', site, re.I), (
-    'critique site does not limit ending to a recorded PID or process group'
-)
+), 'critique site does not end a process using only a PID or process group recorded at launch'
+assert re.search(
+    r'(?:name.{0,80}working directory.{0,80}command-?line|working directory.{0,80}name.{0,80}command-?line)',
+    site,
+    re.I | re.S,
+), 'critique site does not forbid selection by name, working directory, and command line together'
 assert re.search(r'\b(never|not)\b', site, re.I), 'critique site does not forbid unsafe selection'
-low = site.lower()
-assert 'name' in low, 'critique site does not cover selection by name'
-assert 'working directory' in low, 'critique site does not cover selection by working directory'
-assert re.search(r'command-line|command line', low), 'critique site does not cover selection by command line'
-assert 'pgrep -P' in site, 'critique site does not constrain pgrep -P'
-assert re.search(r'recorded PID', site), 'critique site does not limit pgrep -P to a recorded PID'
-assert 'gpgconf' in low and 'gpg-agent' in low, 'critique site drops the gpgconf exception'
-assert re.search(r'exception', site, re.I), 'critique site does not mark gpgconf as an exception'
+assert re.search(r'pgrep -P.{0,80}recorded PID', site, re.I | re.S), (
+    'critique site does not limit pgrep -P to a recorded PID'
+)
+assert re.search(r'gpgconf --kill gpg-agent.{0,80}exception', site, re.I | re.S), (
+    'critique site does not keep gpgconf --kill gpg-agent as the exception'
+)
 " "$WORKFLOW_DOC"
 }
 
@@ -72,26 +72,25 @@ assert len(starts) == 2, len(starts)
 site = text[starts[1] + len(marker):].split('\n\n', 1)[0]
 low = site.lower()
 
-record_at = low.find('record')
-wait_at = low.find('wait')
-assert record_at != -1 and wait_at != -1 and record_at < wait_at, (
-    'Claude site does not record an identity before waiting'
+assert re.search(
+    r'record.{0,80}child\s+PID.{0,120}process group.{0,180}before waiting',
+    site,
+    re.I | re.S,
+), 'Claude site does not record the child PID and process group before waiting'
+assert re.search(
+    r'(?:working directory.{0,80}(?:process )?name.{0,80}command-?line|(?:process )?name.{0,80}working directory.{0,80}command-?line)',
+    site,
+    re.I | re.S,
+), 'Claude site does not forbid discovery by working directory, name, and command line together'
+assert re.search(r'\b(never|not)\b', site, re.I), 'Claude site does not forbid unsafe discovery'
+assert re.search(r'pgrep -P.{0,80}recorded PID', site, re.I | re.S), (
+    'Claude site does not limit pgrep -P to a recorded PID'
 )
-assert re.search(r'\bPID\b', site), 'Claude site does not name a PID'
-assert re.search(r'process group', site, re.I), 'Claude site does not name a process group'
-assert re.search(r'\b(never|not)\b', low), 'Claude site does not forbid unsafe discovery'
-assert 'working directory' in low, 'Claude site does not cover discovery by working directory'
-assert re.search(r'process name|\bname\b', low), 'Claude site does not cover discovery by name'
-assert re.search(r'command-line|command line', low), 'Claude site does not cover discovery by command line'
-assert 'pgrep -P' in site, 'Claude site does not constrain pgrep -P'
-assert re.search(r'recorded PID', site), 'Claude site does not limit pgrep -P to a recorded PID'
-assert re.search(r'(?:no|without(?:\s+an?)?|un)\s*recorded', low), (
-    'Claude site does not cover a missing recorded identity'
-)
-assert re.search(r'(leave|leaves|left|stays).{0,80}running', low), (
-    'Claude site does not leave an unrecorded process running'
-)
-assert 'residual' in low, 'Claude site does not report residual risk'
+assert re.search(
+    r'no recorded\s+identity.{0,80}(?:leave|leaves|left).{0,40}running.{0,80}residual',
+    low,
+    re.S,
+), 'Claude site does not leave a process with no recorded identity running as residual risk'
 assert 'gpgconf' not in low, 'Claude site must not require the gpgconf exception'
 " "$WORKFLOW_DOC"
 }
