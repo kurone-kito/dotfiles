@@ -1,44 +1,31 @@
 # IDD — Review Fix Phase (Lite) (E9–E15)
 
-Lite profile for helper-enabled weak/local models. Same semantics as
-`idd-review-fix.instructions.md`. Use only for a single claimed issue with
-an open PR. If the repository is `instructions-only`, use the standard
-review-fix instructions instead.
+Lite helper profile; claimed open PRs only. `instructions-only` uses the
+standard file.
 
 ## Helper runtime contract
 
-- Helper-enabled profiles: when a step names a helper or command set, use
-  it. If a required helper is missing, fails, or disagrees with live
-  state, stop and ask. Do not fall back silently to prose.
-- `instructions-only`: do not use this lite file; use
-  `idd-review-fix.instructions.md` instead.
-- Any mismatch between this file and the standard review-fix phase is a
-  bug in this file.
+- Use every named helper or command set. Missing, failing, or disagreeing
+  helpers are stop-and-ask conditions; never fall back silently to prose.
+- `instructions-only` uses `idd-review-fix.instructions.md`.
 - **Command sets**: `fix-validate` (E9) and `post-fix-validate` (E12) are
   read from `.github/idd/config.json`'s `commands` mapping. If that file
   is missing or the command set cannot be read, stop and ask rather than
-  guessing a command.
+  guessing a command. Judge each run by exit status (Bash
+  `${PIPESTATUS[0]}`/`set -o pipefail`); a `tail`/`head` filter can't
+  prove success (#3139).
 
 ## Upstream-triage boundary
 
-This file only executes triage dispositions someone else already made.
-It never classifies, scores severity, or decides Accept/Reject itself —
-those are E4-E8 judgment calls, excluded from every lite profile.
+This file executes only prior E4-E8 dispositions; it never classifies
+severity or decides Accept/Reject.
 
-1. Before fixing anything, confirm every item from ReviewItems_snapshot
-   that this round acts on already carries an `**Accepted**` or
-   `**Rejected**` disposition from a prior E4-E8 pass.
-2. If a ReviewItems_snapshot item has no recorded disposition, stop and
-   ask. Do not triage it yourself, and do not guess its severity.
-3. Only act on ReviewItems_snapshot items already marked `**Accepted**`.
-   Leave `**Rejected**` items alone.
-4. This boundary covers ReviewItems_snapshot items only — the ones E9
-   fixes and E13 replies to. It does not cover E10's own critique
-   findings (E10 fixes those directly, per its own step, the same
-   self-review loop every phase uses) or E12's bounded cross-round
-   batching allowance (which explicitly permits folding in bot-sourced
-   comments not yet gone through triage, under its own separate
-   conditions).
+1. Before fixing, confirm every acted-on ReviewItems_snapshot item has an
+   `**Accepted**` or `**Rejected**` disposition from E4-E8.
+2. An undispositioned item is stop-and-ask; do not triage or guess it.
+3. Act only on `**Accepted**` items and leave `**Rejected**` items alone.
+4. This boundary covers E9 fixes and E13 replies only. E10 critique
+   findings and E12's bounded cross-round batching follow their own rules.
 
 ## Stop-and-ask conditions
 
@@ -46,13 +33,13 @@ those are E4-E8 judgment calls, excluded from every lite profile.
   scope for this round (see Upstream-triage boundary).
 - The active claim is ambiguous, disputed, or lost.
 - A required helper is missing, fails, or disagrees with live state.
-- E10's critique loop repeats the same Accepted findings for more than
+- E10's critique loop repeats the same Accepted findings for
   `critiqueLoop.e10NoProgressHoldAfter` (default 3) passes without
   meaningful progress.
 - E10's `critiqueLoop.delegate` under `on-success` or `never` left no
   readable findings list (vacuous verdict, not a clean zero-issue round).
-<!-- dotfiles-divergence: master-branch -->
-- E11 merge conflicts cannot be resolved cleanly, or the PR has
+- <!-- dotfiles-divergence: master-branch -->
+  E11 merge conflicts cannot be resolved cleanly, or the PR has
   unresolved review threads, unreplied comments, or a
   `CHANGES_REQUESTED` reviewer and no explicit operator confirmation
   exists to merge `master` into the feature branch anyway.
@@ -93,11 +80,13 @@ other GitHub side effect, confirm all of the following:
 ## E9 — Fix accepted issues
 
 1. PATH A/PATH B (from `idd-review-triage.instructions.md` E4): PATH A
-   is actionable feedback needing a code change or maintainer decision
-   (human reviewer threads, regular comments, `CHANGES_REQUESTED`
-   bodies, critique-pass findings); PATH B is Copilot and CI advisory
-   bot comments included for traceability, even when they do not
-   require a code change.
+   is actionable feedback: human reviewer threads, regular comments,
+   `CHANGES_REQUESTED` bodies, critique-pass findings that require a
+   code change or maintainer decision, and Copilot inline
+   review-thread comments; PATH B is advisory feedback: Copilot's and
+   CI advisory bots' review-summary bodies and regular comments,
+   included for traceability, even when they do not require a code
+   change.
 2. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
 3. Run `fix-validate`.
 4. Commit fixes atomically — one logical change per commit.
@@ -117,11 +106,18 @@ other GitHub side effect, confirm all of the following:
 
 ## E10 — Validate fixes with critique pass
 
+Per-agent pass: resolve `critiqueLoop.subagentWaitCeiling` (`PT20M` default)
+with harness timeout, not wrapper (#3449). Applies only to per-agent
+subagents; shell-delegate rules unchanged. Background waits require cleanup;
+suppress late output. `mode` only decides whether per-agent starts from
+delegate. Started timeout/cancel/interruption/error passes without findings use
+self-critique and record no return in every mode. Unbounded: skip delegation;
+self-critique and record risk.
+
 1. Resolve `critiqueLoop.delegate` the same way
    `idd-work-lite.instructions.md` C1 does: helper-first
    `critique-delegate` (`node scripts/idd-critique-delegate.mjs` or
-   `idd:critique-delegate`; resolve the exact command from
-   `docs/idd-helper-scripts.md` if unsure). `usable: false` → per-agent only; only
+   `idd:critique-delegate`). `usable: false` → per-agent only; only
    `usable: true` uses `command`/`mode`. Then run delegate and/or
    per-agent per `mode` (`fallback` default, `combined`, `on-success`,
    `never`) and union when both ran. Never assume they stack. Stop
@@ -150,7 +146,7 @@ other GitHub side effect, confirm all of the following:
    finding, narrowing a remaining finding's root cause or scope, or
    producing a materially new fix direction. A reworded duplicate
    finding does not count.
-6. If the same Accepted findings recur for more than
+6. If the same Accepted findings recur for
    `critiqueLoop.e10NoProgressHoldAfter` (default 3) consecutive E10
    passes without meaningful progress, stop the loop, post a hold
    comment summarizing the repeated findings and attempted fixes, and
@@ -158,21 +154,28 @@ other GitHub side effect, confirm all of the following:
 7. Do not use step 6 to bypass a serious issue: unresolved High or
    Medium findings stay blockers until fixed or explicitly redirected
    by a maintainer.
-8. Heuristic: several new, non-repeated same-area findings across
+8. **No confidence exception.** A fix's scope, or your own
+   confidence in it, never excuses skipping this pass — E10 must run
+   for every E9 fix batch before E11. Pushed a skipped round?
+   Disclose it, name the round(s), run E10 against the accumulated
+   diff to a clean pass, then return to E1 before F1 — see
+   `idd-review-fix.instructions.md`'s E10 repair path for the full
+   procedure.
+9. Heuristic: several new, non-repeated same-area findings across
    rounds (3-4) may mean one structural fix converges faster than
    another patch. If that fix keeps drawing new findings, prefer
    simplifying/removing the mechanism over a second redesign -- only
    once confirmed non-required by the issue's acceptance criteria or
    contract; if required, stop for a maintainer decision.
-9. Third tier: when each new finding is instead a genuine, distinct gap
-   against an open-ended external correctness domain (a grammar,
-   protocol, or wire format) rather than a symptom of one mechanism,
-   tiers 1-2 do not apply -- there is no mechanism to simplify, since
-   coverage of that domain is itself the acceptance criterion. Once
-   several rounds each surface a genuinely new in-scope gap rather than
-   repeating one, list every outstanding gap with evidence and the
-   round count in a hold comment and stop for a maintainer decision
-   (`#2865`).
+10. Third tier: when each new finding is instead a genuine, distinct gap
+    against an open-ended external correctness domain (a grammar,
+    protocol, or wire format) rather than a symptom of one mechanism,
+    tiers 1-2 do not apply -- there is no mechanism to simplify, since
+    coverage of that domain is itself the acceptance criterion. Once
+    several rounds each surface a genuinely new in-scope gap rather than
+    repeating one, list every outstanding gap with evidence and the
+    round count in a hold comment and stop for a maintainer decision
+    (`#2865`).
 
 <!-- dotfiles-divergence: master-branch -->
 ## E11 — Resolve conflicts with master
@@ -215,8 +218,8 @@ other GitHub side effect, confirm all of the following:
    default, any login equal to `copilot` or starting with
    `copilot-pull-request-reviewer` counts, matching
    `isCopilotReviewerLogin` — or an `advisoryBotLogins` login,
-   regardless of PATH A/B. A login also configured as
-   `secondaryBotLogin` still qualifies as bot-sourced.
+   regardless of PATH A/B. A configured `secondaryBotLogin` login
+   still qualifies as bot-sourced.
 5. Each such comment is a small, confirmable fix whose claim you
    checked against live evidence (a linter run, actual file content,
    actual runtime behavior) before folding it in. Never fold in a
@@ -231,14 +234,12 @@ other GitHub side effect, confirm all of the following:
    touched-file scope from step 6; you have accumulated 3 additional
    commits; or 10 minutes have passed since the first accumulated
    commit.
-9. This allowance never delays, holds, or interrupts an in-flight CI
-   wait, and never changes PATH A/B routing or triage timing — only
-   push timing changes. A folded-in comment does **not** get a
-   disposition reply in this round — it keeps its formal PATH
-   classification and individual E6 disposition reply for the next
-   E1/E4-E7 pass, exactly like the standard file. E14 still requests a
-   fresh primary-bot re-review after every push. The per-HEAD
-   `review-watermark` still invalidates on this push.
+9. This never delays/holds/interrupts an in-flight CI wait, or changes
+   PATH A/B routing/triage timing — only push timing changes. A
+   folded-in comment gets **no** disposition reply this round; it
+   keeps its PATH classification and individual E6 reply for
+   E1/E4-E7. E14 still requests a fresh primary-bot re-review each
+   push; `review-watermark` still invalidates too.
 10. Apply the pre-mutation guard immediately before this push.
 11. Re-apply the pre-mutation guard immediately before this edit —
     it is a separate mutation after the already-guarded push. If this
@@ -262,20 +263,23 @@ other GitHub side effect, confirm all of the following:
    (review thread, review body, or regular comment), reply describing
    which commits fixed it and how.
 2. Start every reply with:
-   `**Accepted** — fixed in {commit-sha or comma-separated list}: {brief explanation}`
-   After that visible prefix, include the reply-identity stamp exactly
-   as `idd-review-triage.instructions.md`'s E6 defines it
-   (`<!-- {markerPrefix}-review-reply -->`) — same stamp mechanics and
-   constraints, applied here to the `**Accepted**`-only prefix this
-   phase posts.
-   Citing a commit that did not fix this item in the current round
-   requires it to have already passed the file-path-touch check (E9
-   item 7, or `idd-review-snapshot-lite.instructions.md`'s Cold-start
-   edge case 1).
-3. For a review thread, immediately resolve the thread after posting
-   the reply. Reply first, resolve second, so a failed reply never
-   leaves a silently-resolved thread.
-4. For a regular comment, reply only; do not resolve.
+   `**Accepted** — fixed in {commit-sha or comma-separated list}: {brief explanation}`,
+   followed by the reply-identity stamp
+   `<!-- {markerPrefix}-review-reply -->`
+   (`idd-review-triage.instructions.md` E6). Citing a commit that did
+   not fix this item in the current round requires it to have already
+   passed the file-path-touch check (E9 item 7, or
+   `idd-review-snapshot-lite.instructions.md`'s Cold-start edge case 1).
+3. For a review thread, post the reply and resolve it in one call with
+   the profile-selected `resolve-review-thread` helper (`--pr`,
+   `--comment-id`, `--body`, `--claim-issue`, `--claim-id`, `--apply`;
+   package-manager / ephemeral-npx equivalent in
+   `docs/idd-helper-scripts.md`), which appends the stamp and replies
+   before resolving, so a failed reply never leaves a silently-resolved
+   thread.
+4. For a regular comment, reply only and append the stamp yourself; do
+   not resolve. Any reply posted another way (the manual fallback)
+   must append the stamp itself too.
 5. If a non-review notice (rate-limit / usage-limit / review-limit) was
    already dispositioned `**Rejected** — {bot} did not review HEAD …` in
    a prior pass, carry that rejection forward. Do not re-post an
@@ -301,56 +305,57 @@ other GitHub side effect, confirm all of the following:
    canonical evidence collector per
    `idd-advisory-wait-lite.instructions.md`'s helper-first path (`node
    scripts/advisory-wait-state.mjs --pr {pr-number}
+   --claim-id {claim-id} --agent-id {agent-id}
    --trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"` in
    the source/vendored profile; resolve the package-manager /
    ephemeral-npx equivalent from `docs/idd-helper-scripts.md`). If it
-   fails, returns invalid JSON, or is missing required fields
-   (`prHeadSha`, `lastCopilotCommit`, `copilotPending`,
-   `copilotPendingCoversHead`, `outcome`, `f3Outcome`,
-   `secondaryBotLogin`, `secondaryRequestNeeded`, `earliestSameHeadAt`,
-   `requestMarkerCount`, `requestCap`, `pendingWindowMinutes`,
-   `settledWindowMinutes`, `pollIntervalMinutes`, `capExhaustedRoute`,
-   `trustedMarkerSummary` — the full contract in
-   `docs/idd-helper-scripts.md#stable-helper-evidence-outputs` and
-   `schemas/advisory-wait-state.schema.json`), stop and ask — do not
-   fall back to a manual per-field fetch.
+   fails, returns invalid JSON, or is missing any field from
+   `idd-advisory-wait-lite.instructions.md`'s own Required fields list,
+   stop and ask — do not fall back to a manual per-field fetch.
 4. Read the helper's `outcome` field and apply this decision table, top
    to bottom, first match wins:
-   - `SATISFIED`, `copilotPending` `false`, `copilotPendingCoversHead`
-     `false` (settled by elapsed time alone, never proven the request
-     reached Copilot, `#2327`): lite has no bounded recovery cycle to
-     run here — continue to E15 the same as an ordinary `SATISFIED`.
-   - `SATISFIED` (otherwise) → continue to E15.
+   - Off-head `SATISFIED` with `staleRequestRecovery.action ==
+     "attempt"` → hand off for AW3-S; never E15.
+   - Off-head `SATISFIED` with recovery `cap-exhausted` → follow
+     `capExhaustedRoute`: `phase-specific` → E15; `hold` → stop/ask.
+   - `SATISFIED`, `copilotPending` `false`,
+     `copilotPendingCoversHead` `false` (elapsed-only, `#2327`) → apply
+     step 10, then E15.
+   - `SATISFIED` (otherwise) → apply step 10 first, then continue to
+     E15.
    - `RECOVERY_NEEDED`: post the recovery marker
      `advisory-wait-recovery: {agent-id} {PR_HEAD_SHA}
      {ISO8601-recovery-time}` as plain text. Do not request another
      review. Then go to the polling loop below.
-   - `REQUEST_NEEDED`, `copilotPending` `false`: request the review with
-     `gh pr edit {pr-number} --add-reviewer "@{primary-advisory-bot}"`
-     (on a GraphQL login-resolution failure, retry via `gh api
-     repos/{owner}/{repo}/pulls/{pr-number}/requested_reviewers -X POST
-     -f "reviewers[]={primary-advisory-bot-rest-login}"`). If both
-     attempts fail, stop and ask instead of posting a marker. On
-     success, immediately post `advisory-wait: {agent-id} {PR_HEAD_SHA}
-     {ISO8601-requested-at}` as plain text, not an HTML comment, then go
-     to the polling loop below.
+   - `REQUEST_NEEDED`, `copilotPending` `false`: try add-reviewer and
+     REST. Post
+     `advisory-wait: {agent-id} {PR_HEAD_SHA} {ISO8601-requested-at}`
+     as plain text only after current-attempt evidence: a newer event
+     after HEAD or a fresh node absent from the pre-request snapshot;
+     exit status is not evidence (issue `#3500`). If absent, see
+     [AW3-S fallback](../../../docs/idd-advisory-wait-shell-fallback.md#registration-proven-review-request);
+     use its account-typed fallback; never hard-code ids. Still absent:
+     stop and ask; poll only after success. Status `3` means claim/HEAD
+     guard failure: stop and return to E1. Status `1`/`2` means primary
+     registration is unproven/unreadable: stop/ask, not poll.
    - `REQUEST_NEEDED`, `copilotPending` `true` (a request is already
-     pending but unproven for current HEAD, no same-head marker to
-     anchor polling): lite does not track the claim-id/agent-id the
-     full protocol's bounded `AW3-S` remove/re-request cycle requires —
-     stop and ask rather than remove, re-request, or enter the
-     marker-based polling loop below with no marker.
-   - `CAP_EXHAUSTED`: apply step 10 below (the secondary-bot check)
-     first — it is a non-gating supplement that fires on cap exhaustion
-     independent of the cap-exhausted route. Then, if the helper's
-     `capExhaustedRoute` is `hold`, post a hold comment and stop;
-     otherwise (`phase-specific`, the default) continue to E15.
-   - `WAIT`: if `copilotPending` is true and elapsed time since
-     `earliestSameHeadAt` is at least the helper's
-     `pendingWindowMinutes`, apply step 10 below (the secondary-bot
-     check) first, then continue to E15; if `copilotPending` is false
-     and elapsed time is at least `settledWindowMinutes`, do the same;
-     otherwise go to the polling loop below.
+     <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+     pending but unproven for current HEAD, with no same-head marker to
+     anchor polling): consult `staleRequestRecovery`. `attempt` routes
+     through the bounded AW3-S remove/re-request/verify/mark cycle in
+     `idd-advisory-wait.instructions.md` and its AW3-S shell fallback;
+     revalidate claim and HEAD before every mutation. `cap-exhausted`
+     performs no remove, re-request, secondary request, or marker; apply
+     `capExhaustedRoute` (`hold` stops, `phase-specific` continues to
+     E15) while leaving the outcome `REQUEST_NEEDED`. `not-applicable`
+     falls through to the polling loop only when an existing same-head
+     marker anchors it; otherwise stop and ask.
+   - `CAP_EXHAUSTED`: apply step 10 first — it is a non-gating
+     supplement that fires on cap exhaustion independent of the
+     cap-exhausted route. Then, if the helper's `capExhaustedRoute` is
+     `hold`, post a hold comment and stop; otherwise (`phase-specific`,
+     the default) continue to E15.
+   - `WAIT`: go to (or stay in) the polling loop below.
 5. The default primary advisory bot is Copilot: use `copilot` for
    `{primary-advisory-bot}` (the add/remove-reviewer login) and
    `copilot-pull-request-reviewer[bot]` for
@@ -367,12 +372,12 @@ other GitHub side effect, confirm all of the following:
    marker already exists; reuse the one with the earliest `createdAt`
    (the helper's `earliestSameHeadAt` already gives you this). Take a
    fresh activity snapshot (same scope as E1 Step 1) and record its
-   highest `updatedAt` as a temporary polling watermark — do not post
-   it as a `review-watermark` comment. If the snapshot is empty, use
-   the `createdAt` of the latest `review-watermark` comment whose
-   `{claim-id}` matches the current active claim and whose author is a
-   trusted marker actor instead. If no trusted same-claim watermark
-   exists, stop polling and return to E1 to create one.
+   highest `updatedAt` as a temporary polling watermark. If a deferred
+   baseline exists and this is newer, return to E1; otherwise use the fresh
+   maximum as the watermark. Never post it. For an empty snapshot, use the
+   latest trusted same-claim watermark `createdAt`, then the deferred E1
+   baseline, then the same-claim `review-baseline` `createdAt`; never use
+   a marker-shaped comment as that baseline. If none exists, return E1.
 8. Poll on the interval from the helper's `pollIntervalMinutes`. Each
    cycle: re-fetch the current head; if it differs from `PR_HEAD_SHA`,
    stop polling and return to `idd-review-snapshot-lite.instructions.md`
@@ -383,29 +388,27 @@ other GitHub side effect, confirm all of the following:
    JSON, or is missing required fields, stop and ask — do not fall back
    to a manual per-field fetch. If `earliestSameHeadAt` is now empty,
    post a hold comment noting the advisory-wait marker for
-   `PR_HEAD_SHA` disappeared during polling and stop. If `outcome` is
-   now `SATISFIED`, exit polling and continue to E15.
-9. Otherwise re-apply the elapsed-window check from step 4's `WAIT`
-   branch using the refreshed helper output: if the window is now
-   satisfied, apply step 10 below (the secondary-bot check) first, then
-   exit polling and continue to E15 — the primary bot never reviewed
-   this HEAD, which is exactly the stalled/rate-limited case step 10
-   exists for. Else keep polling. A stalled or silent advisory bot must
-   not cause unbounded polling — this elapsed-window re-check is what
-   times the loop out even when the bot never reviews the current HEAD.
-10. **Optional secondary advisory bot (non-gating).** Use the most
+   `PR_HEAD_SHA` disappeared during polling and stop. Before a terminal
+   result, reapply step 4's first-match table: off-head `SATISFIED` with
+   `attempt` hands off for AW3-S; `cap-exhausted` follows
+   `capExhaustedRoute`. Only then may `SATISFIED` apply step 10 and go E15.
+9. Otherwise keep polling — the helper already folds
+   `pendingWindowMinutes`/`settledWindowMinutes` into `outcome` on
+   every call, so a stalled or silent advisory bot still ends the loop
+   as `SATISFIED` without a hand-derived check.
+10. **Optional secondary advisory bot(s) (non-gating).** Use the most
     recent step-3/step-8 helper output's `secondaryRequestNeeded` and
-    `secondaryBotLogin` fields directly — do not re-derive the
-    request/already-requested condition manually. When
-    `secondaryRequestNeeded` is `true`, request `secondaryBotLogin`
-    once for this HEAD using the same gh-then-REST fallback as the
-    primary in step 4. Post no `advisory-wait:` marker for the
-    secondary — it must never satisfy the primary gate or consume the
-    primary's request cap — and never let it change the route already
-    decided above. The secondary's review is ordinary advisory input,
-    picked up by the next E1 snapshot if it lands before merge. Skip
-    this step entirely when `secondaryRequestNeeded` is `false` (which
-    also covers no secondary configured, per the helper contract).
+    `secondaryRequestLogins` fields directly — do not re-derive the
+    request/already-requested condition manually.
+    `secondaryBotLogin` accepts one login or a list. When
+    `secondaryRequestNeeded` is `true`, request **every** login in
+    `secondaryRequestLogins` once each (never only the first), using
+    the guarded procedure, replacing primary placeholders and
+    `BOT_REST_LOGIN`/bare form; type selects `botIds`/`userIds`;
+    `1`/`2` skip and `3` stops. No marker.
+    Each review is ordinary advisory input, picked up by the next E1
+    snapshot if it lands before merge. Skip this step entirely when
+    `secondaryRequestNeeded` is `false`.
 11. Advisory feedback is advisory: you are not obligated to accept
     every suggestion, but you must still wait for a review you
     explicitly requested. A human `CHANGES_REQUESTED` reviewer is not
@@ -422,8 +425,8 @@ other GitHub side effect, confirm all of the following:
    shared `ciWait.runningTimeout` / `ciWait.generationTimeout` /
    `ciWait.rerunPolicy` values). The outcomes below override its generic
    routing for this phase.
-3. If new review threads or comments arrive during the wait, note them
-   but keep waiting for CI.
+3. If new review threads/comments arrive, return to E1 immediately;
+   otherwise continue waiting for CI.
 4. On success: return to `idd-review-snapshot-lite.instructions.md`
    (E1) — do not skip triage.
 5. On failure that is code-caused: fix it, run `fix-validate`, commit

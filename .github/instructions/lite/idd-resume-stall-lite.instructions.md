@@ -17,19 +17,11 @@ takeover, return to resume lite Step 1.
 - **`instructions-only`**: use the written S1–S5 steps without helpers,
   still with a server-anchored `now` for the quiet window.
 
-Every `node scripts/<name>.mjs` command below is the **source-repo /
-vendored-node** invocation form. Under `package-manager` /
-`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
-command's profile-selected equivalent from
-`docs/idd-helper-scripts.md`. A helper missing on the active profile
-is a missing-helper case under the rule above (hold and stop), not a
-reason to fall through.
-
 ## Helper-first commands (helper-enabled profiles)
 
 ```sh
 # Confirm non-owned claim
-node scripts/resume-claim-routing.mjs --issue <N>
+<profile-selected-resume-claim-routing> --issue <N>
 
 # Server-anchored now (required for quiet window)
 SERVER_NOW=$(gh api repos/<owner>/<repo>/issues/<N> --include \
@@ -37,11 +29,16 @@ SERVER_NOW=$(gh api repos/<owner>/<repo>/issues/<N> --include \
 NOW=$(node -e "console.log(new Date(process.argv[1]).toISOString().replace(/\.\d{3}Z$/, 'Z'))" "$SERVER_NOW")
 
 # Quiet-window evidence (always pass --now). Requires --pr; skip if none.
-node scripts/stalled-session-quiet-check.mjs \
+<profile-selected-stalled-session-quiet-check> \
   --pr <pr-number> \
   --now "$NOW" \
   --claim-created-at <latest-valid-claimed-by-created_at>
 ```
+
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+Resolve both helper commands from `docs/idd-helper-scripts.md`; the
+literal `node scripts/...` forms apply only to source-repository or
+vendored-node profiles.
 
 No PR: do not invent `--pr`. Skip the helper (not a helper
 failure). Decide S2 from the written bullets using the claim
@@ -92,19 +89,35 @@ Takeover only if latest valid trusted `claimed-by` `created_at` is
 `heartbeatOverdue` is **diagnostic only**. It does not shorten the 24 h
 gate.
 
-Before S4/posting, rerun helper; require `stale`/`takeover`,
-`evidence.local_worktree.status: absent`; fail → **STOP** (#3141).
+For helper-enabled profiles, before S4/posting use the profile-selected
+`resume-claim-routing` helper; require `state: stale`,
+`action: takeover`, and `evidence.local_worktree.status: absent`. Under
+`ephemeral-npx`, run:
+
+<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+```sh
+npx --yes --package <helper-package-spec> \
+  idd-resume-claim-routing --issue <N>
+```
+
+An unavailable, nonzero, invalid, or other helper result → **STOP**
+(#3141). Under `instructions-only`, perform the written local-worktree
+checks in `idd-claim-lite.instructions.md` pre-check (e); proceed only
+when the matching branch's worktree is explicitly absent. Missing,
+unreadable, unknown, or contradictory evidence → **STOP**.
 
 ## S4 — Race-safe recheck (immediately before write)
 
 1. Run `idd-claim-lite.instructions.md` pre-checks (d)/(e); either
    failing → STOP.
-2. Re-run `resume-claim-routing.mjs --issue <N>` (resolve the exact
-   command from `docs/idd-helper-scripts.md` if unsure). Same
-   fail-closed requirement as the pre-S4 check above: the result must
-   still show `state: stale`, `action: takeover`, and
-   `evidence.local_worktree.status: absent`; occupied, unreadable,
-   unknown, missing, or contradictory evidence means STOP.
+2. <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+   Immediately before the takeover write, helper-enabled profiles
+   re-run the profile-selected `resume-claim-routing` helper for `<N>`;
+   require `state: stale`, `action: takeover`, and
+   `evidence.local_worktree.status: absent`. Under `instructions-only`,
+   repeat the written local-worktree scan in `idd-claim-lite.instructions.md`
+   pre-check (e); the matching branch's worktree must still be explicitly
+   absent. Missing, unreadable, unknown, or contradictory evidence → STOP.
 3. Active claim still the same non-owned `{claim-id}`.
 4. Still stale (≥ 24 h) now.
 5. Fresh server `NOW` + re-run quiet-check (no PR: written S2, not
@@ -117,16 +130,17 @@ Any failure → STOP and restart. Do not post takeover on stale evidence.
 
 ## S5 — Takeover
 
-1. Post claim (fresh `{claim-id}`, `supersedes: <prior-claim-id>`) via
-   `post-idd-marker --type claim ... --apply`, then an
-   activation-nonce (`idd-claim-lite.instructions.md` step 5).
-2. Wait settle delay; re-parse; confirm claim and nonce winner are
-   yours.
-3. Lost → STOP. Verified → record nonce; return to
-   `idd-resume-lite.instructions.md` Step 1, Step 2/3.
+Route through `idd-claim-lite.instructions.md`: pre-checks (a)-(e) in
+full, then Claim execution with `supersedes: <prior-claim-id>`
+(`--record-tokens` before the post and the activation-nonce), then
+Claim verification.
+
+Lost → STOP. Verified → return to `idd-resume-lite.instructions.md`
+Step 1 with `--claim-id`/`--nonce`.
 
 ## Hold behavior
 
 On S2/S3 hold, missing helper, unanchored timestamps, or ambiguous
-claim/forced-handoff: session log only (no issue/PR comment). Never
-invent forced-handoff consent.
+claim/forced-handoff: session log only (no issue/PR comment); on
+`local_worktree_occupied` (S3/S4), include §LWR fields
+(`docs/idd-resume-detail.md`). Never invent forced-handoff consent.

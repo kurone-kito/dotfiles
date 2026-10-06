@@ -44,6 +44,21 @@ Does the issue describe work scoped to this repository?
   system coordination needed
 - **Fail**: Issue crosses repository boundaries, requires external system
   access, or is out-of-scope for this repository
+- A negative regression fixture or expected-rejection example is descriptive
+  context, not a live prerequisite, only when an explicit, positively framed
+  fixture/rejection cue precedes the external-access phrase in the same
+  Markdown paragraph or list item. On a list marker line, the cue and phrase
+  must remain in the same sentence; a separate sentence is part of the same
+  context only when it is a correctly indented loose-list continuation
+  paragraph whose cue text also identifies the external/access context. A
+  heading at the list item's indentation ends that context. Inline-code terms
+  remain scannable when they occur in a live prerequisite, while fixture cues
+  inside inline code, strikethrough, and inline-code-only examples are
+  ignored. A separate live prerequisite still fails this check, while
+  unrelated or negated cues (including `non-`/`not-` prefixed variants), a cue
+  after the access phrase, a cue in another paragraph, and ambiguous wording
+  remain fail-closed. This boundary follows the observed false positive in
+  issue #3522.
 - **Outcome on fail**: `out-of-scope`
 
 ### Check 2: Issue Coherence
@@ -85,7 +100,16 @@ or configured needs-decision label from `labels.needsDecisionLabelName`
   represents novel work
 - **Fail**: Issue duplicates an existing open or closed issue, is
   superseded by newer work, or the work was already completed or is in
-  progress (including draft PRs)
+  progress (including draft PRs). An open or draft PR whose head branch
+  <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+  has a head repository matching this repository and a head branch
+  matching an inheritable claim branch from A5(d) — the stale active
+  claim, the verified active claim, the latest released claim, or the
+  legacy migration source — is this issue's own work, not a duplicate.
+  A cross-repository PR qualifies only when verified forced-handoff
+  evidence binds its exact PR number and head branch. Missing head-repo
+  evidence or an unverified binding remains a duplicate. Any other open
+  or draft PR still fails
 - **Outcome on fail**: `duplicate`
 
 #### High-confidence tier (#1484)
@@ -109,13 +133,12 @@ to the weak heuristic unchanged — never fail _toward_ a false flag; a
 collection failure follows the "Timeout on duplicate detection" Edge
 Case below.
 
-<!-- dotfiles-divergence: master-branch -->
 Same **detect-only** boundary as the rest of A4.5 (label + comment
 only), except a `tier: 'high-confidence'` hit — never the weak
 heuristic — which the high-confidence coordination-close in
 [Mutation Policy](#mutation-policy-and-coordination-rule) below
 (`#1485`) may additionally close. The acceptance-criteria-hold-on-
-`master` signal from `#1484`'s original proposal remains unimplemented
+`main` signal from `#1484`'s original proposal remains unimplemented
 and authorizes no close on its own; only the mechanical signals
 `evaluateHighConfidenceDuplicate` actually evaluates do.
 
@@ -284,8 +307,7 @@ edit-postdates-rejection staleness rule as the Machine-readable outcome
 marker above (a recorded Groom-hearing decision counts as a body edit
 for this rule, since Groom applies it as inline body prose).
 <!-- dotfiles-divergence: blocked-by-human-staleness -->
-For a
-`blocked-by-human` rejection specifically, A4.5 never applies
+For a `blocked-by-human` rejection specifically, A4.5 never applies
 `labels.blockedByHumanLabelName` itself (Mutation Policy above), and
 label state is otherwise too unreliable a staleness signal to use at
 all here — `.github/workflows/strip-untrusted-labels.yml` auto-strips
@@ -298,17 +320,17 @@ verified against `maintainerApprovalActorPolicy` via the collaborator
 permission API; never the trusted marker actor set, which can include
 configured automation and is a distinct concept from this label's own
 "human maintainer only" ownership contract in
-`docs/idd-concept-ownership.md`) that **explicitly affirms the
-blocker is resolved** — an unrelated remark or a "still waiting"
-status update from the same actor does not qualify — as the **only**
-signal that makes a `blocked-by-human` rejection stale. This replaces, rather than
+`docs/idd-concept-ownership.md`) that **explicitly affirms the blocker
+is resolved** — an unrelated remark or a "still waiting" status update
+from the same actor does not qualify — as the **only** signal that
+makes a `blocked-by-human` rejection stale. This replaces, rather than
 supplements, the general edit-postdates-rejection rule above for this
 one outcome specifically: `blocked-by-human` means the issue is
 waiting on external human coordination, not on a better issue draft,
 so an ordinary title/body edit by the issue's own author — who need
-not be a maintainer approval actor at all — must never by itself
-reset the staleness clock and let a worker proceed while that
-coordination remains genuinely unresolved.
+not be a maintainer approval actor at all — must never by itself reset
+the staleness clock and let a worker proceed while that coordination
+remains genuinely unresolved.
 A
 non-stale rejection means the session must not claim the candidate —
 label or no label — so exclude it from Candidates without posting a

@@ -207,17 +207,15 @@ When in scope, run:
    sequence (each step must succeed before the next; `reacquired:
    true` required at both ends) -- else fails closed.
 
-**Recovery if a commit already landed on the wrong branch.** If this gate
-or `idd-doctor` finds a commit on the wrong branch, cherry-pick it onto
-the correct issue branch and restore the contaminated branch — **never**
-`git reset --hard` then force-push a pushed or shared branch to erase it.
-See [Wrong-branch commit recovery](../../docs/idd-design-rationale.md#wrong-branch-commit-recovery-cherry-pick-never-force-push)
-for the full procedure.
+**Wrong-branch recovery.** Cherry-pick onto the right branch and
+restore the contaminated one — never `git reset --hard` +
+force-push a pushed/shared branch;
+[full procedure](../../docs/idd-design-rationale.md#wrong-branch-commit-recovery-cherry-pick-never-force-push).
 
 Out of scope and explicitly **not** blocked:
 
-<!-- dotfiles-divergence: master-branch -->
-- B1 setup commands on the primary worktree's `master` (per the B1
+- <!-- dotfiles-divergence: master-branch -->
+  B1 setup commands on the primary worktree's `master` (per the B1
   Anti-patterns rule, which requires keeping primary HEAD on `master`).
 - A1.5 roadmap-audit coordination operations (claims whose `branch:`
   starts with `roadmap-audit/`).
@@ -273,8 +271,7 @@ enabled and default approval actors to
 | **orphan-first-policy** | `none` |
 <!-- dprint-ignore-end -->
 
-Non-shell rows (**issue-scope**, **orphan-first-policy**) are workflow
-settings — read them literally, not as commands.
+Non-shell rows are settings, not commands.
 
 `pre-push-validate` omits auto-fix. If lint fails, run
 **fix-validate**, commit, then re-run **pre-push-validate**.
@@ -286,26 +283,34 @@ commit before any push, rebase, or step needing a clean tree.
 recreated worktrees must not need manual cleanup or leave unexpected
 tracked changes.
 
-**Tool availability**: run commands only when tools exist. For Node.js:
-prefer project scripts; use `npx <tool>` if Node.js and `npx` are available
-and no relevant script exists; else use `true`. For other tools, use
-`true` when absent.
+Judge a command-set run by exit status; when piping, check
+`${PIPESTATUS[0]}` or `pipefail` because filters can't prove success
+(#3139).
+
+**Tool availability**: run commands only when tools exist. For Node.js,
+prefer project scripts. Resolve IDD helper commands through the selected
+helper-runtime profile in `docs/idd-helper-scripts.md`; never fall back to
+an unpinned `npx <tool>` invocation. For other Node.js tools, use a local
+lockfile-pinned dependency when available. If a required validator named
+in a command set (such as `markdownlint-cli2` or `cspell`) is unavailable,
+report validation as incomplete and stop for guidance; do not substitute
+`true`. For unrelated optional tools, use `true` when absent.
 
 ## Phase routing table
 
-Start by reading this file for shared definitions, then load the phase
-file that matches your current situation.
+Read this file first, then load the phase file matching your situation.
 
 <!-- dprint-ignore-start -->
 | Situation | Read this file |
 | --- | --- |
 | Starting fresh (no active claim) | `idd-discover.instructions.md`, then `idd-claim.instructions.md` |
 | Starting fresh with one explicit issue target | `idd-discover.instructions.md` A0-T, then `idd-claim.instructions.md` |
+| Unsure mid E/F-phase while still owning claim | [Live-session E/F orientation](../../docs/idd-workflow.md#live-session-ef-orientation) |
 | Resuming after crash / rate-limit / handoff / operator-present deliberate pause | `idd-resume.instructions.md` |
 | Claimed, branch exists, no PR yet | `idd-work.instructions.md` |
 | PR open, CI running, no reviews yet | `idd-pr-submit.instructions.md` |
 | PR open, CI running, reviews exist | `idd-review-snapshot.instructions.md` (E1–E3) |
-| PR open, CI passed, no reviews yet | `idd-review-snapshot.instructions.md` (E3 empty-list → branch-sync → F1) |
+| PR open, CI passed, no reviews yet | `idd-review-snapshot.instructions.md` (E3 empty → branch-sync/F1 if ready; deferred → wait/E1) |
 | PR open, CI passed, reviews pending | `idd-review-snapshot.instructions.md` |
 | Snapshot done, ReviewItems_snapshot non-empty | `idd-review-triage.instructions.md` (E4–E8) |
 | Review feedback accepted, pushing fixes | `idd-review-fix.instructions.md` |

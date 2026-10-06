@@ -24,6 +24,8 @@ CI-polling instructions instead of this file.
   check whose provenance the helper cannot verify — its name may be
   unresolvable, or resolvable-and-passing but not confirmably from the
   pinned source).
+- `requiredChecks.status` is `unreadable` (a protection/ruleset read
+  could not be determined) — never fall back to `checks[]`.
 - A non-pass check is not clearly code-caused or recognized
   infra-flaky/pre-existing, except the sole-failing
   `idd-advisory-convergence` exception the caller's own routing names.
@@ -56,20 +58,14 @@ CI-polling instructions instead of this file.
 ## Timing defaults
 
 For context only — the policy helper above already resolves and
-emits these; the distributed defaults below are what it falls back to
-when the repository sets no `ciWait.*` config, not values to derive by
-hand:
-
-- `ciWait.runningTimeout`: `PT30M` — max time a running required check
-  may stay running, measured from its server `startedAt`, before the
-  stalled-run route applies.
-- `ciWait.generationTimeout`: `PT10M` — max time to wait for required
-  checks to appear at all, or for a `startedAt` to appear on a
-  started-less running state.
-- `ciWait.rerunPolicy`: `rerun-once` — the first eligible infra or
-  stalled route reruns exactly once; the next recurrence stops and
-  asks. `hold` never auto-reruns; it stops and asks at the first
-  eligible route.
+emits these; not values to derive by hand. Distributed fallbacks when
+the repository sets no `ciWait.*` config: `runningTimeout` `PT30M`
+(max time a required check may stay running, from its server
+`startedAt`), `generationTimeout` `PT10M` (max time to wait for a
+required check to appear, or for `startedAt` to appear on a
+started-less running state), `rerunPolicy` `rerun-once` (the first
+eligible infra/stalled route reruns once; `hold` always stops and asks
+instead).
 
 ## Required-check discovery
 
@@ -95,6 +91,7 @@ CI-polling shared helper file), never this one. Read
   `pending`); any `failure`, or `checks[]` itself empty → stop and ask.
   Never treat an empty required-check set as a vacuous pass.
 - `source-pinned`: stop and ask (see Stop-and-ask conditions above).
+- `unreadable`: stop and ask (see Stop-and-ask conditions above).
 
 ## Polling algorithm
 
@@ -142,27 +139,55 @@ CI-polling shared helper file), never this one. Read
   `<run-id>` from the failing check's `link` field, or query the
   Actions API for runs filtered to the current PR head SHA and check
   name.
-- Required `idd-advisory-convergence` runs use `pull_request_target`
-  (#501 dropped the transitional `pull_request` trigger); the non-required companion
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+- This repository's required `idd-advisory-convergence` workflow is
+  PR-triggered only by `pull_request_target`; the non-required companion
   `idd-advisory-convergence-comment.yml` handles Copilot
   `pull_request_review` submissions, IDD-originated
   `pull_request_review_comment`, and qualifying `issue_comment` events.
   Its bot-triggered run can be `action_required`
   and cannot refresh the required check. For a review submission use
-  `--refresh-latest --apply`; comment paths use plain `--apply`. Only
+  `--refresh-latest` for diagnosis; comment paths use the plain diagnosis
+  command. Do not append `--apply` to either route. Only
   IDD-originated review-thread replies or qualifying IDD-originated PR
   comments refresh; ordinary comments/replies are filtered.
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 - The required `idd-advisory-convergence` workflow's `workflow_dispatch`
   trigger does not reliably refresh the PR's
   required-check rollup for the current HEAD SHA. Rerun the existing
-  non-bot PR-linked run for that HEAD instead of dispatching a new one;
-  never rerun a gated bot run.
-- If same-HEAD `CANCELLED` siblings remain, rerun only those the plan
-  marks `rerun-eligible`. For the ordinary plan, leave `action_required`,
-  `pending`, `unresolved`, `awaiting-fresh-review`, and
-  `rerun-budget-held` instances withheld; the review exception
-  `--refresh-latest --apply` may rerun a budget-held pull_request-family
-  instance unless `ciWait.rerunPolicy` is `hold`.
+  non-bot `pull_request_target`-triggered PR-linked run for that HEAD
+  instead of dispatching a new one or rerunning a legacy `pull_request`
+  run; never rerun a gated bot run.
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+- For every recovery of this check—including stuck/stale entries,
+  review/comment refreshes, and same-HEAD `CANCELLED` siblings—use the
+  generic rerun helper for diagnosis only. Its documented output does
+  not prove the run event, actor, or PR association, and `--apply`
+  executes its whole plan. Do not pass `--apply` on any route for this
+  check. For each proposed run, first confirm it remains eligible in the
+  current plan under `ciWait.rerunPolicy`, then read the PR's current
+  HEAD and `GET /repos/{owner}/{repo}/actions/runs/{run_id}`. Rerun only
+  when the run has `event: pull_request_target`, `actor.type: User`,
+  `head_sha` equal to the current PR HEAD, and one `pull_requests[]`
+  entry whose `number` is this PR number and whose `head.sha` is the same
+  HEAD. Use `gh run rerun <run-id>` for that individually verified run.
+  Wait for its new attempt to finish, regenerate the read-only plan, and
+  repeat only while the rollup remains unresolved. Preserve both the
+  per-run `rerun-once` policy and the helper's aggregate
+  `MAX_APPLY_RERUNS` cap across every plan section. Missing, unreadable,
+  stale, or mismatched evidence means hold; exclude
+  `workflow_dispatch`, `workflow_call`, legacy `pull_request`, and
+  gated companion runs.
+  <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+  Ordinary plans hold `action_required`, `pending`, `unresolved`,
+  `awaiting-fresh-review`, `rerun-budget-held`. The helper's ordinary
+  plan already promotes the bounded `passedSiblingRecoveryPlan` case
+  (`#3504`). A live-coverage recovery that remains
+  `rerun-budget-held` after its `rerun-once` budget is spent and has no
+  already-passing sibling stays held; do not use
+  `--refresh-latest` to bypass that hold. For a fresh review submission,
+  use it only for diagnosis under the local provenance gate above. Mixed
+  or otherwise not promoted withheld instances also stay held.
 - Helper-first diagnosis (read-only): `node
   scripts/rerun-advisory-convergence.mjs --pr <n>`. Resolve the
   package-manager equivalent from `docs/idd-helper-scripts.md`.
@@ -172,8 +197,11 @@ CI-polling shared helper file), never this one. Read
 Schedule one wake at the expected completion interval, or background
 the wait only when the topology is confirmed to route completion back
 to this turn; otherwise wait synchronously. Before a heavy local
-command expected to run long, set an execution-timeout override near
-the tool's ceiling, not its default (`#2933`). Never blindly re-issue
+command expected to run long, set an execution-timeout override — the
+tool's own per-invocation timeout (e.g. Claude Code's Bash
+`timeout` parameter), not an in-command utility (issue `#3449`) —
+near the tool's ceiling, not its default (`#2933`). Never blindly
+re-issue
 an already-backgrounded heavy command — check first if it's still
 running, then await or reuse it. Batch every post-wait
 action (disposition, replies, marker, next gate) into one turn. Do not

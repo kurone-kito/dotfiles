@@ -117,17 +117,18 @@ forced-handoff marker names this session `newAgentId` — treat its
 forced-handoff steps:
 
 ```sh
-node scripts/resume-claim-routing.mjs --issue <N> --claim-id <your-or-newClaimId> [--nonce <your-recorded-nonce>]
+node scripts/resume-claim-routing.mjs --issue <N> --claim-id <your-or-newClaimId> [--nonce <your-recorded-nonce>] [--worktree <path>]
 ```
 
-Pass `--nonce` when this session already recorded one for that
-`{claim-id}` (true after forced-handoff step 5) so a session that lost
-the nonce tie-break cannot pass as `already_owned`; omit it otherwise.
+Pass `--nonce` only when this session already recorded one for that
+`{claim-id}` (true after forced-handoff step 5); omit it otherwise.
+Pass `--worktree <path>` once the B1 worktree exists.
 
 <!-- dprint-ignore-start -->
 | Top-level `state` / `action` | Meaning |
 | --- | --- |
 | `already_owned` / `keep` | Confirmed — see the two cases below |
+| `owner_evidence_required` / `stop` | Retry once with `--worktree <path>`; still returned → Stop-and-ask (not a competitor), unless a forced-handoff successor: `docs/idd-resume-detail.md` §FH |
 | anything else | Not yours — forced-handoff: Stop-and-ask; else fall through below |
 <!-- dprint-ignore-end -->
 
@@ -136,7 +137,7 @@ the nonce tie-break cannot pass as `already_owned`; omit it otherwise.
 Heartbeat). If it was omitted (first-time forced-handoff entry, not
 yet activated by you), go to Claim execution step 5 (post your own
 activation-nonce for `newClaimId`) first, then Claim verification's
-**Forced-handoff adopt-verbatim** case (step 5's settle-delay + nonce
+**Forced-handoff adopt-verbatim** case (step 4's settle-delay + nonce
 recompute only).
 
 **Otherwise** (no recorded `{claim-id}`, no forced-handoff evidence, or
@@ -146,12 +147,13 @@ verified released-owner retry), run write-gate before claim write:
 node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
 ```
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 <!-- dprint-ignore-start -->
 | Helper `fresh_claim_gate.verdict` | Action |
 | --- | --- |
 | `claimable` | Proceed to Claim execution (fresh) |
 | `stale-reclaimable` | Proceed to Claim execution (takeover) |
-| `already-claimed` | **STOP** unless `winning_claim_id` matches a `{claim-id}` this session already recorded (`--read-tokens`) as its own prior, voluntarily-released claim for this issue -- never a `winning_claim_id` merely read from this helper response; when it matches, proceed to Claim execution as a fresh claim and use the authorized `--takeover` acquisition for the retained worktree-local lock |
+| `already-claimed` | **STOP** unless `winning_claim_id` matches your independently verified claim id and the helper's top-level `reason` does not begin with `released-claim-` |
 <!-- dprint-ignore-end -->
 
 Written fallback (`instructions-only` profile only — per the Helper
@@ -171,9 +173,7 @@ active claim but whose `{agent-id}` **or `branch:`** differs from the
 active claim is ignored as invalid — it is **not** a heartbeat
 (heartbeat branch invariant; claim-id is public, not a secret). An
 `unclaimed-by` releases only when both
-`{agent-id}` and `{claim-id}` match the active claim.
-
-**Stale** =
+`{agent-id}` and `{claim-id}` match the active claim. **Stale** =
 latest valid `claimed-by`'s GitHub `created_at` is
 ≥ 24 h ago (`claim-stale-age`, default `24 h`). No active claim →
 unclaimed, proceed fresh. Active claim already using a `{claim-id}`
@@ -198,10 +198,8 @@ deliberately stricter bind than the full spec's opt-in
 (`requireAuthorMatchesForcedBy`) — this blocks a
 same-identity self-signed hijack where a displaced session spoofs a
 different `forcedBy` name while posting the marker itself; that author
-is authorized under `forcedHandoff.authorityPolicy` (this repository:
-`owners-and-maintainers-only`);
-`forcedHandoff.mode` is `human-gated` (this repository's configured
-mode); `oldAgentId` / `oldClaimId` /
+is authorized under `forcedHandoff.authorityPolicy`;
+`forcedHandoff.mode` is `human-gated`; `oldAgentId` / `oldClaimId` /
 `branch` all match the active claim; and, when an open PR already backs
 this claim, the marker's evidence has `contextScope` of
 `issue-plus-pr` with `linkedPr` naming that PR — an issue-only
@@ -215,11 +213,16 @@ failure, the active claim is unchanged; treat it under the rules above.
 
 ### (d) Open PR
 
-No helper. Re-check live GitHub state: an open PR may close or reference
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+No helper. Re-check live GitHub state. An open PR may close or reference
 this issue only when its head branch matches an inheritable claim — the
-verified active, stale, released, forced-handoff (matching branch and
-linked PR), or legacy migration source. Check linked issues and PR
-closing keywords. A non-inheritable match → **STOP**.
+verified active, stale, released, forced-handoff, or legacy migration
+source — and its `headRepository.nameWithOwner` matches this repository.
+A verified forced-handoff may instead exempt only the exact linked PR
+number and head branch it records. Treat a missing head repository or an
+unverified PR binding as a conflict. Check linked issues and PR-body
+closing keywords (bare mentions and `Refs #N` do not count). A
+non-inheritable match → **STOP**.
 
 ### (e) Branch collision
 
@@ -244,11 +247,12 @@ gh api "repos/{owner}/{repo}/git/matching-refs/heads/issue/<N>-" \
 --jq '.[].ref | sub("^refs/heads/"; "")'
 ```
 
-Parse NUL records; detached: before metadata, require
-`git -C <worktree> rev-parse --show-toplevel` to match the canonical
-recorded root; failure/mismatch → STOP as occupied/unreadable; then compare
-`head-name`/`BISECT_START`: invalid/target → STOP; unrelated → absent;
-prunable frees if unrelated (PR #3154 review).
+Parse NUL records; detached: require `git -C <worktree> rev-parse
+--show-toplevel` to match the canonical recorded root before reading
+`head-name`/`BISECT_START`; failure/mismatch → STOP. Absent:
+unrelated, or non-prunable with no `rebase-*` dir and no
+`BISECT_START`. Otherwise (prunable, invalid, target, malformed,
+unreadable) → STOP as occupied/unreadable (#3154 review).
 
 <!-- dprint-ignore-start -->
 | Match found? | Action |
@@ -357,43 +361,39 @@ the stale clock. Skip step 5 (activation-nonce).
 ## Claim verification
 
 **Already-owned continuation (no new post)**: pre-check (c)'s
-top-branch `already_owned` result verifies ownership. Skip checks 1–5, but run
-step 6's authoring guard; post no new `claimed-by` or nonce. Checks 1–5
+top-branch `already_owned` result verifies ownership. Skip checks 1–4, but run
+step 5's authoring guard; post no new `claimed-by` or nonce. Checks 1–4
 require a fresh `claimed-by` and apply only to fresh claims, takeovers, and
 legacy migrations.
 
 For fresh activation, after posting `claimed-by`, wait the settle delay
 (`claim.verifySettleDelay`, default `PT5S`), re-read all issue comments, then
-check steps 1–5. Step 6 applies to both paths:
+check steps 1–4. Step 5 applies to both paths:
 
 1. Build the same-second contender set: every trusted `claimed-by`
    (including yours) sharing your event's `created_at` second.
 2. 2+ contenders → the lexicographically earliest `{claim-id}` wins
    (case-sensitive ASCII compare).
 3. The active claim now uses **your** `{claim-id}` after that
-   tie-break.
-4. No trusted competing `claimed-by` with a different `{claim-id}`
-   appears in a strictly later second than yours.
-5. If you posted an activation-nonce for this `{claim-id}`, recompute
+   tie-break. A later trusted `claimed-by` with a different `{claim-id}`
+   never disputes this (#3268): Claim-state parsing rules 4/6 could never
+   have activated it, so it stays diagnostic only.
+4. If you posted an activation-nonce for this `{claim-id}`, recompute
    its winner and confirm it is yours (no marker posted → treat as
    passed).
-6. Re-fetch the authoring label and paginated owner log. A
+5. Re-fetch the authoring label and paginated owner log. A
    current/incomplete hold contests this claim; only exact
    anchor/set/session `release-complete` with verified snapshots
    passes. If it
-   contests the claim but steps 1–5 passed and the pair is still active, post
+   contests the claim but steps 1–4 passed and the pair is still active, post
    and verify `unclaimed-by` before stopping. If ownership/nonce is ambiguous,
    retain the claim and stop; never release on failed evidence.
 
-Any failure → claim contested → **STOP**, do not proceed. **Exception:
-only step 4 fails** (1-3 passed — the claim is genuinely yours) → post
-`unclaimed-by` for your own `{agent-id}`/`{claim-id}` first (safe: you
-provably hold it), **then STOP**. Step 5 also failing (alone or with
-step 4) → never release (shares that exact pair) — STOP as usual.
+Any failure → claim contested → **STOP**, do not proceed.
 
-**Forced-handoff adopt-verbatim** only: skip steps 1-4 (no
+**Forced-handoff adopt-verbatim** only: skip steps 1-3 (no
 `claimed-by` was posted for this path). Repeat the authoring guard above
-before posting the activation nonce; only step 5 applies — wait the settle
+before posting the activation nonce; only step 4 applies — wait the settle
 delay (`claim.verifySettleDelay`, default `PT5S`), then recompute the nonce
 winner for the adopted `newClaimId` and confirm it is yours. Repeat the
 authoring guard after nonce verification; on a mismatch or hold, re-resolve
@@ -435,22 +435,24 @@ require `present: true` with no `malformed`; otherwise recover per
 `reacquired: true` both ends), else stop.
 
 A matching `{claim-id}` re-acquires as a read-only check. A different
-`{claim-id}` is always a collision — re-run pre-check (c) (`--claim-id`
-first, then `--fresh-claim-gate` if not `already_owned`):
+`{claim-id}` is always a collision — run `--fresh-claim-gate` directly
+(not pre-check (c)):
 
-- `already_owned` naming **your own** id: only the local lock drifted
-  (crash / worktree recreation) — you still own the GitHub claim.
-  Retry the lock with `--takeover` directly.
-- `claimable` / `stale-reclaimable`, or `already_owned` naming a
-  **different** id: the claim itself was lost. Post and verify a
-  fresh/takeover claim (pre-check (c) → Claim execution → Claim
-  verification), then retry the lock with `--takeover` — the local
-  lock's recorded id is now stale relative to the newly verified one.
-- `already-claimed` naming a **different** id: a live competitor holds
-  it — stop, the claim was lost.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+- `already-claimed` naming **your own** independently verified current
+  `{claim-id}`, with a top-level `reason` that does not begin
+  `released-claim-`: only the local lock drifted (crash / worktree
+  recreation) — you still own the GitHub claim. Retry the lock with
+  `--takeover` directly.
+- Every other result — a `released-claim-*` reason, `already-claimed`
+  naming a different id, or `claimable`/`stale-reclaimable`: the claim
+  itself was lost. **STOP** and report; post no new claim from this
+  check. Re-entry is only through a fresh Resume or Discover pass.
 
 No release step (F4 `git worktree remove` deletes it).
 
-Then continue to `idd-work-lite.instructions.md` — except on
-`instructions-only`, where that file declines the profile in its own
-header; use `idd-work.instructions.md` instead.
+Then continue to `idd-work-lite.instructions.md` when pre-check (d)
+matched no inherited open PR — except on `instructions-only`, where
+that file declines the profile in its own header; use
+`idd-work.instructions.md` instead. When it did, continue at
+`idd-resume-lite.instructions.md` Step 2.

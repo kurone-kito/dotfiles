@@ -1,10 +1,7 @@
 # IDD — Resume Phase (Lite)
 
 Lite profile for weak/local models. Same semantics as
-`idd-resume.instructions.md`. Open `idd-overview-core.instructions.md`
-(shared definitions: claim format, stale threshold, abort, hold)
-alongside this routed phase file as the current step changes; do not
-load this file alone.
+`idd-resume.instructions.md`; load it alone for resume routing.
 
 ## Helper runtime contract
 
@@ -16,26 +13,26 @@ load this file alone.
 2. **When the repository is `instructions-only`** (no helper runtime
    shipped): skip the helper commands and use the written tables only.
 
-Every `node scripts/<name>.mjs` command below is the **source-repo /
-vendored-node** invocation form. Under `package-manager` /
-`ephemeral-npx` profiles, `scripts/` is not vendored — resolve each
-command's profile-selected equivalent from
-`docs/idd-helper-scripts.md`. A helper missing on the active profile
-is a missing-helper case under rule 1 (stop and ask), not a reason to
-fall through.
-
 ## Always run helpers first (helper-enabled profiles)
 
 ```sh
-# Claim state (required before any mutation)
-node scripts/resume-claim-routing.mjs --issue <N>
+# Claim state (before mutation)
+<profile-selected-resume-claim-routing> --issue <N> [--claim-id <id>] [--nonce <nonce>] [--worktree <path>]
 
 # Fresh-claim gate immediately before any claim write
-node scripts/resume-claim-routing.mjs --issue <N> --fresh-claim-gate
+<profile-selected-resume-claim-routing> --issue <N> --fresh-claim-gate
 
 # PR / CI / review resume route (when a PR may exist)
-node scripts/resume-route-selection.mjs --issue <N>
+<profile-selected-resume-route-selection> --issue <N>
 ```
+
+Resolve these commands from `docs/idd-helper-scripts.md`; the literal
+`node scripts/...` forms apply only to the source-repository or
+vendored-node profile.
+
+Pass `--claim-id` once this session recorded and verified one,
+`--nonce` if this session recorded one for that claim-id, and
+`--worktree` once the B1 worktree exists.
 
 Map helper fields to actions below.
 
@@ -46,23 +43,24 @@ unclaimed); trusted `forced-handoff: human-gated` proof (actor, displaced
 claim, branch, PR, URL; mismatches are Step 0 STOP); open PR+HEAD or
 `none`; latest issue/PR activity; PR-HEAD CI; and local worktree/branch/
 status/HEAD. When an open PR backs the claim, the proof must also have
-`contextScope: issue-plus-pr` with `linkedPr` naming that live PR; an
-issue-only handoff is insufficient. Never invent or post forced-handoff
-markers.
+`contextScope: issue-plus-pr` with `linkedPr` naming that live PR.
+Never invent or post forced-handoff markers.
 
 Use GitHub **server** timestamps only. Stale age default: **24 h**
 (`claim-stale-age` / `claimTiming.staleAge`).
 
 ## Step 0 — Route classifier (first match wins)
 
-| Condition                                                          | Action                                                                 |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Issue closed or PR merged                                          | Step 1 cleanup only → STOP                                             |
-| Valid human-gated forced-handoff matching live claim/branch/PR     | Step 1 forced-handoff path (skip stall)                                |
-| Forced-handoff evidence present but mismatches live state          | STOP — report mismatch; do not claim/push                              |
-| Non-owned active claim + operator-present (below) + input received | Operator-present path (below); skip stall                              |
-| Non-owned active claim, no valid forced-handoff                    | Open `idd-resume-stall-lite.instructions.md`; return here if unblocked |
-| Otherwise                                                          | Step 1                                                                 |
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+| Condition                                                      | Action                                                            |
+| -------------------------------------------------------------- | ----------------------------------------------------------------- |
+| PR merged                                                      | Run the guarded F4 cleanup path in `idd-merge.instructions.md`; then STOP |
+| Issue closed with no merged PR                                 | After the shared claim-revalidation gate passes, post a hold naming the state; if no active claim is verified for this session, STOP and report without posting — never remove a worktree or branch |
+| Valid human-gated forced-handoff matching live claim/branch/PR | Step 1 forced-handoff path (skip stall)                           |
+| Forced-handoff evidence present but mismatches live state      | STOP — report mismatch; do not claim/push                         |
+| Non-owned active claim + operator-present + input received     | Operator-present path (below); skip stall                         |
+| Non-owned active claim, no valid forced-handoff                | `idd-resume-stall-lite.instructions.md`; then Step 1 if unblocked |
+| Otherwise                                                      | Step 1                                                            |
 
 Quiet-window evidence never bypasses the 24 h stale threshold.
 
@@ -80,51 +78,55 @@ Else stall-lite. Steps 1-2 are pre-claim (stall windows do not apply).
    `unclaimed-by` matching the held `{agent-id}` / `{claim-id}`.
 3. Confirm unclaimed; else STOP.
 4. Fresh-claim-gate; A5 `supersedes: none` → Step 1 with
-   `--claim-id` of that claim.
+   `--claim-id`/`--nonce` of that claim.
 
 ## Step 1 — Claim state (helper-first)
 
-On helper-enabled profiles, run `resume-claim-routing.mjs --issue <N>`
-(resolve the exact command from `docs/idd-helper-scripts.md` if
-unsure) (and stop-and-ask on failure — do not use the written table).
-Map:
+On helper-enabled profiles, run the Claim-state command above
+(stop-and-ask on failure — do not use the written table). Map:
 
-| Helper `state` / `action`  | Action                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------- |
-| `already_owned` / `keep`   | Keep same `{claim-id}` → Step 2 (if branch is `roadmap-audit/*`, A1.5 only → STOP)     |
-| `unclaimed` / `re_claim`   | Fresh A5 claim → Step 2                                                                |
-| `stale` / `takeover`       | Forced-handoff: retry below; else A5 takeover (if `roadmap-audit/*`, A1.5 only → STOP) |
-| `non_inheritable` / `stop` | Forced-handoff: retry below; else STOP — live competitor claim                         |
-| `disputed` / `stop`        | STOP — contested claim                                                                 |
+| Helper `state` / `action`          | Action                                                         |
+| ---------------------------------- | -------------------------------------------------------------- |
+| `already_owned` / `keep`           | Keep same `{claim-id}` → Step 2                                |
+| `owner_evidence_required` / `stop` | Retry `--worktree <path>` once; else STOP unless §FH successor |
+| `unclaimed` / `re_claim`           | Fresh A5 claim → Step 2                                        |
+| `stale` / `takeover`               | Forced-handoff: retry below; else A5 takeover                  |
+| `non_inheritable` / `stop`         | Forced-handoff: retry below; else STOP — live competitor claim |
+| `disputed` / `stop`                | STOP — contested claim                                         |
 
-`local_worktree_occupied` / `stop` → STOP — recover; verify claim-id
+`local_worktree_occupied` / `stop` → STOP — see §LWR; verify claim-id
 against occupied, unreadable, or unknown local worktree state
-(#3141, Round 21 report).
+(#3141).
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 Forced-handoff: pass `new_claim_id` into Step 1. On
 `non_inheritable`/`stop`, `stale`/`takeover`, or
 `local_worktree_occupied`/`stop` with `evidence.forced_handoff`, retry
 `--claim-id <evidence.forced_handoff.new_claim_id>` before STOP.
 Retry `already_owned`: STOP if `new_agent_id` is not this
 session or `old_claim_id` is this session's claim (displaced).
-Else adopt the pair; post an activation-nonce if missing; wait
-settle; confirm the nonce winner; then Step 2.
+Else adopt the pair. If this session already recorded a nonce for
+`new_claim_id`, follow Claim-lite's **Already-owned continuation**
+authoring guard; do not post another nonce, and continue to Step 2 only
+after that guard passes. If no nonce is recorded, complete Claim-lite's
+**Forced-handoff adopt-verbatim** activation path: run its authoring
+guard before posting the nonce, wait the settle delay and verify the
+nonce winner, then repeat the authoring guard. Continue to Step 2 only
+after both guards and nonce verification pass; otherwise use Claim-lite's
+forced-handoff failure route.
 
 After any helper map, `roadmap-audit/*` is still A1.5-only (no
 worktree; child issues are not locked).
 
 Written table (`instructions-only` profile only): first matching row.
 
-A stale or released claim with a local worktree is STOP — verify claim-id.
-
 | Claim state                                                                                 | Action                                                        |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Closed / PR merged                                                                          | Remove local worktree/branch → STOP                           |
 | Active claim = this session's verified `{claim-id}` and branch starts with `roadmap-audit/` | Re-run A1.5 only → STOP                                       |
 | Active claim = this session's verified `{claim-id}`                                         | → Step 2                                                      |
 | Forced-handoff names this session's verified `{claim-id}` as displaced                      | STOP — displaced; no push/comment/resolve/merge               |
 | Forced-handoff recovery confirmed for this session                                          | A5 re-claim after GitHub shows handoff → Step 2               |
-| Stale/released + local worktree occupied, unreadable, or unknown                            | STOP — recover; verify owner                                  |
+| Stale/released + local worktree occupied, unreadable, or unknown                            | STOP — see §LWR; verify owner                                 |
 | No active claim                                                                             | A5 re-claim → Step 2                                          |
 | Active non-stale claim (other session, < 24 h)                                              | STOP                                                          |
 | Active stale claim (other session, ≥ 24 h) and branch starts with `roadmap-audit/`          | A5 takeover `supersedes: <prior-id>`; re-run A1.5 only → STOP |
@@ -138,15 +140,16 @@ agent-id alone.
 
 `{branch}` = active claim `branch:` field **verbatim**.
 
-| Situation                               | Action                                                          |
-| --------------------------------------- | --------------------------------------------------------------- |
-| No worktree, PR or remote branch exists | Create sibling worktree for `{branch}` (B1 rules); install-deps |
-| Worktree dirty with open reviews        | Stop and report; do not discard uncommitted work                |
-| Worktree dirty, no reviews              | Finish or stash per operator policy; prefer stop-and-ask        |
-| Worktree clean with unpushed commits    | → D1 / push path after claim revalidation                       |
-| Worktree clean, no unpushed             | → Step 3                                                        |
-| Multiple open PRs for the claim branch  | STOP — ambiguous                                                |
-| No PR, no remote, no local branch       | → B1 fresh worktree                                             |
+| Situation                              | Action                                                          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| PR exists, no worktree                 | Create sibling worktree (B1); install-deps, then re-match below |
+| Remote branch, no PR, no worktree      | Create sibling worktree (B1); install-deps                      |
+| Worktree dirty with open reviews       | Stop and report; do not discard uncommitted work                |
+| Worktree dirty, no reviews             | Finish or stash per operator policy; prefer stop-and-ask        |
+| Worktree clean with unpushed commits   | → D1 / push path after claim revalidation                       |
+| Worktree clean, no unpushed            | → Step 3                                                        |
+| Multiple open PRs for the claim branch | STOP — ambiguous                                                |
+| No PR, no remote, no local branch      | → B1 fresh worktree                                             |
 
 <!-- dotfiles-divergence: master-branch -->
 Primary worktree must stay on `master`. Never `git switch` the primary onto
@@ -155,9 +158,8 @@ the issue branch.
 ## Step 3 — PR / CI / review route (helper-first)
 
 On helper-enabled profiles, run `resume-route-selection.mjs --issue <N>`
-(resolve the exact command from `docs/idd-helper-scripts.md` if
-unsure) (and stop-and-ask on failure — do not use the written table).
-Map `route`:
+(and stop-and-ask on failure — do not use the written table). Map
+`route`:
 
 - `D1` → `idd-pr-submit-lite.instructions.md`, from D1 (sync/push/open
   PR)

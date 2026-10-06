@@ -151,13 +151,11 @@ that set instead of re-deriving it.
 
    **Label-gated or other opt-in gate surfacing as a job step, not a
    check.** `gh pr checks` (and `ci-wait-state`) lists jobs/checks, not
-   the steps inside them. An opt-in heavy CI gate wired to run as a
-   step inside an already-present job — rather than its own discrete
-   check — never appears as a new entry there; only the parent job
-   does, and only once, regardless of whether the gated step ran. Do
-   not conclude such a gate is not-running or already-done solely
-   because `gh pr checks` shows no new check for it; confirm it
-   actually executed by inspecting the job's own steps instead:
+   the steps inside them. An opt-in heavy gate wired as a step inside an
+   already-present job, not its own check, shows only as that parent job,
+   once, whether or not the step ran. Do not conclude such a gate is
+   not-running or already-done solely because `gh pr checks` shows no new
+   check for it; confirm it executed by inspecting the job's own steps:
 
    ```sh
    gh run view {run-id} --json jobs
@@ -206,45 +204,78 @@ check name.
 If GH CLI cannot resolve a run ID, use Actions REST endpoints directly
 for the same run before posting a hold.
 
-**`idd-advisory-convergence`** (as a required check): `workflow_dispatch`
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+**`idd-advisory-convergence`** (as a required check): this repository's
+required workflow is PR-triggered only by `pull_request_target`; the
+companion `idd-advisory-convergence-comment.yml` handles
+`pull_request_review` and review/comment refresh events. `workflow_dispatch`
 does **not** reliably refresh the PR's required-check rollup for current
 HEAD — a manually dispatched run has no `pull_request` context to
 associate with the PR's HEAD SHA (full investigation: this repo's
 dogfooded
 [`.github/workflows/idd-advisory-convergence.yml`](https://github.com/kurone-kito/idd-skill/blob/main/.github/workflows/idd-advisory-convergence.yml)
 header comment — not present in the portable stub this template
-ships). For a stuck or stale rollup entry, rerun the _existing_
-PR-linked run (`gh run rerun <run-id>`) instead of `workflow_dispatch`.
+ships).
+
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+For a stuck or stale rollup entry, rerun the _existing_ non-bot
+`pull_request_target` run for this HEAD
+(`gh run rerun <run-id>`) instead of `workflow_dispatch` or a legacy
+`pull_request` run. Apply the exact run-record provenance gate below to
+this and every other recovery path for this check.
 
 A second cause: GitHub gates bot-triggered runs to `action_required`
 (for example, the non-required
 `idd-advisory-convergence-comment.yml` companion run for Copilot's
 `pull_request_review`/`pull_request_review_comment` event), so the
 companion cannot refresh the required check. Rerun the existing non-bot
-required `pull_request_target`-triggered run for
-this HEAD (subject to `ciWait.rerunPolicy`), never the gated bot run
-itself (approve it via `POST
+required `pull_request_target`-triggered run for this HEAD (subject to
+`ciWait.rerunPolicy`), never a legacy `pull_request` run or the gated bot
+run itself (approve it via `POST
 /repos/{owner}/{repo}/actions/runs/{run_id}/approve` only if needed).
 The required check self-heals on a push or companion refresh from
 IDD-originated review-thread replies or qualifying PR comments. Ordinary
 comments are filtered, although `issue_comment` is subscribed.
 
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
 **If rerunning the passing non-bot instance alone does not clear the
 rollup (`#1745`)**: a HEAD can carry several
-`idd-advisory-convergence` check-run instances: the required
-`pull_request_target` run can coexist with companion reruns of that
-instance. #501 dropped the transitional `pull_request` trigger, so a
-new push no longer creates a second required run from that event.
-Review submissions use
-`--refresh-latest --apply`; comment paths use plain `--apply`.
+`idd-advisory-convergence` check-run instances: the required instance
+comes from `pull_request_target` and can coexist with companion reruns
+of that check. Review submissions use `--refresh-latest` for diagnosis;
+comment paths use the plain diagnosis command. Do not append `--apply`
+to either route.
 `cancel-in-progress` can pin the rollup to a non-gated `CANCELLED`
-instance (see `#1745`). If it leaves the block,
-rerun same-HEAD `CANCELLED` siblings marked `rerun-eligible` (`gh run
-rerun <run-id>`). For the ordinary plan, hold `action_required`,
-`pending`, `unresolved`, `awaiting-fresh-review`, and
-`rerun-budget-held` instances; the review exception
-`--refresh-latest --apply` may rerun a budget-held pull_request-family
-instance unless `ciWait.rerunPolicy` is `hold`.
+instance (see `#1745`).
+<!-- dotfiles-divergence: local-pr-target-ci-provenance -->
+For every recovery of this check—including stuck/stale entries,
+review/comment refreshes, and same-HEAD `CANCELLED` siblings—use the
+generic rerun helper for diagnosis only. Its documented output does not
+prove the run event, actor, or PR association, and `--apply` executes its
+whole plan. Do not pass `--apply` on any route for this check. For each
+proposed run, first confirm it remains eligible in the current plan
+under `ciWait.rerunPolicy`, then read the PR's current HEAD and
+`GET /repos/{owner}/{repo}/actions/runs/{run_id}`. Rerun only when the
+run has `event: pull_request_target`, `actor.type: User`, `head_sha`
+equal to the current PR HEAD, and one `pull_requests[]` entry whose
+`number` is this PR number and whose `head.sha` is the same HEAD. Use
+`gh run rerun <run-id>` for that individually verified run. Wait for its
+new attempt to finish, regenerate the read-only plan, and repeat only
+while the rollup remains unresolved. Preserve both the per-run
+`rerun-once` policy and the helper's aggregate `MAX_APPLY_RERUNS` cap
+across every plan section. Missing, unreadable, stale, or mismatched
+evidence means hold; exclude `workflow_dispatch`, `workflow_call`,
+legacy `pull_request`, and gated companion runs.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+Ordinary plans hold `action_required`, `pending`, `unresolved`,
+`awaiting-fresh-review`, `rerun-budget-held`. The helper's ordinary
+plan already promotes the bounded `passedSiblingRecoveryPlan` case
+(`#3504`). A live-coverage recovery that remains
+`rerun-budget-held` after its `rerun-once` budget is spent and has no
+already-passing sibling stays held; do not use
+`--refresh-latest` to bypass that hold. For a fresh review submission,
+use it only for diagnosis under the local provenance gate above. Mixed
+or otherwise not promoted withheld instances also stay held.
 
 Note: this is a known Rulesets platform behavior, not an `idd-skill`
 dedup bug — GitHub can require every same-named instance non-failing,
@@ -252,7 +283,9 @@ not just the dedup-selected latest.
 
 **Helper-first**: prints this diagnosis and ordered rerun plan, read-only
 by default; pass `--apply` to also execute it — the preferred recovery
-path when available. `--apply` reruns each
+path for other checks when available. For this repository's
+`idd-advisory-convergence` recovery, follow the local provenance gate
+above and never use `--apply`. `--apply` reruns each
 rerun-eligible instance in order (recovery-refresh first when one
 applies), waits for each to reach a terminal state before starting the
 next, and stops early as soon as the rollup resolves — never a
@@ -263,15 +296,16 @@ zero-pending checks; see helper docs.
 
 ```sh
 # source repo / vendored-node profile
-node scripts/rerun-advisory-convergence.mjs --pr <n> [--apply]
+node scripts/rerun-advisory-convergence.mjs --pr <n>
 
 # package-manager / ephemeral-npx profile
-<profile-selected-rerun-advisory-convergence-command> --pr <n> [--apply]
+<profile-selected-rerun-advisory-convergence-command> --pr <n>
 ```
 
 On `instructions-only` (no helper runtime), fall back to the manual
-sequence: run the diagnostic, then `gh run rerun <run-id>` on each plan
-entry, waiting for each to finish before the next.
+sequence under the local provenance gate above: rerun only individually
+verified, eligible plan entries, preserve the per-run and aggregate
+rerun budgets, and regenerate the plan after each completed attempt.
 
 **Terminal-waiver recheck (`#1570`)**: once a maintainer waives a proven
 `COPILOT_UNAVAILABLE` state
@@ -355,10 +389,11 @@ requires — CI polling, bot/advisory review waits, and local
 build/test/lint runs alike (see the local-command guidance below,
 issue `#2798`).
 
-**Portability**: under supervisor/worker topologies, a background
-wait's completion notification often reaches only the supervisor, so
-the worker's turn stalls until re-prompted — the topology-safety
-condition below accounts for this.
+**Portability**: a background wait's completion notification may reach
+only the supervisor, so the worker can stall until re-prompted; the
+topology-safety condition below covers this.
+
+See [REST](../../docs/idd-helper-scripts.md#rest).
 
 - **No interim polling turns** — schedule one wake at the **expected**
   completion, or background only if the topology is confirmed to route
@@ -368,11 +403,11 @@ condition below accounts for this.
   **but only once** [Required-check discovery](#required-check-discovery)
   has resolved `noRequiredChecksConfigured: false`. When Required-check
   discovery has instead resolved `noRequiredChecksConfigured: true`,
-  `--watch --required` returns immediately, non-blocking, printing a
-  "no required checks
-  reported" message even while real CI is still running — block with
+  `--watch --required` returns immediately, printing a "no required
+  checks reported" message even while real CI is still running —
+  block with
   the bare `gh pr checks <pr-number> --watch` (no `--required`)
-  instead. That bare form still returns once every visible check
+  instead. That bare form returns once every visible check
   reaches a terminal GitHub state, which is not the same as "safe to
   proceed" — a lone `CANCELLED` check with no same-producer successor
   is one such terminal-but-`pending` case (#2714). None of the three
@@ -383,22 +418,23 @@ condition below accounts for this.
   regardless of which form blocked the wait — track elapsed time and
   apply its rerun-or-hold
   decision if a watch outlasts it. Issue that blocking call with an
-  execution-timeout override set at or near the calling tool's own
-  execution-timeout ceiling, not the tool's default, which can
+  execution-timeout override — the calling tool's own per-invocation
+  timeout control, not a timeout utility run inside the command
+  (Claude Code's Bash `timeout` parameter is one example, not a
+  requirement for every harness; issue `#3449`) — set at or near the
+  calling tool's own execution-timeout ceiling, not the tool's
+  default, which can
   hard-kill the wait well short of `ciWait.runningTimeout`; a
   tool-timeout kill of the watch call is not a CI verdict — re-issue
   the same blocking watch, keep accumulating elapsed time against the
   bound above, and do not fall back to `run_in_background` or another
   detached/backgrounded mechanism just because of the kill. This
   reissue-on-timeout guidance is scoped to an idempotent, read-only
-  remote poll like the watch call above. The same preventive override
-  applies before issuing a heavy local command (a full build, test,
-  lint, or doctor run) expected to run long: set an explicit
-  execution-timeout override at or near the calling tool's own
-  execution-timeout ceiling before the command starts, rather than
-  relying on the tool's default and discovering the auto-background
-  only after the fact — this has repeatedly stalled a session's turn
-  in practice (issue `#2933`). Never blindly re-issue a
+  remote poll like the watch call above. The same override applies
+  before a heavy local command (a full build, test, lint, or doctor
+  run) expected to run long, rather than discovering the
+  auto-background only after the fact (issue `#2933`). Never blindly
+  re-issue a
   heavy local command (a full build, test, or lint run) that
   auto-backgrounds past the tool's default timeout — being idempotent
   does not make it safe to run twice at once; two concurrent instances
@@ -410,10 +446,12 @@ condition below accounts for this.
   review state either — see
   `idd-advisory-wait.instructions.md`, whose Scope section also covers
   why a non-primary bot's review must not gate a custom wait either. A
-  bare `sleep` may be sandboxed or blocked in some runtimes (preventive; no observed
-  incident yet); a `run_in_background` Bash task or other
-  detached/backgrounded mechanism must not be used for this wait
-  unless the topology-safety condition above is confirmed. Never
+  bare `sleep` may be refused (observed 2026-09-30 in Claude Code, issue
+  `#3673`: `sleep 30` refused, `sleep 5` ran); in such a runtime, block a CI wait
+  with the `--watch` forms above. A `run_in_background` Bash task or other
+  detached/backgrounded mechanism (a background until-loop included) must
+  not be used for this wait unless the topology-safety condition above is
+  confirmed. Never
   insert "is it done yet?" turns or end this turn assuming an
   unconfirmed background/async notification resumes it — that stalls
   silently under supervisor/worker topologies.

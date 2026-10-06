@@ -25,12 +25,12 @@ cleanup's own worktree removal -- behind the
 (see the [fan-out variant](../../docs/idd-workflow.md#orchestrator-fan-out-variant)
 for when this applies).
 
-<!-- dotfiles-divergence: master-branch -->
-1. Ensure the local `master` branch is up to date and has no local
+1. <!-- dotfiles-divergence: master-branch -->
+   Ensure the local `master` branch is up to date and has no local
    commits. Run this from the primary worktree while on `master`:
 
    ```sh
-   git fetch origin master
+   git fetch origin
    git log origin/master..master --oneline
    ```
 
@@ -127,8 +127,8 @@ resolve it first: read `developmentBranch` from
 defaultBranchRef --jq .defaultBranchRef.name`; validate the result
 ([defaults](../../docs/policy-constants.md#branch-synchronization-defaults)),
 fail closed if invalid/absent on `origin`, never fall back. Then
-`git fetch origin {development-branch}` (may be missing/stale
-otherwise). Use **WorkTrunk** if available (create verb:
+`git fetch origin` (may be missing/stale otherwise). Use **WorkTrunk**
+if available (create verb:
 `wt switch --create`; `wt new` was removed):
 
 - macOS/Linux: `wt switch --create -b <base-branch> <branch-name>`
@@ -227,8 +227,8 @@ retry the install exactly once before failing loudly — see the
 
 Before continuing to B2, verify all of the following:
 
-<!-- dotfiles-divergence: master-branch -->
-- `git -C <primary-worktree-root> rev-parse --abbrev-ref HEAD` returns
+- <!-- dotfiles-divergence: master-branch -->
+  `git -C <primary-worktree-root> rev-parse --abbrev-ref HEAD` returns
   `master`.
 - `git worktree list` includes the new sibling worktree path.
 - The agent's current working directory is the new sibling worktree
@@ -280,7 +280,7 @@ under concurrent execution, so re-check once the B1 worktree exists and
 **before writing any code or drafting the plan below**, using a
 mechanical file/close-based signal stronger than A4.5's title/
 declaration heuristic (a weak **title-only** match is **not** a hit
-here). Keep it cheap: one fetch plus a bounded merged-PR scan.
+here).
 
 1. `git fetch origin {development-branch}` (concurrent workers sharing
    one clone: behind the
@@ -305,13 +305,15 @@ here). Keep it cheap: one fetch plus a bounded merged-PR scan.
    gh pr view <n> --json files --jq '.files[].path'
    ```
 
-**On a hit → verify-then-close** (never silent re-implementation, and never an
-auto-close on a weak signal): confirm the issue's acceptance criteria already
-hold on current `{development-branch}`, then close the issue with a
+**On a hit → verify-then-close**: confirm the issue's acceptance criteria
+already hold on current `{development-branch}`, then close the issue with a
 comment referencing the superseding PR. If the criteria only
 **partly** hold, keep the issue open,
 record the overlap, and plan only the genuinely-remaining work. On no hit,
 continue with the plan below.
+
+`gh issue close` is not completion: with no diff and no PR, only
+**verify-then-close** or F4 step 1 post-merge close may close it.
 
 ### B2.1 — Premise verification (decision-transcription issues)
 
@@ -382,10 +384,12 @@ Implement the plan, running **fix-validate** before each atomic commit
 the [signed-commit merge wrapper](../../docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure)
 instead.
 
-**Validate.** Run it without a pipe; if shortening output, rerun
-through `tail`/`head`. A filter cannot prove success (see
-kurone-kito/idd-skill#3139). In Bash, use
-`status=${PIPESTATUS[0]}; ((status == 0))` or `set -o pipefail`.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+**Validate.** Judge the validator's own exit status. A display filter
+(`tail`/`head`) alone cannot prove success; avoid piping or preserve the
+status with `set -o pipefail` or an immediate Bash
+`status=${PIPESTATUS[0]}` check. See
+[Project commands](idd-overview-core.instructions.md#project-commands).
 
 **Verify a commit actually landed before trusting a subsequent push.**
 A `commit-msg` hook (e.g. commitlint's body-max-line-length) can

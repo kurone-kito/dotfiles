@@ -1,13 +1,15 @@
 # IDD — Copilot Advisory-Wait Protocol (Lite)
 
 Lite profile for helper-enabled weak/local models. Same semantics as
-the full-size Copilot advisory-wait protocol file
-(`idd-advisory-wait.instructions.md`), restricted to the
-**E14-caller subset only**. Used by
-`idd-review-fix-lite.instructions.md`'s E14, and (fast-path fields
-only) by `idd-review-snapshot-lite.instructions.md`'s E1
-CI-completion precondition. If the repository is `instructions-only`,
-use the full-size advisory-wait instructions instead of this file.
+`idd-advisory-wait.instructions.md`, for E14 and E1 Step 2's advisory
+precondition. E1 Step 2 accepts a matching `lastCopilotCommit` directly.
+<!-- dotfiles-divergence: e1-stale-recovery-cap-route -->
+Off-head `SATISFIED` requires active-claim `staleRequestRecovery` to be
+`not-applicable` or its AW3-S route complete. For `cap-exhausted`, apply
+`capExhaustedRoute`: `phase-specific` permits Step 2; `hold` stops
+without a watermark.
+If the repository is `instructions-only`, use the full-size
+advisory-wait instructions instead.
 
 ## Helper runtime contract
 
@@ -18,25 +20,21 @@ use the full-size advisory-wait instructions instead of this file.
   doesn't restrict marker _posting_ — the manual JSON `POST` under
   Markers stays that step's canonical fallback.
 - `instructions-only`: do not use this lite file.
-- Any mismatch between this file and the full-size
-  `idd-advisory-wait.instructions.md` protocol file is a bug in this
-  file.
+- Any mismatch between this file and
+  `idd-advisory-wait.instructions.md` is a bug in this file.
 
-## Scope boundary (F2/F3 excluded)
+## Scope boundary (E1 Step 2 and E14; F2/F3 excluded)
 
-This file covers only the E14 caller: the fast path, the helper-first
-canonical path, and the outcome table's E14 column. It never attempts
-F2's live-fetch-plus-prose fallback, F3's merge-time call site, the
-terminal stall-recovery contract (`COPILOT_UNAVAILABLE` + waiver
-routing), or the same-HEAD advisory reroll — all F2/F3-only (E14's own
-settled-elapsed-time case, `#2327`, has its own decision table
-instead).
+This file covers E14 and E1's Step 2 precondition: fast/helper-first
+paths plus terminal `SATISFIED`/phase-specific `CAP_EXHAUSTED`
+eligibility. E1 does not inherit E14 request/poll actions. F2's
+live-fetch fallback, F3's merge call, stall recovery, and same-HEAD
+reroll are out of scope; E14's settled-elapsed case (`#2327`) has its
+own table.
 
-A lite session's own routing (A0-A4.5 and E4-E8 excluded, F3-F5
-excluded; only the lite F1-F2 helper-read-only subset and the lite
-F2.5 handoff-stop apply) never reaches those call sites. If it somehow
-does, stop and ask for a stronger session or human to run the
-full-size instructions directly.
+A lite session excludes A0-A4.5/E4-E8 and F3-F5; it uses only E1 Step
+2, E14, lite F1-F2 read-only helpers, and F2.5 handoff-stop. If it
+reaches an excluded call site, stop and ask a stronger session/human.
 
 **Do not build a substitute wait for a non-primary bot** — same
 prohibition as the full-size file's Scope section: rely on the
@@ -60,28 +58,34 @@ any bot but `advisoryWait.primaryBotLogin`.
 
 Run the Helper-first canonical path below. Once `lastCopilotCommit`
 equals `prHeadSha`, the gate is **SATISFIED** — take the caller's
-`SATISFIED` action; otherwise, continue.
+`SATISFIED` action. For off-head `SATISFIED`, apply the header's
+`staleRequestRecovery`; lite hands off `attempt` for AW3-S.
 
 ## Helper-first canonical path
 
 ```sh
-node scripts/advisory-wait-state.mjs --pr <pr-number> \
+node scripts/advisory-wait-state.mjs --pr <pr-number> --claim-id <claim-id> \
+  --agent-id <agent-id> \
   --trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"
 ```
 
 Resolve the package-manager / ephemeral-npx equivalent from
 `docs/idd-helper-scripts.md`.
 
-Required fields (stop and ask if any are missing — matching
-`idd-review-fix-lite.instructions.md`'s E14 field list exactly):
-`prHeadSha`, `lastCopilotCommit`, `copilotPending`,
-`copilotPendingCoversHead`, `outcome`, `f3Outcome`, `secondaryBotLogin`,
-`secondaryRequestNeeded`, `earliestSameHeadAt`, `requestMarkerCount`,
-`requestCap`, `pendingWindowMinutes`, `settledWindowMinutes`,
-`pollIntervalMinutes`, `capExhaustedRoute`, `trustedMarkerSummary`. The
-helper always emits every one of these — an empty/false value (e.g.
-`secondaryBotLogin: ""` unconfigured, or `f3Outcome` unused by E14) is
-still present, not missing. Validate presence, not truthiness.
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
+<!-- dotfiles-divergence: advisory-response-schema -->
+Required fields (stop and ask if any are missing): `prHeadSha`,
+`lastCopilotCommit`, `copilotPending`,
+`copilotPendingCoversHead`, `outcome`, `f3Outcome`, `earliestSameHeadAt`,
+`requestMarkerCount`, `requestCap`,
+`pendingWindowMinutes`, `settledWindowMinutes`, `pollIntervalMinutes`,
+`capExhaustedRoute`, `trustedMarkerSummary`, `secondaryBotLogin`,
+`secondaryBotLogins`, `secondaryRequestLogins`, and
+`secondaryRequestNeeded`. Every field is always present, even
+empty/false/`[]` — validate presence, not truthiness; include
+`staleRequestRecovery`; reject unbound output. The four secondary-bot
+fields are required by the pinned v0.14.0 schema even when the optional
+secondary feature is unset; they remain non-gating.
 
 The helper computes `outcome` directly from live evidence — never by
 hand from raw timestamps. Allowed values: `SATISFIED`,
@@ -97,11 +101,12 @@ field here isn't "config absent" — it's a malformed helper response
 
 ## E14 outcome → action
 
+<!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 <!-- dprint-ignore-start -->
 | Outcome | E14 action |
 | --- | --- |
 | `SATISFIED` | proceed to CI wait |
-| `REQUEST_NEEDED` | `copilotPending`: false → request Copilot + marker, poll; true (no marker) → no `AW3-S` here — stop and ask |
+| `REQUEST_NEEDED` | `copilotPending`: false → registration-proven request + marker, then poll; true (no marker) → consult `staleRequestRecovery`: `attempt` → hand off the bounded AW3-S remove/re-request/verify/mark cycle to the full-size AW3-S procedure, then poll; `cap-exhausted` → follow `capExhaustedRoute` (`phase-specific`: CI wait; `hold`: stop and ask); `not-applicable` → poll only with a same-head marker, otherwise stop and ask |
 | `RECOVERY_NEEDED` | post the recovery marker (do not request another review), then poll |
 | `CAP_EXHAUSTED` | `phase-specific` (default): proceed to CI wait. `hold`: stop and ask (`HOLD`'s only route; see above) |
 | `WAIT` | keep polling |
@@ -152,12 +157,14 @@ duplicated here).
 5. Otherwise (`outcome` is `WAIT`, or any other non-terminal value),
    keep polling.
 
-## Secondary advisory bot (non-gating, optional)
+## Secondary advisory bot(s) (non-gating, optional)
 
-When the helper's `secondaryRequestNeeded` is `true`, request
-`secondaryBotLogin` once for this HEAD using the same request
-mechanics above. Post no `advisory-wait:` marker for it — it never
-satisfies the primary gate or consumes its request cap. Skip when
+`secondaryBotLogins` is the complete list; `secondaryBotLogin` is its
+single-login convenience mirror. When `secondaryRequestNeeded` is
+`true`, request **every** login in the
+emitted `secondaryRequestLogins` once each (never only the first), using
+the same mechanics above. Post no `advisory-wait:` marker for any —
+none satisfy the primary gate or consume its cap. Skip when
 `secondaryRequestNeeded` is `false`.
 
 ## Marker hygiene (optional)
