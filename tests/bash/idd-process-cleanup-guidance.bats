@@ -79,6 +79,11 @@ assert re.search(
     re.I | re.S,
 ), 'Claude site does not record the child PID and process group before waiting'
 assert re.search(
+    r'reads only.{0,60}recorded\s+identit\w*.{0,60}ends only.{0,40}process',
+    site,
+    re.I | re.S,
+), 'Claude site does not end only the recorded processes'
+assert re.search(
     r'(?:never|do not|must not|does not).{0,80}(?:'
     r'working directory.{0,80}(?:process )?name.{0,80}command-?line|'
     r'(?:process )?name.{0,80}working directory.{0,80}command-?line)',
