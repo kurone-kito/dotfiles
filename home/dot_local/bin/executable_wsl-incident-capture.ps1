@@ -250,10 +250,8 @@ function Enter-DotfilesCollectorLock {
         }
         $sameOwner = Test-DotfilesExactProcessIdentity -ProcessId $oldProcessId -StartTimeTicks $oldStartTimeTicks
         if ($null -eq $sameOwner) { throw 'lock-metadata-ambiguous' }
-        if ($sameOwner) {
-          $lockHandle.Dispose()
-          return @{ Acquired = $false; Reason = 'already-running'; Handle = $null }
-        }
+        # The exclusive OS lock is already held here. A still-living
+        # metadata owner released that lock, so the record is stale.
       }
       catch {
         $lockHandle.Dispose()
@@ -553,12 +551,14 @@ function Start-DotfilesOwnedProcess {
   }
   catch {
     $mayRemain = $false
+    $cleanupEntries = @()
     if ($started) {
       if ($startTicks -gt 0) {
         try {
           $partialOwned = @{ Process = $process; ProcessId = $process.Id; StartTimeTicks = $startTicks; Source = $Source }
           $cleanup = Stop-DotfilesOwnedProcess -Owned $partialOwned -GraceMilliseconds 1000
           $mayRemain = -not [bool]$cleanup.Exited
+          if ($mayRemain) { $cleanupEntries = @($cleanup.Entries) }
         }
         catch { $mayRemain = $true }
       }
@@ -579,6 +579,9 @@ function Start-DotfilesOwnedProcess {
       }
     }
     try { $_.Exception.Data['DotfilesOwnedProcessMayRemain'] = [bool]$mayRemain } catch { }
+    if ($mayRemain -and $cleanupEntries.Count -gt 0) {
+      try { $_.Exception.Data['DotfilesOwnedProcessCleanupEntries'] = [object[]]$cleanupEntries } catch { }
+    }
     $process.Dispose()
     throw
   }
@@ -1136,7 +1139,16 @@ function Start-DotfilesGuestProbe {
     return @{ Status = 'pending'; Error = $null; Process = $owned }
   }
   catch {
-    return @{ Status = 'unavailable'; Error = 'guest-start-failed'; Process = $null }
+    $mayRemain = $false
+    $cleanupEntries = @()
+    try { $mayRemain = [bool]$_.Exception.Data['DotfilesOwnedProcessMayRemain'] } catch { }
+    try {
+      $storedCleanupEntries = $_.Exception.Data['DotfilesOwnedProcessCleanupEntries']
+      if ($null -ne $storedCleanupEntries) { $cleanupEntries = @($storedCleanupEntries) }
+    }
+    catch { }
+    $cleanup = if ($mayRemain) { @{ Exited = $false; CleanupUnverified = $true; Entries = $cleanupEntries } } else { $null }
+    return @{ Status = 'unavailable'; Error = 'guest-start-failed'; Process = $null; Cleanup = $cleanup }
   }
 }
 
@@ -1435,8 +1447,14 @@ function Get-DotfilesDiskMetrics {
       queueLength = $device.queueLength
     }
   }
-  $overall = if (@($disks.Values | Where-Object { $_.status -eq 'ok' }).Count -gt 0) { 'ok' } else { 'partial' }
-  return @{ status = $overall; error = if ($overall -eq 'partial') { 'first-sample' } else { $null }; metrics = $disks }
+  $overall = if (@($disks.Values | Where-Object { $_.status -ne 'ok' }).Count -eq 0) { 'ok' } else { 'partial' }
+  $error = $null
+  if ($overall -eq 'partial') {
+    if (@($disks.Values | Where-Object { $_.error -eq 'counter-unavailable' }).Count -gt 0) { $error = 'counter-unavailable' }
+    elseif (@($disks.Values | Where-Object { $_.error -eq 'counter-reset' }).Count -gt 0) { $error = 'counter-reset' }
+    else { $error = 'first-sample' }
+  }
+  return @{ status = $overall; error = $error; metrics = $disks }
 }
 
 function Get-DotfilesHypervMetrics {
@@ -1773,14 +1791,19 @@ function Invoke-DotfilesIncidentCollector {
           $latestSources.guest = @{ status = 'pending'; error = $null; metrics = @{} }
         }
         else {
-          $workerJournal.Remove('guest')
           $latestSources.guest = @{ status = $guestStart.Status; error = $guestStart.Error; metrics = @{} }
           if ($guestStart.Status -eq 'timeout') {
             $guestSuppressed = $true
           }
           if ($guestStart.Cleanup -and -not $guestStart.Cleanup.Exited) {
             $guestSuppressed = $true
-            $inhibitions += @($guestStart.Cleanup.Entries)
+            $blockedSources['guest'] = $true
+            $cleanupEntries = @()
+            if ($null -ne $guestStart.Cleanup.Entries) { $cleanupEntries = @($guestStart.Cleanup.Entries) }
+            if ($cleanupEntries.Count -gt 0) { $inhibitions += $cleanupEntries }
+          }
+          else {
+            $workerJournal.Remove('guest')
           }
           Write-DotfilesInhibitions -StateDirectory $stateDirectory -Entries $inhibitions -RunId $runId -WorkerJournal @($workerJournal.Values)
         }

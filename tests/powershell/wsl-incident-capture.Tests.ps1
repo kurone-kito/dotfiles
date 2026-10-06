@@ -147,6 +147,30 @@ Describe 'wsl incident capture metric handling' {
     $result.metrics.systemVolume.readBytesPerSecond | Should -BeNullOrEmpty
   }
 
+  It 'keeps the disk summary partial when either expected view is unavailable' {
+    $previous = @{ status = 'ok'; metrics = @{ physicalTotal = @{ readBytesCounter = 10; writeBytesCounter = 20; timestampPerfTime = 10; frequencyPerfTime = 10; queueLength = 1 }; systemVolume = @{ readBytesCounter = 5; writeBytesCounter = 7; timestampPerfTime = 10; frequencyPerfTime = 10; queueLength = 0; instanceAlias = 'volume-fixture' } } }
+    $current = @{ status = 'partial'; metrics = @{ physicalTotal = @{ readBytesCounter = 20; writeBytesCounter = 40; timestampPerfTime = 20; frequencyPerfTime = 10; queueLength = 2 }; systemVolume = @{ readBytesCounter = 10; writeBytesCounter = 14; timestampPerfTime = 20; frequencyPerfTime = 10; queueLength = 0; instanceAlias = 'volume-fixture' } } }
+
+    foreach ($missingView in @('physicalTotal', 'systemVolume')) {
+      $metrics = @{
+        physicalTotal = $current.metrics.physicalTotal
+        systemVolume = $current.metrics.systemVolume
+      }
+      $metrics[$missingView] = $null
+      $snapshot = @{ status = 'partial'; metrics = $metrics }
+
+      $result = Get-DotfilesDiskMetrics -Snapshot $snapshot -Previous $previous
+
+      $result.status | Should -Be 'partial'
+      $result.error | Should -Be 'counter-unavailable'
+      $result.metrics[$missingView].status | Should -Be 'unavailable'
+      $healthyView = if ($missingView -eq 'physicalTotal') { 'systemVolume' } else { 'physicalTotal' }
+      $result.metrics[$healthyView].status | Should -Be 'ok'
+    }
+
+    (Get-DotfilesDiskMetrics -Snapshot $current -Previous $previous).status | Should -Be 'ok'
+  }
+
   It 'uses raw Hyper-V counters to report rates and redact virtual storage paths' {
     $salt = [Convert]::ToBase64String((New-Object byte[] 32))
     $script:HypervSnapshotCount = 0
@@ -1158,10 +1182,54 @@ Describe 'wsl incident output directory paths' {
   }
 }
 
+Describe 'wsl incident guest probe startup' {
+  It 'propagates unresolved owned-process cleanup from a failed launch' {
+    $script:GuestLaunchException = New-Object InvalidOperationException('guest-stdin-write-failed')
+    $script:GuestLaunchException.Data['DotfilesOwnedProcessMayRemain'] = $true
+    $script:GuestLaunchException.Data['DotfilesOwnedProcessCleanupEntries'] = [object[]]@(@{
+        source = 'guest'
+        processId = 12345
+        startTimeTicks = 67890
+        cleanupUnverified = $true
+      })
+    Mock Get-DotfilesWslExecutable { return 'wsl.exe' }
+    Mock Invoke-DotfilesWslPreflight { return @{ Status = 'running'; Error = $null } }
+    Mock Start-DotfilesCommand { throw $script:GuestLaunchException }
+
+    try {
+      $result = Start-DotfilesGuestProbe -Distribution 'FixtureDistro' -PreviousCounters 'baseline'
+
+      $result.Status | Should -Be 'unavailable'
+      $result.Error | Should -Be 'guest-start-failed'
+      $result.Cleanup.Exited | Should -BeFalse
+      $result.Cleanup.Entries.Count | Should -Be 1
+      $result.Cleanup.Entries[0].processId | Should -Be 12345
+    }
+    finally { Remove-Variable GuestLaunchException -Scope Script -ErrorAction SilentlyContinue }
+  }
+
+  It 'preserves the unresolved-start signal when cleanup identity is unavailable' {
+    $script:GuestLaunchException = New-Object InvalidOperationException('guest-stdin-write-failed')
+    $script:GuestLaunchException.Data['DotfilesOwnedProcessMayRemain'] = $true
+    Mock Get-DotfilesWslExecutable { return 'wsl.exe' }
+    Mock Invoke-DotfilesWslPreflight { return @{ Status = 'running'; Error = $null } }
+    Mock Start-DotfilesCommand { throw $script:GuestLaunchException }
+
+    try {
+      $result = Start-DotfilesGuestProbe -Distribution 'FixtureDistro' -PreviousCounters 'baseline'
+
+      $result.Cleanup.Exited | Should -BeFalse
+      $result.Cleanup.Entries.Count | Should -Be 0
+    }
+    finally { Remove-Variable GuestLaunchException -Scope Script -ErrorAction SilentlyContinue }
+  }
+}
+
 Describe 'wsl incident collector lock' {
-  It 'does not replace metadata for the exact live lock owner' {
+  It 'replaces stale metadata once the exclusive lock is held by a live recorded owner' {
     $state = Join-Path $TestDrive 'live-owner-lock-state'
     [void][IO.Directory]::CreateDirectory($state)
+    $metadataPath = Join-Path $state 'collector.lock.json'
     $current = [Diagnostics.Process]::GetCurrentProcess()
     try {
       $marker = @{
@@ -1170,24 +1238,42 @@ Describe 'wsl incident collector lock' {
         runId = 'old-live-run'
         acquiredAtUtc = '2026-01-01T00:00:00Z'
       } | ConvertTo-Json -Compress
-      [IO.File]::WriteAllText((Join-Path $state 'collector.lock.json'), $marker, $script:Utf8NoBom)
+      [IO.File]::WriteAllText($metadataPath, $marker, $script:Utf8NoBom)
     }
     finally { $current.Dispose() }
 
     $lock = $null
+    $restart = $null
     try {
       $lock = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '11111111111111111111111111111111'
 
-      $lock.Acquired | Should -BeFalse
-      $lock.Reason | Should -Be 'already-running'
-      $metadata = Get-Content -LiteralPath (Join-Path $state 'collector.lock.json') -Raw | ConvertFrom-Json
-      $metadata.runId | Should -Be 'old-live-run'
+      $lock.Acquired | Should -BeTrue
+      $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+      $metadata.runId | Should -Be '11111111111111111111111111111111'
       $second = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '22222222222222222222222222222222'
       $second.Acquired | Should -BeFalse
       $second.Reason | Should -Be 'already-running'
+      $lock.Handle.Dispose()
+      $lock.Handle = $null
+      $current = [Diagnostics.Process]::GetCurrentProcess()
+      try {
+        $stale = @{
+          processId = $current.Id
+          startTimeTicks = $current.StartTime.ToUniversalTime().Ticks
+          runId = 'old-live-run'
+          acquiredAtUtc = '2026-01-01T00:00:00Z'
+        } | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($metadataPath, $stale, $script:Utf8NoBom)
+      }
+      finally { $current.Dispose() }
+      $restart = Enter-DotfilesCollectorLock -StateDirectory $state -RunId '33333333333333333333333333333333'
+      $restart.Acquired | Should -BeTrue
+      $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+      $metadata.runId | Should -Be '33333333333333333333333333333333'
     }
     finally {
-      if ($null -ne $lock) { Exit-DotfilesCollectorLock -Lock $lock }
+      if ($null -ne $restart) { Exit-DotfilesCollectorLock -Lock $restart }
+      if ($null -ne $lock -and $null -ne $lock.Handle) { Exit-DotfilesCollectorLock -Lock $lock }
     }
   }
 
@@ -1391,7 +1477,7 @@ if ($script:WindowsHost) {
 
   It 'stops the verified owned root and leaves an unrelated sentinel alive' {
     $exe = Get-DotfilesPowerShellExecutable
-    $sleepArguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[System.Threading.Thread]::Sleep(30000)')
+    $sleepArguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 30')
     $sentinel = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'sentinel'
     $owned = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'fixture'
     Mock Get-DotfilesProcessTreeSnapshot { return @() }
