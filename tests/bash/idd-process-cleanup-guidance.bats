@@ -46,11 +46,12 @@ assert re.search(
     re.I | re.S,
 ), 'critique site does not end a process using only a PID or process group recorded at launch'
 assert re.search(
-    r'(?:name.{0,80}working directory.{0,80}command-?line|working directory.{0,80}name.{0,80}command-?line)',
+    r'(?:never|do not|must not|does not).{0,80}(?:'
+    r'name.{0,80}working directory.{0,80}command-?line|'
+    r'working directory.{0,80}name.{0,80}command-?line)',
     site,
     re.I | re.S,
 ), 'critique site does not forbid selection by name, working directory, and command line together'
-assert re.search(r'\b(never|not)\b', site, re.I), 'critique site does not forbid unsafe selection'
 assert re.search(r'pgrep -P.{0,80}recorded PID', site, re.I | re.S), (
     'critique site does not limit pgrep -P to a recorded PID'
 )
@@ -78,11 +79,12 @@ assert re.search(
     re.I | re.S,
 ), 'Claude site does not record the child PID and process group before waiting'
 assert re.search(
-    r'(?:working directory.{0,80}(?:process )?name.{0,80}command-?line|(?:process )?name.{0,80}working directory.{0,80}command-?line)',
+    r'(?:never|do not|must not|does not).{0,80}(?:'
+    r'working directory.{0,80}(?:process )?name.{0,80}command-?line|'
+    r'(?:process )?name.{0,80}working directory.{0,80}command-?line)',
     site,
     re.I | re.S,
 ), 'Claude site does not forbid discovery by working directory, name, and command line together'
-assert re.search(r'\b(never|not)\b', site, re.I), 'Claude site does not forbid unsafe discovery'
 assert re.search(r'pgrep -P.{0,80}recorded PID', site, re.I | re.S), (
     'Claude site does not limit pgrep -P to a recorded PID'
 )
