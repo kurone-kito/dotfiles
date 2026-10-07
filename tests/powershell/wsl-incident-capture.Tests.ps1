@@ -1760,35 +1760,80 @@ if ($script:WindowsHost) {
     $lockPath = Join-Path $script:FixtureState 'collector.lock.json'
     Test-Path -LiteralPath $lockPath | Should -BeFalse
   }
+  }
+}
 
-  It 'runs bounded cleanup and releases the lock on the Ctrl+C pipeline stop path' {
-    $script:FixtureState = Join-Path $TestDrive 'interrupt-state'
-    $script:FixtureOutput = Join-Path $TestDrive 'interrupt-output'
-    $script:FakeClock = 0.0
-    $script:ClockProvider = { [double]$script:FakeClock }
-    $script:SleepProvider = { param($Milliseconds) throw [System.Management.Automation.PipelineStoppedException]::new() }
-    Mock Get-DotfilesDefaultStateDirectory { return $script:FixtureState }
-    Mock Start-DotfilesHostWorker {
-      param($Source)
-      $fake = [pscustomobject]@{ Id = 4000; HasExited = $true }
-      Add-Member -InputObject $fake -MemberType ScriptMethod -Name Dispose -Value {}
-      return @{ Source = $Source; Process = $fake; ProcessId = 4000; StartTimeTicks = 4000 }
-    }
-    Mock Get-DotfilesWorkerResult {
-      param($Owned)
-      return @{ source = $Owned.Source; status = 'unavailable'; error = 'counter-unavailable'; metrics = @{} }
-    }
+Describe 'wsl incident capture pipeline stop' {
+  It 'releases the lock when a stopped pipeline interrupts the sample wait' {
+    # Throwing PipelineStoppedException in this host stops the host
+    # pipeline before a catch can return. The child owns that stop.
+    $state = Join-Path $TestDrive 'pipeline-stop-state'
+    $output = Join-Path $TestDrive 'pipeline-stop-output'
+    $childPath = Join-Path $TestDrive 'pipeline-stop-child.ps1'
+    [void][IO.Directory]::CreateDirectory($state)
+    [void][IO.Directory]::CreateDirectory($output)
+    $childSource = @(
+      'param('
+      '  [Parameter(Mandatory = $true)][string]$CollectorPath,'
+      '  [Parameter(Mandatory = $true)][string]$StateDirectory,'
+      '  [Parameter(Mandatory = $true)][string]$OutputDirectory'
+      ')'
+      '$ErrorActionPreference = ''Stop'''
+      '$script:FixtureState = $StateDirectory'
+      '$script:FixtureOutput = $OutputDirectory'
+      '. $CollectorPath'
+      'function Test-DotfilesWindowsHost { return $true }'
+      'function Initialize-DotfilesPrivateDirectory {'
+      '  param([Parameter(Mandatory = $true)][string]$Path)'
+      '  $safe = [IO.Path]::GetFullPath($Path)'
+      '  [void][IO.Directory]::CreateDirectory($safe)'
+      '  return $safe'
+      '}'
+      'function Get-DotfilesDefaultStateDirectory { return $script:FixtureState }'
+      'function Start-DotfilesHostWorker {'
+      '  param($Source)'
+      '  throw ''worker-start-failed'''
+      '}'
+      '$script:SleepProvider = {'
+      '  param($Milliseconds)'
+      '  Set-Content -LiteralPath (Join-Path $script:FixtureState ''slept.txt'') -Value ''slept'''
+      '  throw [System.Management.Automation.PipelineStoppedException]::new()'
+      '}'
+      'Invoke-DotfilesIncidentCollector -IntervalSeconds 5 -DurationSeconds 10 -MaximumLogBytes 65536 -OutputDirectory $script:FixtureOutput -GuestDistro '''''
+    ) -join "`n"
+    Set-Content -LiteralPath $childPath -Value $childSource -Encoding utf8
 
+    $quote = { param($Value) '"{0}"' -f $Value }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = (Get-Process -Id $PID).Path
+    $startInfo.Arguments = @(
+      '-NoProfile', '-File', (& $quote $childPath),
+      '-CollectorPath', (& $quote $script:CollectorPath),
+      '-StateDirectory', (& $quote $state),
+      '-OutputDirectory', (& $quote $output)
+    ) -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $process = $null
     try {
-      $exitCode = Invoke-DotfilesIncidentCollector -IntervalSeconds 5 -DurationSeconds 10 -MaximumLogBytes 65536 -OutputDirectory $script:FixtureOutput -GuestDistro ''
+      $process = [Diagnostics.Process]::Start($startInfo)
+      if (-not $process.WaitForExit(20000)) {
+        throw 'pipeline-stop child did not exit before the deadline'
+      }
     }
     finally {
-      $script:ClockProvider = $null
-      $script:SleepProvider = $null
+      if ($null -ne $process -and -not $process.HasExited) {
+        $process.Kill()
+        $null = $process.WaitForExit(5000)
+      }
+      if ($null -ne $process) { $process.Dispose() }
     }
 
-    $exitCode | Should -Be 0
-    Test-Path -LiteralPath (Join-Path $script:FixtureState 'collector.lock.json') | Should -BeFalse
-  }
+    Test-Path -LiteralPath (Join-Path $state 'slept.txt') | Should -BeTrue
+    Test-Path -LiteralPath (Join-Path $state 'collector.lock.json') | Should -BeFalse
+    $activePath = Join-Path $state 'collector.active.lock'
+    $lockHandle = [IO.File]::Open($activePath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try { $lockHandle.Close() }
+    finally { $lockHandle.Dispose() }
   }
 }
