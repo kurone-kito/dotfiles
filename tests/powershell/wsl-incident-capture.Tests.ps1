@@ -1053,6 +1053,48 @@ Describe 'wsl incident capture guest and writer behavior' {
     }
   }
 
+  It 'trusts a live retained handle when its start time cannot be read' {
+    $unreadable = [pscustomobject]@{ HasExited = $false }
+    $exited = [pscustomobject]@{ HasExited = $true }
+    $current = [Diagnostics.Process]::GetCurrentProcess()
+    try {
+      Test-DotfilesRetainedProcessIdentity -Process $unreadable -StartTimeTicks 1 | Should -BeTrue
+      Test-DotfilesRetainedProcessIdentity -Process $exited -StartTimeTicks 1 | Should -BeFalse
+      Test-DotfilesRetainedProcessIdentity -Process $current -StartTimeTicks 1 | Should -BeFalse
+      Test-DotfilesRetainedProcessIdentity -Process $current -StartTimeTicks $current.StartTime.ToUniversalTime().Ticks | Should -BeTrue
+    }
+    finally { $current.Dispose() }
+  }
+
+  It 'stops a live root when reopening its start time is ambiguous' {
+    $exe = Get-DotfilesPowerShellExecutable
+    $sleepArguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 30')
+    $sentinel = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'sentinel'
+    $owned = Start-DotfilesOwnedProcess -FileName $exe -Arguments $sleepArguments -Source 'fixture'
+    Mock Get-DotfilesProcessTreeSnapshot { return @() }
+    Mock Get-DotfilesProcessStartTicks { return 'ambiguous' }
+    try {
+      $owned.Process.WaitForExit(100) | Should -BeFalse
+      $cleanup = Stop-DotfilesOwnedProcess -Owned $owned -GraceMilliseconds 3000
+      $cleanup.Exited | Should -BeTrue
+      $cleanup.CleanupUnverified | Should -BeFalse
+      $sentinel.Process.HasExited | Should -BeFalse
+    }
+    finally {
+      if (-not $sentinel.Process.HasExited) { $sentinel.Process.Kill(); $null = $sentinel.Process.WaitForExit(3000) }
+      $sentinel.Process.Dispose()
+      try {
+        $leftover = [Diagnostics.Process]::GetProcessById($owned.ProcessId)
+        try {
+          if (-not $leftover.HasExited) { $leftover.Kill(); $null = $leftover.WaitForExit(3000) }
+        }
+        finally { $leftover.Dispose() }
+      }
+      catch [ArgumentException] { }
+      try { $owned.Process.Dispose() } catch { }
+    }
+  }
+
   It 'persists cleanup inhibition when a new process appears under an owned PID after enumeration' {
     $exe = Get-DotfilesPowerShellExecutable
     $owned = Start-DotfilesOwnedProcess -FileName $exe -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'Start-Sleep -Seconds 30') -Source 'fixture'

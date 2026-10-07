@@ -177,20 +177,50 @@ function Initialize-DotfilesPrivateDirectory {
 function Get-DotfilesProcessStartTicks {
   param([Parameter(Mandatory = $true)][int]$ProcessId)
 
-  $process = $null
-  try {
-    $process = [Diagnostics.Process]::GetProcessById($ProcessId)
-    if ($process.HasExited) { return $null }
-    return $process.StartTime.ToUniversalTime().Ticks
+  foreach ($attempt in 1, 2, 3) {
+    $process = $null
+    try {
+      $process = [Diagnostics.Process]::GetProcessById($ProcessId)
+      if ($process.HasExited) { return $null }
+      return $process.StartTime.ToUniversalTime().Ticks
+    }
+    catch [ArgumentException] {
+      return $null
+    }
+    catch {
+      if ($attempt -eq 3) { return 'ambiguous' }
+    }
+    finally {
+      if ($null -ne $process) { $process.Dispose() }
+    }
   }
-  catch [ArgumentException] {
-    return $null
-  }
-  catch {
-    return 'ambiguous'
-  }
-  finally {
-    if ($null -ne $process) { $process.Dispose() }
+}
+
+function Test-DotfilesRetainedProcessIdentity {
+  param(
+    [Parameter(Mandatory = $true)]$Process,
+    [Parameter(Mandatory = $true)][long]$StartTimeTicks
+  )
+
+  # The retained handle names the original process object. A PID-only
+  # reopen can fail while that handle is still authoritative. StartTime
+  # can also throw for a process that is still the one that was started.
+  foreach ($attempt in 1, 2, 3) {
+    try {
+      if ($Process.HasExited) { return $false }
+      return ($Process.StartTime.ToUniversalTime().Ticks -eq $StartTimeTicks)
+    }
+    catch {
+      if ($attempt -eq 3) {
+        try {
+          if ($Process.HasExited) { return $false }
+        }
+        catch {
+          return $false
+        }
+        return $true
+      }
+    }
   }
 }
 
@@ -590,21 +620,18 @@ function Start-DotfilesOwnedProcess {
 function Get-DotfilesVerifiedProcessTree {
   param([Parameter(Mandatory = $true)]$Owned)
 
-  try {
-    $heldRootTicks = $Owned.Process.StartTime.ToUniversalTime().Ticks
-    if ($heldRootTicks -ne [long]$Owned.StartTimeTicks -or $Owned.Process.HasExited) {
-      # The retained handle authenticates the root, but after it exits the
-      # PID-only parent links cannot prove descendant ownership across reuse.
-      return @{ Complete = $false; Processes = @() }
-    }
-  }
-  catch {
+  # The retained handle authenticates the root. After it exits, PID-only
+  # parent links cannot prove descendant ownership across reuse.
+  if (-not (Test-DotfilesRetainedProcessIdentity -Process $Owned.Process -StartTimeTicks ([long]$Owned.StartTimeTicks))) {
     return @{ Complete = $false; Processes = @() }
   }
 
   $links = Get-DotfilesProcessTreeSnapshot
   $rootTicks = Test-DotfilesExactProcessIdentity -ProcessId $Owned.ProcessId -StartTimeTicks $Owned.StartTimeTicks
-  if ($null -eq $rootTicks -or -not $rootTicks) {
+  if ($rootTicks -eq $false) {
+    return @{ Complete = $false; Processes = @() }
+  }
+  if ($null -eq $rootTicks -and -not (Test-DotfilesRetainedProcessIdentity -Process $Owned.Process -StartTimeTicks ([long]$Owned.StartTimeTicks))) {
     return @{ Complete = $false; Processes = @() }
   }
   $verified = New-Object System.Collections.ArrayList
@@ -676,7 +703,10 @@ function Get-DotfilesVerifiedProcessTree {
   foreach ($node in $verified) {
     if ($node.Root) {
       $rootStillSame = Test-DotfilesExactProcessIdentity -ProcessId $node.ProcessId -StartTimeTicks $node.StartTimeTicks
-      if ($null -eq $rootStillSame -or -not $rootStillSame) { return @{ Complete = $false; Processes = @() } }
+      if ($rootStillSame -eq $false) { return @{ Complete = $false; Processes = @() } }
+      if ($null -eq $rootStillSame -and -not (Test-DotfilesRetainedProcessIdentity -Process $node.Process -StartTimeTicks ([long]$node.StartTimeTicks))) {
+        return @{ Complete = $false; Processes = @() }
+      }
       continue
     }
     $currentLink = $recheckedById[[string]$node.ProcessId]
@@ -740,14 +770,17 @@ function Stop-DotfilesOwnedProcess {
     return @{ Exited = $false; CleanupUnverified = $true; Entries = @(@{ source = $Owned.Source; processId = $Owned.ProcessId; startTimeTicks = $Owned.StartTimeTicks; cleanupUnverified = $true }) }
   }
 
-  $deadline = Get-DotfilesMonotonicMilliseconds
+  $graceWatch = [Diagnostics.Stopwatch]::StartNew()
   for ($index = $tree.Processes.Count - 1; $index -ge 0; $index--) {
     $node = $tree.Processes[$index]
     $stillSame = Test-DotfilesExactProcessIdentity -ProcessId $node.ProcessId -StartTimeTicks $node.StartTimeTicks
     if ($null -eq $stillSame) {
-      return @{ Exited = $false; CleanupUnverified = $true; Entries = @(@{ source = $Owned.Source; processId = $node.ProcessId; startTimeTicks = $node.StartTimeTicks; cleanupUnverified = $true }) }
+      $retainedRoot = $node.Root -and (Test-DotfilesRetainedProcessIdentity -Process $node.Process -StartTimeTicks ([long]$node.StartTimeTicks))
+      if (-not $retainedRoot) {
+        return @{ Exited = $false; CleanupUnverified = $true; Entries = @(@{ source = $Owned.Source; processId = $node.ProcessId; startTimeTicks = $node.StartTimeTicks; cleanupUnverified = $true }) }
+      }
     }
-    if (-not $stillSame) { continue }
+    elseif (-not $stillSame) { continue }
     try {
       if (-not $node.Process.HasExited) { $node.Process.Kill() }
     }
@@ -758,9 +791,31 @@ function Stop-DotfilesOwnedProcess {
 
   $entries = New-Object System.Collections.ArrayList
   foreach ($node in $tree.Processes) {
-    $remaining = [Math]::Max(0, [int]($GraceMilliseconds - (Get-DotfilesMonotonicMilliseconds - $deadline)))
+    $elapsedMs = [int][Math]::Min([int]::MaxValue, [Math]::Floor($graceWatch.Elapsed.TotalMilliseconds))
+    $remaining = [Math]::Max(0, $GraceMilliseconds - $elapsedMs)
     $exited = $false
-    try { $exited = $node.Process.WaitForExit($remaining) } catch { }
+    # WaitForExit(int) can return before the budget elapses while the
+    # process is still alive. Retry only that early return; a wait that
+    # consumed the budget stays unverified.
+    $guard = 0
+    while (-not $exited -and $remaining -gt 0 -and $guard -lt 8) {
+      $guard++
+      $slice = [Diagnostics.Stopwatch]::StartNew()
+      try { $exited = [bool]$node.Process.WaitForExit($remaining) }
+      catch {
+        Start-Sleep -Milliseconds 15
+        $remaining = [Math]::Max(0, $remaining - 15)
+        continue
+      }
+      if (-not $exited) {
+        try { $exited = [bool]$node.Process.HasExited } catch { break }
+      }
+      if ($exited) { break }
+      $elapsed = [int][Math]::Ceiling($slice.Elapsed.TotalMilliseconds)
+      if ($elapsed + 25 -ge $remaining) { break }
+      $remaining = [Math]::Max(0, $remaining - [Math]::Max($elapsed, 15))
+      Start-Sleep -Milliseconds 15
+    }
     if (-not $exited) {
       [void]$entries.Add(@{ source = $Owned.Source; processId = $node.ProcessId; startTimeTicks = $node.StartTimeTicks; cleanupUnverified = $false })
     }
