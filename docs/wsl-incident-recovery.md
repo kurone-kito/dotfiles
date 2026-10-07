@@ -259,7 +259,11 @@ There is no status command. Use evidence in this order:
    folder named in the telemetry guide in case another session started a run.
    Compare the newest file's `LastWriteTimeUtc` with the current time. A run
    that is sampling every 5 seconds writes at least that often. A stale file
-   means no sampling, or a stopped run.
+   means no sampling, or a stopped run. The lock metadata records a run id but
+   not an output directory, so a run another session started in its own
+   directory cannot be found from here. Ask its owner for their checkpoint's
+   `telemetry-runs` list, and without it treat that run's records as not
+   locatable. Do not search the volume for them.
 2. A deliberately tiny second invocation. Never run a second invocation with
    default bounds: if no collector is active, it starts a real run whose
    default duration is 86400 seconds. Give it a scratch output directory, as
@@ -524,16 +528,17 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
    ```sh
    timeout -k 5 15 cat /proc/sys/kernel/random/boot_id
-   timeout -k 5 15 sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20
+   timeout -k 5 15 sh -c "sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20"
    ```
 
    The second command prints the `starttime` ticks, which is field 22 of
-   `/proc/<pid>/stat`. Stripping everything through the last `)` first keeps
-   a process name that contains spaces from shifting the fields, so the value
-   is then field 20. Both the boot id and the ticks must match the
-   checkpoint. When you run them over SSH, wrap the client call in a
-   `timeout` as well. A read that times out is an unknown identity: stop the
-   check without retrying.
+   `/proc/<pid>/stat`. The `timeout` wraps the whole pipeline, so a hung read
+   ends with status 124 instead of being hidden by the exit status of `cut`.
+   Stripping everything through the last `)` first keeps a process name that
+   contains spaces from shifting the fields, so the value is then field 20.
+   Both the boot id and the ticks must match the checkpoint. When you run them
+   over SSH, wrap the client call in a `timeout` as well. A read that times
+   out is an unknown identity: stop the check without retrying.
 
    If you use a terminal multiplexer, list its sessions read-only with
    `tmux list-sessions -F '#{session_name} #{session_created}'` or
