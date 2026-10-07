@@ -467,12 +467,22 @@ identify and hand off the checkpoint, and no check reads them.
   This reads your own private directory, so it needs no more than the bound
   the ground rules already require.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
-  For example, write
-  `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`
-  output, which includes staged and unstaged tracked changes, and the output
-  of
-  `timeout -k 5 60 git -C "<worktree>" --no-optional-locks ls-files --others --exclude-standard`
-  to a private folder, and copy those files. These top-level commands do not
+  Write the output of
+  `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`,
+  which includes staged and unstaged tracked changes, to a private folder.
+  Then list the untracked files with NUL separators, because the default
+  output quotes a name that has a newline or a quote in it, and copy exactly
+  the listed files with a NUL-aware `tar`. The `-C` option must come before
+  `-T`:
+
+  ```sh
+  timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
+    ls-files -z --others --exclude-standard > untracked.nul
+  timeout -k 5 300 tar -C "<worktree>" --null -T untracked.nul -cf untracked.tar
+  ```
+
+  Run both with `untracked.nul` and `untracked.tar` in the private folder. The
+  top-level commands do not
   recurse into initialized submodules. List them with
   `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`, repeat both
   commands with `-C "<worktree>/<submodule-path>"` for each one, and keep every
@@ -483,12 +493,15 @@ identify and hand off the checkpoint, and no check reads them.
 
   ```sh
   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
-    status --porcelain --ignored --untracked-files=normal
+    status --porcelain -z --ignored --untracked-files=normal | tr '\0' '\n'
   ```
 
-  Copy the ignored paths you cannot rebuild, and skip dependency and build
-  directories you can. Record what you skipped, or write
-  `not preserved: ignored files` if you copied none. If a
+  The `tr` is for reading only. A name with a newline looks like two lines, so
+  never retype a path: write the chosen paths, without the `!!` status code
+  and the space after it, separated by NUL, to a list and archive that list
+  with the same `tar --null -T` form. Copy the ignored paths you cannot
+  rebuild, and skip dependency and build directories you can. Record what you
+  skipped, or write `not preserved: ignored files` if you copied none. If a
   command exits non-zero or times out (status 124 or 137), discard its output
   file and record `not preserved: <reason>` instead of keeping a partial copy.
   If the guest cannot be read, write `not preserved: guest unavailable`. That
@@ -614,18 +627,24 @@ under `timeout`, and a timeout is a failed check, not a pass.
    claim state without changing it. `<issue-number>` is the `N` in the
    checkpoint's `issue` field, and `<owner>` and `<name>` come from the same
    field. Take `<helper-package-spec>` from `helperRuntime.packageSpec` in the
-   worktree's own config file, so the commands do not depend on the directory
-   you start in. Both helpers list `--owner` and `--repo` in their `--help`
-   output and take the repository from them for the same reason:
+   config file at the last fetched base branch, not from the worktree's own
+   copy. A dirty or unverified worktree may have changed that file, and
+   `npx` runs whatever package it names, so a modified spec would run
+   arbitrary code during a check that is meant to be read-only. Reading from
+   the base revision also keeps the commands independent of the directory you
+   start in. Both helpers list `--owner` and `--repo` in their `--help` output
+   and take the repository from them for the same reason:
 
    ```sh
-   timeout 30 jq -r .helperRuntime.packageSpec "<worktree>/.github/idd/config.json"
+   timeout -k 5 30 git -C "<worktree>" show \
+     origin/<base-branch>:.github/idd/config.json | jq -r .helperRuntime.packageSpec
    timeout 60 npx --yes --package <helper-package-spec> \
      idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
      --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>"
    ```
 
-   Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
+   An empty spec or a non-zero exit is a failed resume check. Read `state`,
+   `action`, and `reason` from the JSON. Omit `--nonce` when the
    checkpoint has none. When its `claim` is `none`, omit `--claim-id` and
    `--nonce` too. Without `--claim-id` the helper reports the issue's claim
    state and checks no ownership. Do not post a claim, a heartbeat, or a
@@ -823,8 +842,11 @@ branch without a new authorization.
   reason it cannot is recorded), each work owner in that distribution was
   told, and you know which other distributions are running.
 - **If it fails:** the command does not return by the deadline, or the
-  distribution is still listed as running. Record it and let the operator
-  decide the next branch.
+  distribution is still listed as running. A call that has not returned stays
+  outstanding, so run no further `wsl.exe` command, including the shutdown
+  branch, until it ends. Record it, and let the operator decide between
+  waiting and a branch that needs no `wsl.exe` call, such as rebooting the
+  host.
 - **Deadline:** the one in the authorization.
 - **Impact:** `wsl.exe --terminate <DistroName>` stops that distribution.
   Everything held only in its memory is lost, and its open sessions drop.
@@ -836,7 +858,8 @@ branch without a new authorization.
 - **Purpose:** stop the whole WSL 2 environment when stopping one
   distribution is not enough or is not possible.
 - **Prerequisites:** the same as terminating one distribution, for every
-  running distribution.
+  running distribution, and no earlier `wsl.exe` call of this incident is
+  still outstanding.
 - **If it fails:** the command does not return by the deadline, or
   `wsl.exe --list --running --quiet` still lists a distribution. Record it
   and let the operator decide whether a host restart is warranted.
