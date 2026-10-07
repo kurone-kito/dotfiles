@@ -411,6 +411,41 @@ MOCK
   assert_output --partial '"latest"'
 }
 
+@test "declares the cross-platform CLIs with their bare registry short names" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+  local key
+
+  for key in bat bitwarden codex copilot gh ghq worktrunk; do
+    run grep -cFx "$key = \"latest\"" "$config"
+    [ "$output" = 1 ] || fail "$key: expected exactly one bare entry, found $output"
+  done
+}
+
+@test "no longer pins gh, ghq, copilot, codex or bitwarden to a lower-tier backend" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+  local id
+
+  for id in 'github:cli/cli' 'github:x-motemen/ghq' 'npm:@github/copilot' \
+    'npm:@openai/codex' 'npm:@bitwarden/cli'; do
+    run grep -qF "\"$id\"" "$config"
+    [ "$status" -eq 1 ] || fail "$id: still present in the config"
+  done
+}
+
+@test "does not prefix a backend onto the registry short names" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex)"|^"[a-z]+:[^"]*bitwarden[^"]*"|^"[a-z]+:cli/cli"' "$config"
+  assert_failure 1
+}
+
+@test "keeps the claude-code npm pin" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -q '^"npm:@anthropic-ai/claude-code"' "$config"
+  assert_success
+}
+
 @test "no longer relies on the inert claude-code npm_args opt-in" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
