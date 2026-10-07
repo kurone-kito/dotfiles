@@ -195,20 +195,27 @@ record that place in the checkpoint:
 ```powershell
 $state = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry'
 $logs = Join-Path $state 'logs\dotfiles-wsl-incident-telemetry'
-$archive = '<private-archive-dir>'
+$archive = Join-Path '<private-archive-dir>' ([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
 $pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
 $job = Start-Job -ArgumentList $state, $logs, $archive, $pattern -ScriptBlock {
   param($state, $logs, $archive, $pattern)
   $ErrorActionPreference = 'Stop'
-  New-Item -ItemType Directory -Force -Path $archive | Out-Null
+  $reparse = [IO.FileAttributes]::ReparsePoint
+  New-Item -ItemType Directory -Path $archive | Out-Null
   if (Test-Path -LiteralPath $logs) {
-    Get-ChildItem -LiteralPath $logs -File -Force |
-      Where-Object { $_.Name -match $pattern } |
-      Copy-Item -Destination $archive
+    $files = @(Get-ChildItem -LiteralPath $logs -File -Force |
+      Where-Object { $_.Name -match $pattern })
+    if (@($files | Where-Object { $_.Attributes -band $reparse }).Count) {
+      throw 'reparse point among the log files'
+    }
+    $files | Copy-Item -Destination $archive
   }
   foreach ($name in 'inhibitions.json', 'collector.lock.json') {
     $file = Join-Path $state $name
     if (Test-Path -LiteralPath $file) {
+      if ((Get-Item -LiteralPath $file -Force).Attributes -band $reparse) {
+        throw 'reparse point among the state files'
+      }
       Copy-Item -LiteralPath $file -Destination (Join-Path $archive ('state-' + $name))
     }
   }
@@ -230,7 +237,11 @@ Continue only when the last line printed is `archive copied`.
 
 The pattern is the collector's own log-file name set. It includes the
 temporary and partial files that a start can repair or delete, not only
-finished `.jsonl` files. A start also reads and rewrites `inhibitions.json`
+finished `.jsonl` files. A log or state entry that is a reparse point fails
+the copy closed, the way the collector rejects one, so nothing outside the
+directory is read into the archive. Each run of the step writes to its own
+timestamped subdirectory, so a second copy never overwrites or masks the
+first. A start also reads and rewrites `inhibitions.json`
 and replaces `collector.lock.json`, which hold the cleanup and ownership
 evidence the later sections rely on, so both are copied with a `state-`
 prefix. The `Test-Path` guards skip a log directory or state file that does
@@ -438,16 +449,26 @@ Fill the fields as follows:
   first retained record, which can be later than the run start.
 
   ```powershell
+  function Get-ValidRecords($lines) {
+    foreach ($line in $lines) {
+      try { $r = $line | ConvertFrom-Json } catch { continue }
+      if ($r.recordType -eq 'host-sample') { $r }
+    }
+  }
   $files = Get-ChildItem -LiteralPath $logs -Filter 'wsl-capture-*-<run-id>-*.jsonl' |
     Sort-Object Name
-  $first = Get-Content -LiteralPath $files[0].FullName -TotalCount 1 | ConvertFrom-Json
-  $last = Get-Content -LiteralPath $files[-1].FullName -Tail 1 | ConvertFrom-Json
+  $first = Get-ValidRecords (Get-Content -LiteralPath $files[0].FullName -TotalCount 50) |
+    Select-Object -First 1
+  $last = Get-ValidRecords (Get-Content -LiteralPath $files[-1].FullName -Tail 50) |
+    Select-Object -Last 1
   $first.sampleTimeUtc
   $last.sampleTimeUtc
   ```
 
-  If the first or last line is not a `host-sample` record, use the nearest
-  `host-sample` record instead.
+  A run interrupted mid-append can leave a truncated final line, so the helper
+  skips any line that does not parse and keeps only `host-sample` records. If
+  neither end has a valid record in the lines read, widen the count rather
+  than guessing.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   For example, write
   `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`
