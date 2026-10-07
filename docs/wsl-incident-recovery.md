@@ -125,9 +125,10 @@ process only. Do not change the machine or user policy for this.
 
 In this runbook `<private-scratch-dir>` and `<private-incident-dir>` each
 stand for one absolute path on a local volume that is not synchronized or
-shared, for example under `C:\Users\<host-user>`. Use the same absolute form
-in every command, because a relative path resolves against each session's
-current directory.
+shared, for example under `C:\Users\<host-user>`. Choose paths with no
+spaces and no characters a shell treats specially, so the commands need no
+extra quoting. Use the same absolute form in every command, because a relative
+path resolves against each session's current directory.
 
 Then confirm each of these, and record the date and the cap in the
 checkpoint:
@@ -412,32 +413,16 @@ Fill the fields as follows:
   oldest ones when the byte budget fills. The window therefore starts at the
   first retained record, which can be later than the run start.
 
-  ```powershell
-  $logs = Join-Path <private-incident-dir> 'dotfiles-wsl-incident-telemetry'
-  function Get-ValidRecords($lines) {
-    foreach ($line in $lines) {
-      try { $r = $line | ConvertFrom-Json } catch { continue }
-      if ($r.recordType -eq 'host-sample') { $r }
-    }
-  }
-  $files = @(Get-ChildItem -LiteralPath $logs -Filter 'wsl-capture-*-<run-id>-*.jsonl' |
-    Sort-Object Name)
-  if (@($files | Where-Object {
-      $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
-    throw 'reparse point among the log files'
-  }
-  $first = Get-ValidRecords (Get-Content -LiteralPath $files[0].FullName -TotalCount 50) |
-    Select-Object -First 1
-  $last = Get-ValidRecords (Get-Content -LiteralPath $files[-1].FullName -Tail 50) |
-    Select-Object -Last 1
-  $first.sampleTimeUtc
-  $last.sampleTimeUtc
-  ```
-
-  A run interrupted mid-append can leave a truncated final line, so the helper
-  skips any line that does not parse and keeps only `host-sample` records. If
-  neither end has a valid record in the lines read, widen the count rather
-  than guessing.
+  Read the run's segments with the review commands in
+  [Find and review records](wsl-incident-telemetry.md#find-and-review-records),
+  pointed at `<private-incident-dir>\dotfiles-wsl-incident-telemetry` instead
+  of the default folder. Take the first valid `host-sample` record of the
+  lowest segment and the last valid one of the highest. A run interrupted
+  mid-append can leave a truncated final line, so skip any line that does not
+  parse and any record that is not a `host-sample`. If neither end has a valid
+  record in the lines you read, read more lines rather than guessing. That is
+  a read of your own private directory, so it needs no more than the bound the
+  ground rules already require.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   For example, write
   `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`
@@ -759,8 +744,11 @@ branch without a new authorization.
   match, and the operator ends it. Deleting `inhibitions.json` clears every
   inhibition at once, so a descendant that is still running is no longer
   guarded against.
-- **Stop condition:** any identity mismatch, a `*` entry with no usable
-  process identity that you cannot resolve, or an active collector run.
+- **Stop condition:** any identity mismatch, any entry with no usable process
+  identity (a `processId` of -1 and `startTimeTicks` of 0, for any source and
+  not only `*`) that you cannot resolve, or an active collector run. Such an
+  entry means a launch or cleanup was ambiguous, so never clear the file while
+  one remains.
 
 #### Terminate one distribution
 
