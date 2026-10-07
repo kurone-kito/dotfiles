@@ -214,7 +214,10 @@ output directory. A start reads and rewrites `inhibitions.json` and replaces
 sections rely on. The rewrite keeps every inhibition entry whose cleanup was
 not verified, and drops only an entry whose cleanup was verified and whose
 exact process has exited. The lock metadata it replaces is replaced only when
-no collector is active, so it describes a process that has ended. Reading the
+no collector is active, so it describes a run that is no longer active. Its
+recorded process may still be running, for example an interactive PowerShell
+host whose attempt to delete the lock file failed, so never read the metadata
+as proof that the process has exited. Reading the
 files is therefore for the checkpoint's record, not a guard against losing
 evidence. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
 Before any new run, read both files if they exist, without editing or
@@ -545,15 +548,18 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
    ```sh
    timeout -k 5 15 cat /proc/sys/kernel/random/boot_id
-   timeout -k 5 15 sh -c "sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20"
+   timeout -k 5 15 sh -c "sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 1,20"
    ```
 
-   The second command prints the `starttime` ticks, which is field 22 of
-   `/proc/<pid>/stat`. The `timeout` wraps the whole pipeline, so a hung read
-   ends with status 124 instead of being hidden by the exit status of `cut`.
-   Stripping everything through the last `)` first keeps a process name that
-   contains spaces from shifting the fields, so the value is then field 20.
-   Both the boot id and the ticks must match the checkpoint. When you run them
+   The second command prints the process state and the `starttime` ticks,
+   fields 3 and 22 of `/proc/<pid>/stat`. The `timeout` wraps the whole
+   pipeline, so a hung read ends with status 124 instead of being hidden by the
+   exit status of `cut`. Stripping everything through the last `)` first keeps
+   a process name that contains spaces from shifting the fields, so the state
+   is then field 1 and the ticks are field 20. A state of `Z` (exited, not yet
+   reaped) or `X` means the process is gone even though the entry still
+   matches, so it is not a live owner. Otherwise the boot id and the ticks
+   must both match the checkpoint. When you run them
    over SSH, wrap the client call in a `timeout` as well. A read that times
    out is an unknown identity: stop the check without retrying.
 
@@ -620,15 +626,21 @@ under `timeout`, and a timeout is a failed check, not a pass.
    records `<owner>/<name>#<N>`. `gh` takes a number, a URL, or a branch, not
    that form:
    `timeout 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
-   and
-   `timeout 30 gh pr checks <pr-number> -R <owner>/<name> --json name,state,bucket`.
-   Plain `gh pr checks` exits with a non-zero status for a failed check (1)
-   or a pending check (8), even though it prints the table. With `--json`, gh
-   2.102.0 exited 0 for a PR with a failed check, but other versions may keep
-   those statuses. Either way, statuses 1 and 8 with valid JSON on standard
-   output are an observed state: read each check's `bucket` and route failed
-   or pending checks in step 5. Only unavailable or invalid output, or a
-   transport error, is a failed resume check.
+   and the duplicate-safe, HEAD-pinned snapshot that
+   `.github/instructions/idd-ci.instructions.md` requires, because plain
+   `gh pr checks` can collapse same-named checks across workflows:
+
+   ```sh
+   timeout 120 npx --yes --package "$(jq -r .helperRuntime.packageSpec .github/idd/config.json)" idd-ci-wait-state --pr <pr-number>
+   ```
+
+   The helper is read-only and exits 0 with JSON even when a check failed.
+   Read the top-level `headRefOid`, which must equal the `headRefOid` from
+   `gh pr view`, each check's `status` (`success`, `pending`, `failure`, or
+   `unknown`) keyed by `checkName` and `workflowName`, and
+   `requiredChecks.status`. Failed or pending checks are an observed state,
+   routed in step 5. A non-zero exit status, invalid JSON, or a `headRefOid`
+   that differs from the pull request's is a failed resume check.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
@@ -1054,7 +1066,7 @@ owned-child-processes:
 | --- | --- |
 | Owner session | listed by the multiplexer with the recorded name and creation time |
 | Guest boot id | same as recorded |
-| Recorded PID and guest start ticks | PID alive, start ticks match |
+| Recorded PID and guest start ticks | PID alive and not in state `Z` or `X`, start ticks match |
 | `symbolic-ref --short HEAD` | equals the recorded branch |
 | `rev-parse HEAD` | one commit past `head-oid`, the owner's second commit |
 | `git status --porcelain` | two modified tracked files |
@@ -1067,7 +1079,8 @@ is the owner's progress since the last checkpoint update, not a conflict.
 **Next safe action:** reattach to that session read-only first and let it
 continue. Do not start a second agent, do not run `git stash` or
 `git reset`, and do not post a new claim. If instead the guest boot id
-differs and the PID is gone, the session did not survive. The worktree
+differs, the session did not survive, whether or not the PID still exists,
+because a PID after a reboot belongs to a different process. The worktree
 state and the claim are then the facts to resume from, through
 `.github/instructions/idd-resume.instructions.md`, with the checkpoint's
 `uncommitted-work-preservation` entry as the safety record. Stop if the
