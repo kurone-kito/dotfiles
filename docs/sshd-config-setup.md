@@ -381,6 +381,14 @@ If the account is **not** an administrator, ensure
 `%USERPROFILE%\.ssh\authorized_keys` exists and still grants read access
 to `SYSTEM`.
 
+### WSL guest stops answering while the Windows host is reachable
+
+This guide covers how SSH configuration reaches a machine. It does not cover
+recovery when a WSL guest hangs. For the manual, evidence-preserving
+procedure, including how to check a host-native noninteractive shell while
+everything is healthy, see
+[WSL incident recovery runbook](wsl-incident-recovery.md).
+
 ### Connection drops on mobile
 
 If connections still drop frequently, reduce the probe interval:
