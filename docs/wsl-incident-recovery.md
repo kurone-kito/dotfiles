@@ -390,6 +390,7 @@ working-tree-status: <clean | dirty: N tracked, M untracked>
 head-oid: <full commit id of HEAD at the last checkpoint update>
 upstream-state: <ahead A behind B | no upstream>
 uncommitted-work-preservation: <where a copy was written | not preserved: reason>
+working-tree-digest: <SHA-256 of the saved diff, written with the copy | none>
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
@@ -443,11 +444,26 @@ Fill the fields as follows:
   `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`, repeat both
   commands with `-C "<worktree>/<submodule-path>"` for each one, and keep every
   output in its own file. A submodule you cannot capture is recorded as
-  `not preserved: submodule <path>`. If a command exits non-zero or
-  times out (status 124 or 137), discard its output file and record
-  `not preserved: <reason>` instead of keeping a partial copy. If the guest
-  cannot be read, write `not preserved: guest unavailable`. That is a valid
-  entry and a reason to stop, not a reason to improvise.
+  `not preserved: submodule <path>`. Ignored files are not in either output,
+  yet they can hold work you cannot recreate, such as local agent or editor
+  settings. List them, in the worktree and each submodule, with:
+
+  ```sh
+  timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
+    status --porcelain --ignored --untracked-files=normal
+  ```
+
+  Copy the ignored paths you cannot rebuild, and skip dependency and build
+  directories you can. Record what you skipped, or write
+  `not preserved: ignored files` if you copied none. If a
+  command exits non-zero or times out (status 124 or 137), discard its output
+  file and record `not preserved: <reason>` instead of keeping a partial copy.
+  If the guest cannot be read, write `not preserved: guest unavailable`. That
+  is a valid entry and a reason to stop, not a reason to improvise.
+  Finally, record the SHA-256 of the top-level worktree's saved diff file, not
+  a submodule's, in the checkpoint's `working-tree-digest` line, with
+  `sha256sum <file>` in the guest or `Get-FileHash -Algorithm SHA256 <file>`
+  on the host. Write `none` when no diff file was kept.
 - **Owned child processes.** Record the PID together with its start identity,
   and mark whether it lives in the host or the guest. For a host process that
   is the creation time in UTC. For a guest process it is the `starttime`
@@ -536,16 +552,35 @@ under `timeout`, and a timeout is a failed check, not a pass.
    and continue read-only. If the owning session was not verified, even when a
    child process survives, a different commit means someone changed the
    revision, so stop and report it. Never resume
-   from a guess. Even a local `git` call can block on a stalled filesystem, so
-   each runs under `timeout`, and a timeout is a failed check. `timeout` ends
-   the call it started, but a process stuck in uninterruptible I/O can outlast the
+   from a guess. Next, write a fresh diff to a private file:
+
+   ```sh
+   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
+     diff HEAD --binary > "<private-file>"
+   ```
+
+   Compare its SHA-256 with `working-tree-digest`. A `none` digest means the
+   contents cannot be verified, so treat it as a mismatch. A match means the
+   tracked contents are the ones the checkpoint saved. A difference is the owner's
+   progress when the owning session was verified, and otherwise means the
+   contents changed while no verified owner was running, so stop and report
+   it. A path and a status that look unchanged do not prove the contents are.
+
+   Even a local `git` call can block on a stalled filesystem, so each runs
+   under `timeout`, and a timeout is a failed check. `timeout` ends the call
+   it started, but a process stuck in uninterruptible I/O can outlast the
    deadline, so the bound is not guaranteed on a stalled filesystem. A call
    that has not returned is not ended by name. Note it by PID and creation
    time. `--no-optional-locks` keeps `status` from refreshing the index. The
    last command prints the behind count and then the ahead count. When the
-   branch has no upstream it fails. Use
-   `timeout -k 5 30 git -C "<worktree>" rev-list --count origin/<base-branch>..HEAD`
-   and record `no upstream` in the checkpoint.
+   branch has no upstream it fails. Count the commits since the base branch
+   instead, and record `no upstream` in the checkpoint:
+
+   ```sh
+   timeout -k 5 30 git -C "<worktree>" \
+     rev-list --count origin/<base-branch>..HEAD
+   ```
+
 3. **IDD claim state.** With this repository's helper runtime, read the
    claim state without changing it. `<issue-number>` is the `N` in the
    checkpoint's `issue` field. Take `<helper-package-spec>` from
@@ -965,6 +1000,7 @@ Checkpoint excerpt:
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
+working-tree-digest: <SHA-256 of the saved diff>
 owner-session:
   kind: multiplexer
   multiplexer: <session name and creation time>
@@ -986,6 +1022,7 @@ owned-child-processes:
 | `symbolic-ref --short HEAD` | equals the recorded branch |
 | `rev-parse HEAD` | one commit past `head-oid`, the owner's second commit |
 | `git status --porcelain` | two modified tracked files |
+| SHA-256 of a fresh `diff HEAD --binary` | differs from `working-tree-digest`, the owner's progress |
 | `rev-list --left-right --count @{u}...HEAD` | `0` then `1` (one commit ahead) |
 | `idd-resume-claim-routing` | `state` `already_owned`, `action` `keep` |
 
