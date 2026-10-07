@@ -38,9 +38,9 @@ two counters does not name a culprit process.
   volume: `timeout` ends the call it started, but a process stuck in
   uninterruptible I/O can outlast it, and a host-side file read or copy can
   stall the same way. Where a snippet below has no bound of its own, run it as
-  a child job with a wait timeout, as the archive step does. Treat an expired
-  limit as a failed step, note any leftover process by PID and start
-  identity without ending it, and stop.
+  a child job (`Start-Job`, then `Wait-Job -Timeout`) with a wait timeout.
+  Treat an expired limit as a failed step, note any leftover process by PID
+  and start identity without ending it, and stop.
 - Recovery is not a reason to reset, stash, clean, or force-checkout a
   working tree, to delete a lock or state file, or to take over another
   session's IDD claim. None of these is a default step anywhere below. The
@@ -183,80 +183,29 @@ states how to use exactly that from SSH.
 
 The log byte budget is shared by every run that writes to the same logs
 directory. At start, each run deletes the oldest collector log files there
-until the directory fits its own `-MaximumLogBytes`, and a later segment or record
-that would exceed the budget does the same. A new run therefore can delete
-an older run's records, including the one-second run used to check whether a
-collector is active.
+until the directory fits its own `-MaximumLogBytes`, and a later segment or
+record that would exceed the budget does the same. A new run in a directory
+that already holds records can therefore delete them, including the
+one-second run used to check whether a collector is active.
 
-Before any new run in the real logs directory, copy every existing collector
-log file, and the two state files a start can rewrite, to a private place, and
-record that place in the checkpoint:
+Do not share a logs directory. Give every run you start during an incident
+its own new `-OutputDirectory`, never the default directory and never one an
+earlier run used. The collector creates its logs in a
+`dotfiles-wsl-incident-telemetry` subdirectory of it and applies its budget
+only there, so records written elsewhere are never touched. Give checks,
+smoke tests, and activity probes their own scratch directories for the same
+reason. Record each run's directory in the checkpoint's
+`redacted-log-location` line. Avoiding the shared directory needs no copy
+step, so nothing here can stall on the volume.
 
-```powershell
-$state = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry'
-$logs = Join-Path $state 'logs\dotfiles-wsl-incident-telemetry'
-$archive = Join-Path '<private-archive-dir>' ([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
-$pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
-$job = Start-Job -ArgumentList $state, $logs, $archive, $pattern -ScriptBlock {
-  param($state, $logs, $archive, $pattern)
-  $ErrorActionPreference = 'Stop'
-  $reparse = [IO.FileAttributes]::ReparsePoint
-  New-Item -ItemType Directory -Path $archive | Out-Null
-  if (Test-Path -LiteralPath $logs) {
-    $files = @(Get-ChildItem -LiteralPath $logs -File -Force |
-      Where-Object { $_.Name -match $pattern })
-    if (@($files | Where-Object { $_.Attributes -band $reparse }).Count) {
-      throw 'reparse point among the log files'
-    }
-    $files | Copy-Item -Destination $archive
-  }
-  foreach ($name in 'inhibitions.json', 'collector.lock.json') {
-    $file = Join-Path $state $name
-    if (Test-Path -LiteralPath $file) {
-      if ((Get-Item -LiteralPath $file -Force).Attributes -band $reparse) {
-        throw 'reparse point among the state files'
-      }
-      Copy-Item -LiteralPath $file -Destination (Join-Path $archive ('state-' + $name))
-    }
-  }
-}
-if (-not (Wait-Job -Job $job -Timeout 120)) {
-  'archive timed out: stop'
-}
-elseif ($job.State -ne 'Completed') {
-  Receive-Job -Job $job -ErrorAction Continue
-  'archive failed: stop'
-}
-else {
-  Receive-Job -Job $job -ErrorAction Stop
-  'archive copied'
-}
-```
-
-Continue only when the last line printed is `archive copied`.
-
-The pattern is the collector's own log-file name set. It includes the
-temporary and partial files that a start can repair or delete, not only
-finished `.jsonl` files. A log or state entry that is a reparse point fails
-the copy closed, the way the collector rejects one, so nothing outside the
-directory is read into the archive. Each run of the step writes to its own
-timestamped subdirectory, so a second copy never overwrites or masks the
-first. A start also reads and rewrites `inhibitions.json`
-and replaces `collector.lock.json`, which hold the cleanup and ownership
-evidence the later sections rely on, so both are copied with a `state-`
-prefix. The `Test-Path` guards skip a log directory or state file that does
-not exist yet, because there is nothing to preserve. The copy
-runs in a child job with a 120-second wait, so a stalled filesystem returns
-control. A copy that fails, or a wait that expires, is fatal: stop and do not
-start another run, and a longer script must stop explicitly because a failed
-wait does not set a failing exit status. Note the job's id and any leftover
-process by PID and creation time without ending it, and do not run
-`Stop-Job` or `Remove-Job -Force`. Record the archive in the checkpoint's
-`redacted-log-location` line as not preserved.
-
-Run checks, smoke tests, and activity probes with their own scratch
-`-OutputDirectory`. The per-user lock is shared across output directories,
-so a probe with a scratch directory still answers `already-running`.
+The per-user state directory is different: every run shares it, whatever the
+output directory. A start reads and rewrites `inhibitions.json` and replaces
+`collector.lock.json`, which hold the cleanup and ownership evidence the later
+sections rely on. Before any new run, read both files if they exist, without
+editing or deleting them, and write down in the checkpoint whether
+`inhibitions.json` has entries and the PID and run id in the lock metadata.
+The per-user lock is shared across output directories too, so a probe with a
+scratch directory still answers `already-running`.
 
 ### Start
 
@@ -267,14 +216,14 @@ newest log afterwards. From an SSH session:
 
 ```sh
 timeout 660 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
-  "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 600"
+  "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory C:\Users\<host-user>\<private-incident-dir>"
 ```
 
 From a PowerShell session on the host:
 
 ```powershell
 $collector = Join-Path $HOME '.local\bin\wsl-incident-capture.ps1'
-& $collector -IntervalSeconds 5 -DurationSeconds 600
+& $collector -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory '<private-incident-dir>'
 ```
 
 Start host-only. Add a guest only under
@@ -375,8 +324,8 @@ Pick the row that matches what you observe, then follow its steps in order.
 
 | State | How to recognize it | Do, in order | Stop when |
 | --- | --- | --- | --- |
-| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Copy the existing logs and state files (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration. 4. Update the checkpoint with the run id and the observation window. 5. To add a guest probe, copy the logs and state files again, then start a new bounded run with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
-| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Copy the existing logs and state files. 5. Start the host-only collector. 6. Update the checkpoint with the run id and the observation window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
+| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration in that directory. 4. Update the checkpoint with the run id and the observation window. 5. To add a guest probe, read the state files again, then start a new bounded run in another new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
+| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files and choose a new output directory. 5. Start the host-only collector in it. 6. Update the checkpoint with the run id and the observation window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
 | C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
 Stopped or unknown distributions are a separate case. A distribution that a
@@ -405,7 +354,7 @@ command lines or arguments, and no raw log content.
 checkpoint-version: 1
 observation-window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc>
 telemetry-run-id: <run-id from the log file name>
-redacted-log-location: <private folder or archive label | not preserved: reason>
+redacted-log-location: <each run's private output directory | not preserved: reason>
 access-validated: <date> via <host SSH | local console>
 effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
@@ -449,6 +398,7 @@ Fill the fields as follows:
   first retained record, which can be later than the run start.
 
   ```powershell
+  $logs = Join-Path '<private-incident-dir>' 'dotfiles-wsl-incident-telemetry'
   function Get-ValidRecords($lines) {
     foreach ($line in $lines) {
       try { $r = $line | ConvertFrom-Json } catch { continue }
@@ -671,7 +621,7 @@ so an agent may run it once the operator authorizes it.
 ### Observe with the host-only collector
 
 - **Purpose:** same-window host evidence while the guest is unavailable.
-- **Prerequisites:** validated host access, existing logs copied, and a
+- **Prerequisites:** validated host access, a new output directory, and a
   finite `-DurationSeconds`.
 - **If it fails:** a status of 1 or 2, or a status of 0 with a log message
   (see [Exit statuses](#exit-statuses)). Record it and stop. A source
@@ -827,7 +777,7 @@ branch without a new authorization.
 
 - **Purpose:** recover a host that no longer behaves, as a last resort.
 - **Prerequisites:** local console access exists, and the checkpoint and the
-  copied logs are somewhere that survives a restart.
+  incident output directory are somewhere that survives a restart.
 - **If it fails:** the host does not return. Only local console access can
   continue.
 - **Deadline:** the one in the authorization.
@@ -934,7 +884,7 @@ the first. Compare rates that cover the same window. A large cumulative
 counter says nothing about current pressure.
 
 **Next safe action:** let the finite run end, update the checkpoint, and
-archive the logs. Change nothing.
+keep the incident output directory. Change nothing.
 
 ### 2. Hung guest
 
