@@ -608,12 +608,17 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
 3. **IDD claim state.** With this repository's helper runtime, read the
    claim state without changing it. `<issue-number>` is the `N` in the
-   checkpoint's `issue` field. Take `<helper-package-spec>` from
-   `helperRuntime.packageSpec` in `.github/idd/config.json`:
+   checkpoint's `issue` field, and `<owner>` and `<name>` come from the same
+   field. Take `<helper-package-spec>` from `helperRuntime.packageSpec` in the
+   worktree's own config file, so the commands do not depend on the directory
+   you start in. Both helpers take the repository from `--owner` and `--repo`
+   for the same reason:
 
    ```sh
+   timeout 30 jq -r .helperRuntime.packageSpec "<worktree>/.github/idd/config.json"
    timeout 60 npx --yes --package <helper-package-spec> \
-     idd-resume-claim-routing --issue <issue-number> --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>"
+     idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
+     --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>"
    ```
 
    Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
@@ -631,7 +636,8 @@ under `timeout`, and a timeout is a failed check, not a pass.
    `gh pr checks` can collapse same-named checks across workflows:
 
    ```sh
-   timeout 120 npx --yes --package "$(jq -r .helperRuntime.packageSpec .github/idd/config.json)" idd-ci-wait-state --pr <pr-number>
+   timeout 120 npx --yes --package <helper-package-spec> \
+     idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>
    ```
 
    The helper is read-only and exits 0 with JSON even when a check failed.
