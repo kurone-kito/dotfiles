@@ -34,7 +34,13 @@ two counters does not name a culprit process.
 - Capture evidence before acting, and capture it from the host first. The
   host keeps answering when the guest does not.
 - Bound every command with a time or count limit before you run it. Never
-  run a command that can wait forever.
+  run a command that can wait forever. A limit is a best effort on a stalled
+  volume: `timeout` ends the call it started, but a process stuck in
+  uninterruptible I/O can outlast it, and a host-side file read or copy can
+  stall the same way. Where a snippet below has no bound of its own, run it as
+  a child job with a wait timeout, as the archive step does. Treat an expired
+  limit as a failed step, note any leftover process by PID and start
+  identity without ending it, and stop.
 - Recovery is not a reason to reset, stash, clean, or force-checkout a
   working tree, to delete a lock or state file, or to take over another
   session's IDD claim. None of these is a default step anywhere below. The
@@ -186,23 +192,33 @@ Before any new run in the real logs directory, copy every existing collector
 log file to a private place, and record that place in the checkpoint:
 
 ```powershell
-$ErrorActionPreference = 'Stop'
 $logs = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry\logs\dotfiles-wsl-incident-telemetry'
 $archive = '<private-archive-dir>'
 $pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
-if (Test-Path -LiteralPath $logs) {
-  New-Item -ItemType Directory -Force -Path $archive | Out-Null
-  Get-ChildItem -LiteralPath $logs -File -Force |
-    Where-Object { $_.Name -match $pattern } |
-    Copy-Item -Destination $archive
+$job = Start-Job -ArgumentList $logs, $archive, $pattern -ScriptBlock {
+  param($logs, $archive, $pattern)
+  $ErrorActionPreference = 'Stop'
+  if (Test-Path -LiteralPath $logs) {
+    New-Item -ItemType Directory -Force -Path $archive | Out-Null
+    Get-ChildItem -LiteralPath $logs -File -Force |
+      Where-Object { $_.Name -match $pattern } |
+      Copy-Item -Destination $archive
+  }
 }
+if (Wait-Job -Job $job -Timeout 120) { Receive-Job -Job $job } else { 'archive timed out' }
 ```
 
 The pattern is the collector's own log-file name set. It includes the
 temporary and partial files that a start can repair or delete, not only
 finished `.jsonl` files. The `Test-Path` guard skips the copy when the logs
-directory does not exist yet, because there is nothing to preserve. A copy
-that fails is fatal: stop and do not start another run.
+directory does not exist yet, because there is nothing to preserve. The copy
+runs in a child job with a 120-second wait, so a stalled filesystem returns
+control. A copy that fails, or a wait that expires, is fatal: stop and do not
+start another run, and a longer script must stop explicitly because a failed
+wait does not set a failing exit status. Note the job's id and any leftover
+process by PID and creation time without ending it, and do not run
+`Stop-Job` or `Remove-Job -Force`. Record the archive in the checkpoint's
+`redacted-log-location` line as not preserved.
 
 Run checks, smoke tests, and activity probes with their own scratch
 `-OutputDirectory`. The per-user lock is shared across output directories,
@@ -352,7 +368,7 @@ command lines or arguments, and no raw log content.
 checkpoint-version: 1
 observation-window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc>
 telemetry-run-id: <run-id from the log file name>
-redacted-log-location: <private folder or archive label>
+redacted-log-location: <private folder or archive label | not preserved: reason>
 access-validated: <date> via <host SSH | local console>
 effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
@@ -365,8 +381,10 @@ uncommitted-work-preservation: <where a copy was written | not preserved: reason
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
-owner-session: <multiplexer session name and creation time | owner process
-  pid and start identity>, the session that owns the claim, not a child
+owner-session:
+  kind: <multiplexer | process>
+  multiplexer: <session name and creation time, when kind is multiplexer>
+  process: <the same fields as an owned-child-processes entry, listed here only>
 claim: <agent-id> / <claim-id> | none
 activation-nonce: <nonce | none>
 last-completed-step: <IDD phase and step>
@@ -434,8 +452,9 @@ Fill the fields as follows:
   because a new session can reuse a name after the old one exits. For tmux,
   record the name together with its creation time, from
   `tmux list-sessions -F '#{session_name} #{session_created}'`. For a
-  multiplexer that does not show a creation time, record the PID and start
-  identity of the process that owns the session instead.
+  multiplexer that does not show a creation time, record the process that owns
+  the session instead, with the same fields as an owned child: its namespace,
+  distribution and boot id for a guest process, PID, and start identity.
 - **Effective memory cap.** Copy the value you read in the healthy-time
   check. Recovery never changes it.
 - **Claim and nonce.** The IDD agent id, claim id, and activation nonce are
@@ -454,8 +473,9 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
 1. **Surviving sessions.** First verify the owning session itself, using the
    checkpoint's `owner-session`: the multiplexer session listed below, matched
-   by name and creation time, or the owner process with the same start
-   identity. A name alone does not count. A surviving child process does
+   by name and creation time, or the owner process, matched on every field of
+   its entry, including the distribution and boot id for a guest process. A
+   name alone does not count. A surviving child process does
    not prove a live owner, because a child can outlive the session that
    started it. Then, for each recorded process, compare the live PID and its
    start identity with the checkpoint: the creation time in UTC for a host
@@ -933,7 +953,9 @@ Checkpoint excerpt:
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
-owner-session: <multiplexer session name and creation time>
+owner-session:
+  kind: multiplexer
+  multiplexer: <session name and creation time>
 claim: <agent-id> / <claim-id>
 last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
