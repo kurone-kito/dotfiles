@@ -405,7 +405,12 @@ Fill the fields as follows:
   output, which includes staged and unstaged tracked changes, and the output
   of
   `timeout -k 5 60 git -C <worktree> --no-optional-locks ls-files --others --exclude-standard`
-  to a private folder, and copy those files. If a command exits non-zero or
+  to a private folder, and copy those files. These top-level commands do not
+  recurse into initialized submodules. List them with
+  `timeout -k 5 30 git -C <worktree> submodule status --recursive`, repeat both
+  commands with `-C <worktree>/<submodule-path>` for each one, and keep every
+  output in its own file. A submodule you cannot capture is recorded as
+  `not preserved: submodule <path>`. If a command exits non-zero or
   times out (status 124 or 137), discard its output file and record
   `not preserved: <reason>` instead of keeping a partial copy. If the guest
   cannot be read, write `not preserved: guest unavailable`. That is a valid
@@ -444,15 +449,17 @@ under `timeout`, and a timeout is a failed check, not a pass.
    ```
 
    ```sh
-   cat /proc/sys/kernel/random/boot_id
-   sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20
+   timeout -k 5 15 cat /proc/sys/kernel/random/boot_id
+   timeout -k 5 15 sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20
    ```
 
    The second command prints the `starttime` ticks, which is field 22 of
    `/proc/<pid>/stat`. Stripping everything through the last `)` first keeps
    a process name that contains spaces from shifting the fields, so the value
    is then field 20. Both the boot id and the ticks must match the
-   checkpoint.
+   checkpoint. When you run them over SSH, wrap the client call in a
+   `timeout` as well. A read that times out is an unknown identity: stop the
+   check without retrying.
 
    If you use a terminal multiplexer, list its sessions read-only with
    `tmux list-sessions` or `zellij list-sessions`. A live, verified session
