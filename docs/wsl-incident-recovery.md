@@ -51,7 +51,8 @@ two counters does not name a culprit process.
   Each needs the operator's explicit authorization in the current session,
   naming the exact command and target, after the checkpoint exists or after
   you have recorded why it cannot exist. An agent never authorizes itself,
-  and attention alone is not approval.
+  and attention alone is not approval. The operator, not an agent, executes
+  every such branch except the IDD worktree recovery.
 - Do not present an earlier multi-command intervention as a proven fix. A
   sequence of several changes made together cannot show which change, which
   elapsed time, or which workload change mattered.
@@ -94,12 +95,17 @@ Do not change that shell for this check. Start PowerShell explicitly and use
 `-File`, which avoids most quoting differences between login shells.
 
 Every `ssh` example in this runbook carries `-o BatchMode=yes -o
-ConnectTimeout=10`, so a dead path fails in seconds instead of prompting or
-waiting. A client-side timeout does not stop a command that is already
-running on the host, so keep every remote command short and bounded too:
+ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3` and is
+wrapped in a client-side `timeout` sized to the remote command plus a margin.
+`ConnectTimeout` covers only connection setup, the keepalive options end a
+session that goes silent, and the wrapper bounds the whole call, so a dead
+path or a stalled session returns control. If your client has no `timeout`,
+skip the call or run it where one exists. A client-side timeout does not stop
+a command that is already running on the host, so keep every remote command
+short and bounded too:
 
 ```sh
-ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> \
+timeout 30 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
   "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -Help"
 ```
 
@@ -122,7 +128,7 @@ checkpoint:
    so a check that shares the real directory can delete real evidence:
 
    ```sh
-   ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> \
+   timeout 90 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
      "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 10 -OutputDirectory C:\Users\<host-user>\<private-scratch-dir>"
    ```
 
@@ -137,19 +143,18 @@ checkpoint:
    This does not start a distribution:
 
    ```sh
-   timeout 15 ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> "wsl.exe --list --running --quiet"
+   timeout 15 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> "wsl.exe --list --running --quiet"
    ```
 
    Captured raw, that output can contain NUL characters that make names
    look spaced out. The collector strips them before matching.
 
-   `ConnectTimeout` bounds only the connection, not this remote command. Run
-   this check only with a client-side timeout, as above, and skip it if your
-   client has none. The timeout
-   bounds the client only, so the remote `wsl.exe` process can remain. Treat no
-   answer as a failed check, do not run it again, and note the leftover
-   process by PID and creation time. During an incident, prefer the
-   collector's own preflight, which has a 1-second bound, to a manual call.
+   The wrapper bounds the client only, so the remote `wsl.exe` process can
+   remain. Run this check only with it, and skip the check if your client has
+   no `timeout`. Treat no answer as a failed check, do not run it again, and
+   note the leftover process by PID and creation time. During an incident,
+   prefer the collector's own preflight, which has a 1-second bound, to a
+   manual call.
 
 4. Read the machine's effective memory cap. Open the effective
    `%UserProfile%\.wslconfig` on the host, not this repository's source file,
@@ -211,7 +216,7 @@ If the SSH connection drops, the run might end with it, leave an
 newest log afterwards. From an SSH session:
 
 ```sh
-ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> \
+timeout 660 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
   "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 600"
 ```
 
@@ -243,7 +248,7 @@ There is no status command. Use evidence in this order:
    [Protect existing evidence](#protect-existing-evidence) explains.
 
    ```sh
-   ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> \
+   timeout 60 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
      "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 1 -OutputDirectory C:\Users\<host-user>\<private-scratch-dir>"
    ```
 
@@ -354,6 +359,7 @@ repository: <owner>/<name>
 branch: <issue/N-slug>
 worktree-path: <local path, kept private>
 working-tree-status: <clean | dirty: N tracked, M untracked>
+head-oid: <full commit id of HEAD at the last checkpoint update>
 upstream-state: <ahead A behind B | no upstream>
 uncommitted-work-preservation: <where a copy was written | not preserved: reason>
 issue: <owner>/<name>#<N>
@@ -462,11 +468,15 @@ under `timeout`, and a timeout is a failed check, not a pass.
    ```
 
    The `symbolic-ref` output must equal the checkpoint's `branch` exactly. A
-   different branch, or a detached HEAD, means the path is not the worktree
-   the checkpoint describes, so stop. Even a local `git` call can block on a
-   stalled filesystem, so each runs under `timeout`, and a timeout is a failed
-   check. `timeout` ends the call
-   it started, but a process stuck in uninterruptible I/O can outlast the
+   different branch or a detached HEAD means the path is not the worktree the
+   checkpoint describes, so stop. The `rev-parse` output is compared with the
+   checkpoint's `head-oid`. If check 1 verified a live owning session, a
+   different commit is normal progress: record the new commit, tell the owner,
+   and continue read-only. If no live session was verified, a different commit
+   means someone changed the revision, so stop and report it. Never resume
+   from a guess. Even a local `git` call can block on a stalled filesystem, so
+   each runs under `timeout`, and a timeout is a failed check. `timeout` ends
+   the call it started, but a process stuck in uninterruptible I/O can outlast the
    deadline, so the bound is not guaranteed on a stalled filesystem. A call
    that has not returned is not ended by name. Note it by PID and creation
    time. `--no-optional-locks` keeps `status` from refreshing the index. The
@@ -518,13 +528,16 @@ Observing and the bounded guest read run as the decision table says, under
 the prerequisites listed in their own blocks. The graceful guest stop and
 every separately authorized branch need the operator's authorization. None of
 these steps is automated, scheduled, retried in a loop, or tied to a timer.
-Authorization lets an agent run a command the operator names. It never lets
-an agent end an individual process it did not start. The commands named in
-the branches below (`wsl.exe --terminate`, `wsl.exe --shutdown`, a host
-restart, an `sshd` restart) end processes as a side effect, and an agent runs
-one only when the operator names that exact command and target. Stopping
-another session's collector, and ending any process found while reconciling,
-are the operator's own actions.
+The repository rule is that an agent ends only the processes it started, and
+operator authorization is not an exception to it. A shared host runs other
+sessions' processes. So every separately authorized branch except the IDD
+worktree recovery is executed by the operator: the agent collects the
+evidence, and prepares the exact command, target, and impact for the operator
+to run, but does not run it. That covers stopping another session's collector,
+reconciling `inhibitions.json`, `wsl.exe --terminate`, `wsl.exe --shutdown`, a
+host restart, memory, swap, or cache changes, and service or SSH changes. The
+IDD worktree recovery is an IDD helper that changes git state, not processes,
+so an agent may run it once the operator authorizes it.
 
 ### Observe with the host-only collector
 
@@ -575,8 +588,10 @@ are the operator's own actions.
 
 Each branch below needs its own explicit authorization, taken after the
 checkpoint exists or after you recorded why it cannot. Authorizing one does
-not authorize another. Each authorization names a **deadline**, for example a
-wall-clock time. Without one, do not run the step. A command that has not
+not authorize another. The operator executes each branch except the IDD
+worktree recovery. The agent prepares the command and impact for it. Each
+authorization names a **deadline**, for example a wall-clock time. Without
+one, do not run the step. A command that has not
 returned by its deadline is not repeated, and it does not lead to another
 branch without a new authorization.
 
@@ -629,9 +644,11 @@ branch without a new authorization.
 - **Purpose:** clear source inhibitions that an unverified collector cleanup
   left behind, so those sources are sampled again.
 - **Prerequisites:** no collector run is active and every collector session
-  is closed. The operator, not an agent, performs any process stop in this
-  procedure. Record each target's PID and creation time in the checkpoint
-  and re-verify them just before ending it. For each entry, compare
+  is closed. The operator executes this whole branch, including any process
+  stop and the deletion of `inhibitions.json`. The agent only compares
+  identities and prepares the exact commands and impact. Record each target's
+  PID and creation time in the checkpoint and re-verify them just before
+  ending it. For each entry, compare
   `processId` and `startTimeTicks` with the live process, and make an
   independent process-tree check for surviving collector descendants,
   exactly as the procedure under
@@ -838,7 +855,7 @@ there until an escalation branch is authorized.
 
 | Observation | Value |
 | --- | --- |
-| `ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> "exit"` | exit status 255 |
+| `timeout 30 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> "exit"` | exit status 255 (or 124 if the timeout fires) |
 | Guest SSH on `<guest-ssh-port>` | no answer, or an answer from an unknown service |
 | Collector records | none from this session |
 
@@ -882,6 +899,7 @@ Checkpoint excerpt:
 ```text
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
+head-oid: <commit id after commit 1>
 claim: <agent-id> / <claim-id>
 last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
@@ -895,11 +913,14 @@ owned-child-processes:
 | --- | --- |
 | Guest boot id | same as recorded |
 | Recorded PID and guest start ticks | PID alive, start ticks match |
+| `symbolic-ref --short HEAD` | equals the recorded branch |
+| `rev-parse HEAD` | one commit past `head-oid`, the owner's second commit |
 | `git status --porcelain` | two modified tracked files |
 | `rev-list --left-right --count @{u}...HEAD` | `0` then `1` (one commit ahead) |
 | `idd-resume-claim-routing` | `state` `already_owned`, `action` `keep` |
 
-The session is still alive and the claim is still its own.
+The session is still alive and the claim is still its own. The changed HEAD
+is the owner's progress since the last checkpoint update, not a conflict.
 
 **Next safe action:** reattach to that session read-only first and let it
 continue. Do not start a second agent, do not run `git stash` or
