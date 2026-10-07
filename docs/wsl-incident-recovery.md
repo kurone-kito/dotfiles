@@ -42,10 +42,11 @@ two counters does not name a culprit process.
   branches: the IDD worktree recovery, which stashes work, removes a
   worktree and its claim lock, and the reconciliation of
   `inhibitions.json`, which ends by deleting that file.
-- Never end a process by name or by pattern. An agent ends only a process it
-  started itself, by its recorded PID. Any other process is the operator's to
-  end, and only after an exact match of PID and creation time recorded in the
-  checkpoint and re-verified just before acting.
+- Never end a process by name or by pattern. An agent ends an individual
+  process only if it started that process itself, by its recorded PID. Any
+  other individual process is the operator's to end, and only after an exact
+  match of PID and creation time recorded in the checkpoint and re-verified
+  just before acting.
 - Disruptive actions (see [Escalation](#escalation)) are separate branches.
   Each needs the operator's explicit authorization in the current session,
   naming the exact command and target, after the checkpoint exists or after
@@ -379,8 +380,12 @@ Fill the fields as follows:
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   For example, write
   `timeout -k 5 60 git -C <worktree> --no-optional-locks diff HEAD --binary`
-  output, which includes staged and unstaged tracked changes, and a list of
-  untracked files to a private folder, and copy those files. If the guest
+  output, which includes staged and unstaged tracked changes, and the output
+  of
+  `timeout -k 5 60 git -C <worktree> --no-optional-locks ls-files --others --exclude-standard`
+  to a private folder, and copy those files. If a command exits non-zero or
+  times out (status 124 or 137), discard its output file and record
+  `not preserved: <reason>` instead of keeping a partial copy. If the guest
   cannot be read, write `not preserved: guest unavailable`. That is a valid
   entry and a reason to stop, not a reason to improvise.
 - **Owned child processes.** Record the PID together with its creation time
@@ -450,8 +455,10 @@ under `timeout`, and a timeout is a failed check, not a pass.
    ```
 
    Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
-   checkpoint has none. Do not post a claim, a heartbeat, or a release while
-   checking.
+   checkpoint has none. When its `claim` is `none`, omit `--claim-id` and
+   `--nonce` too. Without `--claim-id` the helper reports the issue's claim
+   state and checks no ownership. Do not post a claim, a heartbeat, or a
+   release while checking.
 4. **Pull request and checks.** Skip this check when the checkpoint's `pr`
    field is `none`. Otherwise `<pr-number>` is the `N` in that field, which
    records `<owner>/<name>#<N>`. `gh` takes a number, a URL, or a branch, not
@@ -480,9 +487,12 @@ sequence. Choose one only for a question the earlier steps could not answer.
 None of these steps is automated, scheduled, retried in a loop, or tied to a
 timer, and an agent does not run any of them without authorization.
 Authorization lets an agent run a command the operator names. It never lets
-an agent end a process it did not start. Stopping another session's
-collector, and ending any process found while reconciling, are the
-operator's own actions.
+an agent end an individual process it did not start. The commands named in
+the branches below (`wsl.exe --terminate`, `wsl.exe --shutdown`, a host
+restart, an `sshd` restart) end processes as a side effect, and an agent runs
+one only when the operator names that exact command and target. Stopping
+another session's collector, and ending any process found while reconciling,
+are the operator's own actions.
 
 ### Observe with the host-only collector
 
@@ -587,9 +597,9 @@ branch without a new authorization.
   Keep the affected sources inhibited, record why, and stop.
 - **Deadline:** the one in the authorization.
 - **Impact:** the procedure can end a process whose PID and start time both
-  match, and the operator, not an agent, does that unless the agent started
-  the process itself. Deleting `inhibitions.json` clears every inhibition at
-  once, so a descendant that is still running is no longer guarded against.
+  match, and the operator ends it. Deleting `inhibitions.json` clears every
+  inhibition at once, so a descendant that is still running is no longer
+  guarded against.
 - **Stop condition:** any identity mismatch, a `*` entry with no usable
   process identity that you cannot resolve, or an active collector run.
 
