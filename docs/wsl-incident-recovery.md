@@ -327,7 +327,7 @@ Pick the row that matches what you observe, then follow its steps in order.
 | --- | --- | --- | --- |
 | A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Copy existing logs (see [Protect existing evidence](#protect-existing-evidence)). 2. Start the host-only collector with a finite duration. 3. Write the checkpoint. 4. To add a guest probe, copy the logs again, then start a new bounded run with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 5. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
 | B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Copy existing logs. 4. Start the host-only collector. 5. Write the checkpoint with "guest evidence unavailable". 6. Observe for the finite window. 7. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
-| C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. Read-only resume checks can still run over guest SSH if it answers. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
+| C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
 Stopped or unknown distributions are a separate case. A distribution that
 `wsl.exe --list --running --quiet` does not list is stopped or unknown.
@@ -365,8 +365,8 @@ uncommitted-work-preservation: <where a copy was written | not preserved: reason
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
-owner-session: <multiplexer session name | owner process pid and start
-  identity>, the session that owns the claim, not one of its children
+owner-session: <multiplexer session name and creation time | owner process
+  pid and start identity>, the session that owns the claim, not a child
 claim: <agent-id> / <claim-id> | none
 activation-nonce: <nonce | none>
 last-completed-step: <IDD phase and step>
@@ -374,6 +374,7 @@ owned-child-processes:
   - namespace: <host | guest>
     pid: <number>
     creation-time-utc: <timestamp, host only>
+    guest-distribution: <DistroName, guest only, kept private>
     guest-start-ticks: <starttime field of /proc/<pid>/stat, guest only>
     guest-boot-id: <value, guest only>
 authorized-stop-target: <none | host pid and creation-time-utc of another
@@ -421,11 +422,20 @@ Fill the fields as follows:
   and mark whether it lives in the host or the guest. For a host process that
   is the creation time in UTC. For a guest process it is the `starttime`
   field of `/proc/<pid>/stat`, in clock ticks since boot, together with the
-  boot identity from `/proc/sys/kernel/random/boot_id`. PIDs are reused, and
-  a guest start time means nothing without its boot. A recorded PID with a
+  boot identity from `/proc/sys/kernel/random/boot_id`, and the distribution
+  it runs in, because the same numbers in another distribution name another
+  process. The collector's logs do not keep that name, so write it here, in
+  this private file only. PIDs are reused, and a guest start time means
+  nothing without its boot. A recorded PID with a
   different start identity, or from a different boot, is a different process.
   Do not use `ps -o lstart`: it reports only whole seconds, so a reused PID
   can match it, and it never authorizes ending a process.
+- **Owner session.** A multiplexer session name is not an identity by itself,
+  because a new session can reuse a name after the old one exits. For tmux,
+  record the name together with its creation time, from
+  `tmux list-sessions -F '#{session_name} #{session_created}'`. For a
+  multiplexer that does not show a creation time, record the PID and start
+  identity of the process that owns the session instead.
 - **Effective memory cap.** Copy the value you read in the healthy-time
   check. Recovery never changes it.
 - **Claim and nonce.** The IDD agent id, claim id, and activation nonce are
@@ -443,12 +453,17 @@ it. Do not repair a mismatch as part of checking. The network commands run
 under `timeout`, and a timeout is a failed check, not a pass.
 
 1. **Surviving sessions.** First verify the owning session itself, using the
-   checkpoint's `owner-session`: the multiplexer session listed below, or the
-   owner process with the same start identity. A surviving child process does
+   checkpoint's `owner-session`: the multiplexer session listed below, matched
+   by name and creation time, or the owner process with the same start
+   identity. A name alone does not count. A surviving child process does
    not prove a live owner, because a child can outlive the session that
    started it. Then, for each recorded process, compare the live PID and its
    start identity with the checkpoint: the creation time in UTC for a host
-   process, the `starttime` ticks and the boot id for a guest process.
+   process, the `starttime` ticks and the boot id for a guest process. Run the
+   guest reads in the distribution the checkpoint records for that process,
+   and only after `wsl.exe --list --running --quiet` shows it running. A
+   distribution that is not running means the guest process is gone, so record
+   that and do not start the distribution to check.
 
    ```powershell
    (Get-Process -Id <pid>).StartTime.ToUniversalTime().ToString('o')
@@ -468,8 +483,9 @@ under `timeout`, and a timeout is a failed check, not a pass.
    check without retrying.
 
    If you use a terminal multiplexer, list its sessions read-only with
-   `tmux list-sessions` or `zellij list-sessions`. A live, verified session
-   is reattached to. It is not replaced by a new agent.
+   `tmux list-sessions -F '#{session_name} #{session_created}'` or
+   `zellij list-sessions`. A live, verified session is reattached to. It is
+   not replaced by a new agent.
 2. **Git state.**
 
    ```sh
@@ -877,6 +893,9 @@ An answer on the guest port does not stand in for host evidence, because the
 two services are separate. If the guest does answer, the read-only
 [Resume checks](#resume-checks) for git state and claim state can still be
 done through it, and the checkpoint can say so. They are not host evidence.
+The process-identity checks wait for host access, because they need the host
+to confirm the recorded distribution is running, and guest SSH does not let
+you choose which distribution you land in.
 
 **Stop.** Remote host capture is not possible. Record the time and what you
 tried in the checkpoint, and hand off to whoever has local console access.
@@ -914,19 +933,20 @@ Checkpoint excerpt:
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
-owner-session: <multiplexer session name>
+owner-session: <multiplexer session name and creation time>
 claim: <agent-id> / <claim-id>
 last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
   - namespace: guest
     pid: <number>
+    guest-distribution: <DistroName>
     guest-start-ticks: <value>
     guest-boot-id: <value>
 ```
 
 | Check | Observed |
 | --- | --- |
-| Owner session | listed by the multiplexer under the recorded name |
+| Owner session | listed by the multiplexer with the recorded name and creation time |
 | Guest boot id | same as recorded |
 | Recorded PID and guest start ticks | PID alive, start ticks match |
 | `symbolic-ref --short HEAD` | equals the recorded branch |
