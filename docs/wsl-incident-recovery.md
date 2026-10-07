@@ -53,12 +53,13 @@ two counters does not name a culprit process.
   other individual process is the operator's to end, and only after an exact
   match of PID and creation time recorded in the checkpoint and re-verified
   just before acting.
-- Disruptive actions (see [Escalation](#escalation)) are separate branches.
-  Each needs the operator's explicit authorization in the current session,
+- The separately authorized branches (see [Escalation](#escalation)) are the
+  disruptive actions. Each needs the operator's explicit authorization in the
+  current session,
   naming the exact command and target, after the checkpoint exists or after
   you have recorded why it cannot exist. An agent never authorizes itself,
   and attention alone is not approval. The operator, not an agent, executes
-  every such branch except the IDD worktree recovery.
+  every separately authorized branch except the IDD worktree recovery.
 - Do not present an earlier multi-command intervention as a proven fix. A
   sequence of several changes made together cannot show which change, which
   elapsed time, or which workload change mattered.
@@ -123,17 +124,19 @@ to that one invocation. It is a PowerShell host option, so it goes before
 passed to the script as an argument and bypasses nothing. It applies to that
 process only. Do not change the machine or user policy for this.
 
-In this runbook `<private-scratch-dir>` and `<private-incident-dir>` each
-stand for one absolute path on a local volume that is not synchronized or
-shared, for example under `C:\Users\<host-user>`. Choose paths with no
-spaces and no characters a shell treats specially, so the commands need no
-extra quoting. Use the same absolute form in every command, because a relative
-path resolves against each session's current directory.
+In this runbook `<private-incident-dir>` is the new directory for one
+collector run, different for every run, and `<private-scratch-dir>` is a
+directory for checks and activity probes, which may be reused because it holds
+no evidence. Each stands for one absolute path on a local volume that is not
+synchronized or shared, for example under `C:\Users\<host-user>`. Choose
+paths with no spaces and no characters a shell treats specially, so the
+commands need no extra quoting. Use the same absolute form in every command,
+because a relative path resolves against each session's current directory.
 
-Then confirm each of these, and record the date and the cap in the
-checkpoint:
+Then confirm each of these. No checkpoint exists yet, so keep a private note
+of the date and the cap and copy it into the first checkpoint:
 
-1. `-Help` prints the four-line usage text and the exit status is 0. That
+1. `-Help` prints the usage text and the exit status is 0. That
    proves the file is deployed and runnable from a noninteractive session.
 2. A short bounded host-only run works the same way and writes records. Give
    it its own scratch output directory. The log byte budget covers a whole
@@ -172,8 +175,9 @@ checkpoint:
 4. Read the machine's effective memory cap. Open the effective
    `%UserProfile%\.wslconfig` on the host, not this repository's source file,
    and note the `memory` value under `[wsl2]`. If the key is absent, record
-   `default (key absent)`. Do not edit the file. Put the value in the
-   checkpoint's `effective-memory-cap` line.
+   `default (key absent)`. Do not edit the file. Put the value in your private
+   note, and copy it into the checkpoint's `effective-memory-cap` line when you
+   write the checkpoint.
 
 If any step fails while healthy, fix it then, as its own change. Do not
 discover it for the first time during an incident.
@@ -347,8 +351,8 @@ Pick the row that matches what you observe, then follow its steps in order.
 
 | State | How to recognize it | Do, in order | Stop when |
 | --- | --- | --- | --- |
-| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 4. Start the host-only collector with a finite duration in that directory. 5. Fill in the entry's run id and window. 6. To add a guest probe, read the state files again, add a second pending entry, then start a new bounded run in that other new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 7. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
-| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files, choose a new output directory, and add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 5. Start the host-only collector in it. 6. Fill in the entry's run id and window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
+| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 4. Start the host-only collector with a finite duration in that directory. 5. Fill in the entry's run id. If the start printed `already-running`, no run started, so mark the entry `not preserved: no run started`. 6. When the run ends, set the entry's window. 7. To add a guest probe, read the state files again, add a second pending entry, then start a new bounded run in that other new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active, and only under the prerequisites in [Bounded guest read](#bounded-guest-read-optional). 8. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
+| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time in the checkpoint's `unended-processes` list, read-only. 3. Write the first checkpoint now, with `guest-evidence: unavailable` and the reason. 4. Read the collector state files, choose a new output directory, and add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 5. Start the host-only collector in it. 6. Fill in the entry's run id. If the start printed `already-running`, no run started, so mark the entry `not preserved: no run started`. 7. Observe for the finite window, then set the entry's window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
 | C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
 Stopped or unknown distributions are a separate case. A distribution that a
@@ -409,14 +413,27 @@ owned-child-processes:
     guest-distribution: <DistroName, guest only, kept private>
     guest-start-ticks: <starttime field of /proc/<pid>/stat, guest only>
     guest-boot-id: <value, guest only>
-authorized-stop-targets: <none | a list, one entry per process>
+unended-processes: <none | a list: pid, start identity, and why it was left>
+guest-evidence: <available | unavailable: reason>
+authorized-stop-targets: <none | a list; an entry is only a candidate until
+  the operator authorizes it>
   - pid: <host pid of another session's process, which only the operator
       may end>
-    creation-time-utc: <timestamp>
+    start-time-ticks: <startTimeTicks from the lock metadata>
+    creation-time-utc: <that value as a UTC time>
 next-safe-action: <one sentence, read-only unless authorized>
 ```
 
-Fill the fields as follows:
+Fill the fields as follows. `worktree-path` is the `<worktree>` in every
+command below. `claim` and `activation-nonce` supply `<claim-id>` and
+`<nonce>`, `issue` supplies `<issue-number>`, and `<base-branch>` is
+`developmentBranch` in `.github/idd/config.json`. The git state check compares
+`working-tree-status` and `upstream-state` with the live values, and
+`git worktree list --porcelain` must list `worktree-path` on `branch`.
+`unended-processes` takes every process a step says to note without ending it,
+and `guest-evidence` takes the reason the guest could not be read. The fields
+`checkpoint-version`, `repository`, `agent-session`, and `next-safe-action`
+identify and hand off the checkpoint, and no check reads them.
 
 - **Telemetry runs.** Keep one list entry per collector run, so every retained
   log can be matched with its own run id, directory, and window, and a later
@@ -427,8 +444,8 @@ Fill the fields as follows:
   when the byte budget fills, so the window starts at the first retained
   record, which can be later than the run start. To read the endpoints:
 
-  1. List the run's segments in
-     `<private-incident-dir>\dotfiles-wsl-incident-telemetry`, sorted by name,
+  1. List the run's segments in its `output-directory` plus
+     `\dotfiles-wsl-incident-telemetry`, sorted by name,
      with `Get-ChildItem -Filter 'wsl-capture-*-<run-id>-*.jsonl'`, as the
      listing command in
      [Find and review records](wsl-incident-telemetry.md#find-and-review-records)
@@ -680,10 +697,11 @@ so an agent may run it once the operator authorizes it.
 ### Graceful guest stop
 
 - **Purpose:** let the work owner end a job through its own cleanup path.
-- **Prerequisites:** the guest answers, the checkpoint exists, and the work
-  owner agrees. The operator authorizes the exact cleanup command and the
-  named job or session it applies to, and the owner runs that command. An
-  agent does not end the job any other way.
+- **Prerequisites:** the guest answers, the checkpoint exists (or the reason it
+  cannot is recorded), and the work owner agrees. The operator authorizes the
+  exact cleanup command and the named job or session it applies to. The owner
+  runs that command, and only for a job the owner started. An agent does not
+  end the job any other way.
 - **If it fails:** no answer, or the owner declines. Do not force anything.
 - **Deadline:** a wall-clock time agreed with the work owner before you ask.
   When it passes, stop and ask the operator.
@@ -713,8 +731,10 @@ branch without a new authorization.
   directory named in the telemetry guide. Read it only, and never edit it. Its
   layout is an internal detail of the current collector: `processId` is the
   PID and `startTimeTicks` is the process start time as UTC ticks. Record both
-  as an entry in the checkpoint's `authorized-stop-targets` list, converting
-  the ticks to a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`.
+  as a candidate entry in the checkpoint's `authorized-stop-targets` list
+  (`start-time-ticks`, and `creation-time-utc` from the ticks with
+  `[DateTime]::new(<startTimeTicks>, 'Utc')`). It becomes an authorization only
+  when the operator authorizes it.
 - **Command (operator only):** one PID-targeted expression, run once, that
   checks the start time and stops only on a match. No retry, no other PID, and
   never a name or a pattern:
@@ -760,7 +780,7 @@ branch without a new authorization.
   process, and make an independent process-tree check for surviving collector
   descendants, exactly as the procedure under
   [Start and stop](wsl-incident-telemetry.md#start-and-stop) describes. The
-  checkpoint exists.
+  checkpoint exists, or the reason it cannot is recorded.
 - **If it fails:** you cannot show that no collector-owned process remains.
   Keep the affected sources inhibited, record why, and stop.
 - **Deadline:** the one in the authorization.
@@ -777,17 +797,17 @@ branch without a new authorization.
 #### Terminate one distribution
 
 - **Purpose:** stop one hung distribution while the others keep running.
-- **Prerequisites:** host evidence is captured, the checkpoint exists, each
-  work owner in that distribution was told, and you know which other
-  distributions are running.
+- **Prerequisites:** host evidence is captured, the checkpoint exists (or the
+  reason it cannot is recorded), each work owner in that distribution was
+  told, and you know which other distributions are running.
 - **If it fails:** the command does not return by the deadline, or the
   distribution is still listed as running. Record it and let the operator
   decide the next branch.
 - **Deadline:** the one in the authorization.
 - **Impact:** `wsl.exe --terminate <DistroName>` stops that distribution.
   Everything held only in its memory is lost, and its open sessions drop.
-- **Stop condition:** doubt about which distribution is meant, or no
-  checkpoint.
+- **Stop condition:** doubt about which distribution is meant, or neither a
+  checkpoint nor a recorded reason.
 
 #### Shut down WSL
 
@@ -807,8 +827,9 @@ branch without a new authorization.
 #### Reboot the host
 
 - **Purpose:** recover a host that no longer behaves, as a last resort.
-- **Prerequisites:** local console access exists, and the checkpoint and the
-  incident output directory are somewhere that survives a restart.
+- **Prerequisites:** local console access exists, and the checkpoint (or the
+  recorded reason) and the incident output directories are somewhere that
+  survives a restart.
 - **If it fails:** the host does not return. Only local console access can
   continue.
 - **Deadline:** the one in the authorization.
@@ -915,7 +936,7 @@ the first. Compare rates that cover the same window. A large cumulative
 counter says nothing about current pressure.
 
 **Next safe action:** let the finite run end, update the checkpoint, and
-keep the incident output directory. Change nothing.
+keep the incident output directories. Change nothing.
 
 ### 2. Hung guest
 
@@ -995,7 +1016,10 @@ A run is active and sampling. Read its records, and do not start another run
 or stop the first.
 
 **Next safe action:** use the active run's records, wait for its duration to
-end, and note its run id in the checkpoint. If `already-running` keeps
+end, and note its run id in the checkpoint. If the run belongs to another
+session and its directory is unknown, record `output-directory: not preserved:
+foreign run` with the lock metadata's `runId`, and ask that session's owner for
+their checkpoint. If `already-running` keeps
 appearing while the newest log stays stale for several intervals, the run may
 be stuck. Report it and stop. Do not delete lock files, and do not end the
 process by name. After the run has ended and every collector session is
