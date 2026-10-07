@@ -215,10 +215,12 @@ files is therefore for the checkpoint's record, not a guard against losing
 evidence. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
 Before any new run, read both files if they exist, without editing or
 deleting them, as a child job with a wait timeout, as the ground rules say for
-any host-side file read. Write what you find in the checkpoint's
-`collector-state` field: for `inhibitions.json`, the number of entries and each
-one's source and whether it has a usable process identity; for the lock
-metadata, its `processId`, `startTimeTicks`, and `runId`. The per-user lock is
+any host-side file read. Write what you find, with the time you read it, in the
+`state-before-start` field of that run's entry in the checkpoint's
+`telemetry-runs` list, so each run keeps its own reading: for
+`inhibitions.json`, the number of entries and each one's source and whether it
+has a usable process identity; for the lock metadata, its `processId`,
+`startTimeTicks`, and `runId`. The per-user lock is
 shared across output directories too, so a probe with a scratch directory still
 answers `already-running`.
 
@@ -341,8 +343,8 @@ Pick the row that matches what you observe, then follow its steps in order.
 
 | State | How to recognize it | Do, in order | Stop when |
 | --- | --- | --- | --- |
-| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration in that directory. 4. Add the run to the checkpoint's `telemetry-runs` list, with its run id, directory, and window. 5. To add a guest probe, read the state files again, then start a new bounded run in another new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
-| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files and choose a new output directory. 5. Start the host-only collector in it. 6. Add the run to the checkpoint's `telemetry-runs` list, with its run id, directory, and window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
+| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 4. Start the host-only collector with a finite duration in that directory. 5. Fill in the entry's run id and window. 6. To add a guest probe, read the state files again, add a second pending entry, then start a new bounded run in that other new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 7. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
+| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files, choose a new output directory, and add a pending entry to the checkpoint's `telemetry-runs` list with that directory and the state you read. 5. Start the host-only collector in it. 6. Fill in the entry's run id and window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
 | C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
 Stopped or unknown distributions are a separate case. A distribution that a
@@ -370,12 +372,13 @@ command lines or arguments, and no raw log content.
 ```text
 checkpoint-version: 1
 telemetry-runs: <none | a list, one entry per collector run>
-  - run-id: <run-id from the log file name>
-    output-directory: <the run's private output directory | not preserved: reason>
-    window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc> | incomplete
-collector-state: <read before each new run>
-  inhibitions: <absent | N entries, each with its source and whether it has a usable process identity>
-  lock-metadata: <absent | processId, startTimeTicks, runId>
+  - output-directory: <the run's private output directory | not preserved: reason>
+    run-id: <run-id from the log file name | pending>
+    window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc> | incomplete | pending
+    state-before-start: <read before this run, with the time you read it>
+      inhibitions: <absent | N entries, each with its source and whether it
+        has a usable process identity>
+      lock-metadata: <absent | processId, startTimeTicks, runId>
 access-validated: <date> via <host SSH | local console>
 effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
