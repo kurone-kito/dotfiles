@@ -408,8 +408,10 @@ owned-child-processes:
     guest-distribution: <DistroName, guest only, kept private>
     guest-start-ticks: <starttime field of /proc/<pid>/stat, guest only>
     guest-boot-id: <value, guest only>
-authorized-stop-target: <none | host pid and creation-time-utc of another
-  session's process, which only the operator may end>
+authorized-stop-targets: <none | a list, one entry per process>
+  - pid: <host pid of another session's process, which only the operator
+      may end>
+    creation-time-utc: <timestamp>
 next-safe-action: <one sentence, read-only unless authorized>
 ```
 
@@ -601,7 +603,9 @@ under `timeout`, and a timeout is a failed check, not a pass.
    records `<owner>/<name>#<N>`. `gh` takes a number, a URL, or a branch, not
    that form:
    `timeout 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
-   and `timeout 30 gh pr checks <pr-number> -R <owner>/<name>`.
+   and `timeout 30 gh pr checks <pr-number> -R <owner>/<name>`. `gh pr checks`
+   exits with status 8 while checks are still pending. That is a valid
+   in-progress result, not a failed check: read the table it prints.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
@@ -703,8 +707,8 @@ branch without a new authorization.
   directory named in the telemetry guide. Read it only, and never edit it. Its
   layout is an internal detail of the current collector: `processId` is the
   PID and `startTimeTicks` is the process start time as UTC ticks. Record both
-  in the checkpoint's `authorized-stop-target` line, converting the ticks to
-  a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`.
+  as an entry in the checkpoint's `authorized-stop-targets` list, converting
+  the ticks to a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`.
 - **Command (operator only):** one PID-targeted expression, run once, that
   checks the start time and stops only on a match. No retry, no other PID, and
   never a name or a pattern:
@@ -744,11 +748,11 @@ branch without a new authorization.
   is closed. The operator executes this whole branch, including any process
   stop and the deletion of `inhibitions.json`. The agent only compares
   identities and prepares the exact commands and impact. Record each target's
-  PID and creation time in the checkpoint and re-verify them just before
-  ending it. For each entry, compare
-  `processId` and `startTimeTicks` with the live process, and make an
-  independent process-tree check for surviving collector descendants,
-  exactly as the procedure under
+  PID and creation time as its own entry in the checkpoint's
+  `authorized-stop-targets` list and re-verify them just before ending it.
+  For each entry, compare `processId` and `startTimeTicks` with the live
+  process, and make an independent process-tree check for surviving collector
+  descendants, exactly as the procedure under
   [Start and stop](wsl-incident-telemetry.md#start-and-stop) describes. The
   checkpoint exists.
 - **If it fails:** you cannot show that no collector-owned process remains.
