@@ -404,7 +404,7 @@ pr: <owner>/<name>#<N> | none
 agent-session: <session label>
 owner-session:
   kind: <multiplexer | process>
-  multiplexer: <session name and creation time, when kind is multiplexer>
+  multiplexer: <session name, creation time, and for tmux the session id and server pid, when kind is multiplexer>
   process: <the same fields as an owned-child-processes entry, listed here only>
 claim: <agent-id> / <claim-id> | none
 activation-nonce: <nonce | none>
@@ -506,9 +506,12 @@ identify and hand off the checkpoint, and no check reads them.
   Do not use `ps -o lstart`: it reports only whole seconds, so a reused PID
   can match it, and it never authorizes ending a process.
 - **Owner session.** A multiplexer session name is not an identity by itself,
-  because a new session can reuse a name after the old one exits. For tmux,
-  record the name together with its creation time, from
-  `tmux list-sessions -F '#{session_name} #{session_created}'`. For a
+  because a new session can reuse a name after the old one exits, and a
+  creation time has whole-second resolution. For tmux, record the name, the
+  creation time, the session id, and the server pid, from
+  `tmux list-sessions -F '#{session_name} #{session_created} #{session_id} #{pid}'`.
+  A session id is not reused within one server, and a new server has a new
+  pid, so a replacement session cannot match all four. For a
   multiplexer that does not show a creation time, record the process that owns
   the session instead, with the same fields as an owned child: its namespace,
   distribution and boot id for a guest process, PID, and start identity.
@@ -564,8 +567,9 @@ under `timeout`, and a timeout is a failed check, not a pass.
    out is an unknown identity: stop the check without retrying.
 
    If you use a terminal multiplexer, list its sessions read-only with
-   `tmux list-sessions -F '#{session_name} #{session_created}'` or
-   `zellij list-sessions`. A live, verified session is reattached to. It is
+   `tmux list-sessions -F '#{session_name} #{session_created} #{session_id} #{pid}'`
+   or `zellij list-sessions`. All the recorded values must match. A live,
+   verified session is reattached to. It is
    not replaced by a new agent.
 2. **Git state.**
 
@@ -611,8 +615,8 @@ under `timeout`, and a timeout is a failed check, not a pass.
    checkpoint's `issue` field, and `<owner>` and `<name>` come from the same
    field. Take `<helper-package-spec>` from `helperRuntime.packageSpec` in the
    worktree's own config file, so the commands do not depend on the directory
-   you start in. Both helpers take the repository from `--owner` and `--repo`
-   for the same reason:
+   you start in. Both helpers list `--owner` and `--repo` in their `--help`
+   output and take the repository from them for the same reason:
 
    ```sh
    timeout 30 jq -r .helperRuntime.packageSpec "<worktree>/.github/idd/config.json"
@@ -1057,7 +1061,7 @@ issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
 owner-session:
   kind: multiplexer
-  multiplexer: <session name and creation time>
+  multiplexer: <session name, creation time, session id, server pid>
 claim: <agent-id> / <claim-id>
 last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
