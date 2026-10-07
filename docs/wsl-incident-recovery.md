@@ -205,8 +205,20 @@ $job = Start-Job -ArgumentList $logs, $archive, $pattern -ScriptBlock {
       Copy-Item -Destination $archive
   }
 }
-if (Wait-Job -Job $job -Timeout 120) { Receive-Job -Job $job } else { 'archive timed out' }
+if (-not (Wait-Job -Job $job -Timeout 120)) {
+  'archive timed out: stop'
+}
+elseif ($job.State -ne 'Completed') {
+  Receive-Job -Job $job -ErrorAction Continue
+  'archive failed: stop'
+}
+else {
+  Receive-Job -Job $job -ErrorAction Stop
+  'archive copied'
+}
 ```
+
+Continue only when the last line printed is `archive copied`.
 
 The pattern is the collector's own log-file name set. It includes the
 temporary and partial files that a start can repair or delete, not only
