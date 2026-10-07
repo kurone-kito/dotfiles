@@ -365,6 +365,8 @@ uncommitted-work-preservation: <where a copy was written | not preserved: reason
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
+owner-session: <multiplexer session name | owner process pid and start
+  identity>, the session that owns the claim, not one of its children
 claim: <agent-id> / <claim-id> | none
 activation-nonce: <nonce | none>
 last-completed-step: <IDD phase and step>
@@ -401,14 +403,14 @@ Fill the fields as follows:
   `host-sample` record instead.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   For example, write
-  `timeout -k 5 60 git -C <worktree> --no-optional-locks diff HEAD --binary`
+  `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`
   output, which includes staged and unstaged tracked changes, and the output
   of
-  `timeout -k 5 60 git -C <worktree> --no-optional-locks ls-files --others --exclude-standard`
+  `timeout -k 5 60 git -C "<worktree>" --no-optional-locks ls-files --others --exclude-standard`
   to a private folder, and copy those files. These top-level commands do not
   recurse into initialized submodules. List them with
-  `timeout -k 5 30 git -C <worktree> submodule status --recursive`, repeat both
-  commands with `-C <worktree>/<submodule-path>` for each one, and keep every
+  `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`, repeat both
+  commands with `-C "<worktree>/<submodule-path>"` for each one, and keep every
   output in its own file. A submodule you cannot capture is recorded as
   `not preserved: submodule <path>`. If a command exits non-zero or
   times out (status 124 or 137), discard its output file and record
@@ -440,9 +442,13 @@ says nothing about the machine's state. Stop at the first mismatch and report
 it. Do not repair a mismatch as part of checking. The network commands run
 under `timeout`, and a timeout is a failed check, not a pass.
 
-1. **Surviving sessions.** For each recorded process, compare the live PID
-   and its start identity with the checkpoint: the creation time in UTC for a
-   host process, the `starttime` ticks and the boot id for a guest process.
+1. **Surviving sessions.** First verify the owning session itself, using the
+   checkpoint's `owner-session`: the multiplexer session listed below, or the
+   owner process with the same start identity. A surviving child process does
+   not prove a live owner, because a child can outlive the session that
+   started it. Then, for each recorded process, compare the live PID and its
+   start identity with the checkpoint: the creation time in UTC for a host
+   process, the `starttime` ticks and the boot id for a guest process.
 
    ```powershell
    (Get-Process -Id <pid>).StartTime.ToUniversalTime().ToString('o')
@@ -467,20 +473,21 @@ under `timeout`, and a timeout is a failed check, not a pass.
 2. **Git state.**
 
    ```sh
-   timeout -k 5 30 git -C <worktree> worktree list --porcelain
-   timeout -k 5 30 git -C <worktree> symbolic-ref --short HEAD
-   timeout -k 5 30 git -C <worktree> --no-optional-locks status --porcelain
-   timeout -k 5 30 git -C <worktree> rev-parse HEAD
-   timeout -k 5 30 git -C <worktree> rev-list --left-right --count @{u}...HEAD
+   timeout -k 5 30 git -C "<worktree>" worktree list --porcelain
+   timeout -k 5 30 git -C "<worktree>" symbolic-ref --short HEAD
+   timeout -k 5 30 git -C "<worktree>" --no-optional-locks status --porcelain
+   timeout -k 5 30 git -C "<worktree>" rev-parse HEAD
+   timeout -k 5 30 git -C "<worktree>" rev-list --left-right --count @{u}...HEAD
    ```
 
    The `symbolic-ref` output must equal the checkpoint's `branch` exactly. A
    different branch or a detached HEAD means the path is not the worktree the
    checkpoint describes, so stop. The `rev-parse` output is compared with the
-   checkpoint's `head-oid`. If check 1 verified a live owning session, a
+   checkpoint's `head-oid`. If check 1 verified the owning session itself, a
    different commit is normal progress: record the new commit, tell the owner,
-   and continue read-only. If no live session was verified, a different commit
-   means someone changed the revision, so stop and report it. Never resume
+   and continue read-only. If the owning session was not verified, even when a
+   child process survives, a different commit means someone changed the
+   revision, so stop and report it. Never resume
    from a guess. Even a local `git` call can block on a stalled filesystem, so
    each runs under `timeout`, and a timeout is a failed check. `timeout` ends
    the call it started, but a process stuck in uninterruptible I/O can outlast the
@@ -489,7 +496,7 @@ under `timeout`, and a timeout is a failed check, not a pass.
    time. `--no-optional-locks` keeps `status` from refreshing the index. The
    last command prints the behind count and then the ahead count. When the
    branch has no upstream it fails. Use
-   `timeout -k 5 30 git -C <worktree> rev-list --count origin/<base-branch>..HEAD`
+   `timeout -k 5 30 git -C "<worktree>" rev-list --count origin/<base-branch>..HEAD`
    and record `no upstream` in the checkpoint.
 3. **IDD claim state.** With this repository's helper runtime, read the
    claim state without changing it. `<issue-number>` is the `N` in the
@@ -498,7 +505,7 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
    ```sh
    timeout 60 npx --yes --package <helper-package-spec> \
-     idd-resume-claim-routing --issue <issue-number> --claim-id <claim-id> --nonce <nonce> --worktree <worktree>
+     idd-resume-claim-routing --issue <issue-number> --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>"
    ```
 
    Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
@@ -907,6 +914,7 @@ Checkpoint excerpt:
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
+owner-session: <multiplexer session name>
 claim: <agent-id> / <claim-id>
 last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
@@ -918,6 +926,7 @@ owned-child-processes:
 
 | Check | Observed |
 | --- | --- |
+| Owner session | listed by the multiplexer under the recorded name |
 | Guest boot id | same as recorded |
 | Recorded PID and guest start ticks | PID alive, start ticks match |
 | `symbolic-ref --short HEAD` | equals the recorded branch |
