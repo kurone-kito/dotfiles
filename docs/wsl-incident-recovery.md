@@ -207,7 +207,12 @@ step.
 The per-user state directory is different: every run shares it, whatever the
 output directory. A start reads and rewrites `inhibitions.json` and replaces
 `collector.lock.json`, which hold the cleanup and ownership evidence the later
-sections rely on. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
+sections rely on. The rewrite keeps every inhibition entry whose cleanup was
+not verified, and drops only an entry whose cleanup was verified and whose
+exact process has exited. The lock metadata it replaces is replaced only when
+no collector is active, so it describes a process that has ended. Reading the
+files is therefore for the checkpoint's record, not a guard against losing
+evidence. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
 Before any new run, read both files if they exist, without editing or
 deleting them, as a child job with a wait timeout, as the ground rules say for
 any host-side file read. Write down in the checkpoint whether
@@ -415,8 +420,12 @@ Fill the fields as follows:
       if ($r.recordType -eq 'host-sample') { $r }
     }
   }
-  $files = Get-ChildItem -LiteralPath $logs -Filter 'wsl-capture-*-<run-id>-*.jsonl' |
-    Sort-Object Name
+  $files = @(Get-ChildItem -LiteralPath $logs -Filter 'wsl-capture-*-<run-id>-*.jsonl' |
+    Sort-Object Name)
+  if (@($files | Where-Object {
+      $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+    throw 'reparse point among the log files'
+  }
   $first = Get-ValidRecords (Get-Content -LiteralPath $files[0].FullName -TotalCount 50) |
     Select-Object -First 1
   $last = Get-ValidRecords (Get-Content -LiteralPath $files[-1].FullName -Tail 50) |
