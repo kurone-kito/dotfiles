@@ -801,20 +801,31 @@ function Stop-DotfilesOwnedProcess {
     while (-not $exited -and $remaining -gt 0 -and $guard -lt 8) {
       $guard++
       $slice = [Diagnostics.Stopwatch]::StartNew()
+      $waitThrew = $false
       try { $exited = [bool]$node.Process.WaitForExit($remaining) }
-      catch {
+      catch { $waitThrew = $true }
+      if ($waitThrew) {
         Start-Sleep -Milliseconds 15
         $remaining = [Math]::Max(0, $remaining - 15)
-        continue
       }
-      if (-not $exited) {
-        try { $exited = [bool]$node.Process.HasExited } catch { break }
+      elseif (-not $exited) {
+        $hasExited = $false
+        $hasExitedThrew = $false
+        try { $hasExited = [bool]$node.Process.HasExited }
+        catch { $hasExitedThrew = $true }
+        if ($hasExited) {
+          $exited = $true
+        }
+        elseif ($hasExitedThrew) {
+          break
+        }
+        else {
+          $elapsed = [int][Math]::Ceiling($slice.Elapsed.TotalMilliseconds)
+          if ($elapsed + 25 -ge $remaining) { break }
+          $remaining = [Math]::Max(0, $remaining - [Math]::Max($elapsed, 15))
+          Start-Sleep -Milliseconds 15
+        }
       }
-      if ($exited) { break }
-      $elapsed = [int][Math]::Ceiling($slice.Elapsed.TotalMilliseconds)
-      if ($elapsed + 25 -ge $remaining) { break }
-      $remaining = [Math]::Max(0, $remaining - [Math]::Max($elapsed, 15))
-      Start-Sleep -Milliseconds 15
     }
     if (-not $exited) {
       [void]$entries.Add(@{ source = $Owned.Source; processId = $node.ProcessId; startTimeTicks = $node.StartTimeTicks; cleanupUnverified = $false })
