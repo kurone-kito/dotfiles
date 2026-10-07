@@ -1086,11 +1086,16 @@ Describe 'wsl incident capture guest and writer behavior' {
       try {
         $leftover = [Diagnostics.Process]::GetProcessById($owned.ProcessId)
         try {
-          if (-not $leftover.HasExited) { $leftover.Kill(); $null = $leftover.WaitForExit(3000) }
+          if ($leftover.StartTime.ToUniversalTime().Ticks -eq [long]$owned.StartTimeTicks -and -not $leftover.HasExited) {
+            $leftover.Kill()
+            $null = $leftover.WaitForExit(3000)
+          }
         }
         finally { $leftover.Dispose() }
       }
-      catch [ArgumentException] { }
+      catch {
+        # The fixture root already exited, or its identity cannot be confirmed.
+      }
       try { $owned.Process.Dispose() } catch { }
     }
   }
