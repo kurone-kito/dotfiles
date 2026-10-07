@@ -484,8 +484,10 @@ The first three steps are ordered from least to most disruptive. Take a step
 only when the one before it cannot answer the question, and stop at the first
 stop condition. The separately authorized branches after them are not a
 sequence. Choose one only for a question the earlier steps could not answer.
-None of these steps is automated, scheduled, retried in a loop, or tied to a
-timer, and an agent does not run any of them without authorization.
+Observing and the bounded guest read run as the decision table says, under
+the prerequisites listed in their own blocks. The graceful guest stop and
+every separately authorized branch need the operator's authorization. None of
+these steps is automated, scheduled, retried in a loop, or tied to a timer.
 Authorization lets an agent run a command the operator names. It never lets
 an agent end an individual process it did not start. The commands named in
 the branches below (`wsl.exe --terminate`, `wsl.exe --shutdown`, a host
@@ -588,9 +590,11 @@ branch without a new authorization.
   left behind, so those sources are sampled again.
 - **Prerequisites:** no collector run is active and every collector session
   is closed. The operator, not an agent, performs any process stop in this
-  procedure. For each entry, compare `processId` and `startTimeTicks` with the
-  live process, and make an independent process-tree check for surviving
-  collector descendants, exactly as the procedure under
+  procedure. Record each target's PID and creation time in the checkpoint
+  and re-verify them just before ending it. For each entry, compare
+  `processId` and `startTimeTicks` with the live process, and make an
+  independent process-tree check for surviving collector descendants,
+  exactly as the procedure under
   [Start and stop](wsl-incident-telemetry.md#start-and-stop) describes. The
   checkpoint exists.
 - **If it fails:** you cannot show that no collector-owned process remains.
