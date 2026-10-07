@@ -105,8 +105,11 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> 
 
 Adjust the quoting for your login shell and for spaces in the path. If a
 restricted execution policy blocks the script, add `-ExecutionPolicy Bypass`
-to that one invocation. It applies to that process only. Do not change the
-machine or user policy for this.
+to that one invocation. It is a PowerShell host option, so it goes before
+`-File`, as in `powershell.exe -NoLogo -NoProfile -NonInteractive
+-ExecutionPolicy Bypass -File <script>`. Placed after the script path it is
+passed to the script as an argument and bypasses nothing. It applies to that
+process only. Do not change the machine or user policy for this.
 
 Then confirm each of these, and record the date and the cap in the
 checkpoint:
@@ -168,21 +171,30 @@ states how to use exactly that from SSH.
 ### Protect existing evidence
 
 The log byte budget is shared by every run that writes to the same logs
-directory. At start, each run deletes the oldest `.jsonl` files there until
-the directory fits its own `-MaximumLogBytes`, and a later segment or record
+directory. At start, each run deletes the oldest collector log files there
+until the directory fits its own `-MaximumLogBytes`, and a later segment or record
 that would exceed the budget does the same. A new run therefore can delete
 an older run's records, including the one-second run used to check whether a
 collector is active.
 
-Before any new run in the real logs directory, copy the existing logs to a
-private place, and record that place in the checkpoint:
+Before any new run in the real logs directory, copy every existing collector
+log file to a private place, and record that place in the checkpoint:
 
 ```powershell
+$ErrorActionPreference = 'Stop'
 $logs = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry\logs\dotfiles-wsl-incident-telemetry'
 $archive = '<private-archive-dir>'
 New-Item -ItemType Directory -Force -Path $archive | Out-Null
-Get-ChildItem -LiteralPath $logs -Filter '*.jsonl' | Copy-Item -Destination $archive
+$pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
+Get-ChildItem -LiteralPath $logs -File -Force |
+  Where-Object { $_.Name -match $pattern } |
+  Copy-Item -Destination $archive
 ```
+
+The pattern is the collector's own log-file name set. It includes the
+temporary and partial files that a start can repair or delete, not only
+finished `.jsonl` files. If the logs directory does not exist yet, there is
+nothing to copy. If any copy fails, stop and do not start another run.
 
 Run checks, smoke tests, and activity probes with their own scratch
 `-OutputDirectory`. The per-user lock is shared across output directories,
@@ -350,7 +362,8 @@ last-completed-step: <IDD phase and step>
 owned-child-processes:
   - namespace: <host | guest>
     pid: <number>
-    creation-time-utc: <timestamp>
+    creation-time-utc: <timestamp, host only>
+    guest-start-ticks: <starttime field of /proc/<pid>/stat, guest only>
     guest-boot-id: <value, guest only>
 authorized-stop-target: <none | host pid and creation-time-utc of another
   session's process, which only the operator may end>
@@ -388,12 +401,15 @@ Fill the fields as follows:
   `not preserved: <reason>` instead of keeping a partial copy. If the guest
   cannot be read, write `not preserved: guest unavailable`. That is a valid
   entry and a reason to stop, not a reason to improvise.
-- **Owned child processes.** Record the PID together with its creation time
-  in UTC, and mark whether it lives in the host or the guest. PIDs are reused
-  and Linux start times are relative to boot, so for a guest process also
-  record the boot identity read from `/proc/sys/kernel/random/boot_id`. A
-  recorded PID with a different creation time, or from a different boot, is
-  a different process.
+- **Owned child processes.** Record the PID together with its start identity,
+  and mark whether it lives in the host or the guest. For a host process that
+  is the creation time in UTC. For a guest process it is the `starttime`
+  field of `/proc/<pid>/stat`, in clock ticks since boot, together with the
+  boot identity from `/proc/sys/kernel/random/boot_id`. PIDs are reused, and
+  a guest start time means nothing without its boot. A recorded PID with a
+  different start identity, or from a different boot, is a different process.
+  Do not use `ps -o lstart`: it reports only whole seconds, so a reused PID
+  can match it, and it never authorizes ending a process.
 - **Effective memory cap.** Copy the value you read in the healthy-time
   check. Recovery never changes it.
 - **Claim and nonce.** The IDD agent id, claim id, and activation nonce are
@@ -410,8 +426,9 @@ says nothing about the machine's state. Stop at the first mismatch and report
 it. Do not repair a mismatch as part of checking. The network commands run
 under `timeout`, and a timeout is a failed check, not a pass.
 
-1. **Surviving sessions.** For each recorded process, compare the live PID,
-   creation time in UTC, and (in the guest) boot id with the checkpoint:
+1. **Surviving sessions.** For each recorded process, compare the live PID
+   and its start identity with the checkpoint: the creation time in UTC for a
+   host process, the `starttime` ticks and the boot id for a guest process.
 
    ```powershell
    (Get-Process -Id <pid>).StartTime.ToUniversalTime().ToString('o')
@@ -419,8 +436,14 @@ under `timeout`, and a timeout is a failed check, not a pass.
 
    ```sh
    cat /proc/sys/kernel/random/boot_id
-   LC_ALL=C TZ=UTC ps -o pid=,lstart= -p <pid>
+   sed 's/^.*) //' /proc/<pid>/stat | cut -d ' ' -f 20
    ```
+
+   The second command prints the `starttime` ticks, which is field 22 of
+   `/proc/<pid>/stat`. Stripping everything through the last `)` first keeps
+   a process name that contains spaces from shifting the fields, so the value
+   is then field 20. Both the boot id and the ticks must match the
+   checkpoint.
 
    If you use a terminal multiplexer, list its sessions read-only with
    `tmux list-sessions` or `zellij list-sessions`. A live, verified session
@@ -531,7 +554,9 @@ are the operator's own actions.
 
 - **Purpose:** let the work owner end a job through its own cleanup path.
 - **Prerequisites:** the guest answers, the checkpoint exists, and the work
-  owner agrees.
+  owner agrees. The operator authorizes the exact cleanup command and the
+  named job or session it applies to, and the owner runs that command. An
+  agent does not end the job any other way.
 - **If it fails:** no answer, or the owner declines. Do not force anything.
 - **Deadline:** a wall-clock time agreed with the work owner before you ask.
   When it passes, stop and ask the operator.
@@ -847,14 +872,14 @@ last-completed-step: B3 commit 1 of 2 pushed
 owned-child-processes:
   - namespace: guest
     pid: <number>
-    creation-time-utc: <timestamp>
+    guest-start-ticks: <value>
     guest-boot-id: <value>
 ```
 
 | Check | Observed |
 | --- | --- |
 | Guest boot id | same as recorded |
-| Recorded PID and creation time | PID alive, creation time matches |
+| Recorded PID and guest start ticks | PID alive, start ticks match |
 | `git status --porcelain` | two modified tracked files |
 | `rev-list --left-right --count @{u}...HEAD` | `0` then `1` (one commit ahead) |
 | `idd-resume-claim-routing` | `state` `already_owned`, `action` `keep` |
