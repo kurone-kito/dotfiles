@@ -123,6 +123,12 @@ to that one invocation. It is a PowerShell host option, so it goes before
 passed to the script as an argument and bypasses nothing. It applies to that
 process only. Do not change the machine or user policy for this.
 
+In this runbook `<private-scratch-dir>` and `<private-incident-dir>` each
+stand for one absolute path on a local volume that is not synchronized or
+shared, for example under `C:\Users\<host-user>`. Use the same absolute form
+in every command, because a relative path resolves against each session's
+current directory.
+
 Then confirm each of these, and record the date and the cap in the
 checkpoint:
 
@@ -135,7 +141,7 @@ checkpoint:
 
    ```sh
    timeout 90 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
-     "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 10 -OutputDirectory C:\Users\<host-user>\<private-scratch-dir>"
+     "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 10 -OutputDirectory <private-scratch-dir>"
    ```
 
    Then find the new `.jsonl` file under
@@ -196,13 +202,15 @@ only there, so records written elsewhere are never touched. Give checks,
 smoke tests, and activity probes their own scratch directories for the same
 reason. Record each run's directory in the checkpoint's
 `redacted-log-location` line. Avoiding the shared directory needs no copy
-step, so nothing here can stall on the volume.
+step.
 
 The per-user state directory is different: every run shares it, whatever the
 output directory. A start reads and rewrites `inhibitions.json` and replaces
 `collector.lock.json`, which hold the cleanup and ownership evidence the later
-sections rely on. Before any new run, read both files if they exist, without
-editing or deleting them, and write down in the checkpoint whether
+sections rely on. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
+Before any new run, read both files if they exist, without editing or
+deleting them, as a child job with a wait timeout, as the ground rules say for
+any host-side file read. Write down in the checkpoint whether
 `inhibitions.json` has entries and the PID and run id in the lock metadata.
 The per-user lock is shared across output directories too, so a probe with a
 scratch directory still answers `already-running`.
@@ -216,14 +224,14 @@ newest log afterwards. From an SSH session:
 
 ```sh
 timeout 660 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
-  "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory C:\Users\<host-user>\<private-incident-dir>"
+  "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory <private-incident-dir>"
 ```
 
 From a PowerShell session on the host:
 
 ```powershell
 $collector = Join-Path $HOME '.local\bin\wsl-incident-capture.ps1'
-& $collector -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory '<private-incident-dir>'
+& $collector -IntervalSeconds 5 -DurationSeconds 600 -OutputDirectory <private-incident-dir>
 ```
 
 Start host-only. Add a guest only under
@@ -237,10 +245,12 @@ name placeholder in anything you share.
 
 There is no status command. Use evidence in this order:
 
-1. Newest log: list the `.jsonl` files under the logs folder named in the
-   telemetry guide and compare the newest file's `LastWriteTimeUtc` with the
-   current time. A run that is sampling every 5 seconds writes at least that
-   often. A stale file means no sampling, or a stopped run.
+1. Newest log: list the `.jsonl` files under the output directory recorded in
+   the checkpoint's `redacted-log-location` line, and under the default logs
+   folder named in the telemetry guide in case another session started a run.
+   Compare the newest file's `LastWriteTimeUtc` with the current time. A run
+   that is sampling every 5 seconds writes at least that often. A stale file
+   means no sampling, or a stopped run.
 2. A deliberately tiny second invocation. Never run a second invocation with
    default bounds: if no collector is active, it starts a real run whose
    default duration is 86400 seconds. Give it a scratch output directory, as
@@ -248,7 +258,7 @@ There is no status command. Use evidence in this order:
 
    ```sh
    timeout 60 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -p <host-ssh-port> <host-user>@<host> \
-     "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 1 -OutputDirectory C:\Users\<host-user>\<private-scratch-dir>"
+     "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 1 -OutputDirectory <private-scratch-dir>"
    ```
 
    If another run holds the per-user lock, this prints
@@ -398,7 +408,7 @@ Fill the fields as follows:
   first retained record, which can be later than the run start.
 
   ```powershell
-  $logs = Join-Path '<private-incident-dir>' 'dotfiles-wsl-incident-telemetry'
+  $logs = Join-Path <private-incident-dir> 'dotfiles-wsl-incident-telemetry'
   function Get-ValidRecords($lines) {
     foreach ($line in $lines) {
       try { $r = $line | ConvertFrom-Json } catch { continue }
