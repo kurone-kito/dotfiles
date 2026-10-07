@@ -3,6 +3,10 @@ dotnet = "latest"
 node = "latest"
 pnpm = "latest"
 
+bat = "latest"
+bitwarden = "latest"
+codex = "latest"
+copilot = "latest"
 # dandavison/delta stopped shipping x86_64-apple-darwin builds at
 # v0.19.0 (aarch64-apple-darwin is still published). Pin macOS to the
 # last version with an Intel build; other platforms track latest.
@@ -14,6 +18,8 @@ delta = [
 ]
 fastfetch = "latest"
 fzf = "latest"
+gh = "latest"
+ghq = "latest"
 grok = "latest"
 jq = "latest"
 # ggml-org/llama.cpp is in the mise registry as the llama.cpp shorthand
@@ -66,6 +72,7 @@ tmux = { version = "latest", os = ["linux", "macos"] }
 # route there (e.g. Homebrew).
 ttyd = { version = "latest", os = ["linux", "windows"] }
 vhs = "latest"
+worktrunk = "latest"
 yq = "latest"
 yt-dlp = "latest"
 
@@ -110,9 +117,7 @@ yt-dlp = "latest"
 # package rather than allow_builds = true so no transitive dependency
 # gets an unreviewed build-script opt-in.
 "npm:@anthropic-ai/claude-code" = { version = "latest", allow_builds = ["@anthropic-ai/claude-code"] }
-"npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
-"npm:@github/copilot" = "latest"
 # aube's low-download-count reputation gate blocks a non-interactive
 # `mise install` for this niche tool even though its provenance/trust
 # is fine (published via npm's OIDC trusted-publisher, SLSA
@@ -126,7 +131,6 @@ yt-dlp = "latest"
 # download count is inherent to a niche tool, not a transient upstream
 # publishing regression.
 "npm:@microsoft/inshellisense" = { version = "latest", allow_low_downloads = true }
-"npm:@openai/codex" = "latest"
 
 "npm:@playwright/cli" = "latest"
 "npm:bash-language-server" = "latest"
@@ -135,9 +139,7 @@ yt-dlp = "latest"
 # it too.
 "npm:fast-cli" = { version = "latest", allow_low_downloads = true }
 
-"github:x-motemen/ghq" = "latest"
 "github:d-kuro/gwq" = "latest"
-"github:cli/cli" = "latest"
 "github:anatawa12/git-vrc" = "latest"
 
 "gitlab:gitlab-org/cli" = "latest"

@@ -113,16 +113,17 @@ WinGet/DSC definitions no longer include them.
 | Tool | mise key |
 | -------------------- | --------------------------- |
 | Node.js | `node` |
-| GitHub CLI | `github:cli/cli` |
-| ghq | `github:x-motemen/ghq` |
-| GitHub Copilot CLI | `npm:@github/copilot` |
+| GitHub CLI | `gh` |
+| ghq | `ghq` |
+| GitHub Copilot CLI | `copilot` |
 | git-vrc | `github:anatawa12/git-vrc` |
 
 ### Added here (this repository also owns install, not only config)
 
 The aqua wave (see [#257](https://github.com/kurone-kito/dotfiles/issues/257)),
-yt-dlp, vhs, plus three platform-restricted additions (ttyd: no macOS
-build; pstop: Windows-only; psmux: Windows-only):
+yt-dlp, vhs, the cross-platform `bat` and `worktrunk` CLIs, plus three
+platform-restricted additions (ttyd: no macOS build; pstop:
+Windows-only; psmux: Windows-only):
 
 | Tool | mise key |
 | ---------- | -------------------- |
@@ -136,6 +137,8 @@ build; pstop: Windows-only; psmux: Windows-only):
 | Terraform | `terraform` |
 | yt-dlp | `yt-dlp` |
 | vhs | `vhs` |
+| bat | `bat` |
+| worktrunk | `worktrunk` |
 | ttyd (Linux/Windows-only) | `ttyd` |
 | pstop (Windows-only) | `github:psmux/pstop` |
 | psmux (Windows-only) | `github:psmux/psmux` |
@@ -206,12 +209,20 @@ did not "move," they were only ever defined here:
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
 `aqua:google-antigravity/antigravity-cli`, `aqua:nektos/act`,
 `aqua:supabase/cli`, `grok`, `gitlab:gitlab-org/cli`,
-`npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`,
+`npm:@anthropic-ai/claude-code`, `bitwarden`, `codex`,
 `npm:@executeautomation/playwright-mcp-server`,
-`npm:@microsoft/inshellisense`, `npm:@openai/codex`, `npm:@playwright/cli`,
+`npm:@microsoft/inshellisense`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
 
 ### Current overlap
+
+`bat` and `worktrunk` are installed here through mise, but the setup
+repositories may still install them too, until those repositories opt
+out: setup.ubuntu, setup.macos, and setup.windows may still install
+`bat`, and setup.ubuntu and setup.windows may still install
+`worktrunk`. This is today's dual-install state, not exclusive to any
+one repository, and this repository does not edit the setup
+repositories.
 
 `dotnet = "latest"` in this repository's mise config is a **current,
 non-exclusive** overlap, not a delegation: setup.windows still ships
