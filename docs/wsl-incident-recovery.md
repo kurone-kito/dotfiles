@@ -42,8 +42,9 @@ two counters does not name a culprit process.
   branches: the IDD worktree recovery, which stashes work, removes a
   worktree and its claim lock, and the reconciliation of
   `inhibitions.json`, which ends by deleting that file.
-- Never end a process by name or by pattern. Act only on a process you
-  started, or on a process whose PID and creation time you recorded in the
+- Never end a process by name or by pattern. An agent ends only a process it
+  started itself, by its recorded PID. Any other process is the operator's to
+  end, and only after an exact match of PID and creation time recorded in the
   checkpoint and re-verified just before acting.
 - Disruptive actions (see [Escalation](#escalation)) are separate branches.
   Each needs the operator's explicit authorization in the current session,
@@ -137,13 +138,13 @@ Then confirm each of these, and record the date in the checkpoint:
    Captured raw, that output can contain NUL characters that make names
    look spaced out. The collector strips them before matching.
 
-   `ConnectTimeout` bounds only the connection, not this remote command. If
-   your client has `timeout`, wrap the whole call, for example
-   `timeout 15 ssh ...`. That bounds the client only, so the remote `wsl.exe`
-   process can remain. Treat no answer as a failed check, do not run it
-   again, and note the leftover process by PID and creation time. During an
-   incident, prefer the collector's own preflight, which has a 1-second
-   bound, to a manual call.
+   `ConnectTimeout` bounds only the connection, not this remote command. Run
+   this check only with a client-side timeout, for example
+   `timeout 15 ssh ...`, and skip it if your client has none. The timeout
+   bounds the client only, so the remote `wsl.exe` process can remain. Treat no
+   answer as a failed check, do not run it again, and note the leftover
+   process by PID and creation time. During an incident, prefer the
+   collector's own preflight, which has a 1-second bound, to a manual call.
 
 If any step fails while healthy, fix it then, as its own change. Do not
 discover it for the first time during an incident.
@@ -325,6 +326,7 @@ observation-window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc>
 telemetry-run-id: <run-id from the log file name>
 redacted-log-location: <private folder or archive label>
 access-validated: <date> via <host SSH | local console>
+effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
 branch: <issue/N-slug>
 worktree-path: <local path, kept private>
@@ -343,7 +345,7 @@ owned-child-processes:
     creation-time-utc: <timestamp>
     guest-boot-id: <value, guest only>
 authorized-stop-target: <none | host pid and creation-time-utc of another
-  session's process, only for an authorized stop>
+  session's process, which only the operator may end>
 next-safe-action: <one sentence, read-only unless authorized>
 ```
 
@@ -368,7 +370,8 @@ Fill the fields as follows:
   If the first or last line is not a `host-sample` record, use the nearest
   `host-sample` record instead.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
-  For example, write `git diff --binary` output and a list of untracked
+  For example, write `git -C <worktree> diff HEAD --binary` output, which
+  includes staged and unstaged tracked changes, and a list of untracked
   files to a private folder, and copy those files. If the guest cannot be
   read, write `not preserved: guest unavailable`. That is a valid entry and
   a reason to stop, not a reason to improvise.
@@ -385,8 +388,10 @@ Fill the fields as follows:
 
 Before starting any new agent or touching a worktree, compare the checkpoint
 with the actual state. These checks change nothing in the repository, the
-worktree, GitHub, or the claim. The one network effect is that `npx --yes`
-may download the pinned helper package. Stop at the first mismatch and report
+worktree, GitHub, or the claim. They are not free of network traffic:
+`npx --yes` may download the pinned helper package, and the claim helper and
+`gh` make read-only requests to GitHub. A failure from an unavailable network
+says nothing about the machine's state. Stop at the first mismatch and report
 it. Do not repair a mismatch as part of checking. The network commands run
 under `timeout`, and a timeout is a failed check, not a pass.
 
@@ -408,16 +413,19 @@ under `timeout`, and a timeout is a failed check, not a pass.
 2. **Git state.**
 
    ```sh
-   git worktree list --porcelain
-   git -C <worktree> status --porcelain
-   git -C <worktree> rev-parse HEAD
-   git -C <worktree> rev-list --left-right --count @{u}...HEAD
+   timeout 30 git worktree list --porcelain
+   timeout 30 git -C <worktree> status --porcelain
+   timeout 30 git -C <worktree> rev-parse HEAD
+   timeout 30 git -C <worktree> rev-list --left-right --count @{u}...HEAD
    ```
 
-   The last command prints the behind count and then the ahead count. When
-   the branch has no upstream it fails. Use
-   `git -C <worktree> rev-list --count origin/<base-branch>..HEAD` and record
-   `no upstream` in the checkpoint.
+   Even a local `git` call can block on a stalled filesystem, so each runs
+   under `timeout`, and a timeout is a failed check. A process that does not
+   exit at the deadline is not ended by name. Note it by PID and creation
+   time. The last command prints the behind count and then the ahead count.
+   When the branch has no upstream it fails. Use
+   `timeout 30 git -C <worktree> rev-list --count origin/<base-branch>..HEAD`
+   and record `no upstream` in the checkpoint.
 3. **IDD claim state.** With this repository's helper runtime, read the
    claim state without changing it. Take `<helper-package-spec>` from
    `helperRuntime.packageSpec` in `.github/idd/config.json`:
@@ -430,9 +438,11 @@ under `timeout`, and a timeout is a failed check, not a pass.
    Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
    checkpoint has none. Do not post a claim, a heartbeat, or a release while
    checking.
-4. **Pull request and checks.**
-   `timeout 30 gh pr view <PR> -R <owner>/<name> --json state,headRefOid` and
-   `timeout 30 gh pr checks <PR> -R <owner>/<name>` for the recorded PR.
+4. **Pull request and checks.** Use the number `<N>` from the checkpoint's
+   `pr` field, which records `<owner>/<name>#<N>`. `gh` takes a number, a URL,
+   or a branch, not that form:
+   `timeout 30 gh pr view <N> -R <owner>/<name> --json state,headRefOid` and
+   `timeout 30 gh pr checks <N> -R <owner>/<name>`.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
@@ -509,16 +519,22 @@ branch without a new authorization.
 #### Stop an active collector run
 
 - **Purpose:** end a collector run that cannot be allowed to expire.
-- **Prerequisites:** the run's owner agrees, and Ctrl+C in the console that
-  owns it is unavailable. Read the owner's identity from `collector.lock.json`
-  in the per-user state directory named in the telemetry guide. Read it only,
-  and never edit it. Its layout is an internal detail of the current
-  collector: `processId` is the PID and `startTimeTicks` is the process start
-  time as UTC ticks. Record both in the checkpoint's `authorized-stop-target`
-  line, converting the ticks to a UTC time with
-  `[DateTime]::new(<startTimeTicks>, 'Utc')`. Then match them just before
-  acting, comparing `startTimeTicks` with
-  `(Get-Process -Id <pid>).StartTime.ToUniversalTime().Ticks`.
+- **Prerequisites:** the run belongs to another session or to the operator.
+  An agent never ends a process it did not start, so the first choice is for
+  the owner to press Ctrl+C in the console that owns the run, or to let the
+  run expire. Only if neither works does the operator end it, after reading
+  the owner's identity from `collector.lock.json` in the per-user state
+  directory named in the telemetry guide. Read it only, and never edit it. Its
+  layout is an internal detail of the current collector: `processId` is the
+  PID and `startTimeTicks` is the process start time as UTC ticks. Record both
+  in the checkpoint's `authorized-stop-target` line, converting the ticks to
+  a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`, and compare
+  `startTimeTicks` with
+  `(Get-Process -Id <pid>).StartTime.ToUniversalTime().Ticks` just before
+  acting.
+- **Command (operator only):** one PID-targeted command, run once, after both
+  values match: `Stop-Process -Id <pid>`. No retry, no other PID, and never a
+  name or a pattern.
 - **If it fails:** the process remains, or `already-running` persists. Do not
   retry and do not act on a name. Record it. Any `inhibitions.json` entries
   are reconciled only through the separately authorized branch
@@ -530,8 +546,8 @@ branch without a new authorization.
   started can outlive it. A partial last log line is repaired only when the
   next run uses the same logs directory, and unverified cleanup can leave
   `inhibitions.json` entries that block sources until reconciled.
-- **Stop condition:** the PID and start time do not both match, or you cannot
-  establish the identity at all.
+- **Stop condition:** the PID and start time do not both match, you cannot
+  establish the identity at all, or the one command did not end the process.
 
 #### Reconcile `inhibitions.json`
 
@@ -547,8 +563,9 @@ branch without a new authorization.
   Keep the affected sources inhibited, record why, and stop.
 - **Deadline:** the one in the authorization.
 - **Impact:** the procedure can end a process whose PID and start time both
-  match. Deleting `inhibitions.json` clears every inhibition at once, so a
-  descendant that is still running is no longer guarded against.
+  match, and the operator, not an agent, does that unless the agent started
+  the process itself. Deleting `inhibitions.json` clears every inhibition at
+  once, so a descendant that is still running is no longer guarded against.
 - **Stop condition:** any identity mismatch, a `*` entry with no usable
   process identity that you cannot resolve, or an active collector run.
 
@@ -820,9 +837,11 @@ claim belongs to another session or is not provably yours.
 This repository's `home/dot_wslconfig` sets `autoMemoryReclaim=gradual`,
 `sparseVhd=true`, mirrored networking, and `-1` for `vmIdleTimeout` and
 `instanceIdleTimeout`. It has no `memory` or `swap` key. The operator's
-effective memory cap, which is 20 GB, comes from the machine's own effective
-file, not from this repository. Keep it, the reclaim setting, and the
-sparse-VHD setting unchanged. Do not raise the cap, and do not run a broad
+effective memory cap is whatever the machine's own effective file sets, not
+this repository. For the operator this runbook was written for, that cap is
+20 GB. Identify yours while everything is healthy, record it in the
+checkpoint's `effective-memory-cap` line, and keep it, the reclaim setting,
+and the sparse-VHD setting unchanged. Do not raise the cap, and do not run a broad
 chezmoi apply or overwrite the effective file as part of recovery.
 
 Configured swap and observed swap can differ. Configured swap is whatever
