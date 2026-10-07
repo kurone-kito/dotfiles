@@ -189,20 +189,28 @@ an older run's records, including the one-second run used to check whether a
 collector is active.
 
 Before any new run in the real logs directory, copy every existing collector
-log file to a private place, and record that place in the checkpoint:
+log file, and the two state files a start can rewrite, to a private place, and
+record that place in the checkpoint:
 
 ```powershell
-$logs = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry\logs\dotfiles-wsl-incident-telemetry'
+$state = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry'
+$logs = Join-Path $state 'logs\dotfiles-wsl-incident-telemetry'
 $archive = '<private-archive-dir>'
 $pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
-$job = Start-Job -ArgumentList $logs, $archive, $pattern -ScriptBlock {
-  param($logs, $archive, $pattern)
+$job = Start-Job -ArgumentList $state, $logs, $archive, $pattern -ScriptBlock {
+  param($state, $logs, $archive, $pattern)
   $ErrorActionPreference = 'Stop'
+  New-Item -ItemType Directory -Force -Path $archive | Out-Null
   if (Test-Path -LiteralPath $logs) {
-    New-Item -ItemType Directory -Force -Path $archive | Out-Null
     Get-ChildItem -LiteralPath $logs -File -Force |
       Where-Object { $_.Name -match $pattern } |
       Copy-Item -Destination $archive
+  }
+  foreach ($name in 'inhibitions.json', 'collector.lock.json') {
+    $file = Join-Path $state $name
+    if (Test-Path -LiteralPath $file) {
+      Copy-Item -LiteralPath $file -Destination (Join-Path $archive ('state-' + $name))
+    }
   }
 }
 if (-not (Wait-Job -Job $job -Timeout 120)) {
@@ -222,8 +230,11 @@ Continue only when the last line printed is `archive copied`.
 
 The pattern is the collector's own log-file name set. It includes the
 temporary and partial files that a start can repair or delete, not only
-finished `.jsonl` files. The `Test-Path` guard skips the copy when the logs
-directory does not exist yet, because there is nothing to preserve. The copy
+finished `.jsonl` files. A start also reads and rewrites `inhibitions.json`
+and replaces `collector.lock.json`, which hold the cleanup and ownership
+evidence the later sections rely on, so both are copied with a `state-`
+prefix. The `Test-Path` guards skip a log directory or state file that does
+not exist yet, because there is nothing to preserve. The copy
 runs in a child job with a 120-second wait, so a stalled filesystem returns
 control. A copy that fails, or a wait that expires, is fatal: stop and do not
 start another run, and a longer script must stop explicitly because a failed
@@ -353,13 +364,16 @@ Pick the row that matches what you observe, then follow its steps in order.
 
 | State | How to recognize it | Do, in order | Stop when |
 | --- | --- | --- | --- |
-| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Copy existing logs (see [Protect existing evidence](#protect-existing-evidence)). 2. Start the host-only collector with a finite duration. 3. Write the checkpoint. 4. To add a guest probe, copy the logs again, then start a new bounded run with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 5. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
-| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Copy existing logs. 4. Start the host-only collector. 5. Write the checkpoint with "guest evidence unavailable". 6. Observe for the finite window. 7. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
+| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Copy the existing logs and state files (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration. 4. Update the checkpoint with the run id and the observation window. 5. To add a guest probe, copy the logs and state files again, then start a new bounded run with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
+| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Copy the existing logs and state files. 5. Start the host-only collector. 6. Update the checkpoint with the run id and the observation window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
 | C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
-Stopped or unknown distributions are a separate case. A distribution that
-`wsl.exe --list --running --quiet` does not list is stopped or unknown.
-Running a command inside it starts it, so diagnosis must not do that.
+Stopped or unknown distributions are a separate case. A distribution that a
+successful `wsl.exe --list --running --quiet` does not list is stopped or
+unknown. A listing that timed out or exited non-zero is different: it proves
+nothing, so the state stays unavailable and no guest command follows. Running
+a command inside a distribution starts it if it is stopped, so diagnosis must
+not do that.
 `wsl.exe --list --verbose` is a list command that reports each
 distribution's state. It is still a `wsl.exe` call, so apply the same
 one-at-a-time limit and the same client-side `timeout 15` wrapper.
@@ -593,10 +607,12 @@ under `timeout`, and a timeout is a failed check, not a pass.
    and
    `timeout 30 gh pr checks <pr-number> -R <owner>/<name> --json name,state,bucket`.
    Plain `gh pr checks` exits with a non-zero status for a failed check (1)
-   or a pending check (8), even though it prints the table. With `--json` the
-   status is 0 whatever the checks are, so read each check's `bucket`: failing
-   or pending checks are an observed state to route in step 5, not a failed
-   resume check.
+   or a pending check (8), even though it prints the table. With `--json`, gh
+   2.102.0 exited 0 for a PR with a failed check, but other versions may keep
+   those statuses. Either way, statuses 1 and 8 with valid JSON on standard
+   output are an observed state: read each check's `bucket` and route failed
+   or pending checks in step 5. Only unavailable or invalid output, or a
+   transport error, is a failed resume check.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
