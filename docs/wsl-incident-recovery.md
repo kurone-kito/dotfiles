@@ -390,7 +390,6 @@ working-tree-status: <clean | dirty: N tracked, M untracked>
 head-oid: <full commit id of HEAD at the last checkpoint update>
 upstream-state: <ahead A behind B | no upstream>
 uncommitted-work-preservation: <where a copy was written | not preserved: reason>
-working-tree-digest: <SHA-256 of the saved diff, written with the copy | none>
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
@@ -462,10 +461,6 @@ Fill the fields as follows:
   file and record `not preserved: <reason>` instead of keeping a partial copy.
   If the guest cannot be read, write `not preserved: guest unavailable`. That
   is a valid entry and a reason to stop, not a reason to improvise.
-  Finally, record the SHA-256 of the top-level worktree's saved diff file, not
-  a submodule's, in the checkpoint's `working-tree-digest` line, with
-  `sha256sum <file>` in the guest or `Get-FileHash -Algorithm SHA256 <file>`
-  on the host. Write `none` when no diff file was kept.
 - **Owned child processes.** Record the PID together with its start identity,
   and mark whether it lives in the host or the guest. For a host process that
   is the creation time in UTC. For a guest process it is the `starttime`
@@ -554,19 +549,11 @@ under `timeout`, and a timeout is a failed check, not a pass.
    and continue read-only. If the owning session was not verified, even when a
    child process survives, a different commit means someone changed the
    revision, so stop and report it. Never resume
-   from a guess. Next, write a fresh diff to a private file:
-
-   ```sh
-   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
-     diff HEAD --binary > "<private-file>"
-   ```
-
-   Compare its SHA-256 with `working-tree-digest`. A `none` digest means the
-   contents cannot be verified, so treat it as a mismatch. A match means the
-   tracked contents are the ones the checkpoint saved. A difference is the owner's
-   progress when the owning session was verified, and otherwise means the
-   contents changed while no verified owner was running, so stop and report
-   it. A path and a status that look unchanged do not prove the contents are.
+   from a guess. A matching path, status, and commit do not prove the
+   uncommitted contents are unchanged, and this runbook cannot prove that
+   without a verified owner. So when the owning session was not verified, the
+   saved copy is the record of what the work was, and the operator decides
+   whether the worktree is trusted. Nothing here modifies the worktree.
 
    Even a local `git` call can block on a stalled filesystem, so each runs
    under `timeout`, and a timeout is a failed check. `timeout` ends the call
@@ -603,9 +590,13 @@ under `timeout`, and a timeout is a failed check, not a pass.
    records `<owner>/<name>#<N>`. `gh` takes a number, a URL, or a branch, not
    that form:
    `timeout 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
-   and `timeout 30 gh pr checks <pr-number> -R <owner>/<name>`. `gh pr checks`
-   exits with status 8 while checks are still pending. That is a valid
-   in-progress result, not a failed check: read the table it prints.
+   and
+   `timeout 30 gh pr checks <pr-number> -R <owner>/<name> --json name,state,bucket`.
+   Plain `gh pr checks` exits with a non-zero status for a failed check (1)
+   or a pending check (8), even though it prints the table. With `--json` the
+   status is 0 whatever the checks are, so read each check's `bucket`: failing
+   or pending checks are an observed state to route in step 5, not a failed
+   resume check.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
@@ -1004,7 +995,6 @@ Checkpoint excerpt:
 branch: issue/1234-example-change
 issue: <owner>/<name>#1234
 head-oid: <commit id after commit 1>
-working-tree-digest: <SHA-256 of the saved diff>
 owner-session:
   kind: multiplexer
   multiplexer: <session name and creation time>
@@ -1026,7 +1016,6 @@ owned-child-processes:
 | `symbolic-ref --short HEAD` | equals the recorded branch |
 | `rev-parse HEAD` | one commit past `head-oid`, the owner's second commit |
 | `git status --porcelain` | two modified tracked files |
-| SHA-256 of a fresh `diff HEAD --binary` | differs from `working-tree-digest`, the owner's progress |
 | `rev-list --left-right --count @{u}...HEAD` | `0` then `1` (one commit ahead) |
 | `idd-resume-claim-routing` | `state` `already_owned`, `action` `keep` |
 
