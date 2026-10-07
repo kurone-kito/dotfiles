@@ -184,17 +184,20 @@ log file to a private place, and record that place in the checkpoint:
 $ErrorActionPreference = 'Stop'
 $logs = Join-Path $env:LOCALAPPDATA 'Dotfiles\wsl-incident-telemetry\logs\dotfiles-wsl-incident-telemetry'
 $archive = '<private-archive-dir>'
-New-Item -ItemType Directory -Force -Path $archive | Out-Null
 $pattern = '^wsl-capture-[0-9TZ-]+-[a-f0-9]{32}(?:-[0-9]{4})?\.jsonl(?:\.tmp|\.partial)?$'
-Get-ChildItem -LiteralPath $logs -File -Force |
-  Where-Object { $_.Name -match $pattern } |
-  Copy-Item -Destination $archive
+if (Test-Path -LiteralPath $logs) {
+  New-Item -ItemType Directory -Force -Path $archive | Out-Null
+  Get-ChildItem -LiteralPath $logs -File -Force |
+    Where-Object { $_.Name -match $pattern } |
+    Copy-Item -Destination $archive
+}
 ```
 
 The pattern is the collector's own log-file name set. It includes the
 temporary and partial files that a start can repair or delete, not only
-finished `.jsonl` files. If the logs directory does not exist yet, there is
-nothing to copy. If any copy fails, stop and do not start another run.
+finished `.jsonl` files. The `Test-Path` guard skips the copy when the logs
+directory does not exist yet, because there is nothing to preserve. A copy
+that fails is fatal: stop and do not start another run.
 
 Run checks, smoke tests, and activity probes with their own scratch
 `-OutputDirectory`. The per-user lock is shared across output directories,
@@ -451,14 +454,18 @@ under `timeout`, and a timeout is a failed check, not a pass.
 2. **Git state.**
 
    ```sh
-   timeout -k 5 30 git worktree list --porcelain
+   timeout -k 5 30 git -C <worktree> worktree list --porcelain
+   timeout -k 5 30 git -C <worktree> symbolic-ref --short HEAD
    timeout -k 5 30 git -C <worktree> --no-optional-locks status --porcelain
    timeout -k 5 30 git -C <worktree> rev-parse HEAD
    timeout -k 5 30 git -C <worktree> rev-list --left-right --count @{u}...HEAD
    ```
 
-   Even a local `git` call can block on a stalled filesystem, so each runs
-   under `timeout`, and a timeout is a failed check. `timeout` ends the call
+   The `symbolic-ref` output must equal the checkpoint's `branch` exactly. A
+   different branch, or a detached HEAD, means the path is not the worktree
+   the checkpoint describes, so stop. Even a local `git` call can block on a
+   stalled filesystem, so each runs under `timeout`, and a timeout is a failed
+   check. `timeout` ends the call
    it started, but a process stuck in uninterruptible I/O can outlast the
    deadline, so the bound is not guaranteed on a stalled filesystem. A call
    that has not returned is not ended by name. Note it by PID and creation
@@ -592,8 +599,16 @@ branch without a new authorization.
 
   ```powershell
   $p = Get-Process -Id <pid>
-  if ($p.StartTime.ToUniversalTime().Ticks -eq <startTimeTicks>) { Stop-Process -Id $p.Id }
+  $null = $p.Handle
+  if ($p.StartTime.ToUniversalTime().Ticks -eq <startTimeTicks>) { Stop-Process -InputObject $p }
   ```
+
+  Reading `Handle` first keeps a handle to the process that was found, so the
+  check and the stop act on that process even if its PID is reused in
+  between. A process object alone does not guarantee that, because it can
+  re-open the process by PID. This behavior is not exercised on a Windows host
+  here, and a small race can remain, which is one more reason the operator, not
+  an agent, runs it.
 
 - **If it fails:** the process remains, or `already-running` persists. Do not
   retry and do not act on a name. Record it. Any `inhibitions.json` entries
