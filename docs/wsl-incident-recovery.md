@@ -107,7 +107,8 @@ restricted execution policy blocks the script, add `-ExecutionPolicy Bypass`
 to that one invocation. It applies to that process only. Do not change the
 machine or user policy for this.
 
-Then confirm each of these, and record the date in the checkpoint:
+Then confirm each of these, and record the date and the cap in the
+checkpoint:
 
 1. `-Help` prints the four-line usage text and the exit status is 0. That
    proves the file is deployed and runnable from a noninteractive session.
@@ -132,19 +133,25 @@ Then confirm each of these, and record the date in the checkpoint:
    This does not start a distribution:
 
    ```sh
-   ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> "wsl.exe --list --running --quiet"
+   timeout 15 ssh -o BatchMode=yes -o ConnectTimeout=10 -p <host-ssh-port> <host-user>@<host> "wsl.exe --list --running --quiet"
    ```
 
    Captured raw, that output can contain NUL characters that make names
    look spaced out. The collector strips them before matching.
 
    `ConnectTimeout` bounds only the connection, not this remote command. Run
-   this check only with a client-side timeout, for example
-   `timeout 15 ssh ...`, and skip it if your client has none. The timeout
+   this check only with a client-side timeout, as above, and skip it if your
+   client has none. The timeout
    bounds the client only, so the remote `wsl.exe` process can remain. Treat no
    answer as a failed check, do not run it again, and note the leftover
    process by PID and creation time. During an incident, prefer the
    collector's own preflight, which has a 1-second bound, to a manual call.
+
+4. Read the machine's effective memory cap. Open the effective
+   `%UserProfile%\.wslconfig` on the host, not this repository's source file,
+   and note the `memory` value under `[wsl2]`. If the key is absent, record
+   `default (key absent)`. Do not edit the file. Put the value in the
+   checkpoint's `effective-memory-cap` line.
 
 If any step fails while healthy, fix it then, as its own change. Do not
 discover it for the first time during an incident.
@@ -306,7 +313,7 @@ Stopped or unknown distributions are a separate case. A distribution that
 Running a command inside it starts it, so diagnosis must not do that.
 `wsl.exe --list --verbose` is a list command that reports each
 distribution's state. It is still a `wsl.exe` call, so apply the same
-one-at-a-time limit.
+one-at-a-time limit and the same client-side `timeout 15` wrapper.
 
 A guest running-state check followed by a guest command is not atomic. A
 distribution that stops between the two can be started by the command. Use
@@ -370,17 +377,20 @@ Fill the fields as follows:
   If the first or last line is not a `host-sample` record, use the nearest
   `host-sample` record instead.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
-  For example, write `git -C <worktree> diff HEAD --binary` output, which
-  includes staged and unstaged tracked changes, and a list of untracked
-  files to a private folder, and copy those files. If the guest cannot be
-  read, write `not preserved: guest unavailable`. That is a valid entry and
-  a reason to stop, not a reason to improvise.
+  For example, write
+  `timeout -k 5 60 git -C <worktree> --no-optional-locks diff HEAD --binary`
+  output, which includes staged and unstaged tracked changes, and a list of
+  untracked files to a private folder, and copy those files. If the guest
+  cannot be read, write `not preserved: guest unavailable`. That is a valid
+  entry and a reason to stop, not a reason to improvise.
 - **Owned child processes.** Record the PID together with its creation time
   in UTC, and mark whether it lives in the host or the guest. PIDs are reused
   and Linux start times are relative to boot, so for a guest process also
   record the boot identity read from `/proc/sys/kernel/random/boot_id`. A
   recorded PID with a different creation time, or from a different boot, is
   a different process.
+- **Effective memory cap.** Copy the value you read in the healthy-time
+  check. Recovery never changes it.
 - **Claim and nonce.** The IDD agent id, claim id, and activation nonce are
   public correlation tokens, not secrets. They are still local data here.
 
@@ -413,36 +423,41 @@ under `timeout`, and a timeout is a failed check, not a pass.
 2. **Git state.**
 
    ```sh
-   timeout 30 git worktree list --porcelain
-   timeout 30 git -C <worktree> status --porcelain
-   timeout 30 git -C <worktree> rev-parse HEAD
-   timeout 30 git -C <worktree> rev-list --left-right --count @{u}...HEAD
+   timeout -k 5 30 git worktree list --porcelain
+   timeout -k 5 30 git -C <worktree> --no-optional-locks status --porcelain
+   timeout -k 5 30 git -C <worktree> rev-parse HEAD
+   timeout -k 5 30 git -C <worktree> rev-list --left-right --count @{u}...HEAD
    ```
 
    Even a local `git` call can block on a stalled filesystem, so each runs
-   under `timeout`, and a timeout is a failed check. A process that does not
-   exit at the deadline is not ended by name. Note it by PID and creation
-   time. The last command prints the behind count and then the ahead count.
-   When the branch has no upstream it fails. Use
-   `timeout 30 git -C <worktree> rev-list --count origin/<base-branch>..HEAD`
+   under `timeout`, and a timeout is a failed check. `timeout` ends the call
+   it started, but a process stuck in uninterruptible I/O can outlast the
+   deadline, so the bound is not guaranteed on a stalled filesystem. A call
+   that has not returned is not ended by name. Note it by PID and creation
+   time. `--no-optional-locks` keeps `status` from refreshing the index. The
+   last command prints the behind count and then the ahead count. When the
+   branch has no upstream it fails. Use
+   `timeout -k 5 30 git -C <worktree> rev-list --count origin/<base-branch>..HEAD`
    and record `no upstream` in the checkpoint.
 3. **IDD claim state.** With this repository's helper runtime, read the
-   claim state without changing it. Take `<helper-package-spec>` from
+   claim state without changing it. `<issue-number>` is the `N` in the
+   checkpoint's `issue` field. Take `<helper-package-spec>` from
    `helperRuntime.packageSpec` in `.github/idd/config.json`:
 
    ```sh
    timeout 60 npx --yes --package <helper-package-spec> \
-     idd-resume-claim-routing --issue <N> --claim-id <claim-id> --nonce <nonce> --worktree <worktree>
+     idd-resume-claim-routing --issue <issue-number> --claim-id <claim-id> --nonce <nonce> --worktree <worktree>
    ```
 
    Read `state`, `action`, and `reason` from the JSON. Omit `--nonce` when the
    checkpoint has none. Do not post a claim, a heartbeat, or a release while
    checking.
-4. **Pull request and checks.** Use the number `<N>` from the checkpoint's
-   `pr` field, which records `<owner>/<name>#<N>`. `gh` takes a number, a URL,
-   or a branch, not that form:
-   `timeout 30 gh pr view <N> -R <owner>/<name> --json state,headRefOid` and
-   `timeout 30 gh pr checks <N> -R <owner>/<name>`.
+4. **Pull request and checks.** Skip this check when the checkpoint's `pr`
+   field is `none`. Otherwise `<pr-number>` is the `N` in that field, which
+   records `<owner>/<name>#<N>`. `gh` takes a number, a URL, or a branch, not
+   that form:
+   `timeout 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
+   and `timeout 30 gh pr checks <pr-number> -R <owner>/<name>`.
 5. **Route.** Follow `.github/instructions/idd-resume.instructions.md`
    (Steps 0 to 3) for the observed claim, branch, and PR state. Resuming as
    the owner of a live claim changes nothing destructive. The recovery of a
@@ -464,6 +479,10 @@ stop condition. The separately authorized branches after them are not a
 sequence. Choose one only for a question the earlier steps could not answer.
 None of these steps is automated, scheduled, retried in a loop, or tied to a
 timer, and an agent does not run any of them without authorization.
+Authorization lets an agent run a command the operator names. It never lets
+an agent end a process it did not start. Stopping another session's
+collector, and ending any process found while reconciling, are the
+operator's own actions.
 
 ### Observe with the host-only collector
 
@@ -489,7 +508,8 @@ timer, and an agent does not run any of them without authorization.
 - **If it fails:** a `timeout` or `preflight-*` error in the guest field.
   Do not retry in a loop. The collector stops probing for that run.
 - **Deadline:** the collector's own 1 second preflight and 2 second probe.
-  For a manual call, treat 10 seconds without an answer as a failure.
+  A manual call runs under a client-side `timeout 15`, and no answer by then
+  is a failure.
 - **Impact:** a short noninteractive command runs inside a running guest.
   The check-then-launch race above can start a distribution that just
   stopped.
@@ -528,13 +548,16 @@ branch without a new authorization.
   layout is an internal detail of the current collector: `processId` is the
   PID and `startTimeTicks` is the process start time as UTC ticks. Record both
   in the checkpoint's `authorized-stop-target` line, converting the ticks to
-  a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`, and compare
-  `startTimeTicks` with
-  `(Get-Process -Id <pid>).StartTime.ToUniversalTime().Ticks` just before
-  acting.
-- **Command (operator only):** one PID-targeted command, run once, after both
-  values match: `Stop-Process -Id <pid>`. No retry, no other PID, and never a
-  name or a pattern.
+  a UTC time with `[DateTime]::new(<startTimeTicks>, 'Utc')`.
+- **Command (operator only):** one PID-targeted expression, run once, that
+  checks the start time and stops only on a match. No retry, no other PID, and
+  never a name or a pattern:
+
+  ```powershell
+  $p = Get-Process -Id <pid>
+  if ($p.StartTime.ToUniversalTime().Ticks -eq <startTimeTicks>) { Stop-Process -Id $p.Id }
+  ```
+
 - **If it fails:** the process remains, or `already-running` persists. Do not
   retry and do not act on a name. Record it. Any `inhibitions.json` entries
   are reconciled only through the separately authorized branch
@@ -554,7 +577,8 @@ branch without a new authorization.
 - **Purpose:** clear source inhibitions that an unverified collector cleanup
   left behind, so those sources are sampled again.
 - **Prerequisites:** no collector run is active and every collector session
-  is closed. For each entry, compare `processId` and `startTimeTicks` with the
+  is closed. The operator, not an agent, performs any process stop in this
+  procedure. For each entry, compare `processId` and `startTimeTicks` with the
   live process, and make an independent process-tree check for surviving
   collector descendants, exactly as the procedure under
   [Start and stop](wsl-incident-telemetry.md#start-and-stop) describes. The
