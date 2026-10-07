@@ -201,9 +201,8 @@ earlier run used. The collector creates its logs in a
 `dotfiles-wsl-incident-telemetry` subdirectory of it and applies its budget
 only there, so records written elsewhere are never touched. Give checks,
 smoke tests, and activity probes their own scratch directories for the same
-reason. Record each run's directory in the checkpoint's
-`redacted-log-location` line. Avoiding the shared directory needs no copy
-step.
+reason. Record each run's directory in its entry of the checkpoint's
+`telemetry-runs` list. Avoiding the shared directory needs no copy step.
 
 The per-user state directory is different: every run shares it, whatever the
 output directory. A start reads and rewrites `inhibitions.json` and replaces
@@ -216,10 +215,12 @@ files is therefore for the checkpoint's record, not a guard against losing
 evidence. They live in `%LOCALAPPDATA%\Dotfiles\wsl-incident-telemetry`.
 Before any new run, read both files if they exist, without editing or
 deleting them, as a child job with a wait timeout, as the ground rules say for
-any host-side file read. Write down in the checkpoint whether
-`inhibitions.json` has entries and the PID and run id in the lock metadata.
-The per-user lock is shared across output directories too, so a probe with a
-scratch directory still answers `already-running`.
+any host-side file read. Write what you find in the checkpoint's
+`collector-state` field: for `inhibitions.json`, the number of entries and each
+one's source and whether it has a usable process identity; for the lock
+metadata, its `processId`, `startTimeTicks`, and `runId`. The per-user lock is
+shared across output directories too, so a probe with a scratch directory still
+answers `already-running`.
 
 ### Start
 
@@ -251,8 +252,8 @@ name placeholder in anything you share.
 
 There is no status command. Use evidence in this order:
 
-1. Newest log: list the `.jsonl` files under the output directory recorded in
-   the checkpoint's `redacted-log-location` line, and under the default logs
+1. Newest log: list the `.jsonl` files under each output directory recorded in
+   the checkpoint's `telemetry-runs` list, and under the default logs
    folder named in the telemetry guide in case another session started a run.
    Compare the newest file's `LastWriteTimeUtc` with the current time. A run
    that is sampling every 5 seconds writes at least that often. A stale file
@@ -340,8 +341,8 @@ Pick the row that matches what you observe, then follow its steps in order.
 
 | State | How to recognize it | Do, in order | Stop when |
 | --- | --- | --- | --- |
-| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration in that directory. 4. Update the checkpoint with the run id and the observation window. 5. To add a guest probe, read the state files again, then start a new bounded run in another new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
-| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files and choose a new output directory. 5. Start the host-only collector in it. 6. Update the checkpoint with the run id and the observation window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
+| A. Host reachable, guest responsive | Host SSH works. Guest SSH or a bounded guest command answers. | 1. Write the first checkpoint now, with what you already know. 2. Read the collector state files and choose a new output directory (see [Protect existing evidence](#protect-existing-evidence)). 3. Start the host-only collector with a finite duration in that directory. 4. Add the run to the checkpoint's `telemetry-runs` list, with its run id, directory, and window. 5. To add a guest probe, read the state files again, then start a new bounded run in another new output directory with `-GuestDistro` after the first run ends, because a second run is refused while one is active. 6. Ask each work owner to checkpoint their own work. | The window ends. No escalation is needed. |
+| B. Host reachable, guest unavailable | Host SSH works. Guest SSH times out, or a `wsl.exe` command does not return. | 1. Do not start another `wsl.exe` call while one is outstanding. 2. Note any outstanding `wsl.exe` processes by PID and creation time, read-only. 3. Write the first checkpoint now, with "guest evidence unavailable". 4. Read the collector state files and choose a new output directory. 5. Start the host-only collector in it. 6. Add the run to the checkpoint's `telemetry-runs` list, with its run id, directory, and window. 7. Observe for the finite window. 8. Take the records and the checkpoint to the operator. | You would need a disruptive step. Go to [Escalation](#escalation) and wait for authorization. |
 | C. Host unavailable | Host SSH does not connect. Guest SSH may or may not answer, and an answer does not replace host evidence. | 1. Record the time and what you tried. 2. Do not infer host state from a guest answer. 3. Capture host evidence only from the local console. The read-only git and claim checks can still run over guest SSH if it answers. The process-identity checks wait for host access. | Remote host capture cannot continue. When any access returns, read the host logs for the gap before touching anything. |
 
 Stopped or unknown distributions are a separate case. A distribution that a
@@ -368,9 +369,13 @@ command lines or arguments, and no raw log content.
 
 ```text
 checkpoint-version: 1
-observation-window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc>
-telemetry-run-id: <run-id from the log file name>
-redacted-log-location: <each run's private output directory | not preserved: reason>
+telemetry-runs: <none | a list, one entry per collector run>
+  - run-id: <run-id from the log file name>
+    output-directory: <the run's private output directory | not preserved: reason>
+    window-utc: <first sampleTimeUtc> .. <last sampleTimeUtc> | incomplete
+collector-state: <read before each new run>
+  inhibitions: <absent | N entries, each with its source and whether it has a usable process identity>
+  lock-metadata: <absent | processId, startTimeTicks, runId>
 access-validated: <date> via <host SSH | local console>
 effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
@@ -406,23 +411,34 @@ next-safe-action: <one sentence, read-only unless authorized>
 
 Fill the fields as follows:
 
-- **Observation window.** The first and last `sampleTimeUtc` across every
-  segment of one run. Log files are named
-  `wsl-capture-<UTC stamp>-<run-id>-<segment>.jsonl`, so the run id comes
-  from the name. A long run rolls into numbered segments and removes the
-  oldest ones when the byte budget fills. The window therefore starts at the
-  first retained record, which can be later than the run start.
+- **Telemetry runs.** Keep one list entry per collector run, so every retained
+  log can be matched with its own run id, directory, and window, and a later
+  run never overwrites an earlier one. The window is the first and last
+  `sampleTimeUtc` across every segment of that run. Log files are named
+  `wsl-capture-<UTC stamp>-<run-id>-<segment>.jsonl`, so the run id comes from
+  the name. A long run rolls into numbered segments and removes the oldest ones
+  when the byte budget fills, so the window starts at the first retained
+  record, which can be later than the run start. To read the endpoints:
 
-  Read the run's segments with the review commands in
-  [Find and review records](wsl-incident-telemetry.md#find-and-review-records),
-  pointed at `<private-incident-dir>\dotfiles-wsl-incident-telemetry` instead
-  of the default folder. Take the first valid `host-sample` record of the
-  lowest segment and the last valid one of the highest. A run interrupted
-  mid-append can leave a truncated final line, so skip any line that does not
-  parse and any record that is not a `host-sample`. If neither end has a valid
-  record in the lines you read, read more lines rather than guessing. That is
-  a read of your own private directory, so it needs no more than the bound the
-  ground rules already require.
+  1. List the run's segments in
+     `<private-incident-dir>\dotfiles-wsl-incident-telemetry`, sorted by name,
+     with `Get-ChildItem -Filter 'wsl-capture-*-<run-id>-*.jsonl'`, as the
+     listing command in
+     [Find and review records](wsl-incident-telemetry.md#find-and-review-records)
+     does for the default folder.
+  2. Read the first 50 lines of the lowest segment with
+     `Get-Content -TotalCount 50`, and the last 50 lines of the highest with
+     `Get-Content -Tail 50`.
+  3. The endpoints are the first valid `host-sample` record of the first read
+     and the last valid one of the second. A run interrupted mid-append can
+     leave a truncated final line, so skip any line that does not parse and any
+     record that is not a `host-sample`.
+  4. If either endpoint has no valid record in the lines read, read more lines
+     until both are found or the segment is exhausted. If one stays missing,
+     write `incomplete` for the window rather than guessing.
+
+  This reads your own private directory, so it needs no more than the bound
+  the ground rules already require.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   For example, write
   `timeout -k 5 60 git -C "<worktree>" --no-optional-locks diff HEAD --binary`
