@@ -112,18 +112,21 @@ the only bound on the whole call. A client-side timeout does not stop a
 command that is already running on the host, so keep every remote command
 short and bounded too.
 
-If your client has no `timeout`, use an equivalent that ends the client at a
-deadline: `gtimeout` from GNU coreutils on macOS, or, on a Windows client, run
+If your client has no `timeout`, use an equivalent. `gtimeout` from GNU
+coreutils on macOS ends the client at the deadline. On a Windows client, run
 the `ssh` call as a child job with a wait timeout (`Start-Job`, then
-`Wait-Job -Timeout`) and note a leftover `ssh` process by PID and creation
-time without ending it. With no equivalent at all, use another client that has
-one, or the local console. If neither exists, run no host call from this
-client: write `not preserved: no bounded client` for the evidence you could not
-collect, the state-file copy and the collector run, and hand off. The
-collector's own `-DurationSeconds` is not such a bound, because it is checked
-only once sampling begins, so a start can stall earlier, on the state
-directory, the lock, or the log folder, and the keepalive does not end a
-command that hangs on the host.
+`Wait-Job -Timeout`). That only stops you waiting: it does not end the job or
+its `ssh` process, and the remote command can go on running. When the wait
+expires, note the leftover `ssh` process by PID and creation time, end nothing,
+and make no further host call until the operator has dealt with it. With no
+equivalent at all, use another client that has one, or the local console. If
+neither exists, run no host call from this client: write
+`not preserved: no bounded client` for the evidence you could not collect, the
+state-file copy and the collector run, and hand off. The collector's own
+`-DurationSeconds` is not such a bound, because it is checked only once
+sampling begins, so a start can stall earlier, on the state directory, the
+lock, or the log folder, and the keepalive does not end a command that hangs
+on the host.
 
 The first check below shows the wrapped form:
 
@@ -635,14 +638,18 @@ identify and hand off the checkpoint, and no check reads them.
   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
     ls-files -z --others --ignored --exclude-standard --directory \
     > "<capture-dir>/ignored.nul"
-  timeout -k 5 30 sed -z 's/\\/\\\\/g; s/\n/\\n/g' "<capture-dir>/ignored.nul" | tr '\0' '\n' | cat -n
+  timeout -k 5 30 sed -z 's/\\/\\\\/g; s/\n/\\n/g' "<capture-dir>/ignored.nul" \
+    > "<capture-dir>/ignored-escaped.nul"
+  tr '\0' '\n' < "<capture-dir>/ignored-escaped.nul" | cat -n
   ```
 
   The listing keeps a fully ignored directory as one entry. The `sed` writes a
-  newline inside a name as `\n` and a backslash as `\\`, so after `tr` turns
-  the NUL separators into line ends, each name is one numbered line. That form
-  is for reading only, and a name that holds a carriage return or an escape
-  character can still garble it, which `cat -A` shows. The number is the
+  newline inside a name as `\n` and a backslash as `\\` into its own output
+  file, so its exit status is not hidden by a pipe. If it exits non-zero or
+  times out, discard that file and do not choose from the display. Once `tr`
+  turns the NUL separators into line ends, each name is one numbered line.
+  That form is for reading only, and a name that holds a carriage return or an
+  escape character can still garble it, which `cat -A` shows. The number is the
   record's position in `ignored.nul`, so a displayed entry maps back to its
   exact original path, and you never retype a path. Choose the records to copy
   by number (the numbers below are an example, so use your own), keep the NUL
@@ -804,16 +811,24 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    and the repository comes from them instead of the directory you start in:
 
    ```sh
-   policy_file="$(mktemp)"
-   timeout -k 5 30 git -C "<worktree>" show \
-     origin/<base-branch>:.github/idd/config.json > "$policy_file"
-   jq -r '.helperRuntime.packageSpec // empty' "$policy_file"
-   (cd "<clone-dir>" && timeout -k 5 60 npx --yes --package <helper-package-spec> \
-     idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
-     --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
-     --policy "$policy_file")
-   rm -- "$policy_file"
+   policy_file="$(mktemp)" &&
+     timeout -k 5 30 git -C "<worktree>" show \
+       origin/<base-branch>:.github/idd/config.json > "$policy_file" &&
+     helper_spec="$(jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
+     [ -n "$helper_spec" ] &&
+     echo "helper package spec: $helper_spec" &&
+     (cd "<clone-dir>" && timeout -k 5 60 npx --yes --package "$helper_spec" \
+       idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
+       --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
+       --policy "$policy_file")
+   echo "check 3 exit status: $?"
+   rm -f -- "$policy_file"
    ```
+
+   The `&&` chain stops at the first failure, so the helper runs only with a
+   policy file and a package spec taken from the base branch, and the copy is
+   removed either way. The spec it prints is the `<helper-package-spec>` for
+   check 4.
 
    Run the helper from inside the clone, as the subshell does, but not in the
    incident worktree. `<clone-dir>` is the primary worktree, the first entry of
@@ -822,9 +837,11 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    probe runs `git worktree list` in the current directory, and outside a clone
    the probe comes back unreadable, which fails the check. `--worktree` already
    points the owner-evidence reads at the incident worktree, so the directory
-   only has to be inside the clone, and a project `.npmrc` in a dirty incident
-   worktree would also apply to `npx`. An empty spec or a non-zero exit is a
-   failed resume check. Read `state`, `action`, and `reason` from the JSON, and
+   only has to be inside the clone. The directory `npx` runs from is the one
+   whose project `.npmrc` applies to it, which is why that directory is not the
+   incident worktree, whose contents are unverified. A chain that stopped
+   early, an empty spec, or a non-zero exit is a failed resume check. Read
+   `state`, `action`, and `reason` from the JSON, and
    read `policy.trusted_marker_actors_source`: `none` means the trusted-actor
    list came out empty and the verdict rests on the viewer's own login. Omit
    `--nonce` when the checkpoint has none. When its `claim` is `none`, omit
