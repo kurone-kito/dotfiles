@@ -281,7 +281,7 @@ try {
   $env:MISE_OFFLINE = '1'
   $global:LASTEXITCODE = $null
   node -e 0
-  $LASTEXITCODE   # 0 means accepted; empty means node was not found
+  $LASTEXITCODE   # 0 means accepted; a "not recognized" error means node was not found
 } finally {
   foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 }
