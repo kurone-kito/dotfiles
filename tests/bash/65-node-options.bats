@@ -173,6 +173,19 @@ login_options() {
   [ "$status" -eq 0 ] || fail "$shell_name login shell failed ($status): $stderr"
 }
 
+# Count how often a shell sources the shared conf.d directory.
+install_confd_counter() {
+  CONFD_COUNTER="$BATS_TEST_TMPDIR/confd-sourced.count"
+  : > "$CONFD_COUNTER"
+  printf "echo x >> '%s'\n" "$CONFD_COUNTER" > "$HOME/.config/shell/conf.d/00-counter.sh"
+}
+
+# The probe must have run: an untouched environment is only meaningful then.
+assert_probe_ran() {
+  run cat "$NODE_MOCK_LOG"
+  assert_output --partial 'argv=-e 0'
+}
+
 # Startup must not say anything about the option, the probe, or the mock.
 assert_quiet_startup() {
   local noise
@@ -265,6 +278,7 @@ assert_quiet_startup() {
   login_options bash __unset__
   assert_output ''
   assert_quiet_startup
+  assert_probe_ran
 }
 
 @test "bash: a node that fails leaves the environment untouched and quiet" {
@@ -274,6 +288,7 @@ assert_quiet_startup() {
   assert_success
   assert_output ''
   assert_quiet_startup
+  assert_probe_ran
 }
 
 @test "bash: without awk a non-empty NODE_OPTIONS is left untouched" {
@@ -295,10 +310,17 @@ assert_quiet_startup() {
 }
 
 @test "bash: a nested interactive shell and a plain subshell keep one copy" {
+  install_confd_counter
+
   run --separate-stderr env -u NODE_OPTIONS bash -li -c \
     'bash -i -c "printf %s \"\$NODE_OPTIONS\"" 2>/dev/null; printf "|"; (printf "%s" "$NODE_OPTIONS"); printf "|"; bash -c "printf %s \"\$NODE_OPTIONS\""'
   assert_success
   assert_output "$DEFAULT|$DEFAULT|$DEFAULT"
+
+  # The login shell and the nested interactive shell each sourced conf.d,
+  # so the single copy above is idempotence, not a skipped second run.
+  run awk 'END { print NR }' "$CONFD_COUNTER"
+  assert_output 2
 }
 
 @test "bash: a child process inherits the default" {
@@ -434,11 +456,14 @@ assert_quiet_startup() {
   login_options zsh '--max-old-space-size=4096'
   assert_output '--max-old-space-size=4096'
   assert_quiet_startup
+  assert_probe_ran
 
+  : > "$NODE_MOCK_LOG"
   export NODE_MOCK_MODE=fail
   login_options zsh __unset__
   assert_output ''
   assert_quiet_startup
+  assert_probe_ran
 
   unset NODE_MOCK_MODE
   rm -f "$MOCK_BIN/node"
@@ -469,11 +494,15 @@ assert_quiet_startup() {
 
 @test "zsh: a nested interactive shell keeps one copy" {
   require_zsh
+  install_confd_counter
 
   run --separate-stderr env -u NODE_OPTIONS ZDOTDIR="$ZDOTDIR" zsh -li -c \
     'zsh -i -c "printf %s \"\$NODE_OPTIONS\""'
   assert_success
   assert_output "$DEFAULT"
+
+  run awk 'END { print NR }' "$CONFD_COUNTER"
+  assert_output 2
 }
 
 @test "zsh: a user-owned conf.d file that sorts first keeps its own value" {
