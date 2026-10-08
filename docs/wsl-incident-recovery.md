@@ -169,7 +169,8 @@ of the date and the cap and copy it into the first checkpoint:
 1. `-Help` prints the usage text and the exit status is 0. That
    proves the file is deployed and runnable from a noninteractive session.
 2. A short bounded host-only run works the same way and writes records. Give
-   it its own scratch output directory. The log byte budget covers a whole
+   it its own scratch output directory, and copy the collector state files
+   first, because any start rewrites them. The log byte budget covers a whole
    logs directory (see [Protect existing evidence](#protect-existing-evidence)),
    so a check that shares the real directory can delete real evidence:
 
@@ -204,7 +205,8 @@ of the date and the cap and copy it into the first checkpoint:
 
 4. A short bounded run with a guest works and shows rates. Do this only when
    step 3 listed the distribution as running, and give the run its own scratch
-   output directory. The collector reads the guest at most once every 60
+   output directory. Copy the collector state files first, as in step 2. The
+   collector reads the guest at most once every 60
    seconds, so a shorter run shows one guest reading and no rates. About 70
    seconds covers a second reading. Adjust the quoting for your login shell,
    and under a `cmd.exe` login shell pass the name without single quotes (see
@@ -650,18 +652,20 @@ identify and hand off the checkpoint, and no check reads them.
   timeout -k 5 60 sh -c 'git -C "$1" --no-optional-locks ls-files -z --others --ignored --exclude-standard --directory > "$2"' \
     sh "<worktree>" "<capture-dir>/ignored.nul"
   timeout -k 5 30 sh -c 'sed -z "$1" "$2" > "$3"' \
-    sh 's/\\/\\\\/g; s/\n/\\n/g' "<capture-dir>/ignored.nul" "<capture-dir>/ignored-escaped.nul"
+    sh 's/\\/\\\\/g; s/\n/\\n/g; s/[[:cntrl:]]/?/g' "<capture-dir>/ignored.nul" "<capture-dir>/ignored-escaped.nul"
   timeout -k 5 30 sh -c 'tr "\0" "\n" < "$1" | cat -n' sh "<capture-dir>/ignored-escaped.nul"
   ```
 
   The listing keeps a fully ignored directory as one entry. The `sed` writes a
-  newline inside a name as `\n` and a backslash as `\\` into its own output
-  file, so its exit status is not hidden by a pipe. If it exits non-zero or
-  times out, discard that file and do not choose from the display. Once `tr`
+  newline inside a name as `\n`, a backslash as `\\`, and any other control
+  character, such as a carriage return or an escape, as `?`, into its own
+  output file, so its exit status is not hidden by a pipe. If it exits non-zero
+  or times out, discard that file and do not choose from the display. Once `tr`
   turns the NUL separators into line ends, each name is one numbered line.
-  That form is for reading only, and a name that holds a carriage return or an
-  escape character can still garble it, which `cat -A` shows. The number is the
-  record's position in `ignored.nul`, so a displayed entry maps back to its
+  That form is for reading only, so a name cannot repaint the terminal, and a
+  `?` may stand for a control character. `cat -A` on one record of
+  `ignored.nul` shows its exact bytes. The number is the record's position in
+  `ignored.nul`, so a displayed entry maps back to its
   exact original path, and you never retype a path. Choose the records to copy
   by number (the numbers below are an example, so use your own), keep the NUL
   separators, and archive that file with the same `tar --null -T` form:
@@ -824,7 +828,7 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    ```sh
    policy_dir="$(timeout -k 5 30 mktemp -d)" &&
      policy_file="$policy_dir/config.json" &&
-     timeout -k 5 30 sh -c 'git -C "$1" show "$2" > "$3"' sh "<worktree>" \
+     timeout -k 5 30 sh -c 'git -C "$1" show "$2" > "$3"' sh "<clone-dir>" \
        origin/<base-branch>:.github/idd/config.json "$policy_file" &&
      helper_spec="$(timeout -k 5 30 jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
      [ -n "$helper_spec" ] &&
@@ -852,7 +856,8 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    Run the helper from inside the clone, as the subshell does. `<clone-dir>` is
    any worktree of the clone, preferably the primary worktree, the first entry
    of the `git worktree list` output in check 2, because the incident worktree
-   may sit on the stalled filesystem. The helper's worktree-occupancy probe
+   may sit on the stalled filesystem, so the policy copy is read through it too.
+   The helper's worktree-occupancy probe
    runs `git worktree list` in the current directory, and outside a clone the
    probe comes back unreadable, which fails the check. `--worktree` already
    points the owner-evidence reads at the incident worktree. A chain that
@@ -878,7 +883,7 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    ```sh
    ci_dir="$(timeout -k 5 30 mktemp -d)" &&
      (cd "<clone-dir>" && timeout -k 5 120 npx --prefix "$ci_dir" --yes \
-       --package <helper-package-spec> \
+       --package "<helper-package-spec>" \
        idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>)
    echo "check 4 exit status: $?" >&2
    timeout -k 5 30 rm -rf -- "$ci_dir"
