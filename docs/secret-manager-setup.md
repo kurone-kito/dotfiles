@@ -263,8 +263,9 @@ echo $?
 ```powershell
 $saved = $env:NODE_OPTIONS
 $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=2000'
+$global:LASTEXITCODE = $null
 node -e 0
-$LASTEXITCODE
+$LASTEXITCODE   # 0 means accepted; empty means node was not found
 $env:NODE_OPTIONS = $saved
 ```
 
