@@ -54,6 +54,8 @@ Describe '35-node-options' {
       [Environment]::SetEnvironmentVariable($name, $null)
     }
 
+    # A fresh home every time: a test may drop a user-owned file into conf.d.
+    Remove-Item -LiteralPath (Join-Path $TestDrive 'home') -Recurse -Force -ErrorAction SilentlyContinue
     $homeRoot = (New-Item -ItemType Directory -Path (Join-Path $TestDrive 'home') -Force).FullName
     $confDir = Join-Path (Join-Path (Join-Path $homeRoot '.config') 'powershell') 'conf.d'
     New-Item -ItemType Directory -Path $confDir -Force | Out-Null
@@ -160,6 +162,16 @@ Describe '35-node-options' {
       . $script:Loader
 
       $env:NODE_OPTIONS | Should -BeExactly $Value
+    }
+
+    It 'keeps the value that a user-owned conf.d file sorting first set' {
+      $confDir = Join-Path (Join-Path (Join-Path $HOME '.config') 'powershell') 'conf.d'
+      Set-Content -LiteralPath (Join-Path $confDir '34-node-options-local.ps1') `
+        -Value "`$env:NODE_OPTIONS = '$($script:Option)=5000'"
+
+      . $script:Loader
+
+      $env:NODE_OPTIONS | Should -BeExactly "$($script:Option)=5000"
     }
 
     It 'keeps exactly one copy when the loader runs twice' {
@@ -284,12 +296,21 @@ Describe '35-node-options' {
       if ($null -ne $script:RealNode) {
         $probePath = if ($script:RealNode.Path) { $script:RealNode.Path } else { $script:RealNode.Source }
         $before = [Environment]::GetEnvironmentVariable('NODE_OPTIONS')
+        $savedPreference = $ErrorActionPreference
         try {
+          # Pester runs with 'Stop'; Windows PowerShell 5.1 can turn a native
+          # command's stderr into a terminating error under it, and a host
+          # node that rejects the option must skip these tests, not fail.
+          $ErrorActionPreference = 'SilentlyContinue'
           [Environment]::SetEnvironmentVariable('NODE_OPTIONS', $script:Default)
+          $global:LASTEXITCODE = $null
           & $probePath -e 0 2>$null | Out-Null
-          $script:HostNodeUsable = ($LASTEXITCODE -eq 0)
+          $script:HostNodeUsable = ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)
           $script:HostNodePath = $probePath
+        } catch {
+          $script:HostNodeUsable = $false
         } finally {
+          $ErrorActionPreference = $savedPreference
           [Environment]::SetEnvironmentVariable('NODE_OPTIONS', $before)
         }
       }

@@ -69,11 +69,11 @@
   function Test-NodeOptionToken {
     param([string] $Token)
 
-    if (-not $Token.StartsWith('--')) {
+    if (-not $Token.StartsWith('--', [System.StringComparison]::Ordinal)) {
       return $false
     }
     $name = $Token.Substring(2)
-    $equals = $name.IndexOf('=')
+    $equals = $name.IndexOf([char]'=')
     if ($equals -ge 0) {
       $name = $name.Substring(0, $equals)
     }
@@ -127,8 +127,9 @@
     foreach ($name in $probeVariables.Keys) {
       [Environment]::SetEnvironmentVariable($name, $probeVariables[$name])
     }
+    $global:LASTEXITCODE = $null
     & $nodePath -e 0 2>$null | Out-Null
-    $accepted = ($LASTEXITCODE -eq 0)
+    $accepted = ($null -ne $LASTEXITCODE -and $LASTEXITCODE -eq 0)
   } catch {
     $accepted = $false
   } finally {
