@@ -118,7 +118,9 @@ with a new label.
 ### Bitwarden example
 
 ```bash
-# Install. Before the first apply any install works; afterwards these
+# Install. Before the first apply, use whichever install is available;
+# a packaged CLI may still hit the reported ETIMEOUT during that first
+# apply, and the cause of that report is unproven. Afterwards these
 # dotfiles manage the npm distribution through mise (see "Bitwarden CLI
 # on npm" below). Only that distribution is known to run on a Node.js
 # you control; another build may bundle its own runtime.
@@ -224,7 +226,9 @@ installs the npm CLI in an after script, while secret templates can
 call `bw` earlier. Before such an apply, or in a shell that started
 before the profile was deployed, set the option yourself with a
 simplified version of the same merge rule (skip it when `NODE_OPTIONS`
-already mentions the option). Afterwards, start a new login shell
+already holds the option as a whole argument, unquoted or double-quoted;
+only the profile also parses other quoting). Afterwards, start a new
+login shell
 (`exec "$SHELL" -l`) or reload the profile
 (`. $PROFILE.CurrentUserAllHosts` in PowerShell). The deployed profile
 then finds the option you exported already present and keeps it; unset
@@ -233,15 +237,17 @@ only helps a `bw` that runs on a Node.js you control; a packaged build
 that bundles its own runtime may not honor it until `mise install` has
 provided the npm CLI.
 
+<!-- test-snippet: first-apply-bash -->
 ```bash
-case "${NODE_OPTIONS-}" in
-  *network[-_]family[-_]autoselection[-_]attempt[-_]timeout*) ;;
+case " ${NODE_OPTIONS-} " in
+  *[\ \"]--network[-_]family[-_]autoselection[-_]attempt[-_]timeout[=\ \"]*) ;;
   *) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--network-family-autoselection-attempt-timeout=2000" ;;
 esac
 ```
 
+<!-- test-snippet: first-apply-powershell -->
 ```powershell
-if ($env:NODE_OPTIONS -notmatch 'network[-_]family[-_]autoselection[-_]attempt[-_]timeout') {
+if ($env:NODE_OPTIONS -cnotmatch '(^|[ "])--network[-_]family[-_]autoselection[-_]attempt[-_]timeout($|[= "])') {
   $env:NODE_OPTIONS = (@($env:NODE_OPTIONS, '--network-family-autoselection-attempt-timeout=2000') |
     Where-Object { $_ }) -join ' '
 }
@@ -260,13 +266,21 @@ MISE_AUTO_INSTALL=0 MISE_EXEC_AUTO_INSTALL=0 MISE_OFFLINE=1 \
 echo $?
 ```
 
+The PowerShell form sets the same variables and puts them back afterwards:
+
+<!-- test-snippet: support-check-powershell -->
 ```powershell
-$saved = $env:NODE_OPTIONS
+$names = 'NODE_OPTIONS', 'MISE_AUTO_INSTALL', 'MISE_EXEC_AUTO_INSTALL', 'MISE_OFFLINE'
+$saved = @{}
+foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }
 $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=2000'
+$env:MISE_AUTO_INSTALL = '0'
+$env:MISE_EXEC_AUTO_INSTALL = '0'
+$env:MISE_OFFLINE = '1'
 $global:LASTEXITCODE = $null
 node -e 0
 $LASTEXITCODE   # 0 means accepted; empty means node was not found
-$env:NODE_OPTIONS = $saved
+foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
 ```
 
 Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
@@ -276,8 +290,18 @@ described above.
 and other processes that are neither login nor interactive shells do
 not read the Bash or Zsh profile files, and `pwsh -NoProfile` skips the
 PowerShell profile, so they must pass the option in their own
-environment, for example
-`env NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 chezmoi apply`.
+environment. A shell step can append it to whatever the job already
+sets; unlike the profile, it appends even when the option is already
+there:
+
+<!-- test-snippet: automation-bash -->
+```bash
+env NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--network-family-autoselection-attempt-timeout=2000" chezmoi apply
+```
+
+A launcher that does not expand shell syntax, such as a systemd
+`Environment=` line or a crontab variable, needs the final literal value
+written out instead.
 
 **Limits.**
 
