@@ -225,16 +225,16 @@ call `bw` earlier. Before such an apply, or in a shell that started
 before the profile was deployed, set the option yourself with a
 simplified version of the same merge rule (skip it when `NODE_OPTIONS`
 already mentions the option). Afterwards, refresh the profile by
-starting a new login shell (`exec "$SHELL" -l`, or `. $PROFILE` in
-PowerShell) so the deployed profile takes over. The option only helps a
+starting a new login shell (`exec "$SHELL" -l`, or
+`. $PROFILE.CurrentUserAllHosts` in PowerShell) so the deployed profile
+takes over. The option only helps a
 `bw` that runs on a Node.js you control; a packaged build that bundles
 its own runtime may not honor it until `mise install` has provided the
 npm CLI.
 
 ```bash
 case "${NODE_OPTIONS-}" in
-  *--network-family-autoselection-attempt-timeout* | \
-    *--network_family_autoselection_attempt_timeout*) ;;
+  *network[-_]family[-_]autoselection[-_]attempt[-_]timeout*) ;;
   *) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--network-family-autoselection-attempt-timeout=2000" ;;
 esac
 ```
@@ -246,13 +246,20 @@ if ($env:NODE_OPTIONS -notmatch 'network[-_]family[-_]autoselection[-_]attempt[-
 }
 ```
 
+These snippets skip the support check that the profile runs. On a
+Node.js that rejects the option, every `node` start, including `bw`,
+then fails with exit status 9; test it first with
+`NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 node -e 0`
+(in PowerShell, set `$env:NODE_OPTIONS` to that value and run
+`node -e 0`) and remove the variable again if it fails.
+
 Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
 described above.
 
 **Automation without the profile.** Cron jobs, systemd units, CI steps
-and other non-interactive processes do not read the interactive profile
-files, so they must pass the option in their own environment, for
-example
+and other processes that are neither login nor interactive shells do
+not read the profile files, so they must pass the option in their own
+environment, for example
 `env NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 chezmoi apply`.
 
 **Limits.**
@@ -287,13 +294,18 @@ unset NODE_OPTIONS
 ```
 
 ```powershell
+# Use another value in this shell:
 $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=5000'
+
+# Drop the option (and any other NODE_OPTIONS content) from this shell:
 Remove-Item Env:NODE_OPTIONS
 ```
 
 To keep another value in every new shell, set it in a file that you own
 and that sorts before the managed entry, so the profile finds it
-already present. Chezmoi does not touch files it does not manage:
+already present. These examples replace `NODE_OPTIONS` rather than
+merging into it, so add any other options you need to the value.
+Chezmoi does not touch files it does not manage:
 
 ```bash
 # ~/.config/shell/conf.d/64-node-options-local.sh (Bash and Zsh)

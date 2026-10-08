@@ -5,12 +5,13 @@
 # Node.js gives every non-final connection attempt its own address-selection
 # budget (250ms by default), so a slow but usable address can be abandoned
 # early. One operator reported ETIMEOUT from the Bitwarden CLI that chezmoi
-# runs during `chezmoi apply` and found that a 2000ms budget improved it
-# (#588). The cause is unproven: 2000ms is that operator-confirmed
-# mitigation, not an optimal universal value, not proof of a Bitwarden
-# defect, and no repair for an unreachable IPv6 route. Node.js ignores the
-# option when a connection selects an address family or a local address
-# explicitly.
+# runs during `chezmoi apply` and found that the npm CLI on a managed
+# Node.js with a 2000ms budget improved it (#588; no single-variable
+# comparison exists). The cause is unproven: 2000ms is that
+# operator-confirmed mitigation, not an optimal universal value, not proof
+# of a Bitwarden defect, and no repair for an unreachable IPv6 route.
+# Node.js ignores the option when a connection selects an address family
+# or a local address explicitly.
 #
 # This exports --network-family-autoselection-attempt-timeout=2000 through
 # NODE_OPTIONS for every Node.js tool, so it applies to `bw` too. It does so
