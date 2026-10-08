@@ -135,8 +135,8 @@ Host evidence contains:
 - total and privileged CPU percentages;
 - available and committed memory, commit limit, pagefile usage, and
 paging rates when the needed counters exist;
-- physical-disk and system-volume read/write throughput and queue
-  length; and
+- physical-disk and system-volume read/write throughput, and the queue
+  length of the physical total only; and
 - optional Hyper-V virtual-storage throughput and operation rates.
 The collector retains at most 16 CIM instances per query and stops after
 the first additional instance. Hyper-V `overflowCount` is `1` when one or
@@ -177,6 +177,12 @@ its oldest validated logs and keeps the newest evidence. On startup it
 drops oversized old logs before inspecting a partial record, then repairs a
 partial final line with bounded memory. It rejects symlink/reparse paths
 before reading or deleting collector logs.
+
+## Plan workload admission
+
+To use these records to decide how many heavy jobs to run in the guest at once,
+see the [WSL workload budget](wsl-workload-budget.md) guide. It is manual and
+provisional, and it changes no setting.
 
 ## Optional operator smoke check
 
