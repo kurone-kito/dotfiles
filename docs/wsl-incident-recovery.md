@@ -627,9 +627,14 @@ identify and hand off the checkpoint, and no check reads them.
   ```
 
   The top-level commands do not recurse into initialized submodules. List them
-  with `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`,
-  saving the output as `<capture-dir>/submodules.txt` the same way, and repeat
-  the diff, the two listings, and the archives for each one with
+  first:
+
+  ```sh
+  timeout -k 5 30 sh -c 'git -C "$1" submodule status --recursive > "$2"' \
+    sh "<worktree>" "<capture-dir>/submodules.txt"
+  ```
+
+  Then repeat the diff, the two listings, and the archives for each one with
   `-C "<worktree>/<submodule-path>"`, in `git` and in `tar` alike, so its
   relative paths resolve there. Give every output a name of its own in the same
   folder: `subN-tracked.diff`, `subN-untracked.nul`, `subN-untracked.tar`,
@@ -821,27 +826,28 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
      policy_file="$policy_dir/config.json" &&
      timeout -k 5 30 sh -c 'git -C "$1" show "$2" > "$3"' sh "<worktree>" \
        origin/<base-branch>:.github/idd/config.json "$policy_file" &&
-     helper_spec="$(jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
+     helper_spec="$(timeout -k 5 30 jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
      [ -n "$helper_spec" ] &&
-     echo "helper package spec: $helper_spec" &&
+     echo "helper package spec: $helper_spec" >&2 &&
      (cd "<clone-dir>" && timeout -k 5 60 npx --prefix "$policy_dir" --yes \
        --package "$helper_spec" \
        idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
        --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
        --policy "$policy_file")
-   echo "check 3 exit status: $?"
+   echo "check 3 exit status: $?" >&2
    timeout -k 5 30 rm -rf -- "$policy_dir"
    ```
 
    The `&&` chain stops at the first failure, so the helper runs only with a
    policy file and a package spec taken from the base branch, and the temporary
    directory is removed either way. `mktemp` and the final `rm` run under
-   `timeout` too, because a stalled temporary filesystem would hang them, and a
-   timeout is a failed check. The spec it prints is the
-   `<helper-package-spec>` for check 4. `--prefix` makes `npx` read its project
-   settings from that empty directory instead of from `<clone-dir>`, so a
-   project `.npmrc` there does not apply to it, and only your user and machine
-   npm settings do.
+   `timeout` too, as does `jq`, because a stalled temporary filesystem would
+   hang them, and a timeout is a failed check. The spec and the exit status go
+   to standard error, so standard output stays the helper's JSON. The spec it
+   prints is the `<helper-package-spec>` for check 4. `--prefix` makes `npx`
+   read its project settings from that empty directory instead of from
+   `<clone-dir>`, so a project `.npmrc` there does not apply to it, and only
+   your user and machine npm settings do.
 
    Run the helper from inside the clone, as the subshell does. `<clone-dir>` is
    any worktree of the clone, preferably the primary worktree, the first entry
@@ -874,7 +880,7 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
      (cd "<clone-dir>" && timeout -k 5 120 npx --prefix "$ci_dir" --yes \
        --package <helper-package-spec> \
        idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>)
-   echo "check 4 exit status: $?"
+   echo "check 4 exit status: $?" >&2
    timeout -k 5 30 rm -rf -- "$ci_dir"
    ```
 
