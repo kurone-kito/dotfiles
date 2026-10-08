@@ -415,18 +415,18 @@ MOCK
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
   local key
 
-  for key in bat bitwarden codex copilot gh ghq worktrunk; do
+  for key in bat codex copilot gh ghq worktrunk; do
     run grep -cFx "$key = \"latest\"" "$config"
     [ "$output" = 1 ] || fail "$key: expected exactly one bare entry, found $output"
   done
 }
 
-@test "no longer pins gh, ghq, copilot, codex or bitwarden to a lower-tier backend" {
+@test "no longer pins gh, ghq, copilot or codex to a lower-tier backend" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
   local id
 
   for id in 'github:cli/cli' 'github:x-motemen/ghq' 'npm:@github/copilot' \
-    'npm:@openai/codex' 'npm:@bitwarden/cli'; do
+    'npm:@openai/codex'; do
     run grep -qF "\"$id\"" "$config"
     [ "$status" -eq 1 ] || fail "$id: still present in the config"
   done
@@ -435,8 +435,42 @@ MOCK
 @test "does not prefix a backend onto the registry short names" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex)"|^"[a-z]+:[^"]*bitwarden[^"]*"|^"[a-z]+:cli/cli"' "$config"
+  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex)"|^"[a-z]+:cli/cli"' "$config"
   assert_failure 1
+}
+
+# Bitwarden is the one deliberate exception to the bare registry short
+# names (#583, #588): the npm backend makes the managed Node.js runtime
+# and its NODE_OPTIONS controllable.
+@test "installs bitwarden through the npm backend as the documented exception" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -cFx '"npm:@bitwarden/cli" = "latest"' "$config"
+  assert_output 1
+
+  run grep -Eq '^bitwarden[[:space:]]*=' "$config"
+  assert_failure 1
+
+  run grep -Eq '^"(aqua|github|gitlab|ubi|asdf|vfox|cargo|go|http|packslip):[^"]*bitwarden[^"]*"' "$config"
+  assert_failure 1
+}
+
+@test "records why bitwarden stays on the npm backend next to its entry" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  # Print the unbroken comment block directly above the entry.
+  run awk '
+    /^#/ { block = block $0 "\n"; next }
+    /^"npm:@bitwarden\/cli" = / { printf "%s", block; found = 1; exit }
+    { block = "" }
+    END { if (!found) exit 1 }
+  ' "$config"
+  assert_success
+  assert_output --partial "#583"
+  assert_output --partial "ETIMEOUT"
+  assert_output --partial "attempt-timeout=2000"
+  assert_output --partial "not proven"
+  assert_output --partial "Reconsider the bare shorthand"
 }
 
 @test "keeps the claude-code npm pin" {

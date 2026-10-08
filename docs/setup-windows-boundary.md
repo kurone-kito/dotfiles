@@ -209,10 +209,17 @@ did not "move," they were only ever defined here:
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
 `aqua:google-antigravity/antigravity-cli`, `aqua:nektos/act`,
 `aqua:supabase/cli`, `grok`, `gitlab:gitlab-org/cli`,
-`npm:@anthropic-ai/claude-code`, `bitwarden`, `codex`,
+`npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`, `codex`,
 `npm:@executeautomation/playwright-mcp-server`,
 `npm:@microsoft/inshellisense`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
+
+`npm:@bitwarden/cli` is the one deliberate exception to the bare
+registry short names that `home/dot_config/mise/config.toml` otherwise
+uses. The packaged CLI that the bare `bitwarden` shorthand resolves to
+bundles its own Node.js runtime, so the managed runtime and
+`NODE_OPTIONS` cannot be controlled. The reason is recorded next to the
+entry in that file.
 
 ### Current overlap
 

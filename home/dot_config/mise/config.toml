@@ -4,7 +4,6 @@ node = "latest"
 pnpm = "latest"
 
 bat = "latest"
-bitwarden = "latest"
 codex = "latest"
 copilot = "latest"
 # dandavison/delta stopped shipping x86_64-apple-darwin builds at
@@ -117,6 +116,18 @@ yt-dlp = "latest"
 # package rather than allow_builds = true so no transitive dependency
 # gets an unreviewed build-script opt-in.
 "npm:@anthropic-ai/claude-code" = { version = "latest", allow_builds = ["@anthropic-ai/claude-code"] }
+# Bitwarden is the one deliberate exception to the registry-shorthand
+# migration (#583). The bare `bitwarden` shorthand resolves to the aqua
+# packaged CLI, which bundles its own Node.js runtime. After that
+# migration the operator reported `chezmoi apply` failing with ETIMEOUT
+# (IPv4 attempts timing out, IPv6 attempts returning ENETUNREACH), and
+# the npm distribution on Node.js Jod LTS, together with
+# NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 (the
+# node-options conf.d entries export that default), improved it. npm
+# makes the managed Node.js runtime and its NODE_OPTIONS controllable;
+# the underlying cause is not proven. Reconsider the bare shorthand only
+# after the affected workflow is verified with the packaged CLI.
+"npm:@bitwarden/cli" = "latest"
 "npm:@executeautomation/playwright-mcp-server" = "latest"
 # aube's low-download-count reputation gate blocks a non-interactive
 # `mise install` for this niche tool even though its provenance/trust
