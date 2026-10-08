@@ -682,7 +682,7 @@ Every number in this guide is one of the following:
 | Three known samples | Minimum per indicator and window | Provisional |
 | 90 percent of the eligible samples | Coverage needed for an indicator to count toward `within-range` | Provisional |
 | One fifth and one half of the samples | Verdict boundaries | Provisional |
-| Two consecutive windows | Hysteresis before resuming, and the limit on repeated brief windows | Provisional |
+| Two consecutive windows | Hysteresis before resuming, and the limit on repeated brief or unknown windows | Provisional |
 | All figures in the worked examples | Examples 1 to 4 | Synthetic |
 
 ## Limits of the controls
