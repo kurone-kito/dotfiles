@@ -120,7 +120,8 @@ with a new label.
 ```bash
 # Install. Before the first apply any install works; afterwards these
 # dotfiles manage the npm distribution through mise (see "Bitwarden CLI
-# on npm" below). The packaged builds bundle their own Node.js runtime.
+# on npm" below). Only that distribution is known to run on a Node.js
+# you control; another build may bundle its own runtime.
 sudo apt install bitwarden-cli   # Debian/Ubuntu
 brew install bitwarden-cli       # macOS
 winget install Bitwarden.CLI     # Windows
@@ -151,12 +152,13 @@ stty sane
 `home/dot_config/mise/config.toml` installs `bw` through mise's npm
 backend (`npm:@bitwarden/cli`) instead of the bare `bitwarden`
 shorthand, which resolves to the packaged build. This is a documented
-exception to the other tools' registry shorthands; see
+exception to the registry-shorthand migration; see
 [setup-windows-boundary.md](setup-windows-boundary.md) and the comment
 beside the entry. The npm distribution runs `build/bw.js` through
 `#!/usr/bin/env node`, so the Node.js runtime and its `NODE_OPTIONS` are
-yours to control. The packaged build bundles its own runtime, which
-changing the system Node.js does not affect.
+yours to control. The packaged build that the shorthand resolves to
+bundles its own runtime, which changing the system Node.js does not
+affect.
 
 The reason is an operator report: `chezmoi apply` often failed with
 `ETIMEOUT` using the packaged CLI (IPv4 attempts timed out, IPv6
@@ -192,10 +194,10 @@ rules are:
 
 **Check the runtime.** None of these commands prints vault content or a
 session token; avoid `bw status`, which shows the account and server.
-The `bw` that mise provides for the npm distribution is a small shim,
-under an `npm-bitwarden-cli` install directory, that runs the CLI's
-`build/bw.js` with the first `node` on `PATH`, so that `node` and
-`NODE_OPTIONS` decide how it behaves.
+With mise's current npm backend, the `bw` it provides for the npm
+distribution is a small shim script under an `npm-bitwarden-cli` install
+directory. It runs the CLI's `build/bw.js` with the first `node` on
+`PATH`, so that `node` and `NODE_OPTIONS` decide how it behaves.
 
 ```bash
 command -v bw
@@ -222,10 +224,12 @@ installs the npm CLI in an after script, while secret templates can
 call `bw` earlier. Before such an apply, or in a shell that started
 before the profile was deployed, set the option yourself with a
 simplified version of the same merge rule (skip it when `NODE_OPTIONS`
-already mentions the option), then start a new shell afterwards so the
-deployed profile takes over. It only helps a `bw` that runs on a
-Node.js you control; the packaged build ignores it until `mise install`
-has provided the npm CLI.
+already mentions the option). Afterwards, refresh the profile by
+starting a new login shell (`exec "$SHELL" -l`, or `. $PROFILE` in
+PowerShell) so the deployed profile takes over. The option only helps a
+`bw` that runs on a Node.js you control; a packaged build that bundles
+its own runtime may not honor it until `mise install` has provided the
+npm CLI.
 
 ```bash
 case "${NODE_OPTIONS-}" in
@@ -246,8 +250,9 @@ Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
 described above.
 
 **Automation without the profile.** Cron jobs, systemd units, CI steps
-and other non-login processes never run the profile, so they must pass
-the option in their own environment, for example
+and other non-interactive processes do not read the interactive profile
+files, so they must pass the option in their own environment, for
+example
 `env NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 chezmoi apply`.
 
 **Limits.**
@@ -267,10 +272,13 @@ the option in their own environment, for example
   option is not allowed in `NODE_OPTIONS` (exit status 9). Remove or
   replace the option in that shell.
 
-**Override or remove it.**
+**Override or remove it.** An explicit value is never overwritten, but
+only if it is already in `NODE_OPTIONS` when the profile runs; the
+commands below change the current shell only, and a new terminal gets
+the default again.
 
 ```bash
-# Use another value (an explicit value is never overwritten):
+# Use another value in this shell:
 export NODE_OPTIONS="--network-family-autoselection-attempt-timeout=5000"
 
 # Drop the option from this shell (this also drops other NODE_OPTIONS
@@ -281,6 +289,20 @@ unset NODE_OPTIONS
 ```powershell
 $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=5000'
 Remove-Item Env:NODE_OPTIONS
+```
+
+To keep another value in every new shell, set it in a file that you own
+and that sorts before the managed entry, so the profile finds it
+already present. Chezmoi does not touch files it does not manage:
+
+```bash
+# ~/.config/shell/conf.d/64-node-options-local.sh (Bash and Zsh)
+export NODE_OPTIONS="--network-family-autoselection-attempt-timeout=5000"
+```
+
+```powershell
+# ~/.config/powershell/conf.d/34-node-options-local.ps1
+$env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=5000'
 ```
 
 ## Organizing secrets in Bitwarden

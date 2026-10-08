@@ -214,12 +214,12 @@ did not "move," they were only ever defined here:
 `npm:@microsoft/inshellisense`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
 
-`npm:@bitwarden/cli` is the one deliberate exception to the bare
-registry short names that `home/dot_config/mise/config.toml` otherwise
-uses. The packaged CLI that the bare `bitwarden` shorthand resolves to
-bundles its own Node.js runtime, so the managed runtime and
-`NODE_OPTIONS` cannot be controlled. The reason is recorded next to the
-entry in that file.
+`npm:@bitwarden/cli` is the one deliberate exception to the
+registry-shorthand migration for `home/dot_config/mise/config.toml`
+(roadmap #583). The packaged CLI that the bare `bitwarden` shorthand
+resolves to bundles its own Node.js runtime, so the managed runtime does
+not decide how it runs. The reason is recorded next to the entry in that
+file.
 
 ### Current overlap
 
