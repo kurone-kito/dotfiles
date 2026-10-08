@@ -118,7 +118,9 @@ with a new label.
 ### Bitwarden example
 
 ```bash
-# Install (via package manager or download)
+# Install. Before the first apply any install works; afterwards these
+# dotfiles manage the npm distribution through mise (see "Bitwarden CLI
+# on npm" below). The packaged builds bundle their own Node.js runtime.
 sudo apt install bitwarden-cli   # Debian/Ubuntu
 brew install bitwarden-cli       # macOS
 winget install Bitwarden.CLI     # Windows
@@ -141,6 +143,145 @@ stty sane
 > The important boundary is returning to the **next shell prompt** before
 > running `chezmoi apply`; chaining unlock and apply on the same command
 > line can still reproduce the issue.
+
+<!-- cspell:words autoselection ENETUNREACH ETIMEOUT -->
+
+### Bitwarden CLI on npm
+
+`home/dot_config/mise/config.toml` installs `bw` through mise's npm
+backend (`npm:@bitwarden/cli`) instead of the bare `bitwarden`
+shorthand, which resolves to the packaged build. This is a documented
+exception to the other tools' registry shorthands; see
+[setup-windows-boundary.md](setup-windows-boundary.md) and the comment
+beside the entry. The npm distribution runs `build/bw.js` through
+`#!/usr/bin/env node`, so the Node.js runtime and its `NODE_OPTIONS` are
+yours to control. The packaged build bundles its own runtime, which
+changing the system Node.js does not affect.
+
+The reason is an operator report: `chezmoi apply` often failed with
+`ETIMEOUT` using the packaged CLI (IPv4 attempts timed out, IPv6
+attempts returned `ENETUNREACH`), and the npm CLI on Node.js Jod LTS
+with a 2000ms address-selection budget improved it. The exact upstream
+cause is not proven, so treat this as a mitigation, not a diagnosis.
+
+**Requirements.** The npm CLI needs Node.js 22 or later and npm 10 or
+later (checked on 2026.9.1). The mise config already installs a managed
+Node.js. The shorthand should be reconsidered only after the affected
+workflow is verified with the packaged CLI.
+
+**The Node.js default.** Node.js gives every non-final connection
+attempt its own address-selection budget, normally 250ms. After mise is
+initialized, the shared POSIX profile
+(`conf.d/65-node-options.sh`, Bash and Zsh) and the PowerShell profile
+(`conf.d/35-node-options.ps1`) export
+`--network-family-autoselection-attempt-timeout=2000` through
+`NODE_OPTIONS`, so `bw` started by `chezmoi apply` inherits it. The
+rules are:
+
+- Existing `NODE_OPTIONS` content is kept as is and the default is
+  appended after it, only when the exact option is absent. Equals,
+  space-separated, double-quoted and underscore spellings all count as
+  present, and an existing value always wins.
+- A different option that merely shares the prefix, such as
+  `--network-family-autoselection`, does not count.
+- Nothing is added when `node` is missing, when the resolved `node`
+  rejects the option, or when `NODE_OPTIONS` is malformed (for example an
+  unterminated quote). Startup stays quiet. The check runs one local
+  `node -e 0` per fresh shell that did not inherit the option, with mise
+  auto-install and network access switched off.
+
+**Check the runtime.** None of these commands prints vault content or a
+session token; avoid `bw status`, which shows the account and server.
+The `bw` that mise provides for the npm distribution is a small shim,
+under an `npm-bitwarden-cli` install directory, that runs the CLI's
+`build/bw.js` with the first `node` on `PATH`, so that `node` and
+`NODE_OPTIONS` decide how it behaves.
+
+```bash
+command -v bw
+mise which bw   # an npm-bitwarden-cli path means the npm distribution
+bw --version
+node --version
+node -p 'net.getDefaultAutoSelectFamilyAttemptTimeout()'   # 2000 with the default
+printf '%s\n' "$NODE_OPTIONS"
+```
+
+```powershell
+Get-Command bw
+mise which bw
+bw --version
+node --version
+node -p 'net.getDefaultAutoSelectFamilyAttemptTimeout()'
+$env:NODE_OPTIONS
+```
+
+**First apply or an already-running shell.** A profile change cannot
+repair the same `chezmoi apply` that deploys it: the profile files are
+deployed by that apply, and `run_onchange_after_50-install-mise-tools`
+installs the npm CLI in an after script, while secret templates can
+call `bw` earlier. Before such an apply, or in a shell that started
+before the profile was deployed, set the option yourself with a
+simplified version of the same merge rule (skip it when `NODE_OPTIONS`
+already mentions the option), then start a new shell afterwards so the
+deployed profile takes over. It only helps a `bw` that runs on a
+Node.js you control; the packaged build ignores it until `mise install`
+has provided the npm CLI.
+
+```bash
+case "${NODE_OPTIONS-}" in
+  *--network-family-autoselection-attempt-timeout* | \
+    *--network_family_autoselection_attempt_timeout*) ;;
+  *) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--network-family-autoselection-attempt-timeout=2000" ;;
+esac
+```
+
+```powershell
+if ($env:NODE_OPTIONS -notmatch 'network[-_]family[-_]autoselection[-_]attempt[-_]timeout') {
+  $env:NODE_OPTIONS = (@($env:NODE_OPTIONS, '--network-family-autoselection-attempt-timeout=2000') |
+    Where-Object { $_ }) -join ' '
+}
+```
+
+Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
+described above.
+
+**Automation without the profile.** Cron jobs, systemd units, CI steps
+and other non-login processes never run the profile, so they must pass
+the option in their own environment, for example
+`env NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 chezmoi apply`.
+
+**Limits.**
+
+- The default applies to every Node.js tool started from the shell, not
+  only `bw`, and can delay the fallback to another address by up to the
+  configured budget per failed attempt.
+- It does not fix IPv6 reachability, force IPv4, disable address
+  autoselection, or change any HTTP timeout. Node.js ignores it when a
+  connection selects an address family or a local address explicitly, so
+  a literal IPv4-only failure needs separate diagnosis. If a failure
+  persists, collect sanitized runtime and address evidence instead of
+  raising 2000ms repeatedly.
+- The support check runs once at shell startup, not per directory. A
+  project that selects an older Node.js through `mise`, `.node-version`
+  or `.nvmrc` may then fail every `node` start with a message saying the
+  option is not allowed in `NODE_OPTIONS` (exit status 9). Remove or
+  replace the option in that shell.
+
+**Override or remove it.**
+
+```bash
+# Use another value (an explicit value is never overwritten):
+export NODE_OPTIONS="--network-family-autoselection-attempt-timeout=5000"
+
+# Drop the option from this shell (this also drops other NODE_OPTIONS
+# content, so re-export what you still need):
+unset NODE_OPTIONS
+```
+
+```powershell
+$env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=5000'
+Remove-Item Env:NODE_OPTIONS
+```
 
 ## Organizing secrets in Bitwarden
 
