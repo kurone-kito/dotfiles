@@ -177,14 +177,17 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    treat it as a gap.
    **Eligible samples** are the records of the window other than the first
    record and the gaps. For a guest indicator they are the records of one probe
-   attempt each: every record whose guest status is not `probe-interval`,
-   `pending`, or `not-requested`. A failed attempt is eligible, and unknown. For
-   a delta, the first successful guest result of the run and the first after a
-   gap of more than 10 minutes are not eligible, because they have no rates. An
-   indicator has **coverage** for a window when it is known in at
-   least 90 percent (provisional) of its eligible samples and in at least three
-   of them. Coverage only decides `within-range` (step 4); an excursion is
-   tested on any indicator with at least three known samples.
+   attempt each: every record except those whose guest `error` is
+   `probe-interval` or `not-requested`, and those whose guest `status` is
+   `pending`. A failed attempt is eligible, and unknown. A **guest stall
+   record** is a record whose guest `status` is `timeout` or whose guest `error`
+   is `preflight-timeout` or `inhibited`. For a delta, the first successful
+   guest result of the run and the first after a gap of more than 10 minutes are
+   not eligible, because they have no rates. An indicator has **coverage** for a
+   window when it is known in at least 90 percent (provisional) of its eligible
+   samples and in at least three of them. Coverage only decides `within-range`
+   (step 4); an excursion is tested on any indicator with at least three known
+   samples.
 3. **Unknown is not healthy.** Unknown can neither clear nor confirm a
    hypothesis. A rate, delta, or source block whose own status is `unavailable`,
    `timeout`, or `pending` is unknown for the fields it carries, whatever its
@@ -201,8 +204,8 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    time between two successive guest samples, not `sampleIntervalSeconds`; if
    more than 10 minutes pass between them, the next sample starts a new
    baseline and has no rates. Size every window to hold several guest samples
-   (the provisional minimum is three). A guest `timeout` or `preflight-timeout`
-   is the recovery runbook's stalled-guest state: the collector stops probing
+   (the provisional minimum is three). A guest stall record is the recovery
+   runbook's stalled-guest state: the collector stops probing
    for the rest of the run, and this workflow stops with it. Hold admissions
    and follow the runbook; do not start another guest run from here. An
    `inhibited` guest or host source goes to the runbook too, because an
@@ -300,23 +303,22 @@ known samples. Assign one verdict from the worst indicator:
   than one fifth of its known samples (provisional).
 - `unknown`: no indicator is outside its range in more than one fifth of its
   known samples, and some indicator in the relied-on set lacks coverage or the
-  window holds a guest `timeout`, `preflight-timeout`, or `inhibited` record.
-  This verdict is for missing evidence only.
+  window holds a guest stall record. This verdict is for missing evidence
+  only.
 - `within-range`: every indicator in the relied-on set has coverage for the
   window, and none is outside its range in more than one fifth of its known
-  samples. A guest `timeout`, `preflight-timeout`, or `inhibited` record in the
-  window is never an excursion, but it bars this verdict.
+  samples. A guest stall record in the window is never an excursion, but it
+  bars this verdict.
 
 An out-of-range verdict takes precedence over `unknown`: a known excursion is
 not cancelled by missing data elsewhere. A window with no guest evidence, with
-a guest block of `not-requested`, with fewer than three known guest samples,
-or holding a guest `timeout`, `preflight-timeout`, or `inhibited` record can
-never be `within-range`.
+a guest `error` of `not-requested`, with fewer than three known guest samples,
+or holding a guest stall record can never be `within-range`.
 
 | Verdict | Decision | Decision class |
 | --- | --- | --- |
 | `within-range` | If no window since the baseline was other than `within-range`, or the hysteresis in step 5 is met, you may admit one more job, but only up to the count the owners need. Return to step 2 for the new count. | Admission |
-| `unknown` | Hold new admissions. No verdict is possible. Gather a new window, except after a guest `timeout`, `preflight-timeout`, or an `inhibited` source (reading rule 4). After two consecutive `unknown` windows, stop gathering windows: stay at the current count, or end the run deliberately and start a new run and baseline under the runbook's prerequisites. | Admission |
+| `unknown` | Hold new admissions. No verdict is possible. Gather a new window, except after a guest stall record or an `inhibited` host source (reading rule 4). After two consecutive `unknown` windows, stop gathering windows: stay at the current count, or end the run deliberately and start a new run and baseline under the runbook's prerequisites. | Admission |
 | `out-of-range-brief` | Hold new admissions at the current count and observe another window at the same count. Two consecutive `out-of-range-brief` windows count as `out-of-range-sustained`. | Admission |
 | `out-of-range-sustained` | Hold new admissions and ask the owner of the running work to consider reducing it. The owner decides. | Admission, then a request to the owner |
 
@@ -339,7 +341,7 @@ the owner, not only a change of the admitted count:
 
 ```text
 run-id:                <runId>
-window-utc:            <start>/<end>, finite, same duration as <baseline label>
+window-utc:            <start>/<end>, finite, same duration as one baseline repeat
 job-utc:               <start>/<end>, one line per admitted job
 effective-memory-cap:  <value read from the effective .wslconfig, or "default (key absent)">
 admitted-job-count:    <before> -> <after>
