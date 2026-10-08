@@ -295,11 +295,13 @@ which fails if the folder exists, so no earlier copy is overwritten. If it
 reports an error, stop, choose a new name, and copy nothing. Then copy each
 file to an explicit name inside it, for example
 `Copy-Item -LiteralPath <file> -Destination <folder>\<file-name>`, and check
-that `Get-FileHash` gives the same value for the original and the copy; if the
-values differ, record `not preserved: copy mismatch` for that file. Copy a
-file that fails to parse too. The collector replaces an
-unparseable `inhibitions.json`, and any entry whose source it does not know or
-whose process identity is unusable, with a placeholder entry (source `*`,
+that `Get-FileHash` gives the same value for the original and the copy. If the
+values differ, stop: start no run, copy again into a new folder, and if they
+still differ, record `not preserved: copy mismatch` for that file and leave the
+decision to start to the operator. Copy a file that fails to parse too. The
+collector replaces an unparseable `inhibitions.json`, and any entry whose
+source it does not know or whose process identity is unusable, with a
+placeholder entry (source `*`,
 `processId` -1), so the original content is gone after the next start. Write
 what you find, with the time you read it, in the
 `state-before-start` field of that run's entry in the checkpoint's
@@ -602,46 +604,49 @@ identify and hand off the checkpoint, and no check reads them.
   `YYYYMMDDTHHMMSSZ`, with no colons, and `<worktree-name>` as the worktree's
   directory name. A repeat capture or a second worktree therefore never
   overwrites an earlier good copy, and discarding a failed output (below)
-  discards only that capture's own. Create the folder first with a plain
-  `mkdir "<capture-dir>"`, which fails if it exists. If it reports an error,
-  stop, choose a new name, and run nothing below. Every command below writes
-  to an absolute path there. Write the tracked changes, staged and unstaged,
-  then list the untracked files with NUL separators, because the default
-  output quotes a name that has a newline or a quote in it, and copy exactly
-  the listed files with a NUL-aware `tar`. The `-C` option must come before
-  `-T`:
+  discards only that capture's own. Create the folder first with
+  `timeout -k 5 30 mkdir "<capture-dir>"`, which fails if it exists. If it
+  reports an error, stop, choose a new name, and run nothing below. The folder
+  is on a host volume that may be stalled, and the shell opens a redirection
+  target before `timeout` starts, so each command below that writes a file
+  keeps its redirection inside the bounded command, as `sh -c '...' sh` with
+  the arguments after `sh` arriving as `$1`, `$2`, and `$3`. Every command
+  writes to an absolute path in the folder. Write the tracked changes, staged
+  and unstaged, then list the untracked files with NUL separators, because the
+  default output quotes a name that has a newline or a quote in it, and copy
+  exactly the listed files with a NUL-aware `tar`. The `-C` option must come
+  before `-T`:
 
   ```sh
-  timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
-    diff HEAD --binary > "<capture-dir>/tracked.diff"
-  timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
-    ls-files -z --others --exclude-standard > "<capture-dir>/untracked.nul"
+  timeout -k 5 60 sh -c 'git -C "$1" --no-optional-locks diff HEAD --binary > "$2"' \
+    sh "<worktree>" "<capture-dir>/tracked.diff"
+  timeout -k 5 60 sh -c 'git -C "$1" --no-optional-locks ls-files -z --others --exclude-standard > "$2"' \
+    sh "<worktree>" "<capture-dir>/untracked.nul"
   timeout -k 5 300 tar -C "<worktree>" --null -T "<capture-dir>/untracked.nul" \
     -cf "<capture-dir>/untracked.tar"
   ```
 
   The top-level commands do not recurse into initialized submodules. List them
   with `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`,
-  saving the output as `<capture-dir>/submodules.txt`, and repeat the diff, the
-  two listings, and the archives for each one with
+  saving the output as `<capture-dir>/submodules.txt` the same way, and repeat
+  the diff, the two listings, and the archives for each one with
   `-C "<worktree>/<submodule-path>"`, in `git` and in `tar` alike, so its
   relative paths resolve there. Give every output a name of its own in the same
   folder: `subN-tracked.diff`, `subN-untracked.nul`, `subN-untracked.tar`,
   `subN-ignored.nul`, `subN-ignored-escaped.nul`, `subN-ignored-selected.nul`,
   and `subN-ignored.tar`, where `N` is the submodule's line in
   `submodules.txt`. A submodule you cannot capture is recorded as
-  `not preserved: submodule <path>`. Ignored files are
-  not in either output, yet they can hold work you cannot recreate, such as
-  local agent or editor settings. In the worktree and each submodule, list them
-  into a NUL-delimited file, and show an escaped, numbered form for reading:
+  `not preserved: submodule <path>`. Ignored files are not in either output,
+  yet they can hold work you cannot recreate, such as local agent or editor
+  settings. In the worktree and each submodule, list them into a NUL-delimited
+  file, and show an escaped, numbered form for reading:
 
   ```sh
-  timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
-    ls-files -z --others --ignored --exclude-standard --directory \
-    > "<capture-dir>/ignored.nul"
-  timeout -k 5 30 sed -z 's/\\/\\\\/g; s/\n/\\n/g' "<capture-dir>/ignored.nul" \
-    > "<capture-dir>/ignored-escaped.nul"
-  tr '\0' '\n' < "<capture-dir>/ignored-escaped.nul" | cat -n
+  timeout -k 5 60 sh -c 'git -C "$1" --no-optional-locks ls-files -z --others --ignored --exclude-standard --directory > "$2"' \
+    sh "<worktree>" "<capture-dir>/ignored.nul"
+  timeout -k 5 30 sh -c 'sed -z "$1" "$2" > "$3"' \
+    sh 's/\\/\\\\/g; s/\n/\\n/g' "<capture-dir>/ignored.nul" "<capture-dir>/ignored-escaped.nul"
+  timeout -k 5 30 sh -c 'tr "\0" "\n" < "$1" | cat -n' sh "<capture-dir>/ignored-escaped.nul"
   ```
 
   The listing keeps a fully ignored directory as one entry. The `sed` writes a
@@ -657,8 +662,8 @@ identify and hand off the checkpoint, and no check reads them.
   separators, and archive that file with the same `tar --null -T` form:
 
   ```sh
-  timeout -k 5 30 sed -z -n -e '2p;4,6p' "<capture-dir>/ignored.nul" \
-    > "<capture-dir>/ignored-selected.nul"
+  timeout -k 5 30 sh -c 'sed -z -n -e "$1" "$2" > "$3"' \
+    sh '2p;4,6p' "<capture-dir>/ignored.nul" "<capture-dir>/ignored-selected.nul"
   timeout -k 5 300 tar -C "<worktree>" --null -T "<capture-dir>/ignored-selected.nul" \
     -cf "<capture-dir>/ignored.tar"
   ```
@@ -812,38 +817,40 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    and the repository comes from them instead of the directory you start in:
 
    ```sh
-   policy_file="$(mktemp)" &&
+   policy_dir="$(mktemp -d)" &&
+     policy_file="$policy_dir/config.json" &&
      timeout -k 5 30 git -C "<worktree>" show \
        origin/<base-branch>:.github/idd/config.json > "$policy_file" &&
      helper_spec="$(jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
      [ -n "$helper_spec" ] &&
      echo "helper package spec: $helper_spec" &&
-     (cd "<clone-dir>" && timeout -k 5 60 npx --yes --package "$helper_spec" \
+     (cd "<clone-dir>" && timeout -k 5 60 npx --prefix "$policy_dir" --yes \
+       --package "$helper_spec" \
        idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
        --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
        --policy "$policy_file")
    echo "check 3 exit status: $?"
-   rm -f -- "$policy_file"
+   rm -rf -- "$policy_dir"
    ```
 
    The `&&` chain stops at the first failure, so the helper runs only with a
-   policy file and a package spec taken from the base branch, and the copy is
-   removed either way. The spec it prints is the `<helper-package-spec>` for
-   check 4.
+   policy file and a package spec taken from the base branch, and the temporary
+   directory is removed either way. The spec it prints is the
+   `<helper-package-spec>` for check 4. `--prefix` makes `npx` read its project
+   settings from that empty directory instead of from `<clone-dir>`, so a
+   project `.npmrc` there does not apply to it, and only your user and machine
+   npm settings do.
 
-   Run the helper from inside the clone, as the subshell does, but not in the
-   incident worktree. `<clone-dir>` is the primary worktree, the first entry of
-   the `git worktree list` output in check 2, or another worktree of the clone
-   when the incident worktree is the primary one. The helper's worktree-occupancy
-   probe runs `git worktree list` in the current directory, and outside a clone
-   the probe comes back unreadable, which fails the check. `--worktree` already
-   points the owner-evidence reads at the incident worktree, so the directory
-   only has to be inside the clone. The directory `npx` runs from is the one
-   whose project `.npmrc` applies to it, which is why that directory is not the
-   incident worktree, whose contents are unverified. A chain that stopped
-   early, an empty spec, or a non-zero exit is a failed resume check. Read
-   `state`, `action`, and `reason` from the JSON, and
-   read `policy.trusted_marker_actors_source`: `none` means the trusted-actor
+   Run the helper from inside the clone, as the subshell does. `<clone-dir>` is
+   any worktree of the clone, preferably the primary worktree, the first entry
+   of the `git worktree list` output in check 2, because the incident worktree
+   may sit on the stalled filesystem. The helper's worktree-occupancy probe
+   runs `git worktree list` in the current directory, and outside a clone the
+   probe comes back unreadable, which fails the check. `--worktree` already
+   points the owner-evidence reads at the incident worktree. A chain that
+   stopped early, an empty spec, or a non-zero exit is a failed resume check.
+   Read `state`, `action`, and `reason` from the JSON, and read
+   `policy.trusted_marker_actors_source`: `none` means the trusted-actor
    list came out empty and the verdict rests on the viewer's own login. Omit
    `--nonce` when the checkpoint has none. When its `claim` is `none`, omit
    `--claim-id` and `--nonce` too. Without `--claim-id` the helper reports the
@@ -856,7 +863,10 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    `timeout -k 5 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
    and the duplicate-safe, HEAD-pinned snapshot that
    `.github/instructions/idd-ci.instructions.md` requires, because plain
-   `gh pr checks` can collapse same-named checks across workflows:
+   `gh pr checks` can collapse same-named checks across workflows. Run it the
+   way check 3 runs the claim helper: from a directory whose project settings
+   you trust, or with `npx --prefix <empty-dir>`, so no project `.npmrc`
+   applies:
 
    ```sh
    timeout -k 5 120 npx --yes --package <helper-package-spec> \
@@ -1101,11 +1111,14 @@ agent never chooses between them.
 #### Reboot the host
 
 - **Purpose:** recover a host that no longer behaves, as a last resort.
-- **Prerequisites:** local console access exists, each work owner was told,
-  `wsl.exe --terminate` and `wsl.exe --shutdown` were tried, are impossible, or
-  were skipped under **Outstanding `wsl.exe` calls** (record which), and the
-  checkpoint (or the recorded reason), `<private-preserve-dir>`, and the
-  incident output directories are somewhere that survives a restart.
+- **Prerequisites:** local console access exists, host evidence is captured
+  (or the reason it cannot be is recorded), the checkpoint exists (or the
+  reason it cannot is recorded), `<private-preserve-dir>` exists and holds the
+  copies the checkpoint lists, each work owner was told, `wsl.exe --terminate`
+  and `wsl.exe --shutdown` were tried, are impossible, or were skipped under
+  **Outstanding `wsl.exe` calls** (record which), and the checkpoint, the
+  preserve folder, and the incident output directories are somewhere that
+  survives a restart.
 - **If it fails:** the host does not return. Only local console access can
   continue.
 - **Deadline:** the one in the authorization.
