@@ -177,13 +177,15 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    treat it as a gap.
    **Eligible samples** are the records of the window other than the first
    record and the gaps. For a guest indicator they are the records of one probe
-   attempt each: every record except those whose guest `error` is
-   `probe-interval` or `not-requested`, and those whose guest `status` is
+   attempt each: every record except those whose `guest.error` is
+   `probe-interval` or `not-requested`, and those whose `guest.status` is
    `pending`. A failed attempt is eligible, and unknown. A **guest stall
-   record** is a record whose guest `status` is `timeout` or whose guest `error`
-   is `preflight-timeout` or `inhibited`. For a delta, the first successful
-   guest result of the run and the first after a gap of more than 10 minutes are
-   not eligible, because they have no rates. An indicator has **coverage** for a
+   record** is a record whose `guest.status` is `timeout`, or whose
+   `guest.error` is `preflight-timeout`, `inhibited`, `guest-failed`,
+   `guest-output-invalid`, or `guest-start-failed`. For a delta, the first
+   successful guest result of the run and the first after more than 10 minutes
+   without one are not eligible, because they have no rates. An indicator has
+   **coverage** for a
    window when it is known in at least 90 percent (provisional) of its eligible
    samples and in at least three of them. Coverage only decides `within-range`
    (step 4); an excursion is tested on any indicator with at least three known
@@ -205,14 +207,13 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    more than 10 minutes pass between them, the next sample starts a new
    baseline and has no rates. Size every window to hold several guest samples
    (the provisional minimum is three). A guest stall record is the recovery
-   runbook's stalled-guest state: the collector stops probing
-   for the rest of the run, and this workflow stops with it. Hold admissions
-   and follow the runbook; do not start another guest run from here. An
-   `inhibited` guest or host source goes to the runbook too, because an
-   inhibition persists across runs. A failed or invalid guest result can also
-   suppress or inhibit the guest source, after which the records read
-   `probe-interval` or `inhibited` for the rest of the run: treat that like a
-   timeout. Plain unknowns, such as `distro-not-running` or
+   runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case: the
+   collector usually stops probing for the rest of the run, and this workflow
+   stops with it. Hold admissions and follow the runbook; do not start another
+   guest run from here. An `inhibited` host source goes to the runbook too,
+   because an inhibition persists across runs. After a stall record the
+   following records read `probe-interval` or `inhibited` for the rest of the
+   run. Plain unknowns, such as `distro-not-running` or
    `wsl-client-unavailable`, do not stop the collector: it probes again after 60
    seconds, but coverage is judged per window, so the earlier unknown results
    stay in this window and only a new window can recover. Start a new run with
@@ -341,7 +342,7 @@ the owner, not only a change of the admitted count:
 
 ```text
 run-id:                <runId>
-window-utc:            <start>/<end>, finite, same duration as one baseline repeat
+window-utc:            <start>/<end>, finite, same duration as one baseline repeat (unless a job ended early)
 job-utc:               <start>/<end>, one line per admitted job
 effective-memory-cap:  <value read from the effective .wslconfig, or "default (key absent)">
 admitted-job-count:    <before> -> <after>
@@ -642,10 +643,12 @@ healthy, and every later record in that run reads `probe-interval` (or
 `inhibited`, if the collector could not verify its cleanup). The host's high
 privileged CPU time is context, and it cannot be attributed to the guest or
 cleared by it. With the host indicators in range (not shown), the verdict is
-`unknown`: hold admissions. A guest `timeout` is
-the recovery runbook's stalled-guest state, so this workflow stops here and the
-runbook takes over; do not start another guest run from this guide. The
-host-only records the run keeps writing can still show host memory and storage
+`unknown`: hold admissions. A guest `timeout` is a
+guest stall record, the recovery runbook's
+[hung guest](wsl-incident-recovery.md#2-hung-guest) case, so this workflow
+stops here and the runbook takes over; do not start another guest run from
+this guide. The host-only records the run keeps writing can still show host
+memory and storage
 pressure, and they can support a hold or a request to the owner, but never an
 admission. Conflicting evidence works the same way: if the pressure indicators
 disagree, for example `psi.some` out of range while the reclaim and swap deltas
