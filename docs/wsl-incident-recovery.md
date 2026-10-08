@@ -533,7 +533,7 @@ working-tree-status: <clean | dirty: N tracked, M untracked>
 head-oid: <full commit id of HEAD at the last checkpoint update>
 upstream-state: <ahead A behind B | no upstream>
 uncommitted-work-preservation: <where a copy was written | not preserved: reason>
-worktree-recovery-preserve-dir: <absolute path named in the authorization | none>
+worktree-recovery-preserve-dir: <absolute paths named in authorizations, oldest first | none>
 issue: <owner>/<name>#<N>
 pr: <owner>/<name>#<N> | none
 agent-session: <session label>
@@ -687,7 +687,8 @@ identify and hand off the checkpoint, and no check reads them.
   valid entry and a reason to stop, not a reason to improvise.
 - **Worktree recovery copy.** Write the absolute `--preserve-dir` path here
   before an authorized IDD worktree recovery runs, and `none` otherwise. It is
-  a path inside `<private-preserve-dir>` that does not exist yet (see
+  a path inside `<private-preserve-dir>` that does not exist yet. After a
+  retry, keep the earlier paths and add the new one (see
   [IDD worktree recovery](#idd-worktree-recovery)).
 - **Owned child processes.** Record the PID together with its start identity,
   and mark whether it lives in the host or the guest. For a host process that
@@ -1195,14 +1196,18 @@ agent never chooses between them.
   `--preserve-dir "<private-preserve-dir>/worktree-recovery-<utc-stamp>"`, a
   directory that does not exist yet. The helper creates it during `--apply`,
   before it removes the worktree, and refuses an existing one, so a retry after
-  a failed linked-worktree attempt needs a new name. To resume an interrupted
-  recovery of the primary worktree, pass the recorded directory again or omit
-  the flag. As a child of the private folder it is outside the worktree and
-  outside `/tmp`, and readable by your account only. Without the flag the
-  helper copies into a temporary directory. Record the path in the checkpoint's
-  `worktree-recovery-preserve-dir` line before the run, and pass the same
-  `--preserve-dir` to the dry-run, so the plan the operator reviews names the
-  real destination. Only then pass `--operator-confirmed-no-live-session`, an
+  a failed attempt needs a new, absent name that the operator authorizes
+  afresh. The earlier directory and its contents stay where they are, and the
+  checkpoint line lists both. The one exception is resuming an interrupted
+  recovery of the primary worktree: the helper then continues with the
+  directory it recorded, whether you pass that directory again or omit the
+  flag, and it skips the check that the directory is absent. As a child of the
+  private folder it is outside the worktree and outside `/tmp`, and readable by
+  your account only. Without the flag, and with no interrupted primary recovery
+  to resume, the helper copies into a temporary directory. Record the path in
+  the checkpoint's `worktree-recovery-preserve-dir` line before the run, and
+  pass the same `--preserve-dir` to the dry-run, so the plan the operator
+  reviews names the real destination. Only then pass `--operator-confirmed-no-live-session`, an
   attestation the operator authorizes after seeing the evidence and which is
   required for any mutation, and `--apply`.
 - **If it fails:** the helper reports a block or a verdict that is not
