@@ -224,13 +224,14 @@ installs the npm CLI in an after script, while secret templates can
 call `bw` earlier. Before such an apply, or in a shell that started
 before the profile was deployed, set the option yourself with a
 simplified version of the same merge rule (skip it when `NODE_OPTIONS`
-already mentions the option). Afterwards, refresh the profile by
-starting a new login shell (`exec "$SHELL" -l`, or
-`. $PROFILE.CurrentUserAllHosts` in PowerShell) so the deployed profile
-takes over. The option only helps a
-`bw` that runs on a Node.js you control; a packaged build that bundles
-its own runtime may not honor it until `mise install` has provided the
-npm CLI.
+already mentions the option). Afterwards, start a new login shell
+(`exec "$SHELL" -l`) or reload the profile
+(`. $PROFILE.CurrentUserAllHosts` in PowerShell). The deployed profile
+then finds the option you exported already present and keeps it; unset
+the variable first if you want the profile to decide again. The option
+only helps a `bw` that runs on a Node.js you control; a packaged build
+that bundles its own runtime may not honor it until `mise install` has
+provided the npm CLI.
 
 ```bash
 case "${NODE_OPTIONS-}" in
@@ -248,17 +249,32 @@ if ($env:NODE_OPTIONS -notmatch 'network[-_]family[-_]autoselection[-_]attempt[-
 
 These snippets skip the support check that the profile runs. On a
 Node.js that rejects the option, every `node` start, including `bw`,
-then fails with exit status 9; test it first with
-`NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 node -e 0`
-(in PowerShell, set `$env:NODE_OPTIONS` to that value and run
-`node -e 0`) and remove the variable again if it fails.
+then fails with exit status 9, so run this check first and skip the
+snippet when it does not exit with 0. The Bash form sets the variable
+for that one command, with mise auto-install and network access off so a
+mise shim cannot start an install:
+
+```bash
+MISE_AUTO_INSTALL=0 MISE_EXEC_AUTO_INSTALL=0 MISE_OFFLINE=1 \
+  NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 node -e 0
+echo $?
+```
+
+```powershell
+$saved = $env:NODE_OPTIONS
+$env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=2000'
+node -e 0
+$LASTEXITCODE
+$env:NODE_OPTIONS = $saved
+```
 
 Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
 described above.
 
 **Automation without the profile.** Cron jobs, systemd units, CI steps
 and other processes that are neither login nor interactive shells do
-not read the profile files, so they must pass the option in their own
+not read the Bash or Zsh profile files, and `pwsh -NoProfile` skips the
+PowerShell profile, so they must pass the option in their own
 environment, for example
 `env NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 chezmoi apply`.
 
