@@ -180,16 +180,15 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    attempt each: every record except those whose `guest.error` is
    `probe-interval` or `not-requested`, and those whose `guest.status` is
    `pending`. A failed attempt is eligible, and unknown. A **guest stall
-   record** is a record whose `guest.status` is `timeout`, or whose
-   `guest.error` is `preflight-timeout`, `inhibited`, `guest-failed`,
-   `guest-output-invalid`, or `guest-start-failed`. For a delta, the first
-   successful guest result of the run and the first after more than 10 minutes
-   without one are not eligible, because they have no rates. An indicator has
-   **coverage** for a
-   window when it is known in at least 90 percent (provisional) of its eligible
-   samples and in at least three of them. Coverage only decides `within-range`
-   (step 4); an excursion is tested on any indicator with at least three known
-   samples.
+   record** is a record whose `guest.status` is `timeout` (this includes the
+   `preflight-timeout` error), or whose `guest.error` is `inhibited`,
+   `guest-failed`, `guest-output-invalid`, or `guest-start-failed`. For a delta,
+   the first successful guest result of the run and the first after more than
+   10 minutes without one are not eligible, because they have no rates. An
+   indicator has **coverage** for a window when it is known in at least 90
+   percent (provisional) of its eligible samples and in at least three of them.
+   Coverage only decides `within-range` (step 4); an excursion is tested on any
+   indicator with at least three known samples.
 3. **Unknown is not healthy.** Unknown can neither clear nor confirm a
    hypothesis. A rate, delta, or source block whose own status is `unavailable`,
    `timeout`, or `pending` is unknown for the fields it carries, whatever its
@@ -206,14 +205,20 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    time between two successive guest samples, not `sampleIntervalSeconds`; if
    more than 10 minutes pass between them, the next sample starts a new
    baseline and has no rates. Size every window to hold several guest samples
-   (the provisional minimum is three). A guest stall record is the recovery
-   runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case: the
-   collector usually stops probing for the rest of the run, and this workflow
-   stops with it. Hold admissions and follow the runbook; do not start another
-   guest run from here. An `inhibited` host source goes to the runbook too,
-   because an inhibition persists across runs. After a stall record the
-   following records read `probe-interval` or `inhibited` for the rest of the
-   run. Plain unknowns, such as `distro-not-running` or
+   (the provisional minimum is three). A guest stall record means the recovery
+   runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case applies,
+   and this workflow stops with it: hold admissions, gather no new window, and
+   follow the runbook; do not start another guest run from here. The collector
+   itself stops probing for the rest of the run after a `timeout` and after a
+   failure whose cleanup it cannot verify, and the following records then read
+   `probe-interval` or `inhibited`. After a `guest-failed`,
+   `guest-output-invalid`, or `guest-start-failed` record with nothing left to
+   clean up, it retries after 60 seconds, so such records can keep arriving;
+   treat them the same way. Repeated `guest-output-invalid` records can also
+   mean the guest helper is missing (see the start of this guide): fix that
+   while the guest is healthy, before treating it as a hang. An `inhibited` host
+   source goes to the runbook too, because an inhibition persists across runs.
+   Plain unknowns, such as `distro-not-running` or
    `wsl-client-unavailable`, do not stop the collector: it probes again after 60
    seconds, but coverage is judged per window, so the earlier unknown results
    stay in this window and only a new window can recover. Start a new run with
@@ -313,7 +318,7 @@ known samples. Assign one verdict from the worst indicator:
 
 An out-of-range verdict takes precedence over `unknown`: a known excursion is
 not cancelled by missing data elsewhere. A window with no guest evidence, with
-a guest `error` of `not-requested`, with fewer than three known guest samples,
+a `guest.error` of `not-requested`, with fewer than three known guest samples,
 or holding a guest stall record can never be `within-range`.
 
 | Verdict | Decision | Decision class |
@@ -381,7 +386,7 @@ More than one scenario can be supported in one window; list each in the record.
 | Guest memory or reclaim pressure | `psi.some.avg60` above baseline; `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, or `pswpout` `.perSecond` above baseline in the same window; corroborated by low `memory.available` | Deltas at baseline while only `counters.*` are large; `psi.some` at baseline | `psi` and the reclaim and swap deltas, in at least three guest samples | Another window at the same count, or after the owner decides on a reduction |
 | Host memory or pagefile pressure | `pagesInputPerSecond` or `pagesOutputPerSecond` above baseline; corroborated by `committedBytes` close to `commitLimitBytes`, `pageFilePercentUsage` high, or low `availableBytes` | Paging at baseline | The host paging rates in every sample used | Another window at the same admitted count |
 | Storage saturation without current memory pressure | `physicalTotal.queueLength` above baseline; corroborated by high read or write rates and Hyper-V `virtualStorage[]` rates; host paging rates, guest `psi.some`, and reclaim deltas at baseline | Reclaim deltas or `psi.some` rising together with the disk signals | The disk entries, the host paging rates, and the guest `psi` and reclaim deltas | Another window with the next admission withheld |
-| Unavailable or conflicting evidence | A required field is unknown, the guest timed out, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window; record `unavailable`, and the verdict still comes from the pressure indicators |
+| Unavailable or conflicting evidence | A required field is unknown, a guest stall record is present, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window; record `unavailable`, and the verdict still comes from the pressure indicators |
 
 Guest paths in this table are relative to `guest.metrics`. Each row's
 supported, weakened, or unknown status is a hypothesis to test with the next
@@ -643,18 +648,16 @@ healthy, and every later record in that run reads `probe-interval` (or
 `inhibited`, if the collector could not verify its cleanup). The host's high
 privileged CPU time is context, and it cannot be attributed to the guest or
 cleared by it. With the host indicators in range (not shown), the verdict is
-`unknown`: hold admissions. A guest `timeout` is a
-guest stall record, the recovery runbook's
-[hung guest](wsl-incident-recovery.md#2-hung-guest) case, so this workflow
-stops here and the runbook takes over; do not start another guest run from
-this guide. The host-only records the run keeps writing can still show host
-memory and storage
-pressure, and they can support a hold or a request to the owner, but never an
-admission. Conflicting evidence works the same way: if the pressure indicators
-disagree, for example `psi.some` out of range while the reclaim and swap deltas
-sit at baseline, record `unavailable`, let the pressure indicators decide the
-verdict, and observe the same count again. If two scenarios are supported at
-once, list both in the record.
+`unknown`: hold admissions. A guest `timeout` is a guest stall record: the
+recovery runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case
+applies, so this workflow stops here and the runbook takes over; do not start
+another guest run from this guide. The host-only records the run keeps writing
+can still show host memory and storage pressure, and they can support a hold or
+a request to the owner, but never an admission. Conflicting evidence works the
+same way: if the pressure indicators disagree, for example `psi.some` out of
+range while the reclaim and swap deltas sit at baseline, record `unavailable`,
+let the pressure indicators decide the verdict, and observe the same count
+again. If two scenarios are supported at once, list both in the record.
 
 ## Thresholds
 
@@ -679,7 +682,7 @@ Every number in this guide is one of the following:
 | 5 seconds | Default sample interval | Collector default |
 | 60 seconds | Spacing between guest probes | Collector constant, read from the script |
 | 1 second and 2 seconds | Guest preflight and probe bounds | Collector constants, read from the script |
-| 10 minutes | Gap after which a guest sample has no rates | Collector constant, read from the script |
+| 10 minutes | Time after which a guest sample has no rates | Collector constant, read from the script |
 | 10, 60, 300 seconds | `psi` averaging windows | Kernel definition |
 | 20 GB | The effective memory cap of the operator this guide was written for | Observed configuration, unchanged |
 | One heavy job | First admission | Provisional |
@@ -725,7 +728,7 @@ decision. This guide's records can inform it but cannot make it.
 
 - The collector script and its guest helper in this repository: the field map,
   the 60-second guest probe spacing and its two sequential calls, the 10-minute
-  no-rates gap, the exact counter names, and the partial-record behavior were
+  no-rates rule, the exact counter names, and the partial-record behavior were
   read from them. The key paths of the example records were checked against
   records produced by the collector's own functions, and the guest helper was
   run against a fixture with split refault counters. Nothing was run on a
