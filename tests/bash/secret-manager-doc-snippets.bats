@@ -175,19 +175,33 @@ MOCK
 }
 
 @test "PowerShell support check sets each probe variable and restores them in finally" {
-  local snippet line
+  local snippet line order
   snippet="$(extract_snippet support-check-powershell | sed 's/^ *//')"
 
   for line in \
+    'foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }' \
+    'try {' \
     "\$env:NODE_OPTIONS = '$DEFAULT'" \
     "\$env:MISE_AUTO_INSTALL = '0'" \
     "\$env:MISE_EXEC_AUTO_INSTALL = '0'" \
     "\$env:MISE_OFFLINE = '1'" \
     '$global:LASTEXITCODE = $null' \
+    'node -e 0' \
     '} finally {' \
     'foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }'; do
     printf '%s\n' "$snippet" | grep -Fxq -- "$line" || fail "expected the line: $line"
   done
+
+  # The probe variables are set inside the try, and the restore sits in the
+  # finally after it, so a failing probe cannot leave them set.
+  order="$(printf '%s\n' "$snippet" | awk '
+    /^try \{$/ { t = NR }
+    /^\$env:MISE_OFFLINE = / { a = NR }
+    /^node -e 0$/ { n = NR }
+    /^\} finally \{$/ { f = NR }
+    /SetEnvironmentVariable\(\$name, \$saved\[\$name\]\)/ { r = NR }
+    END { print (t && t < a && a < n && n < f && f < r) ? "ordered" : "disordered" }')"
+  [ "$order" = ordered ] || fail "expected try, assignments, probe, finally, restore in that order"
 }
 
 @test "automation example appends to the job's own NODE_OPTIONS" {
