@@ -3,8 +3,8 @@
 # Exercises: env.DISABLE_AUTOUPDATER JSON merge-patch reconciliation on
 # ~/.claude/settings.json (create/preserve/idempotent/fail-loudly-on-
 # invalid-JSON), and the stray mise-managed-Node @anthropic-ai/claude-code
-# copy detection/removal (only when the mise-managed npm copy is
-# confirmed present).
+# copy detection/removal (only when the mise-managed `claude` install,
+# the aqua release binary, is confirmed present and runs).
 #
 # The fixture under test has zero go-template directives, so it is run
 # directly from home/ rather than via a hand-maintained pre-rendered
@@ -60,31 +60,41 @@ teardown() {
 }
 
 write_mise_mock() {
-  # $1: 0 or 1 -> whether `mise where`/`mise bin-paths
-  #     npm:@anthropic-ai/claude-code` resolve successfully
-  #     (default: 1, resolves)
-  # $2: 0 or 1 -> whether the managed copy's own claude executable
-  #     (at the bin-paths-resolved directory) actually works when
+  # $1: 0 or 1 -> whether `mise where`/`mise bin-paths claude` resolve
+  #     successfully (default: 1, resolves)
+  # $2: 0 or 1 -> whether the managed install's own claude executable
+  #     (in the bin-paths-resolved directory) actually works when
   #     invoked directly (default: 1, works)
+  # $3: 0 or 1 -> whether the LEGACY npm:@anthropic-ai/claude-code id
+  #     still resolves to a healthy install (default: 0, it does not).
+  #     The script must never consult it.
+  #
+  # Layout matches the real aqua release: `mise bin-paths claude` is
+  # the install directory itself and `claude` sits directly in it,
+  # with no bin/ subdirectory.
   local managed_resolves="${1:-1}"
   local managed_works="${2:-1}"
-  mkdir -p "$MANAGED_DIR/bin"
-  rm -f "$MANAGED_DIR/bin/claude"
+  local legacy_npm_healthy="${3:-0}"
+  rm -rf "${MANAGED_DIR:?}/bin"
+  rm -f "$MANAGED_DIR/claude"
   if [ "$managed_works" = "1" ]; then
-    cat > "$MANAGED_DIR/bin/claude" << 'MANAGEDCLAUDE'
+    cat > "$MANAGED_DIR/claude" << 'MANAGEDCLAUDE'
 #!/bin/bash
 echo "managed-claude-version"
 exit 0
 MANAGEDCLAUDE
-    chmod +x "$MANAGED_DIR/bin/claude"
+    chmod +x "$MANAGED_DIR/claude"
   fi
+  MISE_CALLS="$BATS_TEST_TMPDIR/mise-calls.log"
+  : > "$MISE_CALLS"
   cat > "$BIN_DIR/mise" << MOCK
 #!/bin/bash
+echo "\$*" >> "$MISE_CALLS"
 if [ "\$1" = "where" ] && [ "\$2" = "node" ]; then
   echo "$NODE_DIR"
   exit 0
 fi
-if [ "\$1" = "where" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+if [ "\$1" = "where" ] && [ "\$2" = "claude" ]; then
   if [ "$managed_resolves" = "1" ]; then
     echo "$MANAGED_DIR"
     exit 0
@@ -92,13 +102,18 @@ if [ "\$1" = "where" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
     exit 1
   fi
 fi
-if [ "\$1" = "bin-paths" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+if [ "\$1" = "bin-paths" ] && [ "\$2" = "claude" ]; then
   if [ "$managed_resolves" = "1" ]; then
-    echo "$MANAGED_DIR/bin"
+    echo "$MANAGED_DIR"
     exit 0
   else
     exit 1
   fi
+fi
+if [ "$legacy_npm_healthy" = "1" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
+  # A healthy legacy install that the script must not rely on.
+  if [ "\$1" = "where" ]; then echo "$MANAGED_DIR"; exit 0; fi
+  if [ "\$1" = "bin-paths" ]; then echo "$MANAGED_DIR"; exit 0; fi
 fi
 exit 1
 MOCK
@@ -496,6 +511,50 @@ REALNPM
   assert_file_not_exists "$NPM_PREFIX_DIR/bin/claude"
   # Never touches the mise-managed copy itself.
   assert_dir_exists "$MANAGED_DIR"
+  assert_file_exists "$MANAGED_DIR/claude"
+  # The fixture matches the real aqua layout: no bin/ subdirectory.
+  assert_dir_not_exists "$MANAGED_DIR/bin"
+}
+
+@test "never consults the legacy npm id: no mise call names it" {
+  # The old mise-managed npm:@anthropic-ai/claude-code install may be
+  # absent (the config no longer lists it), so the repair must not ask
+  # about it at all.
+  write_mise_mock 1
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "Removed stray @anthropic-ai/claude-code copy"
+  run grep -c 'npm:@anthropic-ai/claude-code' "$MISE_CALLS"
+  assert_output 0
+  run grep -c 'bin-paths claude' "$MISE_CALLS"
+  assert_output 1
+  run grep -c 'where claude' "$MISE_CALLS"
+  assert_output 1
+}
+
+@test "healthy legacy npm install but broken claude: stray copy left in place" {
+  # Proves the decision follows the new `claude` install only: a
+  # healthy old npm-backed install must not justify the removal.
+  write_mise_mock 1 0 1
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "does not appear to work"
+  assert_output --partial "leaving the stray copy in place"
+  assert_dir_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
+  run grep -c 'npm:@anthropic-ai/claude-code' "$MISE_CALLS"
+  assert_output 0
+}
+
+@test "neither template resolves the legacy npm id outside comments" {
+  local home_dir="$BATS_TEST_DIRNAME/../../home"
+
+  run grep -nE "^[^#]*npm:@anthropic-ai/claude-code" \
+    "$home_dir/run_after_90-reconcile-claude-code.sh.tmpl" \
+    "$home_dir/run_after_90-reconcile-claude-code.ps1.tmpl"
+  assert_failure 1
 }
 
 @test "stray copy present, managed dir resolves but claude does not work: stray copy left in place" {
@@ -540,7 +599,7 @@ STRAYCLAUDE
   # Managed install directory resolves, but its own bin/claude is
   # deliberately absent (corrupted/partial install) -- write_mise_mock
   # already created it since managed_works defaults to 1; remove it.
-  rm -f "$MANAGED_DIR/bin/claude"
+  rm -f "$MANAGED_DIR/claude"
   export PATH="$NPM_PREFIX_DIR/bin:$PATH"
 
   run bash "$FIXTURE"

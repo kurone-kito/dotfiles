@@ -4,9 +4,9 @@
 # remove any stray @anthropic-ai/claude-code copy that Claude Code's
 # own background autoupdater may have written directly into
 # mise-managed Node.js's global node_modules, shadowing the
-# mise-managed npm:@anthropic-ai/claude-code install. Runs after mise
-# tool installation so `mise where node` / `mise where
-# npm:@anthropic-ai/claude-code` are resolvable. See issue #258.
+# mise-managed claude install (the aqua release binary, mise key
+# `claude`). Runs after mise tool installation so `mise where node` /
+# `mise where claude` are resolvable. See issues #258 and #585.
 set -euo pipefail
 
 # See run_after_99-secret-status-summary.sh.tmpl for rationale.
@@ -285,15 +285,15 @@ remove_stray_claude_code_copy() {
     return 0
   fi
 
-  managed_dir="$(mise where npm:@anthropic-ai/claude-code 2>/dev/null)" || managed_dir=""
+  managed_dir="$(mise where claude 2>/dev/null)" || managed_dir=""
   if [ -z "${managed_dir}" ] || [ ! -d "${managed_dir}" ]; then
-    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed claude install is not resolvable (run 'mise install claude'); leaving the stray copy in place so 'claude' keeps working."
     return 0
   fi
 
   # A resolvable install directory alone does not prove the managed
-  # copy actually works: an interrupted or failed npm-backend install
-  # can leave the directory in place without a functional binary.
+  # copy actually works: an interrupted or failed install can leave
+  # the directory in place without a functional binary.
   # Confirm the managed 'claude' command actually runs before removing
   # anything, so this repair can never leave the user without a
   # working 'claude' even in that scenario.
@@ -311,11 +311,13 @@ remove_stray_claude_code_copy() {
   # contrived edge case. Resolve the managed tool's exact bin
   # directory and invoke that specific executable directly instead,
   # bypassing PATH lookup (and therefore the ambient stray shim)
-  # entirely.
+  # entirely. The aqua release puts `claude` directly in that
+  # directory (there is no bin/ subdirectory); take the first line and
+  # fail closed if there is none.
   local managed_bin_path
-  managed_bin_path="$(mise bin-paths "npm:@anthropic-ai/claude-code" 2>/dev/null | head -n1)" || managed_bin_path=""
+  managed_bin_path="$(mise bin-paths claude 2>/dev/null | head -n1)" || managed_bin_path=""
   if [ -z "${managed_bin_path}" ] || [ ! -x "${managed_bin_path}/claude" ] || ! "${managed_bin_path}/claude" --version >/dev/null 2>&1; then
-    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed claude install does not appear to work (${managed_bin_path:-no bin path}/claude --version failed); leaving the stray copy in place so 'claude' keeps working."
     return 0
   fi
 

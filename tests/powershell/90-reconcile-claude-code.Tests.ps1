@@ -2,8 +2,8 @@
 # Exercises: env.DISABLE_AUTOUPDATER JSON merge-patch reconciliation on
 # ~/.claude/settings.json (create/preserve/idempotent/fail-loudly-on-
 # invalid-JSON), and the stray mise-managed-Node @anthropic-ai/claude-code
-# copy detection/removal (only when the mise-managed npm copy is
-# confirmed present).
+# copy detection/removal (only when the mise-managed `claude` install,
+# the aqua release binary, is confirmed present and runs).
 #
 # The template under test has zero go-template directives, so BeforeAll
 # copies it byte-for-byte into $TestDrive as a plain .ps1 instead of
@@ -40,7 +40,8 @@ BeforeAll {
       [string] $NodeDir,
       [string] $ManagedDir,
       [bool] $ManagedResolves = $true,
-      [bool] $ManagedWorks = $true
+      [bool] $ManagedWorks = $true,
+      [bool] $LegacyNpmHealthy = $false
     )
     # NOTE: these must be $global:, not $script:. The mock function
     # below is invoked from inside the externally-invoked fixture
@@ -53,6 +54,8 @@ BeforeAll {
     $global:MockManagedDir = $ManagedDir
     $global:MockManagedResolves = $ManagedResolves
     $global:MockManagedWorks = $ManagedWorks
+    $global:MockLegacyNpmHealthy = $LegacyNpmHealthy
+    $global:MockMiseCalls = [System.Collections.Generic.List[string]]::new()
 
     # Test-MiseManagedClaudeWorks no longer goes through `mise exec`
     # (which prepends the managed bin dir to PATH but does not isolate
@@ -60,11 +63,20 @@ BeforeAll {
     # comment) -- it resolves `mise bin-paths` and invokes that exact
     # executable directly, so the mock needs a real file on disk
     # there, not just a LASTEXITCODE toggle.
-    $managedBinDir = Join-Path $ManagedDir 'bin'
+    #
+    # The layout matches the real aqua release: `mise bin-paths claude`
+    # is the install directory itself and the executable sits directly
+    # in it, with no bin/ subdirectory. A text stub cannot be a
+    # runnable claude.exe, so on Windows the stub is claude.cmd, which
+    # the template tries after claude.exe.
+    $managedBinDir = $ManagedDir
     New-Item -ItemType Directory -Path $managedBinDir -Force | Out-Null
+    Remove-Item -LiteralPath (Join-Path $managedBinDir 'bin') -Recurse -Force -ErrorAction SilentlyContinue
+    foreach ($name in @('claude.exe', 'claude.cmd', 'claude')) {
+      Remove-Item -LiteralPath (Join-Path $managedBinDir $name) -Force -ErrorAction SilentlyContinue
+    }
     $claudeExeName = if ($IsWindows -ne $false) { 'claude.cmd' } else { 'claude' }
     $managedClaudePath = Join-Path $managedBinDir $claudeExeName
-    Remove-Item -LiteralPath $managedClaudePath -Force -ErrorAction SilentlyContinue
     if ($ManagedWorks) {
       if ($IsWindows -ne $false) {
         [System.IO.File]::WriteAllText($managedClaudePath, "@echo off`r`necho managed-claude-version`r`n", [System.Text.ASCIIEncoding]::new())
@@ -77,6 +89,7 @@ BeforeAll {
 
     function global:mise {
       $a = $args
+      $global:MockMiseCalls.Add(($a -join ' '))
       if ($a.Count -ge 2 -and $a[0] -eq 'where' -and $a[1] -eq 'node') {
         if ($global:MockNodeDir) {
           Write-Output $global:MockNodeDir
@@ -86,7 +99,7 @@ BeforeAll {
         }
         return
       }
-      if ($a.Count -ge 2 -and $a[0] -eq 'where' -and $a[1] -eq 'npm:@anthropic-ai/claude-code') {
+      if ($a.Count -ge 2 -and $a[0] -eq 'where' -and $a[1] -eq 'claude') {
         if ($global:MockManagedResolves -and $global:MockManagedDir) {
           Write-Output $global:MockManagedDir
           $global:LASTEXITCODE = 0
@@ -95,7 +108,7 @@ BeforeAll {
         }
         return
       }
-      if ($a.Count -ge 2 -and $a[0] -eq 'bin-paths' -and $a[1] -eq 'npm:@anthropic-ai/claude-code') {
+      if ($a.Count -ge 2 -and $a[0] -eq 'bin-paths' -and $a[1] -eq 'claude') {
         if ($global:MockManagedResolves -and $global:MockManagedBinDir) {
           Write-Output $global:MockManagedBinDir
           $global:LASTEXITCODE = 0
@@ -104,13 +117,19 @@ BeforeAll {
         }
         return
       }
+      if ($global:MockLegacyNpmHealthy -and $a.Count -ge 2 -and $a[1] -eq 'npm:@anthropic-ai/claude-code' -and $a[0] -in @('where', 'bin-paths')) {
+        # A healthy legacy install that the script must never consult.
+        Write-Output $global:MockManagedDir
+        $global:LASTEXITCODE = 0
+        return
+      }
       $global:LASTEXITCODE = 1
     }
   }
 
   function global:Remove-TestMiseMock {
     Remove-Item Function:\mise -ErrorAction SilentlyContinue
-    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks, MockManagedBinDir -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks, MockManagedBinDir, MockLegacyNpmHealthy, MockMiseCalls -Scope Global -ErrorAction SilentlyContinue
   }
 
   function global:Set-TestNpmPrefixMock {
@@ -489,9 +508,66 @@ Describe '90-reconcile-claude-code' {
     }
   }
 
+  Context 'managed claude install lookup' {
+    BeforeAll {
+      $tokens = $null
+      $errors = $null
+      $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:Fixture, [ref]$tokens, [ref]$errors)
+      $fn = $ast.Find({
+          param($node)
+          $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+          $node.Name -eq 'Get-ManagedClaudeExecutableName'
+        }, $true)
+      . ([scriptblock]::Create($fn.Extent.Text))
+    }
+
+    It 'tries claude.exe, then claude.cmd, on Windows and never the extensionless shim' {
+      @(Get-ManagedClaudeExecutableName -WindowsHost $true) | Should -Be @('claude.exe', 'claude.cmd')
+    }
+
+    It 'uses the plain claude binary elsewhere' {
+      @(Get-ManagedClaudeExecutableName -WindowsHost $false) | Should -Be @('claude')
+    }
+
+    It 'does not resolve the legacy npm id outside comments' {
+      $lines = @(Get-Content -LiteralPath $script:Template | Where-Object {
+          $_ -notmatch '^\s*#' -and $_ -match 'npm:@anthropic-ai/claude-code'
+        })
+      $lines.Count | Should -Be 0
+    }
+  }
+
   Context 'stray claude-code copy cleanup (POSIX layout)' -Skip:($IsWindows -ne $false) {
     BeforeEach {
       Assert-TestSafetyPreflight
+    }
+
+    It 'never consults the legacy npm id: no mise call names it' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      $null = Write-TestStrayCopy
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'Removed stray @anthropic-ai/claude-code copy'
+      @($global:MockMiseCalls | Where-Object { $_ -match 'npm:@anthropic-ai/claude-code' }).Count | Should -Be 0
+      $global:MockMiseCalls | Should -Contain 'where claude'
+      $global:MockMiseCalls | Should -Contain 'bin-paths claude'
+      # The fixture matches the real aqua layout: no bin/ subdirectory.
+      (Join-Path $script:ManagedDir 'bin') | Should -Not -Exist
+    }
+
+    It 'leaves the stray copy in place when a healthy legacy npm install exists but claude does not work' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false -LegacyNpmHealthy $true
+      $strayDir = Write-TestStrayCopy
+      $shim = Join-Path $script:NodeDir (Join-Path 'bin' 'claude')
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      $shim | Should -Exist
+      @($global:MockMiseCalls | Where-Object { $_ -match 'npm:@anthropic-ai/claude-code' }).Count | Should -Be 0
     }
 
     It 'no-ops idempotently when no stray copy exists' {
