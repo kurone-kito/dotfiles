@@ -68,6 +68,8 @@ write_mise_mock() {
   # $3: 0 or 1 -> whether the LEGACY npm:@anthropic-ai/claude-code id
   #     still resolves to a healthy install (default: 0, it does not).
   #     The script must never consult it.
+  # $4: 0 or 1 -> whether `mise bin-paths claude` prints nothing and
+  #     exits 0 even though `mise where claude` resolves (default: 0).
   #
   # Layout matches the real aqua release: `mise bin-paths claude` is
   # the install directory itself and `claude` sits directly in it,
@@ -75,6 +77,7 @@ write_mise_mock() {
   local managed_resolves="${1:-1}"
   local managed_works="${2:-1}"
   local legacy_npm_healthy="${3:-0}"
+  local bin_paths_empty="${4:-0}"
   rm -rf "${MANAGED_DIR:?}/bin"
   rm -f "$MANAGED_DIR/claude"
   if [ "$managed_works" = "1" ]; then
@@ -112,6 +115,9 @@ if [ "\$1" = "where" ] && [ "\$2" = "claude" ]; then
   fi
 fi
 if [ "\$1" = "bin-paths" ] && [ "\$2" = "claude" ]; then
+  if [ "$bin_paths_empty" = "1" ]; then
+    exit 0
+  fi
   if [ "$managed_resolves" = "1" ]; then
     echo "$MANAGED_DIR"
     exit 0
@@ -555,6 +561,17 @@ REALNPM
   assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
   run grep -c 'npm:@anthropic-ai/claude-code' "$MISE_CALLS"
   assert_output 0
+}
+
+@test "mise bin-paths claude prints nothing: stray copy left in place with its own warning" {
+  write_mise_mock 1 1 0 1
+  write_stray_copy
+  run bash "$FIXTURE"
+  assert_success
+  assert_output --partial "returned nothing"
+  assert_output --partial "leaving the stray copy in place"
+  assert_dir_exists "$NPM_PREFIX_DIR/lib/node_modules/@anthropic-ai/claude-code"
+  assert_file_exists "$NPM_PREFIX_DIR/bin/claude"
 }
 
 @test "neither template resolves the legacy npm id outside comments" {

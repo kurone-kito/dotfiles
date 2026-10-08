@@ -423,8 +423,8 @@ itself cannot be resolved, the stray-copy check is skipped entirely
 rather than guessing a path.
 
 A machine that installed the old npm entry still holds that
-mise-managed install on disk after the config stops listing it. It does
-no harm, and you can remove it once:
+mise-managed install on disk after the config stops listing it. It can
+stay, or you can remove it once:
 
 ```bash
 mise uninstall "npm:@anthropic-ai/claude-code" --all

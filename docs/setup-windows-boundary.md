@@ -199,10 +199,7 @@ upstream.
 investigated — the config pins the backend explicitly for that
 reason. `ollama`, `starship`, and `tmux`'s bare shorthands do resolve
 to their intended `aqua` backends (`mise tool <name>` confirms each),
-so those stay unprefixed to match this file's existing style. `claude`
-is the same case: its bare shorthand resolves to
-`aqua:anthropics/claude-code`, so the config no longer pins the npm
-package.
+so those stay unprefixed to match this file's existing style.
 
 ### Always-here
 
