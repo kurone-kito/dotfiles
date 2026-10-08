@@ -331,6 +331,11 @@ or holding a guest stall record can never be `within-range`.
 | `out-of-range-brief` | Hold new admissions at the current count and observe another window at the same count. Two consecutive `out-of-range-brief` windows count as `out-of-range-sustained`. | Admission |
 | `out-of-range-sustained` | Hold new admissions and ask the owner of the running work to consider reducing it. The owner decides. | Admission, then a request to the owner |
 
+A guest stall record or an `inhibited` host source overrides every "observe
+another window" and "gather a new window" decision in this table and in the
+scenario table: hold admissions, gather no new window, and follow the runbook.
+A request to the owner under `out-of-range-sustained` still stands.
+
 ### 5. Resume with manual hysteresis
 
 After any window that was not `within-range`, a `within-range` window admits
