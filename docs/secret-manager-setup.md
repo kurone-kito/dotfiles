@@ -226,10 +226,10 @@ installs the npm CLI in an after script, while secret templates can
 call `bw` earlier. Before such an apply, or in a shell that started
 before the profile was deployed, set the option yourself with a
 simplified version of the same merge rule (skip it when `NODE_OPTIONS`
-already holds the option as a whole argument, unquoted or double-quoted;
-only the profile also parses other quoting). Afterwards, start a new
-login shell
-(`exec "$SHELL" -l`) or reload the profile
+already holds the option as a whole argument, unquoted or double-quoted).
+Only the profile parses quoting fully; the snippets can over-match when
+a quote opens inside another argument. Afterwards, start a new login
+shell (`exec "$SHELL" -l`) or reload the profile
 (`. $PROFILE.CurrentUserAllHosts` in PowerShell). The deployed profile
 then finds the option you exported already present and keeps it; unset
 the variable first if you want the profile to decide again. The option
@@ -260,6 +260,7 @@ snippet when it does not exit with 0. The Bash form sets the variable
 for that one command, with mise auto-install and network access off so a
 mise shim cannot start an install:
 
+<!-- test-snippet: support-check-bash -->
 ```bash
 MISE_AUTO_INSTALL=0 MISE_EXEC_AUTO_INSTALL=0 MISE_OFFLINE=1 \
   NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2000 node -e 0
@@ -273,14 +274,17 @@ The PowerShell form sets the same variables and puts them back afterwards:
 $names = 'NODE_OPTIONS', 'MISE_AUTO_INSTALL', 'MISE_EXEC_AUTO_INSTALL', 'MISE_OFFLINE'
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }
-$env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=2000'
-$env:MISE_AUTO_INSTALL = '0'
-$env:MISE_EXEC_AUTO_INSTALL = '0'
-$env:MISE_OFFLINE = '1'
-$global:LASTEXITCODE = $null
-node -e 0
-$LASTEXITCODE   # 0 means accepted; empty means node was not found
-foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+try {
+  $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=2000'
+  $env:MISE_AUTO_INSTALL = '0'
+  $env:MISE_EXEC_AUTO_INSTALL = '0'
+  $env:MISE_OFFLINE = '1'
+  $global:LASTEXITCODE = $null
+  node -e 0
+  $LASTEXITCODE   # 0 means accepted; empty means node was not found
+} finally {
+  foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+}
 ```
 
 Unlocking is unchanged: keep using `bw_unlock` and `BW_SESSION` as
@@ -291,8 +295,9 @@ and other processes that are neither login nor interactive shells do
 not read the Bash or Zsh profile files, and `pwsh -NoProfile` skips the
 PowerShell profile, so they must pass the option in their own
 environment. A shell step can append it to whatever the job already
-sets; unlike the profile, it appends even when the option is already
-there:
+sets. Unlike the profile, it appends even when the option is already
+there, and Node.js then uses the last occurrence, so this value replaces
+any earlier value of the same option:
 
 <!-- test-snippet: automation-bash -->
 ```bash
@@ -326,7 +331,7 @@ commands below change the current shell only, and a new terminal gets
 the default again.
 
 ```bash
-# Use another value in this shell:
+# Use another value in this shell (replaces the whole value):
 export NODE_OPTIONS="--network-family-autoselection-attempt-timeout=5000"
 
 # Drop the option from this shell (this also drops other NODE_OPTIONS
@@ -335,7 +340,7 @@ unset NODE_OPTIONS
 ```
 
 ```powershell
-# Use another value in this shell:
+# Use another value in this shell (replaces the whole value):
 $env:NODE_OPTIONS = '--network-family-autoselection-attempt-timeout=5000'
 
 # Drop the option (and any other NODE_OPTIONS content) from this shell:
