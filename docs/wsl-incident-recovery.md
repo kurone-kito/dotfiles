@@ -627,9 +627,10 @@ identify and hand off the checkpoint, and no check reads them.
   `-C "<worktree>/<submodule-path>"`, in `git` and in `tar` alike, so its
   relative paths resolve there. Give every output a name of its own in the same
   folder: `subN-tracked.diff`, `subN-untracked.nul`, `subN-untracked.tar`,
-  `subN-ignored.nul`, `subN-ignored-selected.nul`, and `subN-ignored.tar`,
-  where `N` is the submodule's line in `submodules.txt`. A submodule you cannot
-  capture is recorded as `not preserved: submodule <path>`. Ignored files are
+  `subN-ignored.nul`, `subN-ignored-escaped.nul`, `subN-ignored-selected.nul`,
+  and `subN-ignored.tar`, where `N` is the submodule's line in
+  `submodules.txt`. A submodule you cannot capture is recorded as
+  `not preserved: submodule <path>`. Ignored files are
   not in either output, yet they can hold work you cannot recreate, such as
   local agent or editor settings. In the worktree and each submodule, list them
   into a NUL-delimited file, and show an escaped, numbered form for reading:
