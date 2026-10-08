@@ -819,8 +819,8 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    ```sh
    policy_dir="$(mktemp -d)" &&
      policy_file="$policy_dir/config.json" &&
-     timeout -k 5 30 git -C "<worktree>" show \
-       origin/<base-branch>:.github/idd/config.json > "$policy_file" &&
+     timeout -k 5 30 sh -c 'git -C "$1" show "$2" > "$3"' sh "<worktree>" \
+       origin/<base-branch>:.github/idd/config.json "$policy_file" &&
      helper_spec="$(jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
      [ -n "$helper_spec" ] &&
      echo "helper package spec: $helper_spec" &&
