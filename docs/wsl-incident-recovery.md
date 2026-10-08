@@ -217,7 +217,8 @@ of the date and the cap and copy it into the first checkpoint:
      "powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\Users\<host-user>\.local\bin\wsl-incident-capture.ps1 -IntervalSeconds 5 -DurationSeconds 70 -GuestDistro '<DistroName>' -OutputDirectory <private-scratch-dir>"
    ```
 
-   Read the new file as in step 2. The first completed guest reading carries
+   The scratch directory may be reused, because it holds no evidence. Read the
+   new file as in step 2. The first completed guest reading carries
    memory and swap values, and the next one, about a minute later, adds
    `guest.metrics.deltas` rates. `guest.status` is `ok`, or `partial` when the
    kernel lacks a counter the helper reads. A kernel that exposes
@@ -833,11 +834,11 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
      helper_spec="$(timeout -k 5 30 jq -r '.helperRuntime.packageSpec // empty' "$policy_file")" &&
      [ -n "$helper_spec" ] &&
      echo "helper package spec: $helper_spec" >&2 &&
-     (cd "<clone-dir>" && timeout -k 5 60 npx --prefix "$policy_dir" --yes \
-       --package "$helper_spec" \
+     timeout -k 5 60 sh -c 'cd "$1" && shift && exec "$@"' sh "<clone-dir>" \
+       npx --prefix "$policy_dir" --yes --package "$helper_spec" \
        idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
        --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
-       --policy "$policy_file")
+       --policy "$policy_file"
    echo "check 3 exit status: $?" >&2
    timeout -k 5 30 rm -rf -- "$policy_dir"
    ```
@@ -853,10 +854,14 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    `<clone-dir>`, so a project `.npmrc` there does not apply to it, and only
    your user and machine npm settings do.
 
-   Run the helper from inside the clone, as the subshell does. `<clone-dir>` is
-   any worktree of the clone, preferably the primary worktree, the first entry
-   of the `git worktree list` output in check 2, because the incident worktree
-   may sit on the stalled filesystem, so the policy copy is read through it too.
+   Run the helper from inside the clone: the `sh -c` changes into `<clone-dir>`
+   under the same `timeout`, so even the directory change is bounded.
+   `<clone-dir>` is a worktree of the clone other than the incident worktree,
+   preferably the primary worktree, the first entry of the `git worktree list`
+   output in check 2, because the incident worktree may sit on the stalled
+   filesystem, and the policy copy is read through it too. If the incident
+   worktree is the only worktree, use it: check 2 has just read it under
+   `timeout`, and a timeout there already failed the resume check.
    The helper's worktree-occupancy probe
    runs `git worktree list` in the current directory, and outside a clone the
    probe comes back unreadable, which fails the check. `--worktree` already
@@ -882,9 +887,9 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
 
    ```sh
    ci_dir="$(timeout -k 5 30 mktemp -d)" &&
-     (cd "<clone-dir>" && timeout -k 5 120 npx --prefix "$ci_dir" --yes \
-       --package "<helper-package-spec>" \
-       idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>)
+     timeout -k 5 120 sh -c 'cd "$1" && shift && exec "$@"' sh "<clone-dir>" \
+       npx --prefix "$ci_dir" --yes --package "<helper-package-spec>" \
+       idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>
    echo "check 4 exit status: $?" >&2
    timeout -k 5 30 rm -rf -- "$ci_dir"
    ```
