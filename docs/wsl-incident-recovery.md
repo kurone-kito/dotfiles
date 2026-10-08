@@ -863,14 +863,17 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    `timeout -k 5 30 gh pr view <pr-number> -R <owner>/<name> --json state,headRefOid`
    and the duplicate-safe, HEAD-pinned snapshot that
    `.github/instructions/idd-ci.instructions.md` requires, because plain
-   `gh pr checks` can collapse same-named checks across workflows. Run it the
-   way check 3 runs the claim helper: from a directory whose project settings
-   you trust, or with `npx --prefix <empty-dir>`, so no project `.npmrc`
-   applies:
+   `gh pr checks` can collapse same-named checks across workflows. The command
+   runs from `<clone-dir>` with an empty `--prefix`, as check 3 does, so no
+   project `.npmrc` applies and the incident worktree is not involved:
 
    ```sh
-   timeout -k 5 120 npx --yes --package <helper-package-spec> \
-     idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>
+   ci_dir="$(mktemp -d)" &&
+     (cd "<clone-dir>" && timeout -k 5 120 npx --prefix "$ci_dir" --yes \
+       --package <helper-package-spec> \
+       idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>)
+   echo "check 4 exit status: $?"
+   rm -rf -- "$ci_dir"
    ```
 
    The helper is read-only and exits 0 with JSON even when a check failed.
