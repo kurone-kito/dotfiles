@@ -209,10 +209,17 @@ did not "move," they were only ever defined here:
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
 `aqua:google-antigravity/antigravity-cli`, `aqua:nektos/act`,
 `aqua:supabase/cli`, `grok`, `gitlab:gitlab-org/cli`,
-`npm:@anthropic-ai/claude-code`, `bitwarden`, `codex`,
+`npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`, `codex`,
 `npm:@executeautomation/playwright-mcp-server`,
 `npm:@microsoft/inshellisense`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.
+
+`npm:@bitwarden/cli` is the one deliberate exception to the
+registry-shorthand migration for `home/dot_config/mise/config.toml`
+(roadmap #583). The packaged CLI that the bare `bitwarden` shorthand
+resolves to bundles its own Node.js runtime, so the managed runtime does
+not decide how it runs. The reason is recorded next to the entry in that
+file.
 
 ### Current overlap
 
