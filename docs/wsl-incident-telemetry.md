@@ -135,8 +135,8 @@ Host evidence contains:
 - total and privileged CPU percentages;
 - available and committed memory, commit limit, pagefile usage, and
 paging rates when the needed counters exist;
-- physical-disk and system-volume read/write throughput and queue
-  length; and
+- physical-disk and system-volume read/write throughput, and the queue
+  length of the physical total only; and
 - optional Hyper-V virtual-storage throughput and operation rates.
 The collector retains at most 16 CIM instances per query and stops after
 the first additional instance. Hyper-V `overflowCount` is `1` when one or

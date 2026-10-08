@@ -176,10 +176,11 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    `overflow` and `error` `record-size-limit` has no host or guest block at all;
    treat it as a gap.
    **Eligible samples** are the records of the window other than the first
-   record, the gaps, and any record whose measurement interval began before the
-   window: a host sample whose `sampleIntervalSeconds` reaches back past the
-   start, a guest delta whose interval does, and a `psi` `avg60` reading taken in
-   the first 60 seconds. For a guest indicator they are the records of one probe
+   record and the gaps. For a rate, a delta, or `avg60`, a record is also left
+   out when its measurement interval began before the window: a host sample
+   whose `sampleIntervalSeconds` reaches back past the start, a guest delta
+   whose interval does, and a `psi` `avg60` reading taken in the first 60
+   seconds (provisional). For a guest indicator they are the records of one probe
    attempt each: every record except those whose `guest.error` is
    `probe-interval` or `not-requested`, and those whose `guest.status` is
    `pending`. A failed attempt is eligible, and unknown. A **guest stall
@@ -191,6 +192,9 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    no rates. An
    indicator has **coverage** for a window when it is known in at least 90
    percent (provisional) of its eligible samples and in at least three of them.
+   A record that is not an eligible sample for an indicator is not one of its
+   known samples, even when it holds a value: leave it out of coverage, out of
+   the baseline range in step 1, and out of every count and share in step 4.
    Coverage only decides `within-range` (step 4); an excursion is tested on any
    indicator with at least three known samples.
 3. **Unknown is not healthy.** Unknown can neither clear nor confirm a
@@ -209,7 +213,11 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    time between two successive guest samples, not `sampleIntervalSeconds`; if
    more than 10 minutes pass between them, the next sample starts a new
    baseline and has no rates. Size every window to hold several guest samples
-   (the provisional minimum is three). A guest stall record means the recovery
+   (the provisional minimum is three eligible samples, which takes four probe
+   attempts, since the first result in a window is never eligible; a 10-minute
+   window holds about nine, so 90 percent means all of them, and one failed
+   attempt costs that window its `within-range` verdict). A guest stall record
+   means the recovery
    runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case applies,
    and this workflow stops with it: hold admissions, gather no new window, and
    follow the runbook; do not start another guest run from here. The collector
@@ -270,8 +278,9 @@ Take the baseline **before the first admitted job**, in the same collector run
 you will use for the observations, while the machine is idle or lightly loaded.
 For each pressure indicator in the relied-on set, write down the range it
 spans: the minimum and maximum over all known baseline samples, and the median
-for reporting. Do not trim samples. Each repeat must meet the coverage rule of
-reading rule 2; otherwise lengthen or repeat it. An indicator that is unknown
+for reporting. Do not trim samples other than by reading rule 2. Each repeat
+must meet the coverage rule of reading rule 2; otherwise lengthen or repeat it.
+An indicator that is unknown
 in every baseline sample, such as `queueLength` on a host that does not report
 it, cannot be relied on, so no window can be `within-range` and the count stays
 where it is. A range of zero width, such as 0 to 0, is legal. If calibration
@@ -396,7 +405,7 @@ More than one scenario can be supported in one window; list each in the record.
 | --- | --- | --- | --- | --- |
 | Guest memory or reclaim pressure | `psi.some.avg60` above baseline; `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, or `pswpout` `.perSecond` above baseline in the same window; corroborated by low `memory.available` | Deltas at baseline while only `counters.*` are large; `psi.some` at baseline | `psi` and the reclaim and swap deltas, in at least three guest samples | Another window at the same count, or after the owner decides on a reduction |
 | Host memory or pagefile pressure | `pagesInputPerSecond` or `pagesOutputPerSecond` above baseline; corroborated by `committedBytes` close to `commitLimitBytes`, `pageFilePercentUsage` high, or low `availableBytes` | Paging at baseline | The host paging rates in every sample used | Another window at the same admitted count |
-| Storage saturation without current memory pressure | `physicalTotal.queueLength` above baseline; corroborated by high read or write rates and Hyper-V `virtualStorage[]` rates; host paging rates, guest `psi.some`, and reclaim deltas at baseline | Reclaim deltas or `psi.some` rising together with the disk signals | The disk entries, the host paging rates, and the guest `psi` and reclaim deltas | Another window with the next admission withheld |
+| Storage saturation without current memory pressure | `physicalTotal.queueLength` above baseline; corroborated by high read or write rates and Hyper-V `virtualStorage[]` rates; host paging rates, guest `psi.some`, and reclaim deltas at baseline | Reclaim deltas or `psi.some` rising together with the disk signals | `physicalTotal.queueLength` and the host paging rates in every sample used; the guest `psi` and the reclaim and swap deltas in at least three eligible guest samples | Another window with the next admission withheld |
 | Unavailable or conflicting evidence | A required field is unknown, a guest stall record is present, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window, except after a guest stall record or an `inhibited` host source (reading rule 4); record `unavailable`, and the verdict still comes from the pressure indicators |
 
 Guest paths in this table are relative to `guest.metrics`. Each row's
@@ -496,7 +505,7 @@ baseline-ranges:       psi.some.avg60 median 0.0, 0.0 to 0.0; pgscan_direct rate
 relied-on-set:         psi.some.avg60, psi.full.avg60, pgscan_direct, pgsteal_direct, pswpin, pswpout, paging rates, queueLength
 scenario:              guest-memory
 host-summary:          paging rates and queueLength inside their baseline ranges (not shown)
-guest-summary:         psi.some.avg60 and the pgscan_direct rate outside the range in every known guest sample of the window
+guest-summary:         psi.some.avg60 and the pgscan_direct rate outside the range in every eligible guest sample of the window
 unknown-fields:        deltas.workingset_refault (not relied on)
 verdict:               out-of-range-sustained
 decision:              ask-owner-to-reduce
@@ -570,7 +579,7 @@ Baseline from two quiet 10-minute repeats in the same run:
 
 | Indicator | Role | Baseline (range) |
 | --- | --- | --- |
-| `physicalTotal.queueLength` | Pressure | 0.0 to 1.5 |
+| `physicalTotal.queueLength` | Pressure | 0 to 2 |
 | `pagesInputPerSecond`, `pagesOutputPerSecond` | Pressure | 0 to 15, 0 to 10 |
 | Guest `psi.some.avg60` | Pressure | 0.0 to 0.2 |
 | Guest `pgscan_direct` and `pswpin` rates | Pressure | 0 to 0 |
@@ -609,7 +618,7 @@ A sample from the observation window:
           "alias": "physical-total",
           "readBytesPerSecond": 262144000,
           "writeBytesPerSecond": 104857600,
-          "queueLength": 14.0
+          "queueLength": 14
         }
       }
     }
@@ -692,6 +701,7 @@ Every number in this guide is one of the following:
 | --- | --- | --- |
 | 5 seconds | Default sample interval | Collector default |
 | 60 seconds | Spacing between guest probes | Collector constant, read from the script |
+| 60 seconds | `avg60` readings left out after a window starts | Provisional |
 | 1 second and 2 seconds | Guest preflight and probe bounds | Collector constants, read from the script |
 | 10 minutes | Time after which a guest sample has no rates | Collector constant, read from the script |
 | 10, 60, 300 seconds | `psi` averaging windows | Kernel definition |
