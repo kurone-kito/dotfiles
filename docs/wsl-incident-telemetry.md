@@ -178,6 +178,12 @@ drops oversized old logs before inspecting a partial record, then repairs a
 partial final line with bounded memory. It rejects symlink/reparse paths
 before reading or deleting collector logs.
 
+## Plan workload admission
+
+To use these records to decide how many heavy jobs to run in the guest at once,
+see the [WSL workload budget](wsl-workload-budget.md) guide. It is manual and
+provisional, and it changes no setting.
+
 ## Optional operator smoke check
 
 This check is intentionally manual. It starts a short host-only run and
