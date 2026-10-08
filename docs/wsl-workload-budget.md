@@ -181,10 +181,11 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    `probe-interval` or `not-requested`, and those whose `guest.status` is
    `pending`. A failed attempt is eligible, and unknown. A **guest stall
    record** is a record whose `guest.status` is `timeout` (this includes the
-   `preflight-timeout` error), or whose `guest.error` is `inhibited`,
-   `guest-failed`, `guest-output-invalid`, or `guest-start-failed`. For a delta,
-   the first successful guest result of the run and the first after more than
-   10 minutes without one are not eligible, because they have no rates. An
+   `preflight-timeout` error) or whose `guest.error` is `inhibited`: the two
+   states in which the collector stops probing the guest for the rest of the
+   run. For a delta, the first successful guest result of the run and the first
+   after more than 10 minutes without one are not eligible, because they have
+   no rates. An
    indicator has **coverage** for a window when it is known in at least 90
    percent (provisional) of its eligible samples and in at least three of them.
    Coverage only decides `within-range` (step 4); an excursion is tested on any
@@ -209,19 +210,21 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    runbook's [hung guest](wsl-incident-recovery.md#2-hung-guest) case applies,
    and this workflow stops with it: hold admissions, gather no new window, and
    follow the runbook; do not start another guest run from here. The collector
-   itself stops probing for the rest of the run after a `timeout` and after a
-   failure whose cleanup it cannot verify, and the following records then read
-   `probe-interval` or `inhibited`. After a `guest-failed`,
-   `guest-output-invalid`, or `guest-start-failed` record with nothing left to
-   clean up, it retries after 60 seconds, so such records can keep arriving;
-   treat them the same way. Repeated `guest-output-invalid` records can also
-   mean the guest helper is missing (see the start of this guide): fix that
-   while the guest is healthy, before treating it as a hang. An `inhibited` host
-   source goes to the runbook too, because an inhibition persists across runs.
-   Plain unknowns, such as `distro-not-running` or
-   `wsl-client-unavailable`, do not stop the collector: it probes again after 60
-   seconds, but coverage is judged per window, so the earlier unknown results
-   stay in this window and only a new window can recover. Start a new run with
+   has stopped probing, so the rest of the run can only add host records and
+   `probe-interval` or `inhibited` guest records: let it reach its end, or end it
+   as described at the start of this guide. An `inhibited` host source goes to
+   the runbook too, because an inhibition persists across runs. A failed or
+   unparseable guest result (`guest-failed`, `guest-output-invalid`, or
+   `guest-start-failed`) is not a stall record: the collector tries again after
+   60 seconds, unless it cannot verify the cleanup of the failed attempt, in
+   which case the next records read `inhibited`. If every result is
+   `guest-output-invalid`, the guest helper may be missing (see
+   [Read the collector evidence](#read-the-collector-evidence)): fix that while
+   the guest is healthy, then take a new window. Other plain unknowns, such as
+   `distro-not-running` or `wsl-client-unavailable`, also leave the collector
+   probing every 60 seconds. Coverage is judged per window, so the earlier
+   unknown results stay in this window and only a new window can recover. Start
+   a new run with
    `-GuestDistro` only if you have deliberately ended this one, and only when
    the runbook's
    [bounded guest read](wsl-incident-recovery.md#bounded-guest-read-optional)
@@ -386,7 +389,7 @@ More than one scenario can be supported in one window; list each in the record.
 | Guest memory or reclaim pressure | `psi.some.avg60` above baseline; `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, or `pswpout` `.perSecond` above baseline in the same window; corroborated by low `memory.available` | Deltas at baseline while only `counters.*` are large; `psi.some` at baseline | `psi` and the reclaim and swap deltas, in at least three guest samples | Another window at the same count, or after the owner decides on a reduction |
 | Host memory or pagefile pressure | `pagesInputPerSecond` or `pagesOutputPerSecond` above baseline; corroborated by `committedBytes` close to `commitLimitBytes`, `pageFilePercentUsage` high, or low `availableBytes` | Paging at baseline | The host paging rates in every sample used | Another window at the same admitted count |
 | Storage saturation without current memory pressure | `physicalTotal.queueLength` above baseline; corroborated by high read or write rates and Hyper-V `virtualStorage[]` rates; host paging rates, guest `psi.some`, and reclaim deltas at baseline | Reclaim deltas or `psi.some` rising together with the disk signals | The disk entries, the host paging rates, and the guest `psi` and reclaim deltas | Another window with the next admission withheld |
-| Unavailable or conflicting evidence | A required field is unknown, a guest stall record is present, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window; record `unavailable`, and the verdict still comes from the pressure indicators |
+| Unavailable or conflicting evidence | A required field is unknown, a guest stall record is present, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window, except after a guest stall record or an `inhibited` host source (reading rule 4); record `unavailable`, and the verdict still comes from the pressure indicators |
 
 Guest paths in this table are relative to `guest.metrics`. Each row's
 supported, weakened, or unknown status is a hypothesis to test with the next
