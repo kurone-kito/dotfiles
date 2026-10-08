@@ -234,6 +234,7 @@ Describe '35-node-options' {
       . $script:Loader
 
       [Environment]::GetEnvironmentVariable('NODE_OPTIONS') | Should -BeNullOrEmpty
+      Get-Content -LiteralPath $script:Log | Should -Match '^argv=-e 0 '
     }
 
     It 'leaves the environment untouched when node fails (exit 1)' {
@@ -243,6 +244,7 @@ Describe '35-node-options' {
       . $script:Loader
 
       $env:NODE_OPTIONS | Should -BeExactly '--max-old-space-size=4096'
+      Get-Content -LiteralPath $script:Log | Should -Match '^argv=-e 0 '
     }
 
     It 'probes with a non-empty script, only the option, and the mise guards' {
@@ -272,6 +274,7 @@ Describe '35-node-options' {
       [Environment]::GetEnvironmentVariable('MISE_AUTO_INSTALL') | Should -BeNullOrEmpty
       [Environment]::GetEnvironmentVariable('MISE_EXEC_AUTO_INSTALL') | Should -BeNullOrEmpty
       [Environment]::GetEnvironmentVariable('MISE_OFFLINE') | Should -BeExactly 'kept'
+      Get-Content -LiteralPath $script:Log | Should -Match '^argv=-e 0 '
     }
 
     It 'keeps the caller''s $LASTEXITCODE' {

@@ -274,7 +274,9 @@ assert_quiet_startup() {
   assert_success
   assert_output '--max-old-space-size=4096'
   assert_quiet_startup
+  assert_probe_ran
 
+  : > "$NODE_MOCK_LOG"
   login_options bash __unset__
   assert_output ''
   assert_quiet_startup
