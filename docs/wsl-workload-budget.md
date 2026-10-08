@@ -80,7 +80,11 @@ workflow needs guest evidence to admit work, because host evidence cannot show
 guest memory pressure. A host-only run can still support a hold, a request to
 the owner, or a narrower hypothesis, but it can never return `within-range`.
 The default interval is 5 seconds. The telemetry guide describes the small
-check-then-launch race that `-GuestDistro` carries.
+check-then-launch race that `-GuestDistro` carries, and the runbook's
+[bounded guest read](wsl-incident-recovery.md#bounded-guest-read-optional)
+lists the prerequisites. The guest helper must exist at
+`$HOME/.local/bin/wsl-incident-guest-snapshot` inside the guest, or every probe
+fails.
 
 Give every run its own new `-OutputDirectory`, never the default directory,
 which may hold records from an incident. The log byte budget is shared by every
@@ -143,7 +147,7 @@ memory falls by construction when work runs. So the verdict rests only on
 | Host `pagesInputPerSecond` and `pagesOutputPerSecond` | Pressure | High |
 | `physicalTotal.queueLength` | Pressure | High |
 | Level gauges: guest `memory.available`, host `availableBytes`, derived commit headroom, `pageFilePercentUsage`, `swap.used` | Context | Low for availability, high for usage |
-| Load: host CPU percentages, disk and Hyper-V throughput and operation rates, `pgfault`, `pgmajfault`, `pgscan_kswapd`, `pgsteal_kswapd` | Context | Not used |
+| Load: host CPU percentages, disk and Hyper-V throughput and operation rates, `pageReadsPerSecond`, `pageWritesPerSecond`, `pgfault`, `pgmajfault`, `pgscan_kswapd`, `pgsteal_kswapd` | Context | Not used |
 
 Context never sets a verdict. A level gauge outside its range supports a
 hypothesis only together with a pressure indicator outside its range in the
@@ -166,16 +170,18 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    present and non-null. A rate or delta is known only when its own `status` is
    `ok` and it is non-null. A failed source carries an empty `metrics`, so its
    fields are absent, not null; `host.cpu` has no `metrics` and its fields are
-   null. Absent and null are both unknown. A source whose status is `partial`
-   or `unavailable` can still hold known gauges, for example on the first
-   record of a run. The first record has no sample interval, so leave it out of
-   every window. A record with `status` `overflow` and `error`
-   `record-size-limit` has no host or guest block at all; treat it as a gap.
+   null. Absent and null are both unknown. A `partial` source can still hold
+   known gauges, for example on the first record of a run. The first record has
+   no sample interval, so leave it out of every window. A record with `status`
+   `overflow` and `error` `record-size-limit` has no host or guest block at all;
+   treat it as a gap.
    **Eligible samples** are the records of the window other than the first
-   record and the gaps. For a guest indicator they are the records that carry a
-   completed guest result, not the `probe-interval` or `pending` records in
-   between, and for a delta not the first guest result of the run, which has no
-   rates. An indicator has **coverage** for a window when it is known in at
+   record and the gaps. For a guest indicator they are the records of one probe
+   attempt each: every record whose guest status is not `probe-interval`,
+   `pending`, or `not-requested`. A failed attempt is eligible, and unknown. For
+   a delta, the first successful guest result of the run and the first after a
+   gap of more than 10 minutes are not eligible, because they have no rates. An
+   indicator has **coverage** for a window when it is known in at
    least 90 percent (provisional) of its eligible samples and in at least three
    of them. Coverage only decides `within-range` (step 4); an excursion is
    tested on any indicator with at least three known samples.
@@ -199,12 +205,16 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    is the recovery runbook's stalled-guest state: the collector stops probing
    for the rest of the run, and this workflow stops with it. Hold admissions
    and follow the runbook; do not start another guest run from here. An
-   `inhibited` guest also goes to the runbook, because the inhibition persists
-   across runs. Other unknowns, such as `distro-not-running` or
+   `inhibited` guest or host source goes to the runbook too, because an
+   inhibition persists across runs. A failed or invalid guest result can also
+   suppress or inhibit the guest source, after which the records read
+   `probe-interval` or `inhibited` for the rest of the run: treat that like a
+   timeout. Plain unknowns, such as `distro-not-running` or
    `wsl-client-unavailable`, do not stop the collector: it probes again after 60
-   seconds, and the window stays unknown until three known guest samples
-   arrive. Start a new run with `-GuestDistro` only if you have deliberately
-   ended this one, and only when the runbook's
+   seconds, but coverage is judged per window, so the earlier unknown results
+   stay in this window and only a new window can recover. Start a new run with
+   `-GuestDistro` only if you have deliberately ended this one, and only when
+   the runbook's
    [bounded guest read](wsl-incident-recovery.md#bounded-guest-read-optional)
    prerequisites hold; the new run needs its own baseline.
 5. **Memory pressure only, and a kernel-dependent counter.** The guest helper
@@ -245,13 +255,16 @@ Take the baseline **before the first admitted job**, in the same collector run
 you will use for the observations, while the machine is idle or lightly loaded.
 For each pressure indicator in the relied-on set, write down the range it
 spans: the minimum and maximum over all known baseline samples, and the median
-for reporting. Do not trim samples. A range of zero width, such as 0 to 0, is
-legal. If calibration fails only because of tiny values, lengthen the baseline
-and record the change. Record the window's UTC start and end and the run
-identifier as the baseline's source. Provisional starting length: 10 minutes,
-repeated once, with the range spanning both repeats. To baseline a new workload
-class, do it before any job of that class runs, or start a new run and a new
-baseline.
+for reporting. Do not trim samples. Each repeat must meet the coverage rule of
+reading rule 2; otherwise lengthen or repeat it. An indicator that is unknown
+in every baseline sample, such as `queueLength` on a host that does not report
+it, cannot be relied on, so no window can be `within-range` and the count stays
+where it is. A range of zero width, such as 0 to 0, is legal. If calibration
+fails only because of tiny values, lengthen the baseline and record the change.
+Record the window's UTC start and end and the run identifier as the baseline's
+source. Provisional starting length: 10 minutes, repeated once, with the range
+spanning both repeats. To baseline a new workload class, do it before any job
+of that class runs, or start a new run and a new baseline.
 
 ### 2. Admit one bounded workload
 
@@ -266,8 +279,11 @@ Pick the window length before you admit, make it finite, and do not extend it
 to wait for a better answer. If it has to be longer, record a new window. The
 observation window starts at the admission, has the same duration as one
 baseline repeat, and counts only while all the admitted jobs run: record each
-job's end time in UTC, and repeat the window if any job ended early. Compare it
-with the baseline range every time, not only with the window before it. Size
+job's end time in UTC. If a job ended early, still give the part of the window
+before the end its step 4 verdict: an excursion stands. Ask the owner why the
+job ended before any repeat, and do not re-admit it on a repeat. Compare each
+window with the baseline range every time, not only with the window before it.
+Size
 `-DurationSeconds` for the whole ladder of admissions, or take a new baseline
 in a new run.
 
@@ -283,21 +299,24 @@ known samples. Assign one verdict from the worst indicator:
 - `out-of-range-brief`: otherwise, some indicator is outside its range in more
   than one fifth of its known samples (provisional).
 - `unknown`: no indicator is outside its range in more than one fifth of its
-  known samples, and some indicator in the relied-on set lacks coverage. This
-  verdict is for missing evidence only.
+  known samples, and some indicator in the relied-on set lacks coverage or the
+  window holds a guest `timeout`, `preflight-timeout`, or `inhibited` record.
+  This verdict is for missing evidence only.
 - `within-range`: every indicator in the relied-on set has coverage for the
   window, and none is outside its range in more than one fifth of its known
-  samples.
+  samples. A guest `timeout`, `preflight-timeout`, or `inhibited` record in the
+  window is never an excursion, but it bars this verdict.
 
 An out-of-range verdict takes precedence over `unknown`: a known excursion is
 not cancelled by missing data elsewhere. A window with no guest evidence, with
-a guest block of `not-requested`, or with fewer than three known guest samples
-can never be `within-range`.
+a guest block of `not-requested`, with fewer than three known guest samples,
+or holding a guest `timeout`, `preflight-timeout`, or `inhibited` record can
+never be `within-range`.
 
 | Verdict | Decision | Decision class |
 | --- | --- | --- |
 | `within-range` | If no window since the baseline was other than `within-range`, or the hysteresis in step 5 is met, you may admit one more job, but only up to the count the owners need. Return to step 2 for the new count. | Admission |
-| `unknown` | Hold new admissions. No verdict is possible. Gather a new window, except after a guest `timeout` (reading rule 4). | Admission |
+| `unknown` | Hold new admissions. No verdict is possible. Gather a new window, except after a guest `timeout`, `preflight-timeout`, or an `inhibited` source (reading rule 4). After two consecutive `unknown` windows, stop gathering windows: stay at the current count, or end the run deliberately and start a new run and baseline under the runbook's prerequisites. | Admission |
 | `out-of-range-brief` | Hold new admissions at the current count and observe another window at the same count. Two consecutive `out-of-range-brief` windows count as `out-of-range-sustained`. | Admission |
 | `out-of-range-sustained` | Hold new admissions and ask the owner of the running work to consider reducing it. The owner decides. | Admission, then a request to the owner |
 
@@ -309,8 +328,9 @@ windows at the held count (provisional), and then resume one job at a time, not
 at the count that preceded the pressure. Never resume on unknown evidence. If
 the owner declines the request or does not answer, admissions stay held and the
 guide does not escalate. The last count that finished the hysteresis with
-`within-range` is your provisional operating count. Stop at the count the
-owners need: the loop is not a search for the limit.
+`within-range` is your provisional operating count, and a count that returned
+`out-of-range-sustained` is a ceiling until the workload or the machine changes.
+Stop at the count the owners need: the loop is not a search for the limit.
 
 ### 6. Evidence record
 
@@ -358,7 +378,7 @@ More than one scenario can be supported in one window; list each in the record.
 | Guest memory or reclaim pressure | `psi.some.avg60` above baseline; `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, or `pswpout` `.perSecond` above baseline in the same window; corroborated by low `memory.available` | Deltas at baseline while only `counters.*` are large; `psi.some` at baseline | `psi` and the reclaim and swap deltas, in at least three guest samples | Another window at the same count, or after the owner decides on a reduction |
 | Host memory or pagefile pressure | `pagesInputPerSecond` or `pagesOutputPerSecond` above baseline; corroborated by `committedBytes` close to `commitLimitBytes`, `pageFilePercentUsage` high, or low `availableBytes` | Paging at baseline | The host paging rates in every sample used | Another window at the same admitted count |
 | Storage saturation without current memory pressure | `physicalTotal.queueLength` above baseline; corroborated by high read or write rates and Hyper-V `virtualStorage[]` rates; host paging rates, guest `psi.some`, and reclaim deltas at baseline | Reclaim deltas or `psi.some` rising together with the disk signals | The disk entries, the host paging rates, and the guest `psi` and reclaim deltas | Another window with the next admission withheld |
-| Unavailable or conflicting evidence | A required field is unknown, or the guest timed out | A complete, consistent window | Not applicable | A new window; no scenario is supported until then |
+| Unavailable or conflicting evidence | A required field is unknown, the guest timed out, or the pressure indicators conflict: for example `psi.some` is out of range while the reclaim and swap deltas sit at baseline, or an indicator is out of range while a required field of its scenario is unknown | A complete, consistent window | Not applicable | The same count in a new window; record `unavailable`, and the verdict still comes from the pressure indicators |
 
 Guest paths in this table are relative to `guest.metrics`. Each row's
 supported, weakened, or unknown status is a hypothesis to test with the next
@@ -378,15 +398,15 @@ from one to the next.
 
 ### Example 1: rising reclaim rate in the same window
 
-One run holds B1, the second of two 10-minute baseline repeats (00:00 to
-00:10), and a loaded window from 00:20 to 00:30, when one job is admitted. This
-guest record is the last in B1.
+One run holds two 10-minute baseline repeats (00:00 to 00:10, then B1 from
+00:10 to 00:20) and a loaded window from 00:20 to 00:30, when one job is
+admitted. This guest record is the last in B1.
 It is `partial` because the guest kernel splits the refault counter, so that
 field is unknown and the rest is usable:
 
 ```json
 {
-  "sampleTimeUtc": "2000-01-01T00:09:00.0000000Z",
+  "sampleTimeUtc": "2000-01-01T00:19:00.0000000Z",
   "guest": {
     "status": "partial",
     "error": "provider-unavailable",
@@ -429,7 +449,7 @@ rose by about 8 million since the baseline record and `psi` stalled for about
 }
 ```
 
-| Indicator | Role | B1 (range over its guest samples) | Loaded window (typical sample) |
+| Indicator | Role | Baseline (range over both repeats) | Loaded window (typical sample) |
 | --- | --- | --- | --- |
 | `psi.some.avg60` | Pressure | 0.0 to 0.0 | 31.2 |
 | `deltas.pgscan_direct.perSecond` | Pressure | 0 to 0 | 15000 |
@@ -447,17 +467,17 @@ for this window:
 
 ```text
 run-id:                synthetic-run-1
-window-utc:            2000-01-01T00:20:00Z/2000-01-01T00:30:00Z, same duration as B1
+window-utc:            2000-01-01T00:20:00Z/2000-01-01T00:30:00Z, same duration as one repeat
 job-utc:               2000-01-01T00:20:00Z/2000-01-01T00:32:00Z (one job)
 effective-memory-cap:  20 GB
 admitted-job-count:    0 -> 1
 workload-class:        build
-baseline-source:       B1 and the first repeat, 2000-01-01T00:00:00Z/2000-01-01T00:10:00Z
-baseline-ranges:       psi.some.avg60 median 0.0, 0.0 to 0.0; pgscan_direct rate median 0, 0 to 0; the others as in B1
+baseline-source:       both repeats, 2000-01-01T00:00:00Z/2000-01-01T00:20:00Z
+baseline-ranges:       psi.some.avg60 median 0.0, 0.0 to 0.0; pgscan_direct rate median 0, 0 to 0; the others as in the baseline
 relied-on-set:         psi.some.avg60, psi.full.avg60, pgscan_direct, pgsteal_direct, pswpin, pswpout, paging rates, queueLength
 scenario:              guest-memory
-host-summary:          paging rates and queueLength inside their B1 ranges (not shown)
-guest-summary:         psi.some.avg60 and the pgscan_direct rate outside the range in 10 of 10 known guest samples
+host-summary:          paging rates and queueLength inside their baseline ranges (not shown)
+guest-summary:         psi.some.avg60 and the pgscan_direct rate outside the range in every known guest sample of the window
 unknown-fields:        deltas.workingset_refault (not relied on)
 verdict:               out-of-range-sustained
 decision:              ask-owner-to-reduce
@@ -469,9 +489,9 @@ It does not show which job caused the pressure.
 
 ### Example 2: host memory or pagefile pressure
 
-Baseline window B1, from a quiet 10-minute window in the same run:
+Baseline from two quiet 10-minute repeats in the same run:
 
-| Indicator | Role | B1 (range) |
+| Indicator | Role | Baseline (range) |
 | --- | --- | --- |
 | `pagesInputPerSecond` | Pressure | 0 to 15 |
 | `pagesOutputPerSecond` | Pressure | 0 to 10 |
@@ -527,9 +547,9 @@ window at the same admitted count.
 
 ### Example 3: storage saturation without current memory pressure
 
-Baseline window B1, from a quiet 10-minute window in the same run:
+Baseline from two quiet 10-minute repeats in the same run:
 
-| Indicator | Role | B1 (range) |
+| Indicator | Role | Baseline (range) |
 | --- | --- | --- |
 | `physicalTotal.queueLength` | Pressure | 0.0 to 1.5 |
 | `pagesInputPerSecond`, `pagesOutputPerSecond` | Pressure | 0 to 15, 0 to 10 |
@@ -625,8 +645,11 @@ the recovery runbook's stalled-guest state, so this workflow stops here and the
 runbook takes over; do not start another guest run from this guide. The
 host-only records the run keeps writing can still show host memory and storage
 pressure, and they can support a hold or a request to the owner, but never an
-admission. If two scenarios are supported at once, list both in the record and
-let the pressure indicators decide the verdict.
+admission. Conflicting evidence works the same way: if the pressure indicators
+disagree, for example `psi.some` out of range while the reclaim and swap deltas
+sit at baseline, record `unavailable`, let the pressure indicators decide the
+verdict, and observe the same count again. If two scenarios are supported at
+once, list both in the record.
 
 ## Thresholds
 
@@ -656,8 +679,8 @@ Every number in this guide is one of the following:
 | 20 GB | The effective memory cap of the operator this guide was written for | Observed configuration, unchanged |
 | One heavy job | First admission | Provisional |
 | 10 minutes, repeated once | Baseline length | Provisional |
-| Three guest samples | Minimum per window | Provisional |
-| 90 percent of the eligible samples | Coverage needed for an indicator to be known | Provisional |
+| Three known samples | Minimum per indicator and window | Provisional |
+| 90 percent of the eligible samples | Coverage needed for an indicator to count toward `within-range` | Provisional |
 | One fifth and one half of the samples | Verdict boundaries | Provisional |
 | Two consecutive windows | Hysteresis before resuming, and the limit on repeated brief windows | Provisional |
 | All figures in the worked examples | Examples 1 to 4 | Synthetic |
@@ -675,7 +698,7 @@ prerequisite as a condition to check, not a given.
 | A tool's own worker setting | That tool's own parallelism, and so its CPU, memory, and I/O demand | Other tools, and the cache growth other tools cause | The tool offers such a setting, and its owner changes their own invocation |
 | Linux cgroup v2 `cpu.max` | CPU bandwidth of one cgroup | Memory and I/O | The `cpu` controller is enabled in the parent's `cgroup.subtree_control`, and write access is delegated to the account that would use it |
 | Linux cgroup v2 `io.max` | Per block-device bandwidth and operation limits of one cgroup | CPU and memory; buffered writeback is attributed to a cgroup only where the filesystem supports it, otherwise to the root cgroup; I/O over a shared or network filesystem may not pass through a block device the limit can name | The `io` controller is enabled, delegation, and a block device the limit can name |
-| Linux cgroup v2 `memory.high` | Throttling and reclaim pressure on one cgroup once its usage exceeds the value | CPU and I/O; it creates reclaim pressure on that cgroup by design | The `memory` controller is enabled, and delegation |
+| Linux cgroup v2 `memory.high` | Throttling and reclaim pressure on one cgroup once its usage exceeds the value | CPU and I/O directly; it creates reclaim pressure on that cgroup by design, which costs CPU and can add swap and refault reads | The `memory` controller is enabled, and delegation |
 | `.wslconfig` `processors` | The logical processor count of the whole WSL 2 VM, every distribution in it | Any single job or workload class | The operator edits the effective Windows-side file, and the VM restarts for the change to apply, which ends in-memory jobs |
 
 The `.wslconfig` `memory` key is the existing cap that this guide keeps
