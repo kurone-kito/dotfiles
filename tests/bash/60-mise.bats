@@ -415,7 +415,7 @@ MOCK
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
   local key
 
-  for key in bat codex copilot gh ghq worktrunk; do
+  for key in bat claude codex copilot gh ghq worktrunk; do
     run grep -cFx "$key = \"latest\"" "$config"
     [ "$output" = 1 ] || fail "$key: expected exactly one bare entry, found $output"
   done
@@ -435,7 +435,7 @@ MOCK
 @test "does not prefix a backend onto the registry short names" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex)"|^"[a-z]+:cli/cli"' "$config"
+  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex|claude|claude-code)"|^"[a-z]+:cli/cli"' "$config"
   assert_failure 1
 }
 
@@ -475,26 +475,27 @@ MOCK
   assert_output --partial "Reconsider the bare shorthand"
 }
 
-@test "keeps the claude-code npm pin" {
+@test "no longer installs claude-code through the npm backend" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
   run grep -q '^"npm:@anthropic-ai/claude-code"' "$config"
-  assert_success
-}
-
-@test "no longer relies on the inert claude-code npm_args opt-in" {
-  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
-
+  assert_failure 1
   run grep -q 'npm_args = "--ignore-scripts=false"' "$config"
   assert_failure 1
 }
 
-@test "allow-lists claude-code's own build scripts" {
+@test "does not keep an allow_builds opt-in for claude-code" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep '^"npm:@anthropic-ai/claude-code"' "$config"
+  run grep -Eq 'allow_builds.*claude|claude.*allow_builds' "$config"
+  assert_failure 1
+}
+
+@test "documents the aqua backend the claude shorthand resolves to" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -F 'aqua:anthropics/claude-code' "$config"
   assert_success
-  assert_output --partial 'allow_builds = ["@anthropic-ai/claude-code"]'
 }
 
 @test "tracks playwright/cli at latest now that upstream OIDC trust is restored, unpinned" {

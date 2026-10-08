@@ -4,9 +4,9 @@
 # remove any stray @anthropic-ai/claude-code copy that Claude Code's
 # own background autoupdater may have written directly into
 # mise-managed Node.js's global node_modules, shadowing the
-# mise-managed npm:@anthropic-ai/claude-code install. Runs after mise
-# tool installation so `mise where node` / `mise where
-# npm:@anthropic-ai/claude-code` are resolvable. See issue #258.
+# mise-managed claude install (the aqua release binary, mise key
+# `claude`). Runs after mise tool installation so `mise where node` /
+# `mise where claude` are resolvable. See issues #258 and #585.
 $ErrorActionPreference = 'Stop'
 
 if (-not (Get-Command mise -ErrorAction SilentlyContinue)) {
@@ -372,10 +372,28 @@ function Resolve-MiseNpmPrefix {
   }
 }
 
+function Get-ManagedClaudeExecutableName {
+  # Ordered names to look for in the directory `mise bin-paths claude`
+  # resolves. The aqua release puts the binary directly in that
+  # directory; on Windows the release zip holds a single root
+  # claude.exe. claude.cmd is only a fallback for a shim-style layout
+  # (the tests use it as their runnable stub). The extensionless POSIX
+  # shim is not directly invokable from Windows, so it is deliberately
+  # not a candidate there. The first candidate that exists is the one
+  # that is run. What `mise bin-paths claude` prints on Windows has not
+  # been confirmed on Windows hardware: a wrong guess only fails closed
+  # (nothing is removed).
+  param([bool] $WindowsHost = ($IsWindows -ne $false))
+  if ($WindowsHost) {
+    return @('claude.exe', 'claude.cmd')
+  }
+  return @('claude')
+}
+
 function Test-MiseManagedClaudeWorks {
   # A resolvable install directory alone does not prove the managed
-  # copy actually works: an interrupted or failed npm-backend install
-  # can leave the directory in place without a functional binary.
+  # copy actually works: an interrupted or failed install can leave
+  # the directory in place without a functional binary.
   #
   # `mise exec ... -- claude --version` is NOT safe here: mise exec
   # prepends the managed tool's bin directory to PATH but does not
@@ -391,23 +409,22 @@ function Test-MiseManagedClaudeWorks {
   # directory (mise bin-paths, not mise exec) and invoke that specific
   # executable directly instead, bypassing PATH lookup (and therefore
   # the ambient stray shim) entirely.
-  $binPathOutput = Invoke-MiseWhere -Arguments @('bin-paths', 'npm:@anthropic-ai/claude-code')
+  $binPathOutput = Invoke-MiseWhere -Arguments @('bin-paths', 'claude')
   if (-not $binPathOutput) {
     return $false
   }
+  # Take the first directory and fail closed if there is none; the
+  # aqua release has no bin/ subdirectory, so nothing is appended.
   $binPath = @($binPathOutput)[0]
-  # npm places a POSIX shell shim ('claude') and, on Windows, also
-  # 'claude.cmd'/'claude.ps1' wrappers in the same bin directory. The
-  # POSIX shim isn't directly invokable from Windows; '.cmd' is
-  # invokable via '&' without any execution-policy consideration
-  # (unlike '.ps1'), matching how the stray-copy removal code already
-  # treats 'claude.cmd' as the Windows-invokable shim.
-  $claudeExe = if ($IsWindows -ne $false) {
-    Join-Path $binPath 'claude.cmd'
-  } else {
-    Join-Path $binPath 'claude'
+  $claudeExe = $null
+  foreach ($name in (Get-ManagedClaudeExecutableName)) {
+    $candidate = Join-Path $binPath $name
+    if (Test-Path -LiteralPath $candidate) {
+      $claudeExe = $candidate
+      break
+    }
   }
-  if (-not (Test-Path -LiteralPath $claudeExe)) {
+  if (-not $claudeExe) {
     return $false
   }
   $previousEap = $ErrorActionPreference
@@ -461,14 +478,14 @@ function Remove-StrayClaudeCodeCopy {
     return
   }
 
-  $managedDir = Invoke-MiseWhere -Arguments @('where', 'npm:@anthropic-ai/claude-code')
+  $managedDir = Invoke-MiseWhere -Arguments @('where', 'claude')
   if (-not $managedDir -or -not (Test-Path -LiteralPath $managedDir)) {
-    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy is not resolvable; leaving the stray copy in place so 'claude' keeps working."
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed claude install is not resolvable (run 'mise install claude'); leaving the stray copy in place so 'claude' keeps working."
     return
   }
 
   if (-not (Test-MiseManagedClaudeWorks)) {
-    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed npm:@anthropic-ai/claude-code copy does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+    Write-Host "warn: found a stray @anthropic-ai/claude-code copy at $strayDir, but the mise-managed claude install does not appear to work (claude --version failed); leaving the stray copy in place so 'claude' keeps working."
     return
   }
 
