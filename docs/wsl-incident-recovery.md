@@ -117,15 +117,13 @@ deadline: `gtimeout` from GNU coreutils on macOS, or, on a Windows client, run
 the `ssh` call as a child job with a wait timeout (`Start-Job`, then
 `Wait-Job -Timeout`) and note a leftover `ssh` process by PID and creation
 time without ending it. With no equivalent at all, use another client that has
-one, or the local console. If neither exists, run only the collector start,
-because its own `-DurationSeconds` ends the run and is the one bound that does
-not depend on the client, write `not preserved: no bounded client` for the
-copy of the state files, and skip every other call. The duration is checked
-only once sampling begins, so a start that stalls before its first sample, on
-the state directory, the lock, or the log folder, has no bound: the keepalive
-does not end a command that hangs on the host. Treat a call still open one
-minute past its duration as failed, note the client process the same way, and
-accept that risk.
+one, or the local console. If neither exists, run no host call from this
+client: write `not preserved: no bounded client` for the evidence you could not
+collect, the state-file copy and the collector run, and hand off. The
+collector's own `-DurationSeconds` is not such a bound, because it is checked
+only once sampling begins, so a start can stall earlier, on the state
+directory, the lock, or the log folder, and the keepalive does not end a
+command that hangs on the host.
 
 The first check below shows the wrapped form:
 
