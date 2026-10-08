@@ -817,7 +817,7 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    and the repository comes from them instead of the directory you start in:
 
    ```sh
-   policy_dir="$(mktemp -d)" &&
+   policy_dir="$(timeout -k 5 30 mktemp -d)" &&
      policy_file="$policy_dir/config.json" &&
      timeout -k 5 30 sh -c 'git -C "$1" show "$2" > "$3"' sh "<worktree>" \
        origin/<base-branch>:.github/idd/config.json "$policy_file" &&
@@ -830,12 +830,14 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
        --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
        --policy "$policy_file")
    echo "check 3 exit status: $?"
-   rm -rf -- "$policy_dir"
+   timeout -k 5 30 rm -rf -- "$policy_dir"
    ```
 
    The `&&` chain stops at the first failure, so the helper runs only with a
    policy file and a package spec taken from the base branch, and the temporary
-   directory is removed either way. The spec it prints is the
+   directory is removed either way. `mktemp` and the final `rm` run under
+   `timeout` too, because a stalled temporary filesystem would hang them, and a
+   timeout is a failed check. The spec it prints is the
    `<helper-package-spec>` for check 4. `--prefix` makes `npx` read its project
    settings from that empty directory instead of from `<clone-dir>`, so a
    project `.npmrc` there does not apply to it, and only your user and machine
@@ -868,12 +870,12 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
    project `.npmrc` applies and the incident worktree is not involved:
 
    ```sh
-   ci_dir="$(mktemp -d)" &&
+   ci_dir="$(timeout -k 5 30 mktemp -d)" &&
      (cd "<clone-dir>" && timeout -k 5 120 npx --prefix "$ci_dir" --yes \
        --package <helper-package-spec> \
        idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>)
    echo "check 4 exit status: $?"
-   rm -rf -- "$ci_dir"
+   timeout -k 5 30 rm -rf -- "$ci_dir"
    ```
 
    The helper is read-only and exits 0 with JSON even when a check failed.
