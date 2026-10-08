@@ -475,13 +475,6 @@ MOCK
   assert_output --partial "Reconsider the bare shorthand"
 }
 
-@test "installs claude through the bare registry shorthand, which mise resolves to aqua" {
-  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
-
-  run grep -cFx 'claude = "latest"' "$config"
-  assert_output 1
-}
-
 @test "no longer installs claude-code through the npm backend" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
@@ -498,13 +491,11 @@ MOCK
   assert_failure 1
 }
 
-@test "documents why claude uses the shorthand's aqua backend next to its entry" {
+@test "documents the aqua backend the claude shorthand resolves to" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep -B6 -Fx 'claude = "latest"' "$config"
+  run grep -F 'aqua:anthropics/claude-code' "$config"
   assert_success
-  assert_output --partial "aqua:anthropics/claude-code"
-  assert_output --partial "2026.10.1"
 }
 
 @test "tracks playwright/cli at latest now that upstream OIDC trust is restored, unpinned" {

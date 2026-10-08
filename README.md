@@ -378,8 +378,8 @@ chezmoi init <your-repo-or-local-path> --apply
 ### Claude Code autoupdater vs. mise
 
 Claude Code is installed by mise under the bare registry shorthand
-`claude`, which mise resolves to `aqua:anthropics/claude-code` (mise
-2026.10.1 and later; `mise tool claude` confirms). That installs the
+`claude`, which mise resolves to `aqua:anthropics/claude-code` (`mise
+tool claude` confirms; checked on mise 2026.10.1). That installs the
 upstream release binary with checksum verification, so there is no npm
 postinstall step and no `allow_builds` opt-in. Update it through mise
 (`mise upgrade claude`).
@@ -390,12 +390,13 @@ only that one key; any other settings already there are left
 untouched) — this whole reconciliation step is skipped, with no
 changes to `settings.json`, on systems where `mise` is unavailable.
 The setting keeps Claude Code's own background update check from
-installing a second copy next to the one mise manages.
+changing the installation mise manages.
 
 `DISABLE_AUTOUPDATER` disables only the background autoupdate check;
-manual `claude update` keeps working. The stronger `DISABLE_UPDATES`
-(which also blocks manual updates) is deliberately not used, so you can
-still update Claude Code by hand when needed.
+manual `claude update` is not blocked. The stronger `DISABLE_UPDATES`
+(which also blocks manual updates) is deliberately not used. On a
+mise-managed install, prefer `mise upgrade claude`: `claude update` is
+Claude Code's own updater, and mise does not control what it writes.
 
 A machine set up before the aqua install ran Claude Code from npm
 (`npm:@anthropic-ai/claude-code`). Claude Code's own background

@@ -316,8 +316,12 @@ remove_stray_claude_code_copy() {
   # fail closed if there is none.
   local managed_bin_path
   managed_bin_path="$(mise bin-paths claude 2>/dev/null | head -n1)" || managed_bin_path=""
-  if [ -z "${managed_bin_path}" ] || [ ! -x "${managed_bin_path}/claude" ] || ! "${managed_bin_path}/claude" --version >/dev/null 2>&1; then
-    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed claude install does not appear to work (${managed_bin_path:-no bin path}/claude --version failed); leaving the stray copy in place so 'claude' keeps working."
+  if [ -z "${managed_bin_path}" ]; then
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but 'mise bin-paths claude' returned nothing, so the mise-managed claude install does not appear to work; leaving the stray copy in place so 'claude' keeps working."
+    return 0
+  fi
+  if [ ! -x "${managed_bin_path}/claude" ] || ! "${managed_bin_path}/claude" --version >/dev/null 2>&1; then
+    echo "warn: found a stray @anthropic-ai/claude-code copy at ${stray_dir}, but the mise-managed claude install does not appear to work (${managed_bin_path}/claude --version failed); leaving the stray copy in place so 'claude' keeps working."
     return 0
   fi
 

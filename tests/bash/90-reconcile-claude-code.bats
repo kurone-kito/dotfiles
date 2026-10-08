@@ -85,6 +85,15 @@ exit 0
 MANAGEDCLAUDE
     chmod +x "$MANAGED_DIR/claude"
   fi
+  # The legacy install gets its own directory with a WORKING claude, so
+  # a script that consulted the legacy id would remove the stray copy.
+  LEGACY_DIR="$BATS_TEST_TMPDIR/legacy"
+  rm -rf "${LEGACY_DIR:?}"
+  if [ "$legacy_npm_healthy" = "1" ]; then
+    mkdir -p "$LEGACY_DIR"
+    printf '#!/bin/bash\necho "legacy-claude-version"\nexit 0\n' > "$LEGACY_DIR/claude"
+    chmod +x "$LEGACY_DIR/claude"
+  fi
   MISE_CALLS="$BATS_TEST_TMPDIR/mise-calls.log"
   : > "$MISE_CALLS"
   cat > "$BIN_DIR/mise" << MOCK
@@ -112,8 +121,8 @@ if [ "\$1" = "bin-paths" ] && [ "\$2" = "claude" ]; then
 fi
 if [ "$legacy_npm_healthy" = "1" ] && [ "\$2" = "npm:@anthropic-ai/claude-code" ]; then
   # A healthy legacy install that the script must not rely on.
-  if [ "\$1" = "where" ]; then echo "$MANAGED_DIR"; exit 0; fi
-  if [ "\$1" = "bin-paths" ]; then echo "$MANAGED_DIR"; exit 0; fi
+  if [ "\$1" = "where" ]; then echo "$LEGACY_DIR"; exit 0; fi
+  if [ "\$1" = "bin-paths" ]; then echo "$LEGACY_DIR"; exit 0; fi
 fi
 exit 1
 MOCK
@@ -560,7 +569,7 @@ REALNPM
 @test "stray copy present, managed dir resolves but claude does not work: stray copy left in place" {
   # Regression test: a resolvable mise-managed install directory alone
   # does not prove the managed 'claude' actually works -- an
-  # interrupted or failed npm-backend install can leave the directory
+  # interrupted or failed install can leave the directory
   # in place without a functional binary. The repair must not delete
   # the stray copy in that case (it could be the only working one).
   write_mise_mock 1 0
@@ -578,7 +587,7 @@ REALNPM
   # managed tool's bin directory to PATH but does not otherwise
   # isolate command lookup from the *existing* PATH -- so if the
   # managed install is missing its own 'claude' shim (a
-  # corrupted/partial npm install), it can silently fall through to
+  # corrupted/partial install), it can silently fall through to
   # and run the stray shim this function is about to delete instead,
   # report success, and delete the only copy that actually worked.
   # The npm global bin directory is realistically already on a real

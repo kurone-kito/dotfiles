@@ -4,8 +4,8 @@ node = "latest"
 pnpm = "latest"
 
 bat = "latest"
-# claude resolves to aqua:anthropics/claude-code (mise 2026.10.1 and
-# later; `mise tool claude` confirms). aqua installs the upstream release
+# claude resolves to aqua:anthropics/claude-code (`mise tool claude`
+# confirms; checked on mise 2026.10.1). aqua installs the upstream release
 # binary and verifies its checksum. It is tier 2; the npm package this
 # replaces is tier 4 and needs a postinstall opt-in to place the native
 # binary.

@@ -86,6 +86,21 @@ BeforeAll {
       }
     }
     $global:MockManagedBinDir = $managedBinDir
+    # The legacy install gets its own directory with a WORKING stub, so
+    # a script that consulted the legacy id would remove the stray copy.
+    $global:MockLegacyDir = $null
+    if ($LegacyNpmHealthy) {
+      $legacyDir = Join-Path (Split-Path -Parent $ManagedDir) 'legacy-install'
+      New-Item -ItemType Directory -Path $legacyDir -Force | Out-Null
+      $legacyClaude = Join-Path $legacyDir $claudeExeName
+      if ($IsWindows -ne $false) {
+        [System.IO.File]::WriteAllText($legacyClaude, "@echo off`r`necho legacy-claude-version`r`n", [System.Text.ASCIIEncoding]::new())
+      } else {
+        [System.IO.File]::WriteAllText($legacyClaude, "#!/bin/bash`necho legacy-claude-version`nexit 0`n", [System.Text.ASCIIEncoding]::new())
+        & chmod +x $legacyClaude
+      }
+      $global:MockLegacyDir = $legacyDir
+    }
 
     function global:mise {
       $a = $args
@@ -119,7 +134,7 @@ BeforeAll {
       }
       if ($global:MockLegacyNpmHealthy -and $a.Count -ge 2 -and $a[1] -eq 'npm:@anthropic-ai/claude-code' -and $a[0] -in @('where', 'bin-paths')) {
         # A healthy legacy install that the script must never consult.
-        Write-Output $global:MockManagedDir
+        Write-Output $global:MockLegacyDir
         $global:LASTEXITCODE = 0
         return
       }
@@ -129,7 +144,7 @@ BeforeAll {
 
   function global:Remove-TestMiseMock {
     Remove-Item Function:\mise -ErrorAction SilentlyContinue
-    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks, MockManagedBinDir, MockLegacyNpmHealthy, MockMiseCalls -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name MockNodeDir, MockManagedDir, MockManagedResolves, MockManagedWorks, MockManagedBinDir, MockLegacyNpmHealthy, MockLegacyDir, MockMiseCalls -Scope Global -ErrorAction SilentlyContinue
   }
 
   function global:Set-TestNpmPrefixMock {
@@ -513,6 +528,7 @@ Describe '90-reconcile-claude-code' {
       $tokens = $null
       $errors = $null
       $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:Fixture, [ref]$tokens, [ref]$errors)
+      @($errors).Count | Should -Be 0
       $fn = $ast.Find({
           param($node)
           $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
@@ -649,7 +665,7 @@ Describe '90-reconcile-claude-code' {
     It 'leaves the stray copy in place when the managed directory resolves but claude does not work' {
       # Regression test: a resolvable mise-managed install directory
       # alone does not prove the managed 'claude' actually works -- an
-      # interrupted or failed npm-backend install can leave the
+      # interrupted or failed install can leave the
       # directory in place without a functional binary. The repair
       # must not delete the stray copy in that case (it could be the
       # only working one).
@@ -670,7 +686,7 @@ Describe '90-reconcile-claude-code' {
       # the managed tool's bin directory to PATH but does not
       # otherwise isolate command lookup from the *existing* PATH --
       # so if the managed install is missing its own 'claude' shim (a
-      # corrupted/partial npm install), it can silently fall through
+      # corrupted/partial install), it can silently fall through
       # to and run the stray shim this function is about to delete
       # instead, report success, and delete the only copy that
       # actually worked. The npm global bin directory is realistically
@@ -874,6 +890,25 @@ Describe '90-reconcile-claude-code' {
       }
     }
 
+    It 'runs claude.exe first and does not fall through to claude.cmd when claude.exe cannot run' {
+      Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir
+      # A text file is not a runnable claude.exe, and the working
+      # claude.cmd stub sits next to it: the first candidate that
+      # exists is the one that is run.
+      [System.IO.File]::WriteAllText((Join-Path $script:ManagedDir 'claude.exe'), 'not an executable', [System.Text.ASCIIEncoding]::new())
+      $strayDir = Write-TestStrayCopy
+      $shims = @('claude.cmd', 'claude.ps1', 'claude') | ForEach-Object { Join-Path $script:NpmPrefixDir $_ }
+
+      $output = & $script:Fixture *>&1 | Out-String
+      $LASTEXITCODE | Should -Be 0
+      $output | Should -Match 'does not appear to work'
+      $output | Should -Match 'leaving the stray copy in place'
+      $strayDir | Should -Exist
+      foreach ($shim in $shims) {
+        $shim | Should -Exist
+      }
+    }
+
     It 'leaves the stray copy and shims in place when the managed directory resolves but claude does not work' {
       Set-TestMiseMock -NodeDir $script:NodeDir -ManagedDir $script:ManagedDir -ManagedWorks $false
       $strayDir = Write-TestStrayCopy
@@ -894,7 +929,7 @@ Describe '90-reconcile-claude-code' {
       # the managed tool's bin directory to PATH but does not
       # otherwise isolate command lookup from the *existing* PATH --
       # so if the managed install is missing its own 'claude' shim (a
-      # corrupted/partial npm install), it can silently fall through
+      # corrupted/partial install), it can silently fall through
       # to and run the stray shim this function is about to delete
       # instead, report success, and delete the only copy that
       # actually worked. The npm global prefix directory is

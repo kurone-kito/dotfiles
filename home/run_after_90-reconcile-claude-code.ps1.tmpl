@@ -375,11 +375,13 @@ function Resolve-MiseNpmPrefix {
 function Get-ManagedClaudeExecutableName {
   # Ordered names to look for in the directory `mise bin-paths claude`
   # resolves. The aqua release puts the binary directly in that
-  # directory; on Windows it is the zip's claude.exe, and claude.cmd is
-  # the legacy npm shim name. The extensionless POSIX shim is not
-  # directly invokable from Windows, so it is deliberately not a
-  # candidate there. The Windows executable name has not been
-  # confirmed on Windows hardware: a wrong guess only fails closed
+  # directory; on Windows the release zip holds a single root
+  # claude.exe. claude.cmd is only a fallback for a shim-style layout
+  # (the tests use it as their runnable stub). The extensionless POSIX
+  # shim is not directly invokable from Windows, so it is deliberately
+  # not a candidate there. The first candidate that exists is the one
+  # that is run. What `mise bin-paths claude` prints on Windows has not
+  # been confirmed on Windows hardware: a wrong guess only fails closed
   # (nothing is removed).
   param([bool] $WindowsHost = ($IsWindows -ne $false))
   if ($WindowsHost) {
