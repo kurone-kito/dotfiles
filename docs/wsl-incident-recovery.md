@@ -5,7 +5,7 @@ description: Manual SSH checkpoint and evidence-preserving recovery runbook for 
 tags: [wsl, ssh, recovery, diagnostics]
 ---
 
-<!-- cspell:words wslconfig -->
+<!-- cspell:words wslconfig YYYYMMDDTHHMMSSZ -->
 
 # WSL incident recovery runbook
 
@@ -120,10 +120,12 @@ time without ending it. With no equivalent at all, use another client that has
 one, or the local console. If neither exists, run only the collector start,
 because its own `-DurationSeconds` ends the run and is the one bound that does
 not depend on the client, write `not preserved: no bounded client` for the
-copy of the state files, and skip every other call. While the connection stays
-up, nothing but that duration bounds a start that hangs on the host, so treat a
-call still open one minute past its duration as failed and note the client
-process the same way.
+copy of the state files, and skip every other call. The duration is checked
+only once sampling begins, so a start that stalls before its first sample, on
+the state directory, the lock, or the log folder, has no bound: the keepalive
+does not end a command that hangs on the host. Treat a call still open one
+minute past its duration as failed, note the client process the same way, and
+accept that risk.
 
 The first check below shows the wrapped form:
 
@@ -149,15 +151,16 @@ an IDD worktree recovery. It is a new directory on a host volume, which the
 guest reaches as `/mnt/<drive>/...`, outside every worktree and outside `/tmp`
 (a restart can clear `/tmp`, and it sits on the guest's own disk image). Create
 it before an incident, readable by your account only. While healthy, check
-that the guest can create and remove a file there and that only your account
-has access (`icacls <path>` on the host lists who does), instead of assuming
-it. Each of the three stands for one
-absolute path on a local volume that is not synchronized or shared, for
-example under `C:\Users\<host-user>`. Choose paths with no spaces and no
-characters a shell treats specially, so the commands need no extra quoting.
-Use the same absolute form in every command, in the spelling of the shell that
-runs it (`C:\Users\...` on the host, `/mnt/c/Users/...` in the guest), because
-a relative path resolves against each session's current directory.
+that the guest can create and remove a file there and that no other ordinary
+account has access (`icacls <path>` on the host lists who does; the system and
+administrator accounts are inherited and expected), instead of assuming it.
+Each of the three stands for one absolute path on a local volume that is not
+synchronized or shared, for example under `C:\Users\<host-user>`. Choose paths
+with no spaces and no characters a shell treats specially, so the commands need
+no extra quoting. Use the same absolute form in every command, in the spelling
+of the shell that runs it (`C:\Users\...` on the host, `/mnt/c/Users/...` in
+the guest), because a relative path resolves against each session's current
+directory.
 
 Then confirm each of these. No checkpoint exists yet, so keep a private note
 of the date and the cap and copy it into the first checkpoint:
@@ -220,11 +223,12 @@ of the date and the cap and copy it into the first checkpoint:
    leaves that one delta `unavailable`. A partial reading still counts as
    working, and its `guest.error` reads `provider-unavailable`, as a pending
    record's does (see fixture 2): the collector fills that value for any status
-   other than `ok` that comes with no listed error. The probe runs `$HOME/.local/bin/wsl-incident-guest-snapshot`
-   inside the distribution through `/bin/sh`, and that helper needs `bash`.
-   Only a chezmoi apply inside the distribution on Linux places it, so a
-   missing or non-executable helper shows up here as `guest.error`
-   `guest-output-invalid`. Fix that now, as its own change.
+   other than `ok` or `timeout` that comes with no listed error. The probe runs
+   `$HOME/.local/bin/wsl-incident-guest-snapshot` inside the distribution
+   through `/bin/sh`, and that helper needs `bash`. Only a chezmoi apply inside
+   the distribution on Linux places it, so a missing or non-executable helper
+   shows up here as `guest.error` `guest-output-invalid`. Fix that now, as its
+   own change.
 
 5. Read the machine's effective memory cap. Open the effective
    `%UserProfile%\.wslconfig` on the host, not this repository's source file,
@@ -232,6 +236,13 @@ of the date and the cap and copy it into the first checkpoint:
    `default (key absent)`. Do not edit the file. Put the value in your private
    note, and copy it into the checkpoint's `effective-memory-cap` line when you
    write the checkpoint.
+
+6. The listing of outstanding `wsl.exe` processes runs from a noninteractive
+   session. Save the snippet from
+   [Responsive guest and outstanding calls](#responsive-guest-and-outstanding-calls)
+   as `list-wsl-processes.ps1` in `<private-scratch-dir>`, and run it in the
+   same wrapped `-File` form as step 1. It prints a process id and a creation
+   time for each running `wsl.exe`, and nothing when there is none.
 
 If any step fails while healthy, fix it then, as its own change. Do not
 discover it for the first time during an incident.
@@ -278,11 +289,13 @@ Before any new run, read both files if they exist, without editing or
 deleting them, as a child job with a wait timeout, as the ground rules say for
 any host-side file read. Then copy each one, byte for byte, as the same kind
 of child job, before the start. First create a new folder for that run under
-`<private-preserve-dir>` with `New-Item -ItemType Directory`, which fails if
-the folder exists, so no earlier copy is overwritten. Then copy each file to
-an explicit name inside it, for example
+`<private-preserve-dir>` with `New-Item -ItemType Directory -ErrorAction Stop`,
+which fails if the folder exists, so no earlier copy is overwritten. If it
+reports an error, stop, choose a new name, and copy nothing. Then copy each
+file to an explicit name inside it, for example
 `Copy-Item -LiteralPath <file> -Destination <folder>\<file-name>`, and check
-that `Get-FileHash` gives the same value for the original and the copy. Copy a
+that `Get-FileHash` gives the same value for the original and the copy; if the
+values differ, record `not preserved: copy mismatch` for that file. Copy a
 file that fails to parse too. The collector replaces an
 unparseable `inhibitions.json`, and any entry whose source it does not know or
 whose process identity is unusable, with a placeholder entry (source `*`,
@@ -292,8 +305,9 @@ what you find, with the time you read it, in the
 `telemetry-runs` list, so each run keeps its own reading: for
 `inhibitions.json`, the number of entries and each one's source and whether it
 has a usable process identity, or `unparseable` for a file that fails to
-parse; for the lock metadata, its `processId`, `startTimeTicks`, and `runId`;
-for `copy`, the folder holding the copies, or `not preserved: reason`. The
+parse; for the lock metadata, its `processId`, `startTimeTicks`, and `runId`,
+or `unparseable`; for `copy`, the folder holding the copies, or
+`not preserved: reason`. The
 per-user lock is shared across output directories too, so a probe with a
 scratch directory still answers `already-running`.
 
@@ -461,23 +475,26 @@ timeout 15 ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=1
 ```
 
 Never send a `wsl.exe` command to a distribution that is not known to be
-running, because it starts a stopped one. No answer inside the bound means the
-guest is unavailable (row B). It is not a reason to retry.
+running, because it starts a stopped one. Prefer guest SSH: the `wsl.exe` form
+is itself a `wsl.exe` call that can hang, so run it once and count it as
+outstanding if it does not return. No answer inside the bound means the guest
+is unavailable (row B). It is not a reason to retry.
 
 To list the outstanding `wsl.exe` processes without their command lines, which
 can hold private names, run this on the host:
 
 ```powershell
-Get-Process -Name wsl | Select-Object Id, @{ n = 'CreationTimeUtc'; e = { $_.StartTime.ToUniversalTime().ToString('o') } }
+Get-Process -Name wsl -ErrorAction SilentlyContinue | Select-Object Id, @{ n = 'CreationTimeUtc'; e = { $_.StartTime.ToUniversalTime().ToString('o') } }
 ```
 
-Run it in a PowerShell session on the host. Over SSH, save it beforehand as a
-short script in `<private-scratch-dir>` and run it with `-File`, as the other
-examples do, because the local shell would expand the `$_` in a one-line
-command. `Get-Process` shows no arguments and changes nothing. It lists every
-`wsl.exe` on the host, including an interactive shell the operator opened, so
-note only the processes this incident started or that began after the first
-symptom, and end none of them (see the ground rules).
+Run it in a PowerShell session on the host. Over SSH, save it beforehand as
+`list-wsl-processes.ps1` in `<private-scratch-dir>` (healthy-time step 6 does
+this) and run it with `-File`, as the other examples do, because the local
+shell would expand the `$_` in a one-line command. `Get-Process` shows no
+arguments and changes nothing. It lists every `wsl.exe` on the host, including
+an interactive shell the operator opened, so note only the processes this
+incident started or that began after the first symptom, and end none of them
+(see the ground rules).
 
 ## Checkpoint
 
@@ -498,9 +515,9 @@ telemetry-runs: <none | a list, one entry per collector run>
     state-before-start: <read before this run, with the time you read it>
       inhibitions: <absent | unparseable | N entries, each with its source and
         whether it has a usable process identity>
-      lock-metadata: <absent | processId, startTimeTicks, runId>
+      lock-metadata: <absent | unparseable | processId, startTimeTicks, runId>
       copy: <folder under the preserve directory with byte-for-byte copies of
-        both files | not preserved: reason>
+        the files that exist | not preserved: reason>
 access-validated: <date> via <host SSH | local console>
 effective-memory-cap: <value read while healthy; never changed by recovery>
 repository: <owner>/<name>
@@ -580,18 +597,20 @@ identify and hand off the checkpoint, and no check reads them.
   the ground rules already require.
 - **Uncommitted work.** Preserve by copying, never by stashing or resetting.
   Each capture goes into its own new folder, `<capture-dir>`, which is
-  `<private-preserve-dir>/<utc-stamp>-<worktree-name>`. A repeat capture or a
-  second worktree therefore never overwrites an earlier good copy, and
-  discarding a failed output (below) discards only that capture's own. Create
-  it with a plain `mkdir`, which fails if the folder exists, and never reuse a
-  name. Every command below writes to an absolute path there. Write the tracked
-  changes, staged and unstaged, then list the untracked files with NUL
-  separators, because the default output quotes a name that has a newline or a
-  quote in it, and copy exactly the listed files with a NUL-aware `tar`. The
-  `-C` option must come before `-T`:
+  `<private-preserve-dir>/<utc-stamp>-<worktree-name>`. Write `<utc-stamp>` as
+  `YYYYMMDDTHHMMSSZ`, with no colons, and `<worktree-name>` as the worktree's
+  directory name. A repeat capture or a second worktree therefore never
+  overwrites an earlier good copy, and discarding a failed output (below)
+  discards only that capture's own. Create the folder first with a plain
+  `mkdir "<capture-dir>"`, which fails if it exists. If it reports an error,
+  stop, choose a new name, and run nothing below. Every command below writes
+  to an absolute path there. Write the tracked changes, staged and unstaged,
+  then list the untracked files with NUL separators, because the default
+  output quotes a name that has a newline or a quote in it, and copy exactly
+  the listed files with a NUL-aware `tar`. The `-C` option must come before
+  `-T`:
 
   ```sh
-  mkdir "<capture-dir>"
   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
     diff HEAD --binary > "<capture-dir>/tracked.diff"
   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
@@ -601,15 +620,18 @@ identify and hand off the checkpoint, and no check reads them.
   ```
 
   The top-level commands do not recurse into initialized submodules. List them
-  with `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`, and
-  repeat the diff and both listing commands with
-  `-C "<worktree>/<submodule-path>"` for each one, giving every output a name
-  of its own in the same folder (for example `sub1-tracked.diff`,
-  `sub1-untracked.nul`, and `sub1-ignored.nul`). A submodule you cannot capture
-  is recorded as `not preserved: submodule <path>`. Ignored files are not in
-  either output, yet they can hold work you cannot recreate, such as local
-  agent or editor settings. In the worktree and each submodule, list them into
-  a NUL-delimited file, and show an escaped, numbered form for reading:
+  with `timeout -k 5 30 git -C "<worktree>" submodule status --recursive`,
+  saving the output as `<capture-dir>/submodules.txt`, and repeat the diff, the
+  two listings, and the archives for each one with
+  `-C "<worktree>/<submodule-path>"`, in `git` and in `tar` alike, so its
+  relative paths resolve there. Give every output a name of its own in the same
+  folder: `subN-tracked.diff`, `subN-untracked.nul`, `subN-untracked.tar`,
+  `subN-ignored.nul`, `subN-ignored-selected.nul`, and `subN-ignored.tar`,
+  where `N` is the submodule's line in `submodules.txt`. A submodule you cannot
+  capture is recorded as `not preserved: submodule <path>`. Ignored files are
+  not in either output, yet they can hold work you cannot recreate, such as
+  local agent or editor settings. In the worktree and each submodule, list them
+  into a NUL-delimited file, and show an escaped, numbered form for reading:
 
   ```sh
   timeout -k 5 60 git -C "<worktree>" --no-optional-locks \
@@ -797,7 +819,8 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
 
    Run the helper from inside the clone, as the subshell does, but not in the
    incident worktree. `<clone-dir>` is the primary worktree, the first entry of
-   the `git worktree list` output in check 2. The helper's worktree-occupancy
+   the `git worktree list` output in check 2, or another worktree of the clone
+   when the incident worktree is the primary one. The helper's worktree-occupancy
    probe runs `git worktree list` in the current directory, and outside a clone
    the probe comes back unreadable, which fails the check. `--worktree` already
    points the owner-evidence reads at the incident worktree, so the directory
@@ -938,9 +961,12 @@ checkpoint's `unended-processes` list, says what that call is (a read-only
 listing or probe, or an earlier terminate), and accepts that the new call can
 hang the same way. Or it skips both branches and goes to
 [Reboot the host](#reboot-the-host), which needs no `wsl.exe` call. An operator
-who cannot say what an outstanding call is takes the second way. An
-authorization that does neither does not allow the call, and the agent never
-chooses between them.
+who cannot say what an outstanding call is cannot authorize terminate or
+shutdown. They can wait, or authorize the reboot branch separately. An
+authorization that names an outstanding call also covers the read-only
+`wsl.exe --list` calls the branch needs for its prerequisites and failure
+checks. An authorization that does neither does not allow the call, and the
+agent never chooses between them.
 
 #### Stop an active collector run
 
@@ -1027,8 +1053,9 @@ chooses between them.
   running, and no earlier `wsl.exe` call of this incident is still
   outstanding unless the authorization names it (see **Outstanding `wsl.exe`
   calls** above).
-- **If it fails:** the command does not return by the deadline, or the
-  distribution is still listed as running. A call that has not returned stays
+- **If it fails:** the command does not return by the deadline, or, once it
+  has returned, the distribution is still listed as running. A call that has
+  not returned stays
   outstanding, so run no further `wsl.exe` command, including the shutdown
   branch, until it ends. Record it, and let the operator decide between
   waiting, a new authorization that names this call, and a branch that needs
@@ -1116,11 +1143,13 @@ chooses between them.
   with the operator. When the target is a linked worktree, run it from the
   primary worktree, never from the target. The authorization names
   `--preserve-dir "<private-preserve-dir>/worktree-recovery-<utc-stamp>"`, a
-  directory that does not exist yet. The helper creates it, only when it has
-  something to copy, and refuses an existing one, so a retry needs a new name.
-  As a child of the private folder it is outside the worktree and outside
-  `/tmp`, and readable by your account only. Without the flag the helper copies
-  into a temporary directory. Record the path in the checkpoint's
+  directory that does not exist yet. The helper creates it during `--apply`,
+  before it removes the worktree, and refuses an existing one, so a retry after
+  a failed linked-worktree attempt needs a new name. To resume an interrupted
+  recovery of the primary worktree, pass the recorded directory again or omit
+  the flag. As a child of the private folder it is outside the worktree and
+  outside `/tmp`, and readable by your account only. Without the flag the
+  helper copies into a temporary directory. Record the path in the checkpoint's
   `worktree-recovery-preserve-dir` line before the run, and pass the same
   `--preserve-dir` to the dry-run, so the plan the operator reviews names the
   real destination. Only then pass `--operator-confirmed-no-live-session`, an
@@ -1195,8 +1224,8 @@ Shape A: the guest probe itself hangs.
 
 A `pending` guest record, a probe still in flight, carries
 `provider-unavailable` in `guest.error`, and so does a `partial` one, because
-the collector fills that value for any status other than `ok` that comes with
-no listed error. It is not a provider failure.
+the collector fills that value for any status other than `ok` or `timeout`
+that comes with no listed error. It is not a provider failure.
 
 Shape B: the read-only running-state check hangs first, so no probe starts.
 
