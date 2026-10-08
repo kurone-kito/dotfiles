@@ -197,9 +197,9 @@ upstream.
 (`aqua:neovim/neovim`), so the bare `neovim` shorthand resolves to
 `vfox`, not the precompiled-binary `aqua` entry this repository
 investigated — the config pins the backend explicitly for that
-reason. `ollama`, `starship`, and `tmux`'s bare shorthands do resolve
-to their intended `aqua` backends (`mise tool <name>` confirms each),
-so those stay unprefixed to match this file's existing style.
+reason. `claude`, `ollama`, `starship`, and `tmux`'s bare shorthands do
+resolve to their intended `aqua` backends (`mise tool <name>` confirms
+each), so those stay unprefixed to match this file's existing style.
 
 ### Always-here
 
@@ -209,7 +209,7 @@ did not "move," they were only ever defined here:
 `pnpm`, `github:d-kuro/gwq` (gwq), `aqua:anomalyco/opencode`,
 `aqua:google-antigravity/antigravity-cli`, `aqua:nektos/act`,
 `aqua:supabase/cli`, `grok`, `gitlab:gitlab-org/cli`,
-`npm:@anthropic-ai/claude-code`, `npm:@bitwarden/cli`, `codex`,
+`claude`, `npm:@bitwarden/cli`, `codex`,
 `npm:@executeautomation/playwright-mcp-server`,
 `npm:@microsoft/inshellisense`, `npm:@playwright/cli`,
 `npm:bash-language-server`, `npm:fast-cli`.

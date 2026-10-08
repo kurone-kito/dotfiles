@@ -377,68 +377,63 @@ chezmoi init <your-repo-or-local-path> --apply
 
 ### Claude Code autoupdater vs. mise
 
-When `mise` is on `PATH`, `chezmoi apply` sets
+Claude Code is installed by mise under the bare registry shorthand
+`claude`, which mise resolves to `aqua:anthropics/claude-code` (mise
+2026.10.1 and later; `mise tool claude` confirms). That installs the
+upstream release binary with checksum verification, so there is no npm
+postinstall step and no `allow_builds` opt-in. Update it through mise
+(`mise upgrade claude`).
+
+When `mise` is on `PATH`, `chezmoi apply` also sets
 `env.DISABLE_AUTOUPDATER = "1"` in `~/.claude/settings.json` (merging
 only that one key; any other settings already there are left
 untouched) — this whole reconciliation step is skipped, with no
 changes to `settings.json`, on systems where `mise` is unavailable.
-This is necessary because Claude
-Code's own background autoupdater runs `npm install -g
-@anthropic-ai/claude-code@latest` against whatever `npm` is currently
-active, which resolves to mise-managed Node.js's own global install
-location — not the isolated copy mise manages at
-`npm:@anthropic-ai/claude-code`. Left unchecked, the autoupdater writes
-a second, mise-invisible copy of `@anthropic-ai/claude-code` directly
-into that global install location — wherever the mise-managed `npm`
-itself reports as its configured prefix (`npm config get prefix`),
-resolved on both POSIX and Windows rather than assumed to equal the
-Node.js install directory, since a user-level `.npmrc` or
-`NPM_CONFIG_PREFIX` can override it on either platform, and npm's
-Windows default (`%AppData%\npm`) diverges from the Node.js install
-directory even without any override — and PATH ordering makes that
-stray copy win over the mise-managed one — so `claude --version` and
-`mise ls --current` can silently disagree. The same `chezmoi apply`
-also detects and removes that stray copy when it finds one, but only
-once the mise-managed `npm:@anthropic-ai/claude-code` copy is
-confirmed present, resolvable, and actually runs (`claude --version`
-succeeds through it), so a repair can never leave `claude`
-non-functional. If the npm prefix itself cannot be resolved, the
-stray-copy check is skipped entirely rather than guessing a path.
+The setting keeps Claude Code's own background update check from
+installing a second copy next to the one mise manages.
 
 `DISABLE_AUTOUPDATER` disables only the background autoupdate check;
 manual `claude update` keeps working. The stronger `DISABLE_UPDATES`
 (which also blocks manual updates) is deliberately not used, so you can
 still update Claude Code by hand when needed.
 
-`home/dot_config/mise/config.toml`'s `npm:@anthropic-ai/claude-code`
-entry also sets `allow_builds = ["@anthropic-ai/claude-code"]`. mise's
-npm backend now installs through its embedded `aube` installer by
-default, which — unlike the npm CLI — does not run a dependency's
-lifecycle scripts unless the package is explicitly allow-listed.
-Without that opt-in, `@anthropic-ai/claude-code`'s `postinstall` never
-runs, so the platform-native `claude` binary is never placed over the
-placeholder `bin/claude.exe` the package ships, and `claude` cannot
-start at all.
+A machine set up before the aqua install ran Claude Code from npm
+(`npm:@anthropic-ai/claude-code`). Claude Code's own background
+autoupdater ran `npm install -g @anthropic-ai/claude-code@latest`
+against whatever `npm` is currently active, which resolves to
+mise-managed Node.js's own global install location — not the isolated
+copy mise manages. Left unchecked, the autoupdater wrote a second,
+mise-invisible copy of `@anthropic-ai/claude-code` directly into that
+global install location — wherever the mise-managed `npm` itself
+reports as its configured prefix (`npm config get prefix`), resolved on
+both POSIX and Windows rather than assumed to equal the Node.js install
+directory, since a user-level `.npmrc` or `NPM_CONFIG_PREFIX` can
+override it on either platform, and npm's Windows default
+(`%AppData%\npm`) diverges from the Node.js install directory even
+without any override — and PATH ordering makes that stray copy win over
+the mise-managed one — so `claude --version` and `mise ls --current` can
+silently disagree. The same `chezmoi apply` still detects and removes
+that stray copy when it finds one, but only once the mise-managed
+`claude` install is confirmed present, resolvable, and actually runs
+(its own executable, found through `mise bin-paths claude` rather than
+whatever `claude` comes first on `PATH`, answers `--version`), so a
+repair can never leave `claude` non-functional. If the npm prefix
+itself cannot be resolved, the stray-copy check is skipped entirely
+rather than guessing a path.
 
-An install that predates this opt-in is stuck with that broken
-placeholder: `mise install` treats an already-installed version as
-done and does not rebuild it just because a tool option changed, so
-the broken install has to be removed and reinstalled explicitly:
+A machine that installed the old npm entry still holds that
+mise-managed install on disk after the config stops listing it. It does
+no harm, and you can remove it once:
 
 ```bash
 mise uninstall "npm:@anthropic-ai/claude-code" --all
-mise install "npm:@anthropic-ai/claude-code"
-mise reshim
 ```
 
-Run this once per existing machine after updating to a `config.toml`
-that carries the `allow_builds` opt-in. On Windows, `cmd.exe` requires
-the double-quoted form exactly as shown — it has no single-quote
-string syntax at all and passes `'...'` through literally instead of
-stripping the quotes, breaking the command. PowerShell tolerates
-either quote style here, but keep the double quotes anyway so these
-commands stay copy-paste-safe across bash, PowerShell, and `cmd.exe`
-alike.
+Keep the double quotes. On Windows, `cmd.exe` has no single-quote string
+syntax at all and passes `'...'` through literally instead of stripping
+the quotes, breaking the command; PowerShell tolerates either quote
+style, but double quotes keep the command copy-paste-safe across bash,
+PowerShell, and `cmd.exe` alike.
 
 ## Testing
 
