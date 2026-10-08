@@ -435,7 +435,7 @@ MOCK
 @test "does not prefix a backend onto the registry short names" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex|claude-code)"|^"[a-z]+:cli/cli"' "$config"
+  run grep -Eq '^"[a-z]+:([^"]*/)?(bat|gh|ghq|worktrunk|copilot|copilot-cli|codex|claude|claude-code)"|^"[a-z]+:cli/cli"' "$config"
   assert_failure 1
 }
 
