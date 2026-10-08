@@ -176,7 +176,10 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    `overflow` and `error` `record-size-limit` has no host or guest block at all;
    treat it as a gap.
    **Eligible samples** are the records of the window other than the first
-   record and the gaps. For a guest indicator they are the records of one probe
+   record, the gaps, and any record whose measurement interval began before the
+   window: a host sample whose `sampleIntervalSeconds` reaches back past the
+   start, a guest delta whose interval does, and a `psi` `avg60` reading taken in
+   the first 60 seconds. For a guest indicator they are the records of one probe
    attempt each: every record except those whose `guest.error` is
    `probe-interval` or `not-requested`, and those whose `guest.status` is
    `pending`. A failed attempt is eligible, and unknown. A **guest stall
