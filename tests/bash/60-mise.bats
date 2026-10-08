@@ -451,7 +451,9 @@ MOCK
   run grep -Eq '^bitwarden[[:space:]]*=' "$config"
   assert_failure 1
 
-  run grep -Eq '^"(aqua|github|gitlab|ubi|asdf|vfox|cargo|go|http|packslip):[^"]*bitwarden[^"]*"' "$config"
+  # Every key that mentions bitwarden must be exactly the npm entry, so a
+  # second bitwarden key under any other backend prefix is caught.
+  run bash -c 'grep -E "^\"[^\"]*bitwarden" "$1" | grep -vFx "\"npm:@bitwarden/cli\" = \"latest\""' _ "$config"
   assert_failure 1
 }
 

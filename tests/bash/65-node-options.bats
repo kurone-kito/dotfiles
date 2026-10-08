@@ -38,6 +38,8 @@ ABSENT_FIXTURES=(
   "--require 'single quoted'"
   "--require=\"a b.js\""
   "\"\""
+  " "
+  "--require \"/tmp/日本語 é/x.js\""
   $'--max-old-space-size=1\t'"$OPTION=3"
   "--require \"a\\\"b\" --max-old-space-size=1"
 )
@@ -167,6 +169,8 @@ login_options() {
       run --separate-stderr "${launcher[@]}" ZDOTDIR="$ZDOTDIR" zsh -li -c 'printf "%s" "$NODE_OPTIONS"'
       ;;
   esac
+  # An empty NODE_OPTIONS must mean "left untouched", never "the shell broke".
+  [ "$status" -eq 0 ] || fail "$shell_name login shell failed ($status): $stderr"
 }
 
 # Startup must not say anything about the option, the probe, or the mock.
@@ -332,6 +336,43 @@ assert_quiet_startup() {
   assert_output "$DEFAULT"
 }
 
+@test "bash: an unexported NODE_OPTIONS is honored and not duplicated" {
+  run env -u NODE_OPTIONS sh -c 'NODE_OPTIONS="$1"; . "$2"; printf "%s" "$NODE_OPTIONS"' \
+    _ "$OPTION=5000" "$SCRIPT"
+  assert_success
+  assert_output "$OPTION=5000"
+
+  run env -u NODE_OPTIONS sh -c \
+    'NODE_OPTIONS=--max-old-space-size=1; . "$1"; sh -c "printf %s \"\$NODE_OPTIONS\""' _ "$SCRIPT"
+  assert_success
+  assert_output "--max-old-space-size=1 $DEFAULT"
+}
+
+@test "bash: sourcing under set -eu never aborts the caller" {
+  local mode
+  for mode in ok unsupported fail; do
+    export NODE_MOCK_MODE=$mode
+    run env -u NODE_OPTIONS sh -eu -c '. "$1"; printf "done:%s" "${NODE_OPTIONS-}"' _ "$SCRIPT"
+    [ "$status" -eq 0 ] || fail "sh -eu aborted with node mode $mode: $output"
+    run env NODE_OPTIONS='--max-old-space-size=4096' bash -eu -c \
+      '. "$1"; printf "done:%s" "${NODE_OPTIONS-}"' _ "$SCRIPT"
+    [ "$status" -eq 0 ] || fail "bash -eu aborted with node mode $mode: $output"
+  done
+
+  export NODE_MOCK_MODE=ok
+  run env -u NODE_OPTIONS sh -eu -c '. "$1"; printf "%s" "${NODE_OPTIONS-}"' _ "$SCRIPT"
+  assert_success
+  assert_output "$DEFAULT"
+}
+
+@test "bash: a user-owned conf.d file that sorts first keeps its own value" {
+  printf 'export NODE_OPTIONS="%s=5000"\n' "$OPTION" \
+    > "$HOME/.config/shell/conf.d/64-node-options-local.sh"
+
+  login_options bash __unset__
+  assert_output "$OPTION=5000"
+}
+
 # ---------------------------------------------------------------------------
 # zsh: the same contract through the zsh startup files
 # ---------------------------------------------------------------------------
@@ -424,6 +465,24 @@ assert_quiet_startup() {
   login_options zsh __unset__
   assert_success
   assert_output "$DEFAULT"
+}
+
+@test "zsh: a nested interactive shell keeps one copy" {
+  require_zsh
+
+  run --separate-stderr env -u NODE_OPTIONS ZDOTDIR="$ZDOTDIR" zsh -li -c \
+    'zsh -i -c "printf %s \"\$NODE_OPTIONS\""'
+  assert_success
+  assert_output "$DEFAULT"
+}
+
+@test "zsh: a user-owned conf.d file that sorts first keeps its own value" {
+  require_zsh
+  printf 'export NODE_OPTIONS="%s=5000"\n' "$OPTION" \
+    > "$HOME/.config/shell/conf.d/64-node-options-local.sh"
+
+  login_options zsh __unset__
+  assert_output "$OPTION=5000"
 }
 
 # ---------------------------------------------------------------------------
