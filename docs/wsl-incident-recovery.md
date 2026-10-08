@@ -1207,9 +1207,10 @@ agent never chooses between them.
   to resume, the helper copies into a temporary directory. Record the path in
   the checkpoint's `worktree-recovery-preserve-dir` line before the run, and
   pass the same `--preserve-dir` to the dry-run, so the plan the operator
-  reviews names the real destination. Only then pass `--operator-confirmed-no-live-session`, an
-  attestation the operator authorizes after seeing the evidence and which is
-  required for any mutation, and `--apply`.
+  reviews names the real destination. Only then pass
+  `--operator-confirmed-no-live-session`, an attestation the operator
+  authorizes after seeing the evidence and which is required for any mutation,
+  and `--apply`.
 - **If it fails:** the helper reports a block or a verdict that is not
   ready, a claim or lock check disagrees, or `--apply` refuses because the
   platform lacks the secure-copy support it needs (native Windows Node is the
