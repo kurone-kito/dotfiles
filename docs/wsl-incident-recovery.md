@@ -647,12 +647,15 @@ identify and hand off the checkpoint, and no check reads them.
   `not preserved: submodule <path>`. Ignored files are not in either output,
   yet they can hold work you cannot recreate, such as local agent or editor
   settings. In the worktree and each submodule, list them into a NUL-delimited
-  file, and show an escaped, numbered form for reading:
+  file, and show an escaped, numbered form for reading. These commands run in
+  the guest, a Linux distribution, where GNU `sed` and GNU `tar` are the
+  defaults; `sed -z` and `tar --null -T` are GNU options, so on a system with
+  BSD tools install the GNU ones first, while healthy:
 
   ```sh
   timeout -k 5 60 sh -c 'git -C "$1" --no-optional-locks ls-files -z --others --ignored --exclude-standard --directory > "$2"' \
     sh "<worktree>" "<capture-dir>/ignored.nul"
-  timeout -k 5 30 sh -c 'sed -z "$1" "$2" > "$3"' \
+  timeout -k 5 30 sh -c 'sed -z -e "$1" "$2" > "$3"' \
     sh 's/\\/\\\\/g; s/\n/\\n/g; s/[[:cntrl:]]/?/g' "<capture-dir>/ignored.nul" "<capture-dir>/ignored-escaped.nul"
   timeout -k 5 30 sh -c 'tr "\0" "\n" < "$1" | cat -n' sh "<capture-dir>/ignored-escaped.nul"
   ```
