@@ -130,10 +130,12 @@ The guest counter names are `pgscan_kswapd`, `pgscan_direct`,
 `workingset_refault_anon`, `workingset_refault_file`, `pswpin`, `pswpout`,
 `pgfault`, and `pgmajfault`. A kernel reports the refault counter either as the
 single `workingset_refault` line or as the split `_anon` and `_file` pair, and
-the record carries each under the kernel's own name: `workingset_refault` is
-null on a split kernel, and the two split counters are null on a kernel with the
-single line. The paging rates are the collector's names for Windows performance
-counters; this guide uses them only as indicators relative to a baseline.
+the record carries each under the kernel's own name. A split kernel has no
+`workingset_refault` line, so that field is empty and the refault value is in
+`workingset_refault_file`; a kernel with the single line leaves the two split
+fields empty. The paging rates are the collector's names for Windows
+performance counters; this guide uses them only as indicators relative to a
+baseline.
 "Commit headroom" is not a field: derive it as `commitLimitBytes` minus
 `committedBytes` (or as their ratio) and label it derived.
 
@@ -254,20 +256,25 @@ the record. Do not drop an indicator later because it is inconvenient.
    records carry no guest CPU or I/O pressure. It reads the refault counter by
    exact name, as the single `workingset_refault` line and as the split
    `workingset_refault_anon` and `workingset_refault_file` lines, and reports
-   whichever the kernel has; it never sums them. A record with neither is
-   `partial` with the error `provider-unavailable`, and so is a record from a
-   helper that predates the split counters when it runs on a split kernel. A
+   whichever the kernel has; it never sums them. A record without the single
+   line and without both split lines is `partial` with the error
+   `provider-unavailable`, and so is a record from a helper that predates the
+   split counters when it runs on a split kernel. A
    collector that predates them drops the split names, so its record can read
    `ok` with no refault value at all: `guest.status` alone does not show that a
    refault indicator is known, so judge by field presence (rule 2). A record
    without a refault value is still usable for every field that is known; only
    the refault evidence is unknown, and that indicator leaves the relied-on
-   set. Check your own guest while healthy. This prints `0` on a split kernel
-   and `1` on a kernel with the single counter:
+   set. Check your own guest while healthy:
 
    ```sh
-   grep -c '^workingset_refault ' /proc/vmstat
+   grep '^workingset_refault' /proc/vmstat
    ```
+
+   Two lines named `workingset_refault_anon` and `workingset_refault_file`
+   mean a split kernel: rely on `workingset_refault_file`. One line named
+   `workingset_refault` means the single counter: rely on that one. No output
+   means the guest has no refault counter and the indicator is unknown.
 
 6. **Aggregates hide detail.** `physicalTotal` is a total across physical
    disks, and `systemVolume` is only the Windows system volume. The records do
@@ -785,4 +792,5 @@ decision. This guide's records can inform it but cannot make it.
   `cpu.max`, `io.max`, `memory.high`, controller enablement, delegation, and
   writeback attribution. Its `memory.stat` section lists the split
   `workingset_refault_anon` and `workingset_refault_file` entries; the check in
-  reading rule 5 shows whether your guest's `/proc/vmstat` does the same.
+  reading rule 5 shows which of the two layouts your guest's `/proc/vmstat`
+  has.

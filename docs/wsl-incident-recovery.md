@@ -229,10 +229,10 @@ of the date and the cap and copy it into the first checkpoint:
    `partial` there and leaves the refault delta `unavailable`, and a collector
    from before it drops the split fields, so check that
    `guest.metrics.counters.workingset_refault_file` is a number before relying
-   on a refault rate. A partial reading still counts as
-   working, and its `guest.error` reads `provider-unavailable`, as a pending
-   record's does (see fixture 2): the collector fills that value for any status
-   other than `ok` or `timeout` that comes with no listed error. The probe runs
+   on a refault rate. A partial reading still counts as working, and its
+   `guest.error` reads `provider-unavailable`, as a pending record's does (see
+   fixture 2): the collector fills that value for any status other than `ok` or
+   `timeout` that comes with no listed error. The probe runs
    `$HOME/.local/bin/wsl-incident-guest-snapshot` inside the distribution
    through `/bin/sh`, and that helper needs `bash`. Only a chezmoi apply inside
    the distribution on Linux places it, so a missing or non-executable helper
