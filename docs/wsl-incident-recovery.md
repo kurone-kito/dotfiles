@@ -221,10 +221,15 @@ of the date and the cap and copy it into the first checkpoint:
    new file as in step 2. The first completed guest reading carries
    memory and swap values, and the next one, about a minute later, adds
    `guest.metrics.deltas` rates. `guest.status` is `ok`, or `partial` when the
-   kernel lacks a counter the helper reads. A kernel that exposes
-   `workingset_refault` only as separate `_anon` and `_file` counters, as the
-   6.18 kernel this runbook was checked against does, reports `partial` and
-   leaves that one delta `unavailable`. A partial reading still counts as
+   kernel lacks a counter the helper reads. A kernel that exposes the refault
+   counter only as separate `_anon` and `_file` counters, as the 6.18 kernel
+   this runbook was checked against does, reports `ok` when the helper and the
+   collector are both current, because the helper counts the split pair as the
+   refault counter. A helper from before the split counters were added reports
+   `partial` there and leaves the refault delta `unavailable`, and a collector
+   from before it drops the split fields, so check that
+   `guest.metrics.counters.workingset_refault_file` is a number before relying
+   on a refault rate. A partial reading still counts as
    working, and its `guest.error` reads `provider-unavailable`, as a pending
    record's does (see fixture 2): the collector fills that value for any status
    other than `ok` or `timeout` that comes with no listed error. The probe runs
@@ -1261,8 +1266,8 @@ The tables show later records unless they say otherwise.
 | `host.disk.metrics.physicalTotal.queueLength` | `1` |
 | `guest.status` | `ok` |
 | `guest.metrics.psi.some.avg10` | `0.4` |
-| `guest.metrics.deltas.workingset_refault.status` | `ok` |
-| `guest.metrics.deltas.workingset_refault.perSecond` | `0` |
+| `guest.metrics.deltas.workingset_refault_file.status` | `ok` |
+| `guest.metrics.deltas.workingset_refault_file.perSecond` | `0` |
 | `guest.metrics.swap.total` | `0` |
 
 Between probes the guest field shows `unavailable` with `probe-interval`.
