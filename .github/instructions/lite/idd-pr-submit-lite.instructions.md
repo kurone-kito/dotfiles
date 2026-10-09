@@ -236,12 +236,14 @@ loop instead of returning to this D1 rebase path.
 7. If CODEOWNERS or expected reviewers are not auto-assigned, request
    them explicitly: `gh pr edit {pr-number} --add-reviewer
    {reviewer-login}`.
-8. **Do not create follow-up issues directly** — never call `gh issue
-   create` (or the REST issues API) yourself. Recommended follow-ups
-   stay in the PR body prose above; if one is important enough to file
-   now, invoke the `issue-authoring` skill (Stage 1 hold; continue
-   to its Stage 2 narrow auto-release exception when the published
-   body carries the `review-fix-loop-cutoff` defer-source marker).
+8. **Do not create follow-up issues directly** — never call `gh issue create`
+   (or the REST issues API) yourself. Recommended follow-ups stay in the PR body
+   prose above; if one is important enough to file now, invoke the
+   `issue-authoring` skill (Stage 1 hold). When the published body carries the
+   `review-fix-loop-cutoff` defer-source marker, the follow-up still waits
+   there: this repository disables the Stage 2 narrow auto-release exception, so
+   a human must explicitly request release.
+   <!-- dotfiles-divergence: explicit-human-release -->
 9. **Live-operator-directed immediate-fix carve-out**: a live operator
    may direct an unrelated blocking-bug side-fix instead of routing it
    through `issue-authoring` first. Cross-reference the originating

@@ -1570,7 +1570,7 @@ Binding rules:
 
 ## Authoring hold and release
 
-<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+<!-- dotfiles-divergence: explicit-human-release -->
 **Dotfiles helper-version override (v0.14.0):** the pinned
 `idd-authoring-set-members` helper silently skips trusted owner markers
 GitHub minimized with reason `outdated` without checking for a later
@@ -2097,14 +2097,15 @@ only approval boundary.
   GitHub `created_at` for marked targets, and the label event only for
   legacy-unowned bootstrap. A competing active marker still stops the
   session.
-- **Stage 2 — release.** Before removing the authoring label, run a
-  release checklist: every child issue is referenced from its parent
-  roadmap's `## Tracks` list; no unsubstituted placeholder remains in
-  any published body; the `audit-authored-issue` linter (or its manual
-  fallback) is green on every published body in the set. Keep the authoring
-  label in place until the checklist passes and the user explicitly requests
-  release from the authoring hold. The upstream auto-release exception below
-  is unavailable in this repository's profile under the local override above.
+- **Stage 2 — release.** Before removing the authoring label, run a release
+  checklist: every child issue is referenced from its parent roadmap's `##
+  Tracks` list; no unsubstituted placeholder remains in any published body; the
+  `audit-authored-issue` linter (or its manual fallback) is green on every
+  published body in the set. Keep the authoring label in place until the
+  checklist passes and the user explicitly requests release from the authoring
+  hold. The upstream auto-release exception below is unavailable in this
+  repository's profile under the local override above.
+  <!-- dotfiles-divergence: explicit-human-release -->
   Keep the set anchor held until every other
   target's label removal is verified, and remove the anchor label last. For
   every target, first re-fetch owner comments during release-marker preflight.
@@ -2461,7 +2462,7 @@ only approval boundary.
   release either; it only ensures a fully-silent skip never happens even
   in the one failure mode the mechanical signal cannot itself cover.
 - **Narrow auto-release exception (review-fix-loop-cutoff).** A
-  <!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+  <!-- dotfiles-divergence: explicit-human-release -->
   This upstream exception is disabled for this repository while helper
   v0.14.0 is pinned. Its sole-member result cannot prove that a minimized
   owner marker was superseded in the same continuity chain; require the

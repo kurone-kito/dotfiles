@@ -376,7 +376,7 @@ in particular, `authoring-set-members` maps to
 
 ### Stage 2: Release (the single approval boundary)
 
-<!-- dotfiles-divergence: helper-profile-ephemeral-npx -->
+<!-- dotfiles-divergence: explicit-human-release -->
 - In this repository's installed helper profile, the user's explicit
   hold-release request is the only approval this bundle requires and it
   authorizes IDD execution for the released issues. The upstream
@@ -485,18 +485,17 @@ in particular, `authoring-set-members` maps to
 - Release remains a human action; this repository's installed profile
   does not auto-release a held issue set
 - For an ordinary human-gated release, under an orchestrator and
-  delegated-worker split, the release action itself must be
-  performed by whichever party directly holds the verified user's
-  release request, never relayed as a claim for the other party to
-  trust —
-  mirroring how Discover and Claim already stay the orchestrator's
-  own job under `docs/idd-workflow.md`'s Orchestrator fan-out
-  variant. A delegated worker that receives only a relayed release
-  claim, even from its own orchestrator, must refuse to act on it and
-  require the party holding the actual request to release directly.
-  The upstream review-fix-loop-cutoff auto-release exception is
-  unavailable in this repository's installed helper profile; every
-  release requires the party holding the actual user request
+  delegated-worker split, the release action itself must be performed by
+  whichever party directly holds the verified user's release request, never
+  relayed as a claim for the other party to trust — mirroring how Discover and
+  Claim already stay the orchestrator's own job under `docs/idd-workflow.md`'s
+  Orchestrator fan-out variant. A delegated worker that receives only a relayed
+  release claim, even from its own orchestrator, must refuse to act on it and
+  require the party holding the actual request to release directly. The upstream
+  review-fix-loop-cutoff auto-release exception is unavailable in this
+  repository's installed helper profile; every release requires the party
+  holding the actual user request
+  <!-- dotfiles-divergence: explicit-human-release -->
 
 ## A4.5 Gate Timing
 
