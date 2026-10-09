@@ -5,6 +5,8 @@ description: Run the bounded, foreground WSL host evidence collector and review 
 tags: [wsl, diagnostics, telemetry]
 ---
 
+<!-- cspell:words pgscan pgsteal kswapd pswpin pswpout pgmajfault -->
+
 # WSL incident telemetry
 
 The collector is an opt-in diagnostic for a Windows host. It samples
@@ -145,9 +147,24 @@ queried directly so they remain available beyond that retention limit.
 
 With `-GuestDistro`, guest evidence contains available and total memory,
 swap use, memory PSI, and interval deltas/rates for supported reclaim,
-refault, page-in, page-out, and fault counters. Missing procfs files or
-commands produce unavailable fields rather than guessed values. Partial
-samples can still establish counter baselines when usable counters exist.
+refault, page-in, page-out, and fault counters. The counters, each with a
+matching entry under `deltas` (`status`, `value`, `perSecond`), are
+`pgscan_kswapd`, `pgscan_direct`, `pgsteal_kswapd`, `pgsteal_direct`,
+`workingset_refault`, `workingset_refault_anon`, `workingset_refault_file`,
+`pswpin`, `pswpout`, `pgfault`, and `pgmajfault`. A kernel reports the refault
+counter either as the single `workingset_refault` line or as the separate
+`_anon` and `_file` lines. The helper reads each under the kernel's own name
+and never sums them. A split kernel has no `workingset_refault` line, so that
+field is empty and the refault value is in `workingset_refault_file`; a kernel
+with the single line leaves the two split fields empty. The refault counter
+counts as present when the single line exists or both split lines exist; a
+sample with neither, or with only one split line, is `partial`, and a split
+counter that is present is still reported. A helper or collector from before
+the split counters were added does not read or keep them, so on a split kernel
+its records carry no refault value; treat a missing or null field as unknown.
+Missing procfs files or commands produce unavailable fields rather than
+guessed values. Partial samples can still establish counter baselines when
+usable counters exist.
 If more than 10 minutes elapse between successful samples, the next sample
 starts a new baseline and its counter rates remain unavailable. The stdin
 and file baselines are each capped at 4 KiB; a larger baseline is discarded

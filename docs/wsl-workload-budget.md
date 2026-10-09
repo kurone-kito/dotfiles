@@ -126,12 +126,18 @@ known; see the reading rules below for what to do otherwise.
 | `guest.metrics.deltas.<name>`: `value`, `perSecond` | Delta and rate over the interval between two successive successful guest samples | events, events per second | that delta's `status` is `ok` |
 
 The guest counter names are `pgscan_kswapd`, `pgscan_direct`,
-`pgsteal_kswapd`, `pgsteal_direct`, `workingset_refault`, `pswpin`, `pswpout`,
-`pgfault`, and `pgmajfault`. The paging rates are the collector's names for
-Windows performance counters; this guide uses them only as indicators relative
-to a baseline. "Commit headroom" is not a field: derive it as
-`commitLimitBytes` minus `committedBytes` (or as their ratio) and label it
-derived.
+`pgsteal_kswapd`, `pgsteal_direct`, `workingset_refault`,
+`workingset_refault_anon`, `workingset_refault_file`, `pswpin`, `pswpout`,
+`pgfault`, and `pgmajfault`. A kernel reports the refault counter either as the
+single `workingset_refault` line or as the split `_anon` and `_file` pair, and
+the record carries each under the kernel's own name. A split kernel has no
+`workingset_refault` line, so that field is empty and the refault value is in
+`workingset_refault_file`; a kernel with the single line leaves the two split
+fields empty. The paging rates are the collector's names for Windows
+performance counters; this guide uses them only as indicators relative to a
+baseline.
+"Commit headroom" is not a field: derive it as `commitLimitBytes` minus
+`committedBytes` (or as their ratio) and label it derived.
 
 ### Pressure indicators and context
 
@@ -143,11 +149,11 @@ memory falls by construction when work runs. So the verdict rests only on
 | Indicator | Role | Bad direction |
 | --- | --- | --- |
 | Guest `psi.some` and `psi.full`, `avg60` | Pressure | High |
-| Guest `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, `pswpout` rates, and `workingset_refault` when it is known | Pressure | High |
+| Guest `deltas.pgscan_direct`, `pgsteal_direct`, `pswpin`, `pswpout` rates, and the refault rate (`deltas.workingset_refault_file`, or `deltas.workingset_refault` on a kernel with the single counter) when it is known | Pressure | High |
 | Host `pagesInputPerSecond` and `pagesOutputPerSecond` | Pressure | High |
 | `physicalTotal.queueLength` | Pressure | High |
 | Level gauges: guest `memory.available`, host `availableBytes`, derived commit headroom, `pageFilePercentUsage`, `swap.used` | Context | Low for availability, high for usage |
-| Load: host CPU percentages, disk and Hyper-V throughput and operation rates, `pageReadsPerSecond`, `pageWritesPerSecond`, `pgfault`, `pgmajfault`, `pgscan_kswapd`, `pgsteal_kswapd` | Context | Not used |
+| Load: host CPU percentages, disk and Hyper-V throughput and operation rates, `pageReadsPerSecond`, `pageWritesPerSecond`, `pgfault`, `pgmajfault`, `pgscan_kswapd`, `pgsteal_kswapd`, `workingset_refault_anon` | Context | Not used |
 
 Context never sets a verdict. A level gauge outside its range supports a
 hypothesis only together with a pressure indicator outside its range in the
@@ -155,8 +161,15 @@ same window.
 
 The set of pressure indicators you rely on is **fixed when you take the
 baseline** and written into the record: every pressure indicator in the table,
-including the guest ones, except `workingset_refault` when the counter is null
-on your kernel. Do not drop an indicator later because it is inconvenient.
+including the guest ones. For the refault indicator, fix one family when you
+take the baseline: `workingset_refault_file` when the record carries it, or
+else `workingset_refault` where the kernel reports the single counter. A record
+that carries both layouts reports all three fields, because the helper never
+sums them; use the file counter. Do not sum or mix the two families, and do not
+treat them as the same quantity. If the record has neither (an older helper or
+collector, or a kernel with no refault counter), the refault indicator is
+unknown and leaves the relied-on set; write that in the record. Do not drop an
+indicator later because it is inconvenient.
 
 ### Reading rules
 
@@ -242,17 +255,28 @@ on your kernel. Do not drop an indicator later because it is inconvenient.
    prerequisites hold; the new run needs its own baseline.
 5. **Memory pressure only, and a kernel-dependent counter.** The guest helper
    reads `/proc/meminfo`, `/proc/vmstat`, and `/proc/pressure/memory`, so the
-   records carry no guest CPU or I/O pressure. It reads `workingset_refault` by
-   exact name. Kernels that split it into `workingset_refault_anon` and
-   `workingset_refault_file` give a null counter and an unavailable delta, and
-   the guest record is then `partial` with the error `provider-unavailable`.
-   Such a record is still usable for every field that is known; only the
-   refault evidence is unknown, and that indicator leaves the relied-on set.
-   Check your own guest while healthy. This prints `0` on such a kernel:
+   records carry no guest CPU or I/O pressure. It reads the refault counter by
+   exact name, as the single `workingset_refault` line and as the split
+   `workingset_refault_anon` and `workingset_refault_file` lines, and reports
+   whichever the kernel has; it never sums them. A record without the single
+   line and without both split lines is `partial` with the error
+   `provider-unavailable`, and so is a record from a helper that predates the
+   split counters when it runs on a split kernel. A
+   collector that predates them drops the split names, so its record can read
+   `ok` with no refault value at all: `guest.status` alone does not show that a
+   refault indicator is known, so judge by field presence (rule 2). A record
+   without a refault value is still usable for every field that is known; only
+   the refault evidence is unknown, and that indicator leaves the relied-on
+   set. Check your own guest while healthy:
 
    ```sh
-   grep -c '^workingset_refault ' /proc/vmstat
+   grep '^workingset_refault' /proc/vmstat
    ```
+
+   Two lines named `workingset_refault_anon` and `workingset_refault_file`
+   mean a split kernel: rely on `workingset_refault_file`. One line named
+   `workingset_refault` means the single counter: rely on that one. No output
+   means the guest has no refault counter and the indicator is unknown.
 
 6. **Aggregates hide detail.** `physicalTotal` is a total across physical
    disks, and `systemVolume` is only the Windows system volume. The records do
@@ -428,24 +452,24 @@ from one to the next.
 
 One run holds two 10-minute baseline repeats (00:00 to 00:10, then B1 from
 00:10 to 00:20) and a loaded window from 00:20 to 00:30, when one job is
-admitted. This guest record is the last in B1.
-It is `partial` because the guest kernel splits the refault counter, so that
-field is unknown and the rest is usable:
+admitted. This guest record is the last in B1. The guest's kernel reports the
+refault counter split, so the record carries the file counter and its delta
+(the anon counter is context and is not shown):
 
 ```json
 {
   "sampleTimeUtc": "2000-01-01T00:19:00.0000000Z",
   "guest": {
-    "status": "partial",
-    "error": "provider-unavailable",
+    "status": "ok",
+    "error": null,
     "metrics": {
       "memory": { "status": "ok", "unit": "kB", "total": 20971520, "available": 15728640 },
       "swap": { "status": "ok", "unit": "kB", "total": 5242880, "used": 0 },
       "psi": { "status": "ok", "some": { "avg10": 0.0, "avg60": 0.0, "avg300": 0.0, "totalUsec": 1200000 } },
-      "counters": { "pgscan_direct": 48000000, "workingset_refault": null },
+      "counters": { "pgscan_direct": 48000000, "workingset_refault_file": 21000000 },
       "deltas": {
         "pgscan_direct": { "status": "ok", "value": 0, "perSecond": 0 },
-        "workingset_refault": { "status": "unavailable", "value": null, "perSecond": null }
+        "workingset_refault_file": { "status": "ok", "value": 600, "perSecond": 10 }
       }
     }
   }
@@ -453,24 +477,25 @@ field is unknown and the rest is usable:
 ```
 
 This is the guest record nine minutes into the loaded window. Its delta covers
-the 60 seconds since the previous guest sample, which is not shown. The counter
-rose by about 8 million since the baseline record and `psi` stalled for about
-170 seconds, which is consistent with a steady rate over most of the window:
+the 60 seconds since the previous guest sample, which is not shown. Both
+counters rose by about 8 million since the baseline record and `psi` stalled
+for about 170 seconds, which is consistent with a steady rate over most of the
+window:
 
 ```json
 {
   "sampleTimeUtc": "2000-01-01T00:29:00.0000000Z",
   "guest": {
-    "status": "partial",
-    "error": "provider-unavailable",
+    "status": "ok",
+    "error": null,
     "metrics": {
       "memory": { "status": "ok", "unit": "kB", "total": 20971520, "available": 1048576 },
       "swap": { "status": "ok", "unit": "kB", "total": 5242880, "used": 2097152 },
       "psi": { "status": "ok", "some": { "avg10": 33.5, "avg60": 31.2, "avg300": 29.9, "totalUsec": 168000000 } },
-      "counters": { "pgscan_direct": 56100000, "workingset_refault": null },
+      "counters": { "pgscan_direct": 56100000, "workingset_refault_file": 29200000 },
       "deltas": {
         "pgscan_direct": { "status": "ok", "value": 900000, "perSecond": 15000 },
-        "workingset_refault": { "status": "unavailable", "value": null, "perSecond": null }
+        "workingset_refault_file": { "status": "ok", "value": 720000, "perSecond": 12000 }
       }
     }
   }
@@ -481,14 +506,14 @@ rose by about 8 million since the baseline record and `psi` stalled for about
 | --- | --- | --- | --- |
 | `psi.some.avg60` | Pressure | 0.0 to 0.0 | 31.2 |
 | `deltas.pgscan_direct.perSecond` | Pressure | 0 to 0 | 15000 |
-| `deltas.workingset_refault` | Not relied on (unknown on this kernel) | unknown | unknown |
+| `deltas.workingset_refault_file.perSecond` | Pressure | 5 to 20 | 12000 |
 | `memory.available` (kB) | Context | 15728640 to 15728640 | 1048576 |
 
 The evidence that supports a reclaim-pressure hypothesis is the *rate* rising
 inside the same window as the admission, together with `psi.some`, corroborated
 by low available memory. The cumulative `counters.pgscan_direct` is large in
-both records and says only that reclaim happened at some time since boot. Both
-relied-on pressure indicators shown are outside their ranges in all of the
+both records and says only that reclaim happened at some time since boot. All
+three relied-on pressure indicators shown are outside their ranges in all of the
 loaded window's guest samples, so the verdict is `out-of-range-sustained`: hold
 admissions and ask the owner to consider reducing the running work. The record
 for this window:
@@ -501,12 +526,12 @@ effective-memory-cap:  20 GB
 admitted-job-count:    0 -> 1
 workload-class:        build
 baseline-source:       both repeats, 2000-01-01T00:00:00Z/2000-01-01T00:20:00Z
-baseline-ranges:       psi.some.avg60 median 0.0, 0.0 to 0.0; pgscan_direct rate median 0, 0 to 0; the others as in the baseline
-relied-on-set:         psi.some.avg60, psi.full.avg60, pgscan_direct, pgsteal_direct, pswpin, pswpout, paging rates, queueLength
+baseline-ranges:       psi.some.avg60 median 0.0, 0.0 to 0.0; pgscan_direct rate median 0, 0 to 0; workingset_refault_file rate median 10, 5 to 20; the others as in the baseline
+relied-on-set:         psi.some.avg60, psi.full.avg60, pgscan_direct, pgsteal_direct, workingset_refault_file, pswpin, pswpout, paging rates, queueLength
 scenario:              guest-memory
 host-summary:          paging rates and queueLength inside their baseline ranges (not shown)
-guest-summary:         psi.some.avg60 and the pgscan_direct rate outside the range in every eligible guest sample of the window
-unknown-fields:        deltas.workingset_refault (not relied on)
+guest-summary:         psi.some.avg60, the pgscan_direct rate and the workingset_refault_file rate outside the range in every eligible guest sample of the window
+unknown-fields:        none
 verdict:               out-of-range-sustained
 decision:              ask-owner-to-reduce
 owner-response:        pending
@@ -552,8 +577,8 @@ A sample from the observation window:
     }
   },
   "guest": {
-    "status": "partial",
-    "error": "provider-unavailable",
+    "status": "ok",
+    "error": null,
     "metrics": {
       "memory": { "status": "ok", "unit": "kB", "total": 20971520, "available": 12582912 },
       "psi": { "status": "ok", "some": { "avg10": 0.1, "avg60": 0.0, "avg300": 0.0, "totalUsec": 1250000 } }
@@ -624,8 +649,8 @@ A sample from the observation window:
     }
   },
   "guest": {
-    "status": "partial",
-    "error": "provider-unavailable",
+    "status": "ok",
+    "error": null,
     "metrics": {
       "psi": { "status": "ok", "some": { "avg10": 0.2, "avg60": 0.1, "avg300": 0.1, "totalUsec": 3400000 } },
       "counters": { "pgscan_direct": 48900000, "pswpin": 5000 },
@@ -752,8 +777,9 @@ decision. This guide's records can inform it but cannot make it.
   no-rates rule, the exact counter names, and the partial-record behavior were
   read from them. The key paths of the example records were checked against
   records produced by the collector's own functions, and the guest helper was
-  run against a fixture with split refault counters. Nothing was run on a
-  Windows host.
+  run against fixtures with the single, the split, and both refault layouts and
+  on a WSL 2 guest whose kernel reports only the split counters. Nothing was
+  run on a Windows host.
 - [WSL incident telemetry](wsl-incident-telemetry.md) for the collector
   options, the record fields, and the overhead check.
 - [WSL incident recovery runbook](wsl-incident-recovery.md) for protecting
@@ -768,4 +794,5 @@ decision. This guide's records can inform it but cannot make it.
   `cpu.max`, `io.max`, `memory.high`, controller enablement, delegation, and
   writeback attribution. Its `memory.stat` section lists the split
   `workingset_refault_anon` and `workingset_refault_file` entries; the check in
-  reading rule 5 shows whether your guest's `/proc/vmstat` does the same.
+  reading rule 5 shows which of the two layouts your guest's `/proc/vmstat`
+  has.

@@ -168,7 +168,10 @@ fi
 [[ -n $psi_some ]] || psi_some='null'
 [[ -n $psi_full ]] || psi_full='null'
 
-counter_keys=(pgscan_kswapd pgscan_direct pgsteal_kswapd pgsteal_direct workingset_refault pswpin pswpout pgfault pgmajfault)
+# Newer kernels report the refault counter split into workingset_refault_anon
+# and workingset_refault_file instead of the single workingset_refault line.
+# Each is read and reported as the kernel names it; nothing is summed.
+counter_keys=(pgscan_kswapd pgscan_direct pgsteal_kswapd pgsteal_direct workingset_refault workingset_refault_anon workingset_refault_file pswpin pswpout pgfault pgmajfault)
 declare -A current previous deltas rates
 for key in "${counter_keys[@]}"; do
   current[$key]=$(read_vmstat "$key" || true)
@@ -187,8 +190,13 @@ overall_status=ok
 [[ -n $mem_available && -n $swap_total && -n $swap_free ]] || overall_status=partial
 [[ $psi_some != null || $psi_full != null ]] || overall_status=partial
 for key in "${counter_keys[@]}"; do
+  case $key in
+    workingset_refault|workingset_refault_anon|workingset_refault_file) continue ;;
+  esac
   [[ -n ${current[$key]} ]] || overall_status=partial
 done
+# The refault family is present as the legacy line or as both split counters.
+[[ -n ${current[workingset_refault]} || ( -n ${current[workingset_refault_anon]} && -n ${current[workingset_refault_file]} ) ]] || overall_status=partial
 
 printf '{"schemaVersion":1,"status":"%s",' "$overall_status"
 printf '"memory":{"status":"%s","unit":"kB","total":%s,"available":%s},' \
