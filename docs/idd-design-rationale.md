@@ -1227,8 +1227,10 @@ below.
   `review-fix-loop-cutoff` defer-source marker. The issue-authoring
   skill's Stage 2 narrow auto-release exception releases that hold
   immediately, so the deferred issue does not wait for a human
-  release request. (Upstream default; disabled in this repository, see
-  the repository note below.)
+  release request.
+
+Upstream default, disabled in this repository (see the repository
+note below).
 
 Repository note (2026-10-09, #597): this repository disables the narrow
 auto-release exception while helper v0.14.0 is pinned (see #567 and #571).
