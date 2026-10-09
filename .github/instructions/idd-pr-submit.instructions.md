@@ -215,14 +215,17 @@ template's sections when one exists:
   Include only context grounded in the issue discussion, commits, diff,
   or explicit operator instructions; omit rather than speculate.
 
-**Do not create follow-up issues directly.** An executing IDD session
-must never call `gh issue create` (or the REST issues API) itself.
-Recommended follow-ups stay in the PR body's own prose above. If a
-follow-up is important enough to file in-repo now, invoke the
-`issue-authoring` skill (its Stage 1 hold; when the published body
-carries the `review-fix-loop-cutoff` defer-source marker, continue
-at once to that skill's Stage 2 narrow auto-release exception)
-instead of improvising a body. Do not add a parallel "worker-lite authoring" contract.
+**Do not create follow-up issues directly.** An executing IDD session must never
+call `gh issue create` (or the REST issues API) itself. Recommended follow-ups
+stay in the PR body's own prose above. If a follow-up is important enough to
+file in-repo now, invoke the `issue-authoring` skill instead of improvising a
+body. Its Stage 1 hold applies: when the published body carries the
+`review-fix-loop-cutoff` defer-source marker, the follow-up does not continue to
+a release. This repository disables that skill's Stage 2 narrow auto-release
+exception, so the follow-up waits under the Stage 1 hold until a human
+explicitly requests release. Do not add a parallel "worker-lite authoring"
+contract.
+<!-- dotfiles-divergence: explicit-human-release -->
 
 ### Live-operator-directed immediate-fix carve-out
 

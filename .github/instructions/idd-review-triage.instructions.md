@@ -206,13 +206,14 @@ scope-fenced item, an Accepted item mid-fix
   every scored urgency. Clause: `urgency <level>; severity <tier>[,
   Copilot <label>]`.
 
-Bundle one E5 pass's deferred items into one follow-up issue (E6; do
-not append). Each keeps an AC bullet, exactly one
-`Refs #<originating-issue>` line, and the
-`<!-- dotfiles-authoring-defer-source: review-fix-loop-cutoff -->`
-marker, then issue-authoring's Stage 2 narrow auto-release, not the Stage 1
-hold. See
+Bundle one E5 pass's deferred items into one follow-up issue (E6; do not
+append). Each keeps an AC bullet, exactly one `Refs #<originating-issue>` line,
+and the `<!-- dotfiles-authoring-defer-source: review-fix-loop-cutoff -->`
+marker, then issue-authoring's Stage 1 hold. This repository disables the Stage
+2 narrow auto-release, so each item waits there until a human explicitly
+requests release (`critiqueLoop.deferByUrgency` is `severity-tiered` here). See
 [rationale](../../docs/idd-design-rationale.md#e4e5-adopt-now-urgency-defer).
+<!-- dotfiles-divergence: explicit-human-release -->
 
 ## E6 — Post disposition replies
 

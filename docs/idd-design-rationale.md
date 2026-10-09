@@ -1229,6 +1229,16 @@ below.
   immediately, so the deferred issue does not wait for a human
   release request.
 
+Upstream default, disabled in this repository (see the repository
+note below).
+
+Repository note (2026-10-09, #597): this repository disables the narrow
+auto-release exception while helper v0.14.0 is pinned (see #567 and #571).
+Because `critiqueLoop.deferByUrgency` is `severity-tiered` here, a deferred
+follow-up that carries the marker waits under its Stage 1 hold until a human
+explicitly requests release.
+<!-- dotfiles-divergence: explicit-human-release -->
+
 #### Severity-tiered urgency (kurone-kito/idd-skill#3589)
 
 `severity-tiered` is a third `deferByUrgency` value. It replaces the

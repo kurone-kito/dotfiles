@@ -318,12 +318,13 @@ needs-decision, blocked-by-human, and out-of-scope.
      read with a bounded fresh read, restore labels for already processed
      targets while the owner/set still match, verify the restored set, and
      leave every target generation open
-9. Stop at the single approval boundary: release. Publishing under the
-   hold does not by itself authorize starting the IDD execution loop;
-   the user's explicit release request is always required for this
-   repository's pinned helper profile. The upstream
-   review-fix-loop-cutoff auto-release exception is disabled here as
-   documented in [Authoring hold and release](references/contract.md#authoring-hold-and-release).
+9. Stop at the single approval boundary: release. Publishing under the hold does
+   not by itself authorize starting the IDD execution loop; the user's explicit
+   release request is always required for this repository's pinned helper
+   profile. The upstream review-fix-loop-cutoff auto-release exception is
+   disabled here as documented in [Authoring hold and
+   release](references/contract.md#authoring-hold-and-release).
+   <!-- dotfiles-divergence: explicit-human-release -->
 
 ## Reference Routing
 
