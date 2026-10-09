@@ -263,6 +263,117 @@ Describe 'wsl incident capture metric handling' {
     $safe.Data.deltas.pgscan_direct.status | Should -Be 'unavailable'
   }
 
+  It 'keeps the split refault counters and their deltas and still drops unlisted names' {
+    $payload = @{
+      schemaVersion = 1; status = 'ok'
+      memory = @{ status = 'ok'; unit = 'kB'; total = 1000; available = 500 }
+      swap = @{ status = 'ok'; unit = 'kB'; total = 100; used = 10 }
+      psi = @{ status = 'ok'; some = @{ avg10 = 0.1; avg60 = 0.2; avg300 = 0.3; totalUsec = 40 }; full = $null }
+      counters = @{ workingset_refault = $null; workingset_refault_anon = 3; workingset_refault_file = 37171155; workingset_refault_total = 9 }
+      deltas = @{
+        workingset_refault_anon = @{ status = 'ok'; value = 2; perSecond = 1.0 }
+        workingset_refault_file = @{ status = 'ok'; value = 100; perSecond = 50.0 }
+        workingset_refault_total = @{ status = 'ok'; value = 1; perSecond = 1.0 }
+      }
+    }
+    $safe = ConvertTo-DotfilesSafeGuestSnapshot -Data ($payload | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+
+    $safe.Valid | Should -BeTrue
+    $safe.Status | Should -Be 'ok'
+    $safe.Data.counters.workingset_refault | Should -BeNullOrEmpty
+    $safe.Data.counters.workingset_refault_anon | Should -Be 3
+    $safe.Data.counters.workingset_refault_file | Should -Be 37171155
+    $safe.Data.deltas.workingset_refault_anon.status | Should -Be 'ok'
+    $safe.Data.deltas.workingset_refault_anon.value | Should -Be 2
+    $safe.Data.deltas.workingset_refault_file.status | Should -Be 'ok'
+    $safe.Data.deltas.workingset_refault_file.perSecond | Should -Be 50
+    $safe.Data.deltas.workingset_refault.status | Should -Be 'unavailable'
+    $safe.Data.counters.PSObject.Properties.Name | Should -Not -Contain 'workingset_refault_total'
+    $safe.Data.deltas.PSObject.Properties.Name | Should -Not -Contain 'workingset_refault_total'
+  }
+
+  It 'keeps schemaVersion 1 and the existing guest counter and delta fields' {
+    $existing = @('pgscan_kswapd', 'pgscan_direct', 'pgsteal_kswapd', 'pgsteal_direct', 'workingset_refault', 'pswpin', 'pswpout', 'pgfault', 'pgmajfault')
+    $counters = @{}
+    $deltas = @{}
+    foreach ($name in $existing) {
+      $counters[$name] = 7
+      $deltas[$name] = @{ status = 'ok'; value = 1; perSecond = 0.5 }
+    }
+    $payload = @{ schemaVersion = 1; status = 'ok'; counters = $counters; deltas = $deltas }
+    $safe = ConvertTo-DotfilesSafeGuestSnapshot -Data ($payload | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+
+    $safe.Valid | Should -BeTrue
+    $safe.Data.schemaVersion | Should -Be 1
+    ($safe.Data.counters.PSObject.Properties.Name -join ',') | Should -Be 'pgscan_kswapd,pgscan_direct,pgsteal_kswapd,pgsteal_direct,workingset_refault,workingset_refault_anon,workingset_refault_file,pswpin,pswpout,pgfault,pgmajfault'
+    foreach ($name in $existing) {
+      $safe.Data.counters.$name | Should -BeOfType [ValueType]
+      ($safe.Data.deltas.$name.PSObject.Properties.Name -join ',') | Should -Be 'status,value,perSecond'
+      $safe.Data.deltas.$name.status | Should -Be 'ok'
+      $safe.Data.deltas.$name.value | Should -BeOfType [ValueType]
+      $safe.Data.deltas.$name.perSecond | Should -BeOfType [ValueType]
+    }
+  }
+
+  It 'keeps a full eleven-counter guest baseline within the helper stdin limit' {
+    $counters = [ordered]@{}
+    foreach ($name in @('pgscan_kswapd', 'pgscan_direct', 'pgsteal_kswapd', 'pgsteal_direct', 'workingset_refault', 'workingset_refault_anon', 'workingset_refault_file', 'pswpin', 'pswpout', 'pgfault', 'pgmajfault')) {
+      $counters[$name] = [uint64]::MaxValue
+    }
+    $baseline = Get-DotfilesGuestBaseline -Snapshot ([pscustomobject]@{ status = 'ok'; counters = [pscustomobject]$counters })
+
+    ($baseline -split "`n" | Where-Object { $_ }).Count | Should -Be 11
+    $baseline | Should -Match "(?m)^workingset_refault_anon`t18446744073709551615$"
+    $baseline | Should -Match "(?m)^workingset_refault_file`t18446744073709551615$"
+    [Text.Encoding]::UTF8.GetByteCount($baseline) | Should -BeLessOrEqual 4096
+  }
+
+  It 'turns a split-counter helper snapshot into an ok guest record and a usable baseline' -Skip:$script:WindowsHost {
+    $helper = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../home/dot_local/bin/executable_wsl-incident-guest-snapshot'))
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('dotfiles-proc-' + [guid]::NewGuid().ToString('N'))
+    try {
+      $null = New-Item -ItemType Directory -Path (Join-Path $root 'pressure') -Force
+      Set-Content -LiteralPath (Join-Path $root 'meminfo') -Value @('MemTotal: 100000 kB', 'MemAvailable: 40000 kB', 'SwapTotal: 1000 kB', 'SwapFree: 700 kB')
+      Set-Content -LiteralPath (Join-Path $root 'pressure/memory') -Value @('some avg10=0.10 avg60=0.20 avg300=0.30 total=900', 'full avg10=0.01 avg60=0.02 avg300=0.03 total=90')
+      $writeVmstat = {
+        param($Anon, $File)
+        Set-Content -LiteralPath (Join-Path $root 'vmstat') -Value @(
+          'pgscan_kswapd 15', 'pgscan_direct 7', 'pgsteal_kswapd 11', 'pgsteal_direct 3',
+          'pswpin 5', 'pswpout 8', 'pgfault 100', 'pgmajfault 2',
+          "workingset_refault_anon $Anon", "workingset_refault_file $File")
+      }
+
+      & $writeVmstat 3 37171155
+      $first = ConvertFrom-Json -InputObject ((& bash $helper --proc-root $root) -join "`n")
+      $firstSafe = ConvertTo-DotfilesSafeGuestSnapshot -Data $first
+
+      $firstSafe.Valid | Should -BeTrue
+      $firstSafe.Status | Should -Be 'ok'
+      $firstSafe.Error | Should -BeNullOrEmpty
+      $firstSafe.Data.counters.workingset_refault | Should -BeNullOrEmpty
+      $firstSafe.Data.counters.workingset_refault_anon | Should -Be 3
+      $firstSafe.Data.counters.workingset_refault_file | Should -Be 37171155
+      $baseline = Get-DotfilesGuestBaseline -Snapshot $firstSafe.Data
+      $baseline | Should -Match "(?m)^workingset_refault_file`t37171155$"
+      [Text.Encoding]::UTF8.GetByteCount($baseline) | Should -BeLessOrEqual 4096
+
+      $baselineFile = Join-Path $root 'previous.tsv'
+      [IO.File]::WriteAllText($baselineFile, $baseline)
+      & $writeVmstat 5 37171255
+      $second = ConvertFrom-Json -InputObject ((& bash $helper --proc-root $root --previous $baselineFile --interval-seconds 2) -join "`n")
+      $secondSafe = ConvertTo-DotfilesSafeGuestSnapshot -Data $second
+
+      $secondSafe.Status | Should -Be 'ok'
+      $secondSafe.Data.deltas.workingset_refault_file.status | Should -Be 'ok'
+      $secondSafe.Data.deltas.workingset_refault_file.value | Should -Be 100
+      $secondSafe.Data.deltas.workingset_refault_file.perSecond | Should -Be 50
+      $secondSafe.Data.deltas.workingset_refault_anon.value | Should -Be 2
+    }
+    finally {
+      Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+
   It 'rejects guest output with an unsupported schema or status' {
     $unsupportedSchema = ConvertTo-DotfilesSafeGuestSnapshot -Data @{ schemaVersion = 2; status = 'ok' }
     $unsupportedStatus = ConvertTo-DotfilesSafeGuestSnapshot -Data @{ schemaVersion = 1; status = 'timed-out' }

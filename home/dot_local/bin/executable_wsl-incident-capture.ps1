@@ -1296,7 +1296,7 @@ function ConvertTo-DotfilesSafeGuestSnapshot {
       totalUsec = ConvertTo-DotfilesSafeGuestNumber $inputSide.totalUsec -Integer
     }
   }
-  $counterNames = @('pgscan_kswapd', 'pgscan_direct', 'pgsteal_kswapd', 'pgsteal_direct', 'workingset_refault', 'pswpin', 'pswpout', 'pgfault', 'pgmajfault')
+  $counterNames = @('pgscan_kswapd', 'pgscan_direct', 'pgsteal_kswapd', 'pgsteal_direct', 'workingset_refault', 'workingset_refault_anon', 'workingset_refault_file', 'pswpin', 'pswpout', 'pgfault', 'pgmajfault')
   $counters = [ordered]@{}
   $deltas = [ordered]@{}
   foreach ($name in $counterNames) {

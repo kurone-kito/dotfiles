@@ -272,6 +272,172 @@ EOF
   assert_output '{"schemaVersion":1,"status":"unavailable","error":"required-command-missing"}'
 }
 
+# Write /proc/vmstat with the eight counters outside the refault family,
+# followed by the given refault lines.
+_write_vmstat() {
+  {
+    printf '%s\n' 'pgscan_kswapd 15' 'pgscan_direct 7' 'pgsteal_kswapd 11' \
+      'pgsteal_direct 3' 'pswpin 5' 'pswpout 8' 'pgfault 100' 'pgmajfault 2'
+    (($# == 0)) || printf '%s\n' "$@"
+  } >"$PROC_ROOT/vmstat"
+}
+
+@test "reports ok for a legacy refault line and leaves the split counters unavailable" {
+  previous="$BATS_TEST_TMPDIR/previous.tsv"
+  printf 'workingset_refault\t30\n' >"$previous"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT" --previous "$previous" --interval-seconds 2
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault":40,"workingset_refault_anon":null,"workingset_refault_file":null,'
+  assert_output --partial '"workingset_refault":{"status":"ok","value":10,"perSecond":5.000}'
+  assert_output --partial '"workingset_refault_anon":{"status":"unavailable","value":null,"perSecond":null}'
+  assert_output --partial '"workingset_refault_file":{"status":"unavailable","value":null,"perSecond":null}'
+}
+
+@test "reads split refault counters and reports ok without the legacy line" {
+  _write_vmstat 'workingset_refault_anon 3' 'workingset_refault_file 37171155'
+  previous="$BATS_TEST_TMPDIR/previous.tsv"
+  printf 'workingset_refault_anon\t1\nworkingset_refault_file\t37171055\n' >"$previous"
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT" --previous "$previous" --interval-seconds 2
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":3,"workingset_refault_file":37171155,'
+  assert_output --partial '"workingset_refault":{"status":"unavailable","value":null,"perSecond":null}'
+  assert_output --partial '"workingset_refault_anon":{"status":"ok","value":2,"perSecond":1.000}'
+  assert_output --partial '"workingset_refault_file":{"status":"ok","value":100,"perSecond":50.000}'
+}
+
+@test "reports all three refault counters when both layouts are present" {
+  _write_vmstat 'workingset_refault 40' 'workingset_refault_anon 3' 'workingset_refault_file 9'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault":40,"workingset_refault_anon":3,"workingset_refault_file":9,'
+}
+
+@test "marks the sample partial when neither refault layout is present" {
+  _write_vmstat
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"partial",'
+  assert_output --partial '"pgscan_kswapd":15,'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":null,"workingset_refault_file":null,'
+}
+
+@test "marks the sample partial when only the anon split counter is present" {
+  _write_vmstat 'workingset_refault_anon 3'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"partial",'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":3,"workingset_refault_file":null,'
+}
+
+@test "marks the sample partial when only the file split counter is present" {
+  _write_vmstat 'workingset_refault_file 9'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"partial",'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":null,"workingset_refault_file":9,'
+}
+
+@test "keeps the legacy line sufficient when only one split counter accompanies it" {
+  _write_vmstat 'workingset_refault 40' 'workingset_refault_file 9'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault":40,"workingset_refault_anon":null,"workingset_refault_file":9,'
+}
+
+@test "counts a zero split counter as present" {
+  _write_vmstat 'workingset_refault_anon 0' 'workingset_refault_file 5'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":0,"workingset_refault_file":5,'
+}
+
+@test "treats a non-numeric split counter as missing" {
+  _write_vmstat 'workingset_refault_anon abc' 'workingset_refault_file 7'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"partial",'
+  assert_output --partial '"workingset_refault":null,"workingset_refault_anon":null,"workingset_refault_file":7,'
+}
+
+@test "reads the first of duplicated split counter lines" {
+  _write_vmstat 'workingset_refault_anon 1' 'workingset_refault_file 7' 'workingset_refault_file 9'
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT"
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"workingset_refault_anon":1,"workingset_refault_file":7,'
+}
+
+@test "keeps schemaVersion 1 and the existing counter and delta fields unchanged" {
+  previous="$BATS_TEST_TMPDIR/previous.tsv"
+  cat >"$previous" <<'EOT'
+pgscan_kswapd	14
+pgscan_direct	6
+pgsteal_kswapd	10
+pgsteal_direct	2
+workingset_refault	39
+pswpin	4
+pswpout	7
+pgfault	99
+pgmajfault	1
+EOT
+
+  run "$SNAPSHOT" --proc-root "$PROC_ROOT" --previous "$previous" --interval-seconds 1
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  assert_output --partial '"counters":{"pgscan_kswapd":15,"pgscan_direct":7,"pgsteal_kswapd":11,"pgsteal_direct":3,"workingset_refault":40,"workingset_refault_anon":null,"workingset_refault_file":null,"pswpin":5,"pswpout":8,"pgfault":100,"pgmajfault":2}'
+  for key in pgscan_kswapd pgscan_direct pgsteal_kswapd pgsteal_direct workingset_refault pswpin pswpout pgfault pgmajfault; do
+    assert_output --partial "\"$key\":{\"status\":\"ok\",\"value\":1,\"perSecond\":1.000}"
+  done
+}
+
+@test "keeps a full eleven-counter baseline within 4 KiB and reads its last key" {
+  keys=(pgscan_kswapd pgscan_direct pgsteal_kswapd pgsteal_direct workingset_refault workingset_refault_anon workingset_refault_file pswpin pswpout pgfault pgmajfault)
+  previous="$BATS_TEST_TMPDIR/full-previous.tsv"
+  : >"$previous"
+  : >"$PROC_ROOT/vmstat"
+  for key in "${keys[@]}"; do
+    printf '%s\t%s\n' "$key" 1000000000000000000 >>"$previous"
+    printf '%s %s\n' "$key" 1000000000000000100 >>"$PROC_ROOT/vmstat"
+  done
+  [ "$(wc -c <"$previous")" -le 4096 ]
+
+  run bash -c 'exec 0<"$1"; shift; exec "$@"' _ "$previous" "$SNAPSHOT" \
+    --proc-root "$PROC_ROOT" --interval-seconds 2 --previous-stdin
+
+  assert_success
+  assert_output --partial '{"schemaVersion":1,"status":"ok",'
+  for key in "${keys[@]}"; do
+    assert_output --partial "\"$key\":{\"status\":\"ok\",\"value\":100,\"perSecond\":50.000}"
+  done
+  [ "$(printf '%s' "$output" | wc -c)" -le 4096 ]
+}
+
 _render_ignore() {
   local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
   printf '%s\n' '{ "data": {} }' > "$config"
