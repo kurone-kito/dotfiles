@@ -840,20 +840,24 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
        idd-resume-claim-routing --issue <issue-number> --owner <owner> --repo <name> \
        --claim-id <claim-id> --nonce <nonce> --worktree "<worktree>" \
        --policy "$policy_file"
-   echo "check 3 exit status: $?" >&2
-   timeout -k 5 30 rm -rf -- "$policy_dir"
+   status=$?
+   echo "check 3 exit status: $status" >&2
+   timeout -k 5 30 rm -rf -- "$policy_dir" || status=1
+   (exit "$status")
    ```
 
    The `&&` chain stops at the first failure, so the helper runs only with a
    policy file and a package spec taken from the base branch, and the temporary
-   directory is removed either way. `mktemp` and the final `rm` run under
-   `timeout` too, as does `jq`, because a stalled temporary filesystem would
-   hang them, and a timeout is a failed check. The spec and the exit status go
-   to standard error, so standard output stays the helper's JSON. The spec it
-   prints is the `<helper-package-spec>` for check 4. `--prefix` makes `npx`
-   read its project settings from that empty directory instead of from
-   `<clone-dir>`, so a project `.npmrc` there does not apply to it, and only
-   your user and machine npm settings do.
+   directory is removed either way. The last line hands the check's status back
+   after the cleanup, so a failed check or a failed cleanup is never reported
+   as success; the subshell keeps an interactive shell open. `mktemp` and the
+   final `rm` run under `timeout` too, as does `jq`, because a stalled
+   temporary filesystem would hang them, and a timeout is a failed check. The
+   spec and the exit status go to standard error, so standard output stays the
+   helper's JSON. The spec it prints is the `<helper-package-spec>` for check
+   4. `--prefix` makes `npx` read its project settings from that empty
+   directory instead of from `<clone-dir>`, so a project `.npmrc` there does
+   not apply to it, and only your user and machine npm settings do.
 
    Run the helper from inside the clone: the `sh -c` changes into `<clone-dir>`
    under the same `timeout`, so even the directory change is bounded.
@@ -891,8 +895,10 @@ timeout (status 124, or 137 after the kill) is a failed check, not a pass.
      timeout -k 5 120 sh -c 'cd "$1" && shift && exec "$@"' sh "<clone-dir>" \
        npx --prefix "$ci_dir" --yes --package "<helper-package-spec>" \
        idd-ci-wait-state --pr <pr-number> --owner <owner> --repo <name>
-   echo "check 4 exit status: $?" >&2
-   timeout -k 5 30 rm -rf -- "$ci_dir"
+   status=$?
+   echo "check 4 exit status: $status" >&2
+   timeout -k 5 30 rm -rf -- "$ci_dir" || status=1
+   (exit "$status")
    ```
 
    The helper is read-only and exits 0 with JSON even when a check failed.
