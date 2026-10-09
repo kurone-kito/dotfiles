@@ -305,7 +305,9 @@ Describe 'wsl incident capture metric handling' {
 
     $safe.Valid | Should -BeTrue
     $safe.Data.schemaVersion | Should -Be 1
-    ($safe.Data.counters.PSObject.Properties.Name -join ',') | Should -Be 'pgscan_kswapd,pgscan_direct,pgsteal_kswapd,pgsteal_direct,workingset_refault,workingset_refault_anon,workingset_refault_file,pswpin,pswpout,pgfault,pgmajfault'
+    $allNames = 'pgscan_kswapd,pgscan_direct,pgsteal_kswapd,pgsteal_direct,workingset_refault,workingset_refault_anon,workingset_refault_file,pswpin,pswpout,pgfault,pgmajfault'
+    ($safe.Data.counters.PSObject.Properties.Name -join ',') | Should -Be $allNames
+    ($safe.Data.deltas.PSObject.Properties.Name -join ',') | Should -Be $allNames
     foreach ($name in $existing) {
       $safe.Data.counters.$name | Should -BeOfType [ValueType]
       ($safe.Data.deltas.$name.PSObject.Properties.Name -join ',') | Should -Be 'status,value,perSecond'
