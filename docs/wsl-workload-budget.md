@@ -162,12 +162,14 @@ same window.
 The set of pressure indicators you rely on is **fixed when you take the
 baseline** and written into the record: every pressure indicator in the table,
 including the guest ones. For the refault indicator, fix one family when you
-take the baseline: `workingset_refault_file` on a split kernel, or
-`workingset_refault` where the kernel reports the single counter. Do not sum or
-mix the two families, and do not treat them as the same quantity. If the record
-has neither (an older helper or collector, or a kernel with no refault counter),
-the refault indicator is unknown and leaves the relied-on set; write that in
-the record. Do not drop an indicator later because it is inconvenient.
+take the baseline: `workingset_refault_file` when the record carries it, or
+else `workingset_refault` where the kernel reports the single counter. A record
+that carries both layouts reports all three fields, because the helper never
+sums them; use the file counter. Do not sum or mix the two families, and do not
+treat them as the same quantity. If the record has neither (an older helper or
+collector, or a kernel with no refault counter), the refault indicator is
+unknown and leaves the relied-on set; write that in the record. Do not drop an
+indicator later because it is inconvenient.
 
 ### Reading rules
 
