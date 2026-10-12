@@ -559,6 +559,14 @@ values — four or more digits, optionally comma-grouped, followed by
 `bytes` — so keep any non-budget value of that shape out of the guarded
 files, or express it without the `bytes` suffix.
 
+<!-- dotfiles-divergence: instruction-size-limits-not-enforced -->
+Limits in this section are not enforced in this repository. The per-file and
+bundle limits below, including the 98% check, are CI checks in the source
+repository. This checkout has no `audit/sync-manifest.json` and no check that
+fails when a limit is exceeded. At commit `b683a54`, 12 of the 15 bundles whose
+paths exist in this checkout exceeded their `limitBytes`, and 5 phase files
+exceeded 36,000 bytes. See #601 for the measurements.
+
 ### Per-file limits
 
 | Limit type    | Value        | Applies to                                                                 | Rationale                                                                                                                                                                                               |
