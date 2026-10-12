@@ -1701,8 +1701,11 @@ A4 Step 2 de-prioritization order. Evidence-only: it claims nothing.
   - `recommendedOrder`: `number[]` — candidate numbers after the soft
     tie-breaker (score desc, then non-overlapping first within a score band,
     then issue number). It does **not** apply `discover.selectionDesync`; the
-    agent layers the overlap nudge after its own desync pick. Advisory only;
-    never a hard gate.
+    agent layers the overlap nudge after its own desync pick, except that under
+    `session-offset` with more than one entry in the band the desync pick is
+    final.
+    <!-- dotfiles-divergence: session-offset-direct-index -->
+    Advisory only; never a hard gate.
   - `summary`: `{ candidateCount: number, flaggedCount: number,`
     `activeIssueCount: number }`
 - **Behavior boundary**: evidence-only and heuristic. `## Candidate files` are

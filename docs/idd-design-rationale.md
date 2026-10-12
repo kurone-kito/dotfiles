@@ -286,6 +286,7 @@ relative order, except that a session-offset pick from more than one entry
 is final — for example, between two genuinely-scored candidates,
 or between two unscored candidates when no genuinely-scored one is
 present at that value.
+<!-- dotfiles-divergence: session-offset-direct-index -->
 
 ## Claim resolution
 
