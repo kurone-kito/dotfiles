@@ -84,10 +84,11 @@ Required fields (stop and ask if any are missing): `protocolVersion`,
 `sameHeadMarkerCount`, `secondaryBotLogin`, `secondaryBotLogins`,
 `secondaryRequestLogins`, and `secondaryRequestNeeded`. Every field is
 always present, even empty/false/`[]` — validate presence, not
-truthiness; include `staleRequestRecovery`; reject unbound output. The
-pinned v0.14.0 schema requires every field listed here, including the four
-secondary-bot fields, even when the optional secondary feature is unset;
-they remain non-gating.
+truthiness; reject unbound output. The pinned v0.14.0 schema requires the
+24 fields listed above, including the four secondary-bot fields, even when
+the optional secondary feature is unset. Lite additionally requires
+`staleRequestRecovery`, which the schema lists as optional and which is not
+one of the 24. These fields remain non-gating.
 
 The helper computes `outcome` directly from live evidence — never by
 hand from raw timestamps. Allowed values: `SATISFIED`,
