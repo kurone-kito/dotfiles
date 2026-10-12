@@ -258,10 +258,11 @@ candidates in the same suitability-score tie band, positioned after
 selection-desync and before the effort hint (release intent
 outranks size preference, but both still apply only inside one band).
 
-Note (2026-10-12, #573): under the decided direct-index contract, the desync
-pick is final when `session-offset` applies with more than one entry, so this
-preference applies only when that setting is `off` or the band has one entry.
-<!-- dotfiles-divergence: session-offset-direct-index -->
+Note (2026-10-12, #573): under the decided direct-index contract, when
+`session-offset` applies with more than one entry, the desync pick is final.
+The milestone-scope, effort, and shared-file preferences therefore do not
+reorder that pick. They apply only when the setting is `off` or the band has
+one entry. <!-- dotfiles-divergence: session-offset-direct-index -->
 
 The preference is symmetric-neutral by construction: an unset or empty
 `discover.milestoneScope`, a candidate with no milestone, a **closed**
@@ -281,7 +282,8 @@ Moved from the Discover phase file to keep the capped instruction
 surface lean. After the scored-vs-unscored floor tie-breaker resolves
 the mixed case, the remaining tie-breakers (concurrent-selection
 desync, effort hint, lowest issue number) still apply in unchanged
-relative order — for example, between two genuinely-scored candidates,
+relative order, except that a session-offset pick from more than one entry
+is final — for example, between two genuinely-scored candidates,
 or between two unscored candidates when no genuinely-scored one is
 present at that value.
 
