@@ -1480,6 +1480,9 @@ Binding rules:
 - **Soft tie-breaker, never a gate.** Effort only reorders candidates
   **within** a single suitability-score band, after the score and
   optional desync rules and **before** the lowest-issue-number tie-break.
+  <!-- dotfiles-divergence: session-offset-direct-index -->
+  Exception: under `session-offset` with more than one entry in the band, the
+  desync pick is final and effort does not reorder it.
   It never skips, gates, crosses a score band, or bypasses the A4.5/A5
   gates, and a large (`L`) issue stays fully claimable when it is the only
   ready work.
