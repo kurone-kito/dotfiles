@@ -716,6 +716,13 @@ through the remaining enabled tie-breakers below. Use the deterministic
 When score-based selection is disabled, Step 2's explicit lowest-number
 rule applies without score-based tie-breakers.
 
+<!-- dotfiles-divergence: session-offset-direct-index -->
+**Contract when session offset applies.** With `session-offset` and more than
+one entry in the band, the offset picks that entry directly. The
+milestone-scope, effort, and shared-file preferences do not reorder that pick.
+They still apply when `discover.selectionDesync` is `off` and when the band has
+one entry.
+
 **Configured milestone-scope preference.** `discover.milestoneScope`
 (`#2340`) prefers a same-score-band candidate whose OPEN milestone
 matches, after desync and before effort — see

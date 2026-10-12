@@ -255,9 +255,13 @@ gap the same way `selectionDesync` and the effort hint do: a **soft**,
 same-score-band-only preference, never a gate. When set, a candidate whose
 **OPEN** milestone title equals the configured value sorts ahead of other
 candidates in the same suitability-score tie band, positioned after
-selection-desync (session spread stays available even within a
-milestone-preferred set) and before the effort hint (release intent
+selection-desync and before the effort hint (release intent
 outranks size preference, but both still apply only inside one band).
+
+Note (2026-10-12, #573): under the decided direct-index contract, the desync
+pick is final when `session-offset` applies with more than one entry, so this
+preference applies only when that setting is `off` or the band has one entry.
+<!-- dotfiles-divergence: session-offset-direct-index -->
 
 The preference is symmetric-neutral by construction: an unset or empty
 `discover.milestoneScope`, a candidate with no milestone, a **closed**

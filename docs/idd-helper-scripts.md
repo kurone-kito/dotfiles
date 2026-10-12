@@ -4498,6 +4498,10 @@ still fails closed:
   silently returning the library function's safe-default `0`
 - The written formula in `idd-discover.instructions.md` stays the
   canonical spec and fallback when the helper is unavailable
+- <!-- dotfiles-divergence: session-offset-direct-index -->
+  Under `session-offset`, the index picks the entry directly. The
+  milestone-scope, effort, and shared-file preferences do not reorder that
+  entry; they still apply when the setting is `off` or the band has one entry.
 
 ### Per-cycle marker bodies
 
