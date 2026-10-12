@@ -7,6 +7,7 @@ tags: [onboarding, placeholders]
 
 # Onboarding Reference — Placeholder Values
 
+<!-- dotfiles-divergence: onboarding-doc-trim -->
 Use this reference with
 [`ONBOARDING.md`](https://github.com/kurone-kito/idd-skill/blob/ae16f497434a5023dfaa28f965fc2af92ebf055d/idd-template/ONBOARDING.md)
 when you need the full derivation and replacement rules for the
