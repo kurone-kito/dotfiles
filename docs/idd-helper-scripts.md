@@ -1427,6 +1427,11 @@ default below is unchanged.
     at the same effective value — scored work always sorts first at a tie.
     The score is an advisory ranking hint only; it never replaces the
     A4.5 suitability gate or the A5 claim safety checks.
+    <!-- dotfiles-divergence: session-offset-direct-index -->
+    A `session-offset` index (`idd-select-desynced-index`) is defined over the
+    surviving score band in ascending issue-number order, not over this sorted
+    array. A consumer applying that index here must first rebuild the band in
+    ascending issue-number order.
 - **Progress and interruption recovery (`--with-progress`, #3598)**: an
   opt-in flag for the annotated union scan (`--all-roadmaps` with
   `--with-claim-state` and/or `--with-readiness`), which can make many
