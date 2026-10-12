@@ -716,6 +716,13 @@ through the remaining enabled tie-breakers below. Use the deterministic
 When score-based selection is disabled, Step 2's explicit lowest-number
 rule applies without score-based tie-breakers.
 
+<!-- dotfiles-divergence: session-offset-direct-index -->
+**Contract when session offset applies.** With `session-offset` and more than
+one entry in the band, the offset picks that entry directly. The
+milestone-scope, effort, and shared-file preferences do not reorder that pick.
+They still apply when `discover.selectionDesync` is `off` and when the band has
+one entry.
+
 **Configured milestone-scope preference.** `discover.milestoneScope`
 (`#2340`) prefers a same-score-band candidate whose OPEN milestone
 matches, after desync and before effort — see
@@ -730,6 +737,11 @@ Read the `<!-- dotfiles-effort: S|M|L -->` footer (or
 `discover-roadmap-graph`'s `effort`): `S` < `M` < `L`; missing/invalid
 is **neutral** (`M`). **Soft**: reorders only within one score tie
 band; `discover-roadmap-graph` already emits this order.
+
+<!-- dotfiles-divergence: session-offset-direct-index -->
+When `session-offset` applies with more than one entry in the band, the desync
+pick is final, so this effort preference and the overlap preference below do
+not reorder it.
 
 **High-contention shared-file overlap (advisory).** Concurrent sessions
 tend to edit the same F-phase bundle files and `audit/sync-manifest.json`.
@@ -752,6 +764,10 @@ issue number is the final deterministic tie-break after the enabled
 preferences; each later preference only breaks ties left by the earlier
 rules. When score-based selection is disabled, ignore this sequence and
 select by lowest issue number.
+
+<!-- dotfiles-divergence: session-offset-direct-index -->
+When `session-offset` applies with more than one entry in the band, the desync
+pick is final, and the later preferences above do not reorder it.
 
 After picking, proceed to **A4.5** (`idd-suitability.instructions.md`).
 

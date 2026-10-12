@@ -1427,6 +1427,11 @@ default below is unchanged.
     at the same effective value — scored work always sorts first at a tie.
     The score is an advisory ranking hint only; it never replaces the
     A4.5 suitability gate or the A5 claim safety checks.
+    <!-- dotfiles-divergence: session-offset-direct-index -->
+    A `session-offset` index (`idd-select-desynced-index`) is defined over the
+    surviving score band in ascending issue-number order, not over this sorted
+    array. A consumer applying that index here must first rebuild the band in
+    ascending issue-number order.
 - **Progress and interruption recovery (`--with-progress`, #3598)**: an
   opt-in flag for the annotated union scan (`--all-roadmaps` with
   `--with-claim-state` and/or `--with-readiness`), which can make many
@@ -1701,8 +1706,11 @@ A4 Step 2 de-prioritization order. Evidence-only: it claims nothing.
   - `recommendedOrder`: `number[]` — candidate numbers after the soft
     tie-breaker (score desc, then non-overlapping first within a score band,
     then issue number). It does **not** apply `discover.selectionDesync`; the
-    agent layers the overlap nudge after its own desync pick. Advisory only;
-    never a hard gate.
+    agent layers the overlap nudge after its own desync pick, except that under
+    `session-offset` with more than one entry in the band the desync pick is
+    final.
+    <!-- dotfiles-divergence: session-offset-direct-index -->
+    Advisory only; never a hard gate.
   - `summary`: `{ candidateCount: number, flaggedCount: number,`
     `activeIssueCount: number }`
 - **Behavior boundary**: evidence-only and heuristic. `## Candidate files` are
@@ -4498,6 +4506,10 @@ still fails closed:
   silently returning the library function's safe-default `0`
 - The written formula in `idd-discover.instructions.md` stays the
   canonical spec and fallback when the helper is unavailable
+- <!-- dotfiles-divergence: session-offset-direct-index -->
+  Under `session-offset`, the index picks the entry directly. The
+  milestone-scope, effort, and shared-file preferences do not reorder that
+  entry; they still apply when the setting is `off` or the band has one entry.
 
 ### Per-cycle marker bodies
 
