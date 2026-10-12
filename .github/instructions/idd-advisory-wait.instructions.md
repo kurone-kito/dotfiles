@@ -68,16 +68,18 @@ Contract: `docs/idd-helper-scripts.md#stable-helper-evidence-outputs`
 and `schemas/advisory-wait-state.schema.json`.
 
 <!-- dotfiles-divergence: advisory-response-schema -->
-Required helper fields: `prHeadSha`, `lastCopilotCommit`,
-`copilotPending`, `copilotPendingCoversHead`, `outcome`, `f3Outcome`,
-`earliestSameHeadAt`, `requestMarkerCount`, `requestCap`,
-`pendingWindowMinutes`, `settledWindowMinutes`, `pollIntervalMinutes`,
-`capExhaustedRoute`, `trustedMarkerSummary`, `secondaryBotLogin`,
-`secondaryBotLogins`, `secondaryRequestLogins`, and
-`secondaryRequestNeeded`. The pinned v0.14.0 schema requires all four
-secondary-bot fields even when the optional secondary feature is unset;
-validate schema-valid empty or `false` values. These fields remain
-non-gating and do not change the `outcome`/`f3Outcome` enums.
+Required helper fields: `protocolVersion`, `prHeadSha`,
+`lastCopilotCommit`, `copilotPending`, `copilotPendingCoversHead`,
+`outcome`, `f3Outcome`, `earliestSameHeadAt`, `requestMarkerCount`,
+`requestCap`, `pendingWindowMinutes`, `settledWindowMinutes`,
+`pollIntervalMinutes`, `capExhaustedRoute`, `trustedMarkerSummary`, `now`,
+`elapsedMinutes`, `sameHeadMarkerPresent`, `sameHeadRequestMarkerPresent`,
+`sameHeadMarkerCount`, `secondaryBotLogin`, `secondaryBotLogins`,
+`secondaryRequestLogins`, and `secondaryRequestNeeded`. The pinned v0.14.0
+schema requires every field listed here, including the four secondary-bot
+fields, even when the optional secondary feature is unset; validate
+schema-valid empty or `false` values. These fields remain non-gating and do
+not change the `outcome`/`f3Outcome` enums.
 
 Allowed `outcome`/`f3Outcome` values: `SATISFIED`, `REQUEST_NEEDED`,
 `RECOVERY_NEEDED`, `CAP_EXHAUSTED`, `WAIT`. `HOLD` is a protocol-level
@@ -113,6 +115,7 @@ outage (e.g. via status page or an org admin surface) before retrying.
 
 ### Secondary advisory bot supplement (non-gating)
 
+<!-- dotfiles-divergence: advisory-response-schema -->
 Orthogonal to the table above: changes no `outcome`/`f3Outcome` or
 route, never satisfies the primary gate, posts no `advisory-wait`
 marker. A bot check alone never confirms review of current HEAD.

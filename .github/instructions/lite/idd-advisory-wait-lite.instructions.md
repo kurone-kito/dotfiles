@@ -74,18 +74,20 @@ Resolve the package-manager / ephemeral-npx equivalent from
 
 <!-- dotfiles-divergence: reviewed-v014-safety-corrections -->
 <!-- dotfiles-divergence: advisory-response-schema -->
-Required fields (stop and ask if any are missing): `prHeadSha`,
-`lastCopilotCommit`, `copilotPending`,
+Required fields (stop and ask if any are missing): `protocolVersion`,
+`prHeadSha`, `lastCopilotCommit`, `copilotPending`,
 `copilotPendingCoversHead`, `outcome`, `f3Outcome`, `earliestSameHeadAt`,
-`requestMarkerCount`, `requestCap`,
-`pendingWindowMinutes`, `settledWindowMinutes`, `pollIntervalMinutes`,
-`capExhaustedRoute`, `trustedMarkerSummary`, `secondaryBotLogin`,
-`secondaryBotLogins`, `secondaryRequestLogins`, and
-`secondaryRequestNeeded`. Every field is always present, even
-empty/false/`[]` — validate presence, not truthiness; include
-`staleRequestRecovery`; reject unbound output. The four secondary-bot
-fields are required by the pinned v0.14.0 schema even when the optional
-secondary feature is unset; they remain non-gating.
+`requestMarkerCount`, `requestCap`, `pendingWindowMinutes`,
+`settledWindowMinutes`, `pollIntervalMinutes`, `capExhaustedRoute`,
+`trustedMarkerSummary`, `now`, `elapsedMinutes`,
+`sameHeadMarkerPresent`, `sameHeadRequestMarkerPresent`,
+`sameHeadMarkerCount`, `secondaryBotLogin`, `secondaryBotLogins`,
+`secondaryRequestLogins`, and `secondaryRequestNeeded`. Every field is
+always present, even empty/false/`[]` — validate presence, not
+truthiness; include `staleRequestRecovery`; reject unbound output. The
+pinned v0.14.0 schema requires every field listed here, including the four
+secondary-bot fields, even when the optional secondary feature is unset;
+they remain non-gating.
 
 The helper computes `outcome` directly from live evidence — never by
 hand from raw timestamps. Allowed values: `SATISFIED`,
@@ -159,6 +161,7 @@ duplicated here).
 
 ## Secondary advisory bot(s) (non-gating, optional)
 
+<!-- dotfiles-divergence: advisory-response-schema -->
 `secondaryBotLogins` is the complete list; `secondaryBotLogin` is its
 single-login convenience mirror. When `secondaryRequestNeeded` is
 `true`, request **every** login in the
