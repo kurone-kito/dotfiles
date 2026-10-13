@@ -105,7 +105,7 @@ worktree_guard = config.get('worktreeGuard', {})
 assert worktree_guard.get('enabled') is True, worktree_guard
 assert worktree_guard.get('refuseBaseBranchCommits') is True, worktree_guard
 
-assert config.get('issueAuthoring', {}).get('journalIssue') == 'kurone-kito/dotfiles#380', \
+assert config.get('issueAuthoring', {}).get('journalIssue') == 'kurone-kito/dotfiles#608', \
     config.get('issueAuthoring')
 
 assert config.get('labels', {}).get('untrustedLabelerLogins') == ['coderabbitai[bot]'], \
