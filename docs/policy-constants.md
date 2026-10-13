@@ -384,7 +384,9 @@ short, bounded poll `advisory-convergence.mjs` itself runs when the
 the primary bot has not reviewed the pull request at all yet -- absorbing
 the common race between the `pull_request_target: synchronize` trigger
 (fires immediately on push) and the primary bot's
-own review landing shortly after. The bot's review submission
+own review landing shortly
+after. <!-- dotfiles-divergence: advisory-trigger-pull-request-target-only -->
+The bot's review submission
 (`pull_request_review`) does not trigger this required workflow directly
 -- it moved to the non-required companion
 `idd-advisory-convergence-comment.yml` workflow (`--refresh-latest
