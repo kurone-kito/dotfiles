@@ -138,3 +138,9 @@ $RECYCLE.BIN/
 
 # Pester test result artifacts (Invoke-Pester -CI emits testResults.xml in cwd)
 testResults.xml
+
+### Node.js ###
+# npx lint runs (markdownlint-cli2, cspell) create node_modules/.cache in the
+# working directory. This repository has no package.json, so nothing under
+# node_modules/ is a managed dependency.
+node_modules/
