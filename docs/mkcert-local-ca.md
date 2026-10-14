@@ -180,10 +180,10 @@ recorded as done. In short: a non-interactive `chezmoi apply` (an
 inbound SSH session with nobody available to click through a dialog,
 a scheduled task, etc.) fails loudly after at most 180 seconds by
 default (or the configured `data.mkcert.installTimeoutSeconds`) instead
-of hanging forever. (Stopping the background job stopped its native
-child process on both Windows PowerShell 5.1 and pwsh 7 in the probe
-recorded in the job-stop subsection below, and no `mkcert.exe` process
-was left running. If one were ever left running regardless,
+of hanging forever. (The probe in the job-stop subsection below observed
+no matching surviving process after `Stop-Job` on either Windows
+PowerShell 5.1 or pwsh 7, though its checks have limits that subsection
+describes. If a `mkcert.exe` process were ever left running regardless,
 `chezmoi apply` itself would still be unblocked — the primary problem
 this bound exists to prevent — with, at worst, a lingering orphaned
 process to clean up by hand.) Run the initial opt-in `chezmoi apply`
@@ -224,8 +224,8 @@ evidence.
 
 | Edition | Host executable | PSVersion | mkcert | Survivors after `Stop-Job` | Result |
 | --- | --- | --- | --- | --- | --- |
-| Windows PowerShell 5.1 | `powershell.exe` | 5.1.26100.33438 | v1.4.4 | None, by name or by parent process id | No surviving child process |
-| pwsh 7 | `pwsh.exe` | 7.6.6 | v1.4.4 | None, by name or by parent process id | No surviving child process |
+| Windows PowerShell 5.1 | `powershell.exe` | 5.1.26100.33438 | v1.4.4 | None observed, by name or by parent process id | No matching survivor observed |
+| pwsh 7 | `pwsh.exe` | 7.6.6 | v1.4.4 | None observed, by name or by parent process id | No matching survivor observed |
 
 Run links: [run 38574478124, Windows PowerShell 5.1 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115887850309)
 and [run 38574478124, pwsh 7 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115888799841).
@@ -269,16 +269,21 @@ RESULT edition=Core done
 The `OUT mkcert:` line drops a trailing emoji from mkcert's output, which
 the workflow log shows as garbled characters.
 
-How the result was judged: the probe did not snapshot child processes
-before `Stop-Job`, so a surviving child is judged from what is visible
-after the stop. In both editions the mkcert job was still running at the
-60-second bound, after mkcert had printed `Created a new local CA`. The
-`ping.exe` control was still running at its 15-second bound, because
-`ping -n 300` cannot finish that quickly. After the stop, no process named
-`mkcert` or `PING` existed, no process had the job host as its parent,
-and the job host itself was gone within 3 seconds in every case. No child
-process survived `Stop-Job` in either edition, so no known limitation is
-recorded and no follow-up issue is needed.
+How the result was judged: in both editions the mkcert job was still
+running at the 60-second bound, after mkcert had printed
+`Created a new local CA`. The `ping.exe` control was still running at its
+15-second bound, because `ping -n 300` cannot finish that quickly. The
+checks ran 3 and 8 seconds after the stop. They observed no process named
+`mkcert` or `PING` and no process whose parent process id was the job
+host, and the job host itself was gone within 3 seconds in every case.
+This records no matching survivor. It does not prove that no child process
+can survive `Stop-Job`. The probe did not snapshot child processes before
+the stop. The checks also miss a child that exits between snapshots, a
+child reparented when the job host stops, and a child with another
+executable name. The probe ran the downloaded release binary directly, not
+the mise shim that the documented Windows setup resolves. Because no
+matching survivor was observed, the known-limitation and follow-up path
+for a surviving child is not triggered.
 
 ## Verifying the registration
 
