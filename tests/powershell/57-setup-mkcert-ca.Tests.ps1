@@ -550,12 +550,14 @@ Describe 'mkcert registration check documentation' {
       @($parsed.Errors).Count | Should -Be 0
     }
 
-    It 'contains no mkcert, Remove-Item, Import-Certificate, or certutil command' {
+    It 'contains no mkcert, Remove-Item (or an alias), Import-Certificate, or certutil command' {
       $parsed = Get-RegistrationAst
       $info = Get-CommandInfo -Ast $parsed.Ast
       $info.Unresolved | Should -Be 0
       @($info.Names).Count | Should -BeGreaterThan 0
-      $forbidden = @('mkcert', 'Remove-Item', 'Import-Certificate', 'certutil')
+      # Remove-Item's built-in aliases are listed so that `rm` cannot slip
+      # past a check on canonical cmdlet names only.
+      $forbidden = @('mkcert', 'Remove-Item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir', 'Import-Certificate', 'certutil')
       $hits = @($info.Names | Where-Object { $forbidden -contains (Get-NormalizedName -Name $_) })
       $hits | Should -BeNullOrEmpty
     }
