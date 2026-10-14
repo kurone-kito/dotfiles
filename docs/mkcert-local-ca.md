@@ -180,11 +180,10 @@ recorded as done. In short: a non-interactive `chezmoi apply` (an
 inbound SSH session with nobody available to click through a dialog,
 a scheduled task, etc.) fails loudly after at most 180 seconds by
 default (or the configured `data.mkcert.installTimeoutSeconds`) instead
-of hanging forever. (Stopping the background job also stops its
-underlying native child process, confirmed empirically on
-Linux/PowerShell during development, though not separately confirmed
-on Windows PowerShell 5.1. If a `mkcert.exe` process or a dialog it
-spawned were ever left running in the background regardless,
+of hanging forever. (Stopping the background job stopped its native
+child process on both Windows PowerShell 5.1 and pwsh 7 in the probe
+recorded in the job-stop subsection below, and no `mkcert.exe` process
+was left running. If one were ever left running regardless,
 `chezmoi apply` itself would still be unblocked — the primary problem
 this bound exists to prevent — with, at worst, a lingering orphaned
 process to clean up by hand.) Run the initial opt-in `chezmoi apply`
@@ -210,6 +209,76 @@ real interactive-RDP-with-logged-in-user-vs-plain-SSH comparison. If
 you observe different behavior (a fast failure instead of a hang, for
 example) in your own SSH session, please report it so this note can be
 refined.
+
+### Job-stop behaviour on Windows PowerShell 5.1 and pwsh 7
+
+The script runs `mkcert -install` in a background job and calls
+`Stop-Job` after a bound. This subsection records whether a native child
+process survived that stop, once for each PowerShell edition. Both rows
+come from one temporary probe run on a `windows-latest` GitHub Actions
+runner, dated 2026-10-14. The probe used the mkcert v1.4.4 release
+binary, a throwaway `CAROOT`, and `TRUST_STORES=system`, and it ran a
+native `ping.exe` sleeper as a control. The probe workflow was deleted by
+the change that added this subsection, so the run links below are the
+evidence.
+
+| Edition | Host executable | PSVersion | mkcert | Survivors after `Stop-Job` | Result |
+| --- | --- | --- | --- | --- | --- |
+| Windows PowerShell 5.1 | `powershell.exe` | 5.1.26100.33438 | v1.4.4 | None, by name or by parent process id | No surviving child process |
+| pwsh 7 | `pwsh.exe` | 7.6.6 | v1.4.4 | None, by name or by parent process id | No surviving child process |
+
+Run links: [run 38574478124, Windows PowerShell 5.1 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115887850309)
+and [run 38574478124, pwsh 7 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115888799841).
+
+Observed output for Windows PowerShell 5.1 (timestamps removed):
+
+```text
+RESULT edition=Desktop psversion=5.1.26100.33438 host_exe=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.EXE host_pid=9532
+RESULT mkcert_url=https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe mkcert_version=v1.4.4
+RESULT throwaway_caroot=D:\a\_temp\probe-Desktop\caroot trust_stores=system
+RESULT case=mkcert-install job_host_pid=7888 bound_seconds=60
+OUT mkcert: Created a new local CA
+RESULT case=mkcert-install outcome=stopped-at-bound elapsed_seconds=60 job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=mkcert-install survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=mkcert-install survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT case=native-sleep job_host_pid=10192 bound_seconds=15
+RESULT case=native-sleep outcome=stopped-at-bound job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=native-sleep survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=native-sleep survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT edition=Desktop done
+```
+
+Observed output for pwsh 7 (timestamps removed):
+
+```text
+RESULT edition=Core psversion=7.6.6 host_exe=C:\Program Files\PowerShell\7\pwsh.EXE host_pid=5688
+RESULT mkcert_url=https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe mkcert_version=v1.4.4
+RESULT throwaway_caroot=D:\a\_temp\probe-Core\caroot trust_stores=system
+RESULT case=mkcert-install job_host_pid=6968 bound_seconds=60
+OUT mkcert: Created a new local CA
+RESULT case=mkcert-install outcome=stopped-at-bound elapsed_seconds=60 job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=mkcert-install survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=mkcert-install survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT case=native-sleep job_host_pid=1392 bound_seconds=15
+RESULT case=native-sleep outcome=stopped-at-bound job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=native-sleep survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=native-sleep survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT edition=Core done
+```
+
+The `OUT mkcert:` line drops a trailing emoji from mkcert's output, which
+the workflow log shows as garbled characters.
+
+How the result was judged: the probe did not snapshot child processes
+before `Stop-Job`, so a surviving child is judged from what is visible
+after the stop. In both editions the mkcert job was still running at the
+60-second bound, after mkcert had printed `Created a new local CA`. The
+`ping.exe` control was still running at its 15-second bound, because
+`ping -n 300` cannot finish that quickly. After the stop, no process named
+`mkcert` or `PING` existed, no process had the job host as its parent,
+and the job host itself was gone within 3 seconds in every case. No child
+process survived `Stop-Job` in either edition, so no known limitation is
+recorded and no follow-up issue is needed.
 
 ## Verifying the registration
 
