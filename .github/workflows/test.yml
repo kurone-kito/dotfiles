@@ -364,3 +364,19 @@ jobs:
             echo "::error::$errors Lua file(s) have syntax errors"
             exit 1
           fi
+
+  advisory-wait-required-fields:
+    name: Advisory-wait required fields (bats)
+    # Deliberately not gated on the detect-changes job: this check reads
+    # Markdown instruction files, so a Markdown-only pull request must
+    # still run it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+          # The job runs PR-controlled test code and needs no authenticated
+          # Git commands after checkout, so do not leave the token behind.
+          persist-credentials: false
+      - name: Run advisory-wait required-field check
+        run: tests/bash/helpers/bats-core/bin/bats tests/bash/advisory-wait-required-fields.bats
