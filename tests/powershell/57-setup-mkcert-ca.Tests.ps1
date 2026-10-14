@@ -37,6 +37,68 @@ BeforeDiscovery {
 BeforeAll {
   $script:RepoHome = Join-Path (Join-Path $PSScriptRoot '..') '..' | Join-Path -ChildPath 'home' | Resolve-Path
   $script:TemplatePath = Join-Path $script:RepoHome 'run_onchange_after_57-setup-mkcert-ca.ps1.tmpl'
+  $script:RepoRoot = (Join-Path $script:RepoHome '..' | Resolve-Path).Path
+  $script:ConfigTemplatePath = Join-Path $script:RepoRoot '.chezmoi.toml.tmpl'
+
+  # Renders .chezmoi.toml.tmpl the way `chezmoi init` does, with the git and
+  # secret prompts answered on the command line. $MkcertJson is the value of
+  # data.mkcert as a JSON object, or $null to leave the table out entirely.
+  # Windows PowerShell 5.1 turns stderr into ErrorRecords under Stop, so the
+  # capture runs in a child scriptblock with 'Continue' (as in Invoke-Render).
+  function Invoke-ConfigRender {
+    param([AllowNull()] [string] $MkcertJson)
+    $data = if ([string]::IsNullOrEmpty($MkcertJson)) { '{}' } else { '{ "mkcert": ' + $MkcertJson + ' }' }
+    $cfg = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-initcfg-{0}.json" -f [guid]::NewGuid())
+    $dest = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-initdest-{0}" -f [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    [System.IO.File]::WriteAllText($cfg, '{ "data": ' + $data + ' }', [System.Text.UTF8Encoding]::new($false))
+    try {
+      $raw = & {
+        $ErrorActionPreference = 'Continue'
+        & chezmoi execute-template --init --file $script:ConfigTemplatePath --config $cfg --config-format json `
+          --promptString git.name='Test User' --promptString git.email='test@example.com' `
+          --promptString git.signingkey='' --promptString secret.manager='none' `
+          --source $script:RepoRoot --destination $dest 2>&1
+      }
+      $exitCode = $LASTEXITCODE
+      $lines = @($raw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+      [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = ($lines -join "`n")
+      }
+    } finally {
+      Remove-Item -LiteralPath $cfg, $dest -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  # Renders the run_onchange script from a config file that already holds
+  # TOML text, so a generated config can be fed back in as chezmoi would
+  # read it on the next apply. The OS is pinned to windows.
+  function Invoke-RenderOnChangeFromToml {
+    param([string] $ConfigToml)
+    $cfg = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-roundtrip-{0}.toml" -f [guid]::NewGuid())
+    $osFile = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-roundtrip-os-{0}.json" -f [guid]::NewGuid())
+    $dest = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-roundtrip-dest-{0}" -f [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    [System.IO.File]::WriteAllText($cfg, $ConfigToml, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($osFile, '{"chezmoi":{"os":"windows"}}', [System.Text.UTF8Encoding]::new($false))
+    try {
+      $raw = & {
+        $ErrorActionPreference = 'Continue'
+        & chezmoi execute-template --file $script:TemplatePath --config $cfg --config-format toml `
+          --override-data-file $osFile --source $script:RepoHome --destination $dest 2>&1
+      }
+      $exitCode = $LASTEXITCODE
+      # Keep ErrorRecords too: chezmoi reports a failed render on stderr.
+      $lines = @($raw | ForEach-Object { $_.ToString() })
+      [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = ($lines -join "`n")
+      }
+    } finally {
+      Remove-Item -LiteralPath $cfg, $osFile, $dest -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
 
   function Invoke-Render {
     param(
@@ -163,6 +225,45 @@ Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
       $result = Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds $_
       $result.ExitCode | Should -Not -Be 0
       $result.Output | Should -Match 'installTimeoutSeconds'
+    }
+  }
+
+  Context 'chezmoi init config emission (.chezmoi.toml.tmpl)' {
+    It 'emits no [data.mkcert] table when both keys are unset' {
+      $result = Invoke-ConfigRender -MkcertJson $null
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Not -Match '(?m)^\[data\.mkcert\]'
+    }
+
+    It 'emits no table when installTimeoutSeconds is the integer default 180' {
+      $result = Invoke-ConfigRender -MkcertJson '{ "installTimeoutSeconds": 180 }'
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Not -Match '(?m)^\[data\.mkcert\]'
+    }
+
+    It 'emits install = true without an installTimeoutSeconds line when only install is set' {
+      $result = Invoke-ConfigRender -MkcertJson '{ "install": true }'
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match '(?m)^\[data\.mkcert\]\ninstall = true$'
+      $result.Output | Should -Not -Match 'installTimeoutSeconds'
+    }
+
+    It 'emits a configured integer as a bare number that the script render accepts' {
+      $result = Invoke-ConfigRender -MkcertJson '{ "install": true, "installTimeoutSeconds": 45 }'
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match '(?m)^installTimeoutSeconds = 45$'
+      $roundTrip = Invoke-RenderOnChangeFromToml -ConfigToml $result.Output
+      $roundTrip.ExitCode | Should -Be 0
+      $roundTrip.Output | Should -Match '(?s)\}\s*else\s*\{\s*45\s*\}'
+    }
+
+    It 'emits a quoted invalid value and the script render rejects it, naming the key' {
+      $result = Invoke-ConfigRender -MkcertJson '{ "install": true, "installTimeoutSeconds": "180" }'
+      $result.ExitCode | Should -Be 0
+      $result.Output | Should -Match '(?m)^installTimeoutSeconds = "180"$'
+      $roundTrip = Invoke-RenderOnChangeFromToml -ConfigToml $result.Output
+      $roundTrip.ExitCode | Should -Not -Be 0
+      $roundTrip.Output | Should -Match 'installTimeoutSeconds'
     }
   }
 
