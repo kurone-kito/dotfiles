@@ -9,6 +9,11 @@
 # advisory-wait instruction file must backtick exactly those names, no more
 # and no fewer. A pin update therefore fails this file until the fixture is
 # refreshed, and a dropped backtick or a stray or missing name fails it too.
+#
+# Scope of the guarantee: this file checks snapshot consistency only. It
+# does not fetch the schema at the pinned commit, so it cannot tell whether
+# the fixture's names still match that schema. Refreshing the fixture from
+# the schema at each pin is a manual step, recorded in docs/idd-policy.md.
 
 bats_require_minimum_version 1.5.0
 
@@ -41,6 +46,9 @@ fixture, path, lead = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(fixture, encoding="utf-8") as f:
     lines = f.read().split("\n")
 names = [line for line in lines[1:] if line]
+if not names:
+    print("error: fixture lists no required names")
+    sys.exit(1)
 
 with open(path, encoding="utf-8") as f:
     doc = f.read().split("\n")
@@ -109,6 +117,9 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as f:
     names = [line for line in f.read().split("\n")[1:] if line]
+if not names:
+    print("error: fixture lists no required names")
+    sys.exit(1)
 bad = [n for n in names if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", n)]
 dups = sorted({n for n in names if names.count(n) > 1})
 if bad or dups:
@@ -222,4 +233,12 @@ PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
   assert_output --partial 'repeated names'
+}
+
+@test "negative: a fixture with no names fails the check instead of passing vacuously" {
+  local empty="$BATS_TEST_TMPDIR/advisory-wait-required.txt"
+  head -n 1 "$FIXTURE" > "$empty"
+  run check_required_paragraph "$empty" "$FULL_FILE" "$FULL_LEAD"
+  assert_failure
+  assert_output --partial 'no required names'
 }
