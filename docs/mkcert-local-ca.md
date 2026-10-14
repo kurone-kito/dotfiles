@@ -224,16 +224,24 @@ call `mkcert`, import, remove, or change any certificate, and it does
 not read `$CAROOT`. Run it after the opt-in `chezmoi apply`, in the
 session you want to verify.
 
-A **positive result** lists one or more certificates. Record the
-subject, thumbprint, and NotAfter date of each row. A **negative
-result** (no rows) means the opt-in did not complete, unless
-`TRUST_STORES` is set and leaves out `system` (see the
-`$CAROOT` and `TRUST_STORES` section above). In that case mkcert does
-not add its CA to this store, so no rows is expected. This check only
-covers the `CurrentUser\Root` store, so it cannot confirm a registration
-in any other store. Otherwise, re-run the opt-in `chezmoi apply` from a
-console session, as described in the Non-interactive sessions section
-above.
+This check applies only when `TRUST_STORES` is unset or includes
+`system` (see the `$CAROOT` and `TRUST_STORES` section above). If
+`TRUST_STORES` is set and leaves out `system`, mkcert does not add its CA
+to this store. An empty result is then expected and says nothing about
+whether the opt-in completed, so the check is not applicable. The check
+covers only the `CurrentUser\Root` store and cannot confirm a
+registration in any other store.
+
+A **positive result** lists one or more certificates. It shows only that
+some mkcert root is in the store. The store can keep a CA left over from
+an earlier `$CAROOT`, so a positive result does not on its own show that
+the current opt-in succeeded. Record the subject, thumbprint, and
+NotAfter date of each row.
+
+A **negative result** (no rows, with `TRUST_STORES` unset or including
+`system`) means the opt-in did not complete. Re-run the opt-in
+`chezmoi apply` from a console session, as described in the
+Non-interactive sessions section above.
 
 > **Not yet confirmed on a real machine.** The subject pattern, the
 > `CN=mkcert` prefix followed by a space, has not yet been confirmed on a
