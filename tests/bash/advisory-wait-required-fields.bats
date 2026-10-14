@@ -142,13 +142,18 @@ PY
 
 @test "negative: removing the backticks around one name fails the check" {
   local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
+  local name
+  # Take a real fixture name at run time, so a later pin that drops a
+  # particular field does not break this case. It asserts the generic
+  # diagnostic, not the field name.
+  name="$(sed -n 2p "$FIXTURE")"
   cp "$FULL_FILE" "$copy"
   # Strip the backticks around one name, only inside the required-field
   # paragraph, so the rest of the file stays identical.
-  python3 -I - "$copy" "$FULL_LEAD" <<'PY'
+  python3 -I - "$copy" "$FULL_LEAD" "$name" <<'PY'
 import sys
 
-path, lead = sys.argv[1], sys.argv[2]
+path, lead, name = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path, encoding="utf-8") as f:
     doc = f.read().split("\n")
 start = next(i for i, line in enumerate(doc) if line.startswith(lead))
@@ -156,8 +161,8 @@ end = start
 while end < len(doc) and doc[end].strip() != "":
     end += 1
 for i in range(start, end):
-    if "`copilotPending`" in doc[i]:
-        doc[i] = doc[i].replace("`copilotPending`", "copilotPending", 1)
+    if f"`{name}`" in doc[i]:
+        doc[i] = doc[i].replace(f"`{name}`", name, 1)
         break
 else:
     sys.exit("name not found in paragraph")
@@ -166,20 +171,22 @@ with open(path, "w", encoding="utf-8", newline="\n") as f:
 PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
-  assert_output --partial 'copilotPending'
+  assert_output --partial 'missing'
 }
 
 @test "negative: an extra backticked name in the required-list sentence fails the check" {
   local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
+  local name
+  name="$(sed -n 2p "$FIXTURE")"
   cp "$FULL_FILE" "$copy"
-  # Add a backticked name that the fixture does not list just before the
-  # first fixture name in the required-field paragraph. The anchor is the
-  # token itself, anywhere in the paragraph, so reflowing the paragraph
-  # does not break this mutation.
-  python3 -I - "$copy" "$FULL_LEAD" <<'PY'
+  # Add a backticked name that the fixture does not list just before a real
+  # fixture name in the required-field paragraph. The anchor is picked at run
+  # time and found anywhere in the paragraph, so neither a later pin nor a
+  # reflowed paragraph breaks this mutation.
+  python3 -I - "$copy" "$FULL_LEAD" "$name" <<'PY'
 import sys
 
-path, lead = sys.argv[1], sys.argv[2]
+path, lead, name = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path, encoding="utf-8") as f:
     doc = f.read().split("\n")
 start = next(i for i, line in enumerate(doc) if line.startswith(lead))
@@ -187,10 +194,8 @@ found = False
 for i in range(start, len(doc)):
     if doc[i].strip() == "":
         break
-    if "`protocolVersion`" in doc[i]:
-        doc[i] = doc[i].replace(
-            "`protocolVersion`", "`staleBogusField`, `protocolVersion`", 1
-        )
+    if f"`{name}`" in doc[i]:
+        doc[i] = doc[i].replace(f"`{name}`", f"`staleBogusField`, `{name}`", 1)
         found = True
         break
 if not found:
@@ -200,18 +205,21 @@ with open(path, "w", encoding="utf-8", newline="\n") as f:
 PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
-  assert_output --partial 'staleBogusField'
+  assert_output --partial 'extra'
 }
 
 @test "negative: a repeated name in the required-list sentence fails the check" {
   local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
+  local name
+  name="$(sed -n 2p "$FIXTURE")"
   cp "$FULL_FILE" "$copy"
-  # Repeat one fixture name inside the required-field paragraph. A set
-  # comparison alone would accept this, so the duplicate check must catch it.
-  python3 -I - "$copy" "$FULL_LEAD" <<'PY'
+  # Repeat a real fixture name, picked at run time, inside the required-field
+  # paragraph. A set comparison alone would accept this, so the duplicate
+  # check must catch it.
+  python3 -I - "$copy" "$FULL_LEAD" "$name" <<'PY'
 import sys
 
-path, lead = sys.argv[1], sys.argv[2]
+path, lead, name = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path, encoding="utf-8") as f:
     doc = f.read().split("\n")
 start = next(i for i, line in enumerate(doc) if line.startswith(lead))
@@ -219,10 +227,8 @@ found = False
 for i in range(start, len(doc)):
     if doc[i].strip() == "":
         break
-    if "`protocolVersion`" in doc[i]:
-        doc[i] = doc[i].replace(
-            "`protocolVersion`", "`protocolVersion`, `protocolVersion`", 1
-        )
+    if f"`{name}`" in doc[i]:
+        doc[i] = doc[i].replace(f"`{name}`", f"`{name}`, `{name}`", 1)
         found = True
         break
 if not found:
