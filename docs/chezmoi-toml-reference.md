@@ -190,9 +190,13 @@ See
 
 ## mkcert local CA (`data.mkcert.install`)
 
-| Field     | Type    | Required | Default | Purpose                                                   |
-| --------- | ------- | -------- | ------- | --------------------------------------------------------- |
-| `install` | boolean | no       | `false` | Runs `mkcert -install` on Windows during `chezmoi apply`. |
+| Field                   | Type    | Required | Default | Purpose                                                                                                                                                                  |
+| ----------------------- | ------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `install`               | boolean | no       | `false` | Runs `mkcert -install` on Windows during `chezmoi apply`.                                                                                                                |
+| `installTimeoutSeconds` | integer | no       | `180`   | Bounds the `mkcert -install` wait, in seconds, so an unattended apply still fails instead of hanging. Must be a positive whole number; any other value fails the render and names this key. |
+
+The test-only `DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS` environment
+variable, when set, overrides `installTimeoutSeconds`.
 
 See [Opt-in local development CA setup (mkcert)](mkcert-local-ca.md).
 
