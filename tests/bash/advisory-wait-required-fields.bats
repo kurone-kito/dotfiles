@@ -5,10 +5,10 @@
 # The pinned upstream schema's `required` array is vendored as
 # tests/bash/fixtures/advisory-wait-required.txt: its first line is the
 # idd-skill commit from helperRuntime.packageSpec, and its remaining lines
-# are the schema's required names. Each advisory-wait instruction file
-# must list every one of those names in backticks in its required-field
-# paragraph. A pin update therefore fails this file until the fixture is
-# refreshed, and a dropped backtick or missing name fails it too.
+# are the schema's required names. The required-list sentence of each
+# advisory-wait instruction file must backtick exactly those names, no more
+# and no fewer. A pin update therefore fails this file until the fixture is
+# refreshed, and a dropped backtick or a stray or missing name fails it too.
 
 bats_require_minimum_version 1.5.0
 
@@ -26,10 +26,14 @@ setup() {
 
 # check_required_paragraph <fixture> <instruction-file> <lead>
 #
-# Takes the paragraph that starts with <lead> up to the first blank line
-# and fails unless every fixture name appears in backticks inside it.
+# Takes the paragraph that starts with <lead> up to the first blank line,
+# then its required-list sentence (up to the first ". "). The names
+# backticked in that sentence must equal the fixture names exactly, in
+# both directions. A name missing from the sentence, or an extra backticked
+# name in it, fails the check.
 check_required_paragraph() {
   python3 -I - "$1" "$2" "$3" <<'PY'
+import re
 import sys
 
 fixture, path, lead = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -53,11 +57,23 @@ for line in doc[start:]:
     paragraph.append(line)
 text = " ".join(paragraph)
 
-missing = [name for name in names if f"`{name}`" not in text]
-if missing:
-    print(f"error: {path} is missing backticked names: {', '.join(missing)}")
+# Only the required-list sentence counts. A later sentence in the same
+# paragraph (the lite file's optional staleRequestRecovery note) is not
+# part of the schema-required list.
+end = text.find(". ")
+sentence = text[: end + 1] if end != -1 else text
+listed = re.findall(r"`([^`]+)`", sentence)
+
+if len(names) != len(set(names)):
+    print("error: fixture names must be unique")
     sys.exit(1)
-print(f"ok: {len(names)} names found in {path}")
+
+missing = sorted(set(names) - set(listed))
+extra = sorted(set(listed) - set(names))
+if missing or extra:
+    print(f"error: {path}: missing {missing}, extra {extra}")
+    sys.exit(1)
+print(f"ok: {len(names)} names match in {path}")
 PY
 }
 
@@ -80,10 +96,21 @@ PY
   assert_success
 }
 
-@test "fixture lists the 24 required names of the pinned schema" {
-  run bash -c "tail -n +2 '$FIXTURE' | grep -c ."
+@test "fixture names are identifiers and unique (no fixed count)" {
+  run python3 -I - "$FIXTURE" <<'PY'
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    names = [line for line in f.read().split("\n")[1:] if line]
+bad = [n for n in names if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", n)]
+dups = sorted({n for n in names if names.count(n) > 1})
+if bad or dups:
+    print(f"error: bad names {bad}, duplicates {dups}")
+    sys.exit(1)
+print(f"ok: {len(names)} unique names")
+PY
   assert_success
-  assert_output "24"
 }
 
 @test "full advisory-wait paragraph backticks every fixture name" {
@@ -123,4 +150,27 @@ PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
   assert_output --partial 'copilotPending'
+}
+
+@test "negative: an extra backticked name in the required-list sentence fails the check" {
+  local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
+  cp "$FULL_FILE" "$copy"
+  # Add a backticked name that the fixture does not list to the start of
+  # the required-list sentence, the case the one-way check used to miss.
+  python3 -I - "$copy" "$FULL_LEAD" <<'PY'
+import sys
+
+path, lead = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as f:
+    text = f.read()
+old = lead + " `protocolVersion`"
+if old not in text:
+    sys.exit("anchor not found")
+text = text.replace(old, lead + " `staleBogusField`, `protocolVersion`", 1)
+with open(path, "w", encoding="utf-8", newline="\n") as f:
+    f.write(text)
+PY
+  run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
+  assert_failure
+  assert_output --partial 'staleBogusField'
 }
