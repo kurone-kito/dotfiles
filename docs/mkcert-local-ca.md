@@ -79,7 +79,8 @@ On each `chezmoi apply`:
    once `mkcert` actually becomes resolvable, instead of the script
    being silently treated as permanently complete.
 3. Otherwise it runs `mkcert -install` unconditionally, bounded by a
-   60-second timeout (see
+   timeout of 180 seconds by default (`data.mkcert.installTimeoutSeconds`
+   sets another positive whole number of seconds; see
    [Non-interactive sessions](#non-interactive-sessions-eg-inbound-ssh)
    below for why). Upstream mkcert already treats a call to `-install`
    as a no-op once the CA is trusted, so this script does not
@@ -165,8 +166,11 @@ rather than mkcert failing fast or succeeding silently.
 
 **What this means for `chezmoi apply` over SSH**: because of this
 finding, the script runs `mkcert -install` inside a background job
-bounded by a 60-second `Wait-Job` timeout rather than calling it
-directly and unbounded. If it does not complete in time, the job is
+bounded by a 180-second `Wait-Job` timeout by default rather than calling
+it directly and unbounded. A person at a console can take longer than a
+minute to answer the dialog, so the default is generous;
+`data.mkcert.installTimeoutSeconds` changes it, and the bound itself is
+kept for unattended runs. If it does not complete in time, the job is
 stopped, a warning explains what likely happened (an unanswered
 trust-store confirmation dialog) and recommends completing the opt-in
 from an interactive session instead, and the script exits non-zero —
@@ -174,7 +178,8 @@ the same non-zero-exit-and-retry mechanism documented above, so the
 next `chezmoi apply` tries again rather than the run being silently
 recorded as done. In short: a non-interactive `chezmoi apply` (an
 inbound SSH session with nobody available to click through a dialog,
-a scheduled task, etc.) fails loudly after at most 60 seconds instead
+a scheduled task, etc.) fails loudly after at most 180 seconds by
+default (or the configured `data.mkcert.installTimeoutSeconds`) instead
 of hanging forever. (Stopping the background job also stops its
 underlying native child process, confirmed empirically on
 Linux/PowerShell during development, though not separately confirmed

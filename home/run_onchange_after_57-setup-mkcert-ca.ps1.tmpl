@@ -1,4 +1,23 @@
 # chezmoi:template:left-delimiter=<% right-delimiter=%>
+<%- /* data.mkcert.installTimeoutSeconds bounds the mkcert -install wait, in
+     whole seconds (default 180, at most 2147483647 because Wait-Job -Timeout
+     binds an Int32). It is validated before the Windows guard so a bad value
+     fails the render on every OS, and the message names the key.
+     TOML integers arrive as int64 and JSON-fed numbers as float64; floor is
+     only applied to float64 because eq rejects mixed int64/float64. */ -%>
+<%- $installTimeoutSeconds := dig "mkcert" "installTimeoutSeconds" 180 . -%>
+<%- $installTimeoutIsValid := false -%>
+<%- if or (kindIs "int" $installTimeoutSeconds) (kindIs "int64" $installTimeoutSeconds) -%>
+<%-   $installTimeoutIsValid = and (gt (int64 $installTimeoutSeconds) 0) (le (int64 $installTimeoutSeconds) 2147483647) -%>
+<%- else if kindIs "float64" $installTimeoutSeconds -%>
+<%-   if and (eq (floor $installTimeoutSeconds) $installTimeoutSeconds) (gt $installTimeoutSeconds 0.0) (le $installTimeoutSeconds 2147483647.0) -%>
+<%-     $installTimeoutIsValid = true -%>
+<%-   end -%>
+<%- end -%>
+<%- if not $installTimeoutIsValid -%>
+<%-   fail (printf "data.mkcert.installTimeoutSeconds must be a positive integer no greater than 2147483647 (got %v)" $installTimeoutSeconds) -%>
+<%- end -%>
+<%- $installTimeoutSeconds = int64 $installTimeoutSeconds -%>
 <%- if eq .chezmoi.os "windows" %>
 # Opt-in local development CA setup via mkcert -install.
 # Windows-only; no POSIX counterpart is shipped (see
@@ -57,10 +76,14 @@ $mkcertPath = if ($mkcertCmd.Path) { $mkcertCmd.Path } else { $mkcertCmd.Source 
 # never receives a response. Run it as a background job with a bounded
 # wait so a non-interactive `chezmoi apply` (e.g. over SSH) fails
 # loudly and retries on the next apply instead of hanging forever.
+# The wait is data.mkcert.installTimeoutSeconds (default 180). A person
+# at a console may need longer than a minute to answer the dialog, so
+# the default is generous; the bound itself is kept for unattended runs.
+# The test-only environment variable below takes precedence over it.
 $timeoutSeconds = if ($env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS) {
   [int]$env:DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS
 } else {
-  60
+  <% $installTimeoutSeconds %>
 }
 
 $jobParams = @{

@@ -192,10 +192,20 @@ defaultShellFallbackToLegacy = {{ dig "defaultShellFallbackToLegacy" false $sshS
 age = {{ $tmpfilesAge | quote }}
 {{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
-{{- if $mkcertInstall }}
+{{- $mkcertInstallTimeout := dig "mkcert" "installTimeoutSeconds" 180 . }}
+{{- $mkcertInstallTimeoutIsDefault := and (or (kindIs "int64" $mkcertInstallTimeout) (kindIs "int" $mkcertInstallTimeout) (kindIs "float64" $mkcertInstallTimeout)) (eq (printf "%v" $mkcertInstallTimeout) "180") }}
+{{- if or $mkcertInstall (not $mkcertInstallTimeoutIsDefault) }}
 
 [data.mkcert]
+{{- if $mkcertInstall }}
 install = {{ $mkcertInstall }}
+{{- end }}
+{{- if not $mkcertInstallTimeoutIsDefault }}
+{{- /* Numbers are emitted bare so the run_onchange template can validate
+     them; anything else is quoted so the TOML still parses and the render
+     failure names the key instead. */}}
+installTimeoutSeconds = {{ if or (kindIs "int64" $mkcertInstallTimeout) (kindIs "int" $mkcertInstallTimeout) (kindIs "float64" $mkcertInstallTimeout) }}{{ $mkcertInstallTimeout }}{{ else }}{{ printf "%v" $mkcertInstallTimeout | quote }}{{ end }}
+{{- end }}
 {{- end }}
 {{- range $key, $entry := (dig "env" "deploy" dict .) }}
 
