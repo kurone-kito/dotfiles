@@ -41,9 +41,15 @@ BeforeAll {
   function Invoke-Render {
     param(
       [bool] $Install,
-      [string] $Os = 'windows'
+      [string] $Os = 'windows',
+      # Optional data.mkcert.installTimeoutSeconds; $null leaves the key unset.
+      [object] $InstallTimeoutSeconds = $null
     )
-    $cfgObj = @{ data = @{ mkcert = @{ install = $Install } } }
+    $mkcertCfg = @{ install = $Install }
+    if ($null -ne $InstallTimeoutSeconds) {
+      $mkcertCfg['installTimeoutSeconds'] = $InstallTimeoutSeconds
+    }
+    $cfgObj = @{ data = @{ mkcert = $mkcertCfg } }
     $cfg = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-cfg-{0}.json" -f [guid]::NewGuid())
     $dest = Join-Path ([IO.Path]::GetTempPath()) ("mkcert-ca-dest-{0}" -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
@@ -130,6 +136,23 @@ Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
       $disabled | Should -Not -Be $enabled
       $disabled | Should -Match 'mkcert install opt-in: false'
       $enabled | Should -Match 'mkcert install opt-in: true'
+    }
+
+    It 'renders the 180-second bounded wait when installTimeoutSeconds is unset' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows').Output
+      $rendered | Should -Match '(?s)\}\s*else\s*\{\s*180\s*\}'
+    }
+
+    It 'renders a configured installTimeoutSeconds into the bounded wait' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds 45).Output
+      $rendered | Should -Match '(?s)\}\s*else\s*\{\s*45\s*\}'
+      $rendered | Should -Not -Match '(?s)\}\s*else\s*\{\s*180\s*\}'
+    }
+
+    It 'fails the render and names installTimeoutSeconds for a value that is not a positive integer: <_>' -ForEach @(0, -1, 1.5, 'abc', $true) {
+      $result = Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds $_
+      $result.ExitCode | Should -Not -Be 0
+      $result.Output | Should -Match 'installTimeoutSeconds'
     }
   }
 
@@ -239,7 +262,7 @@ function mkcert {
       # in a non-interactive session. The script must not hang forever
       # -- it bounds the wait and fails loudly instead. A short
       # DOTFILES_TEST_MKCERT_INSTALL_TIMEOUT_SECONDS keeps this test
-      # fast rather than waiting out the real 60s production default.
+      # fast rather than waiting out the real 180s production default.
       # 5s (not shorter) is deliberate: empirically, a background
       # job's very first pipeline output can take a moment to
       # transport back to the parent job object, and a 1-2s window
@@ -270,6 +293,32 @@ function mkcert {
         -MkcertJobInit $mkcertJobInit -TimeoutSeconds 5
       $result.ExitCode | Should -Not -Be 0
       $result.Output | Should -Match 'Created a new local CA \(mock partial output\)'
+      $result.Output | Should -Match 'did not complete within 5s'
+    }
+
+    It 'lets the test-only environment variable override a configured installTimeoutSeconds' {
+      # Precedence: the test variable, then data.mkcert.installTimeoutSeconds,
+      # then the 180s default. The configured 45s would let the 20s mock
+      # finish successfully, so only the 5s test variable can produce the
+      # timeout failure asserted below.
+      $rendered = (Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds 45).Output
+      $getCommandMock = @'
+function Get-Command {
+  param([string]$Name, [string]$CommandType, [string]$ErrorAction)
+  if ($Name -eq 'mkcert') {
+    [pscustomobject]@{ Name = 'mkcert'; Path = 'mkcert'; Source = 'mkcert' }
+  } else { $null }
+}
+'@
+      $mkcertJobInit = @'
+function mkcert {
+  Start-Sleep -Seconds 20
+  $global:LASTEXITCODE = 0
+}
+'@
+      $result = Invoke-RenderedScript -ScriptContent $rendered -GetCommandMock $getCommandMock `
+        -MkcertJobInit $mkcertJobInit -TimeoutSeconds 5
+      $result.ExitCode | Should -Not -Be 0
       $result.Output | Should -Match 'did not complete within 5s'
     }
 
