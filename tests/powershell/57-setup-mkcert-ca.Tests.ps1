@@ -65,6 +65,11 @@ BeforeAll {
     $overrideJson = "{`"chezmoi`":{`"os`":`"$Os`"}}"
     [System.IO.File]::WriteAllText($overrideDataFile, $overrideJson, [System.Text.UTF8Encoding]::new($false))
     try {
+      # Windows PowerShell 5.1 turns a native command's stderr (the render
+      # failure text) into a terminating RemoteException under Pester's
+      # ErrorActionPreference = 'Stop'. Continue here, local to this
+      # function, so a failed render returns ExitCode and Output instead.
+      $ErrorActionPreference = 'Continue'
       $output = & chezmoi execute-template --file $script:TemplatePath `
         --config $cfg --config-format json `
         --override-data-file $overrideDataFile `
