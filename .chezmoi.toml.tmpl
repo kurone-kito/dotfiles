@@ -193,7 +193,7 @@ age = {{ $tmpfilesAge | quote }}
 {{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
 {{- $mkcertInstallTimeout := dig "mkcert" "installTimeoutSeconds" 180 . }}
-{{- $mkcertInstallTimeoutIsDefault := eq (printf "%v" $mkcertInstallTimeout) "180" }}
+{{- $mkcertInstallTimeoutIsDefault := and (or (kindIs "int64" $mkcertInstallTimeout) (kindIs "int" $mkcertInstallTimeout) (kindIs "float64" $mkcertInstallTimeout)) (eq (printf "%v" $mkcertInstallTimeout) "180") }}
 {{- if or $mkcertInstall (not $mkcertInstallTimeoutIsDefault) }}
 
 [data.mkcert]

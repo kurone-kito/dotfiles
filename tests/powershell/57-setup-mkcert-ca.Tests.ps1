@@ -154,7 +154,12 @@ Describe '57-setup-mkcert-ca' -Skip:(-not $script:HasChezmoi) {
       $rendered | Should -Not -Match '(?s)\}\s*else\s*\{\s*180\s*\}'
     }
 
-    It 'fails the render and names installTimeoutSeconds for a value that is not a positive integer: <_>' -ForEach @(0, -1, 1.5, 'abc', $true) {
+    It 'renders the largest accepted value, 2147483647, which is the Int32 limit of Wait-Job -Timeout' {
+      $rendered = (Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds 2147483647).Output
+      $rendered | Should -Match '(?s)\}\s*else\s*\{\s*2147483647\s*\}'
+    }
+
+    It 'fails the render and names installTimeoutSeconds for a value that is not a positive integer up to 2147483647: <_>' -ForEach @(0, -1, 1.5, 'abc', '180', $true, 2147483648) {
       $result = Invoke-Render -Install $true -Os 'windows' -InstallTimeoutSeconds $_
       $result.ExitCode | Should -Not -Be 0
       $result.Output | Should -Match 'installTimeoutSeconds'
