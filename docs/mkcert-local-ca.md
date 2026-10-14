@@ -211,6 +211,62 @@ you observe different behavior (a fast failure instead of a hang, for
 example) in your own SSH session, please report it so this note can be
 refined.
 
+## Verifying the registration
+
+```powershell
+Get-ChildItem -Path Cert:\CurrentUser\Root |
+  Where-Object { $_.Subject -like 'CN=mkcert *' } |
+  Select-Object Subject, Thumbprint, NotAfter
+```
+
+This check only reads the `CurrentUser\Root` trust store. It does not
+call `mkcert`, import, remove, or change any certificate, and it does
+not read `$CAROOT`. Run it after the opt-in `chezmoi apply`, in the
+session you want to verify.
+
+This check applies only when `TRUST_STORES` is unset or includes
+`system` (see the `$CAROOT` and `TRUST_STORES` section above). If
+`TRUST_STORES` is set and leaves out `system`, mkcert does not add its CA
+to this store. An empty result is then expected and says nothing about
+whether the opt-in completed, so the check is not applicable. The check
+covers only the `CurrentUser\Root` store and cannot confirm a
+registration in any other store.
+
+A **positive result** lists one or more certificates. It shows only that
+some mkcert root is in the store. The store can keep a CA left over from
+an earlier `$CAROOT`, so a positive result does not on its own show that
+the current opt-in succeeded. Record the subject, thumbprint, and
+NotAfter date of each row.
+
+A **negative result** (no rows, with `TRUST_STORES` unset or including
+`system`) means the opt-in did not complete. Re-run the opt-in
+`chezmoi apply` from a console session, as described in the
+Non-interactive sessions section above.
+
+> **Not yet confirmed on a real machine.** The subject pattern, the
+> `CN=mkcert` prefix followed by a space, has not yet been confirmed on a
+> real machine. The evidence
+> that confirms it is tracked in roadmap kurone-kito/dotfiles#612. A
+> follow-up removes this note once that evidence confirms the pattern.
+
+Record each run with this template. It has no field for the CA private
+key or the contents of `$CAROOT`, and none should be added.
+
+```text
+Date: <yyyy-mm-dd>
+Session type: <console or RDP>
+Windows version: <edition, version, and build>
+Shell (edition and version): <for example Windows PowerShell 5.1 or PowerShell 7.4>
+mkcert -version output: <paste the output>
+chezmoi version: <paste the output of chezmoi --version>
+dotfiles commit SHA: <full SHA>
+chezmoi apply exit code: <number>
+Trust-store dialog appeared: <yes or no; if yes, seconds the apply waited>
+Thumbprint: <from the check>
+Subject: <from the check>
+Exact output of the block: <paste the full output of the check>
+```
+
 ## Scope
 
 Obtaining the `mkcert` binary itself is out of scope for this feature —

@@ -480,3 +480,130 @@ function mkcert-via-source {
     }
   }
 }
+
+# Read-only registration check and evidence template in
+# docs/mkcert-local-ca.md ("Verifying the registration"). These checks
+# only parse the Markdown and the PowerShell block, so they sit outside
+# the chezmoi-gated Describe above and run without chezmoi.
+
+Describe 'mkcert registration check documentation' {
+
+  BeforeAll {
+    $script:DocPath = Join-Path (Join-Path $PSScriptRoot '..') '..' | Join-Path -ChildPath 'docs' | Join-Path -ChildPath 'mkcert-local-ca.md'
+    $docText = Get-Content -Raw -Encoding UTF8 -Path $script:DocPath
+
+    # The section body runs from its heading to the next H2 (## Scope).
+    $script:Section = ''
+    $sectionMatch = [regex]::Match($docText, '(?ms)^## Verifying the registration\r?\n(.*?)^## Scope')
+    if ($sectionMatch.Success) { $script:Section = $sectionMatch.Groups[1].Value }
+
+    $psFences = @([regex]::Matches($script:Section, '(?ms)^```powershell\r?\n(.*?)^```'))
+    $textFences = @([regex]::Matches($script:Section, '(?ms)^```text\r?\n(.*?)^```'))
+    $script:PowerShellFenceCount = $psFences.Count
+    $script:TextFenceCount = $textFences.Count
+    $script:RegistrationCode = ''
+    $script:TemplateText = ''
+    if ($psFences.Count -eq 1) { $script:RegistrationCode = $psFences[0].Groups[1].Value }
+    if ($textFences.Count -eq 1) { $script:TemplateText = $textFences[0].Groups[1].Value }
+
+    function Get-RegistrationAst {
+      $tokens = $null
+      $parseErrors = $null
+      $ast = [System.Management.Automation.Language.Parser]::ParseInput($script:RegistrationCode, [ref] $tokens, [ref] $parseErrors)
+      [pscustomobject]@{ Ast = $ast; Errors = @($parseErrors) }
+    }
+
+    # Names of every command in the AST, including nested script blocks.
+    # A command whose name is not a literal (for example `& $x`) has no
+    # name from GetCommandName() and is counted as unresolved.
+    function Get-CommandInfo {
+      param($Ast)
+      $commandAsts = @($Ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] }, $true))
+      $names = New-Object System.Collections.ArrayList
+      $unresolved = 0
+      foreach ($commandAst in $commandAsts) {
+        $name = $commandAst.GetCommandName()
+        if ($name) { [void] $names.Add($name) } else { $unresolved++ }
+      }
+      [pscustomobject]@{ Names = @($names); Unresolved = $unresolved }
+    }
+
+    # Reduce a command token to its bare, lower-case name so that
+    # `C:\tools\MKCERT.EXE` and `mkcert` compare equal.
+    function Get-NormalizedName {
+      param([string] $Name)
+      $leaf = @($Name -split '[\\/]')[-1]
+      ($leaf -replace '\.exe$', '').ToLowerInvariant()
+    }
+  }
+
+  Context 'read-only registration check (powershell block)' {
+
+    It 'has exactly one powershell block and one text block in the section' {
+      $script:PowerShellFenceCount | Should -Be 1
+      $script:TextFenceCount | Should -Be 1
+    }
+
+    It 'parses with the PowerShell parser and has no parse errors' {
+      $script:RegistrationCode | Should -Not -BeNullOrEmpty
+      $parsed = Get-RegistrationAst
+      @($parsed.Errors).Count | Should -Be 0
+    }
+
+    It 'contains no mkcert, Remove-Item (or an alias), Import-Certificate, or certutil command' {
+      $parsed = Get-RegistrationAst
+      $info = Get-CommandInfo -Ast $parsed.Ast
+      $info.Unresolved | Should -Be 0
+      @($info.Names).Count | Should -BeGreaterThan 0
+      # Remove-Item's built-in aliases are listed so that `rm` cannot slip
+      # past a check on canonical cmdlet names only.
+      $forbidden = @('mkcert', 'Remove-Item', 'ri', 'rm', 'del', 'erase', 'rd', 'rmdir', 'Import-Certificate', 'certutil')
+      $hits = @($info.Names | Where-Object { $forbidden -contains (Get-NormalizedName -Name $_) })
+      $hits | Should -BeNullOrEmpty
+    }
+
+    It 'uses only the read-only commands it needs' {
+      $parsed = Get-RegistrationAst
+      $info = Get-CommandInfo -Ast $parsed.Ast
+      $allowed = @('Get-ChildItem', 'Where-Object', 'Select-Object')
+      $others = @($info.Names | Where-Object { $allowed -notcontains $_ })
+      $others | Should -BeNullOrEmpty
+    }
+
+    It 'does not read CAROOT in the block' {
+      $script:RegistrationCode | Should -Not -Match 'CAROOT'
+      $parsed = Get-RegistrationAst
+      $variables = @($parsed.Ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.VariableExpressionAst] }, $true) | ForEach-Object { $_.VariablePath.UserPath })
+      $variables | Should -Not -Contain 'CAROOT'
+    }
+  }
+
+  Context 'evidence record template (text block)' {
+
+    It 'lists exactly the twelve evidence fields, in order' {
+      $script:TemplateText | Should -Not -BeNullOrEmpty
+      $lines = @($script:TemplateText -split '\r?\n' | Where-Object { $_.Trim() -ne '' })
+      $labels = @($lines | ForEach-Object { ($_ -split ':', 2)[0].Trim() })
+      $expected = @(
+        'Date',
+        'Session type',
+        'Windows version',
+        'Shell (edition and version)',
+        'mkcert -version output',
+        'chezmoi version',
+        'dotfiles commit SHA',
+        'chezmoi apply exit code',
+        'Trust-store dialog appeared',
+        'Thumbprint',
+        'Subject',
+        'Exact output of the block'
+      )
+      $labels.Count | Should -Be 12
+      ($labels -join '|') | Should -BeExactly ($expected -join '|')
+    }
+
+    It 'has no field for the CA private key or the contents of CAROOT' {
+      $script:TemplateText | Should -Not -Match 'CAROOT|private key|rootCA-key'
+    }
+  }
+}
