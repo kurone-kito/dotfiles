@@ -375,5 +375,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: true
+          # The job runs PR-controlled test code and needs no authenticated
+          # Git commands after checkout, so do not leave the token behind.
+          persist-credentials: false
       - name: Run advisory-wait required-field check
         run: tests/bash/helpers/bats-core/bin/bats tests/bash/advisory-wait-required-fields.bats

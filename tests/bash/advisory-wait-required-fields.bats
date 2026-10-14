@@ -67,6 +67,12 @@ listed = re.findall(r"`([^`]+)`", sentence)
 if len(names) != len(set(names)):
     print("error: fixture names must be unique")
     sys.exit(1)
+# A set comparison hides a repeated name, so reject repeats in the list
+# separately: each required name must appear exactly once.
+if len(listed) != len(set(listed)):
+    dups = sorted({n for n in listed if listed.count(n) > 1})
+    print(f"error: {path}: repeated names in the required list: {dups}")
+    sys.exit(1)
 
 missing = sorted(set(names) - set(listed))
 extra = sorted(set(listed) - set(names))
@@ -155,22 +161,65 @@ PY
 @test "negative: an extra backticked name in the required-list sentence fails the check" {
   local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
   cp "$FULL_FILE" "$copy"
-  # Add a backticked name that the fixture does not list to the start of
-  # the required-list sentence, the case the one-way check used to miss.
+  # Add a backticked name that the fixture does not list just before the
+  # first fixture name in the required-field paragraph. The anchor is the
+  # token itself, anywhere in the paragraph, so reflowing the paragraph
+  # does not break this mutation.
   python3 -I - "$copy" "$FULL_LEAD" <<'PY'
 import sys
 
 path, lead = sys.argv[1], sys.argv[2]
 with open(path, encoding="utf-8") as f:
-    text = f.read()
-old = lead + " `protocolVersion`"
-if old not in text:
+    doc = f.read().split("\n")
+start = next(i for i, line in enumerate(doc) if line.startswith(lead))
+found = False
+for i in range(start, len(doc)):
+    if doc[i].strip() == "":
+        break
+    if "`protocolVersion`" in doc[i]:
+        doc[i] = doc[i].replace(
+            "`protocolVersion`", "`staleBogusField`, `protocolVersion`", 1
+        )
+        found = True
+        break
+if not found:
     sys.exit("anchor not found")
-text = text.replace(old, lead + " `staleBogusField`, `protocolVersion`", 1)
 with open(path, "w", encoding="utf-8", newline="\n") as f:
-    f.write(text)
+    f.write("\n".join(doc))
 PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
   assert_output --partial 'staleBogusField'
+}
+
+@test "negative: a repeated name in the required-list sentence fails the check" {
+  local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
+  cp "$FULL_FILE" "$copy"
+  # Repeat one fixture name inside the required-field paragraph. A set
+  # comparison alone would accept this, so the duplicate check must catch it.
+  python3 -I - "$copy" "$FULL_LEAD" <<'PY'
+import sys
+
+path, lead = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as f:
+    doc = f.read().split("\n")
+start = next(i for i, line in enumerate(doc) if line.startswith(lead))
+found = False
+for i in range(start, len(doc)):
+    if doc[i].strip() == "":
+        break
+    if "`protocolVersion`" in doc[i]:
+        doc[i] = doc[i].replace(
+            "`protocolVersion`", "`protocolVersion`, `protocolVersion`", 1
+        )
+        found = True
+        break
+if not found:
+    sys.exit("anchor not found")
+with open(path, "w", encoding="utf-8", newline="\n") as f:
+    f.write("\n".join(doc))
+PY
+  run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
+  assert_failure
+  assert_output --partial 'repeated names'
 }
