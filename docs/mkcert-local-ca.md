@@ -226,9 +226,14 @@ session you want to verify.
 
 A **positive result** lists one or more certificates. Record the
 subject, thumbprint, and NotAfter date of each row. A **negative
-result** (no rows) means the opt-in did not complete. Re-run the opt-in
-`chezmoi apply` from a console session, as described in the
-Non-interactive sessions section above.
+result** (no rows) means the opt-in did not complete, unless
+`TRUST_STORES` is set and leaves out `system` (see the
+`$CAROOT` and `TRUST_STORES` section above). In that case mkcert does
+not add its CA to this store, so no rows is expected. This check only
+covers the `CurrentUser\Root` store, so it cannot confirm a registration
+in any other store. Otherwise, re-run the opt-in `chezmoi apply` from a
+console session, as described in the Non-interactive sessions section
+above.
 
 > **Not yet confirmed on a real machine.** The subject pattern, the
 > `CN=mkcert` prefix followed by a space, has not yet been confirmed on a
