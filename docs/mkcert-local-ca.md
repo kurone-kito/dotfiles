@@ -180,11 +180,10 @@ recorded as done. In short: a non-interactive `chezmoi apply` (an
 inbound SSH session with nobody available to click through a dialog,
 a scheduled task, etc.) fails loudly after at most 180 seconds by
 default (or the configured `data.mkcert.installTimeoutSeconds`) instead
-of hanging forever. (Stopping the background job also stops its
-underlying native child process, confirmed empirically on
-Linux/PowerShell during development, though not separately confirmed
-on Windows PowerShell 5.1. If a `mkcert.exe` process or a dialog it
-spawned were ever left running in the background regardless,
+of hanging forever. (The probe in the job-stop subsection below observed
+no matching surviving process after `Stop-Job` on either Windows
+PowerShell 5.1 or pwsh 7, though its checks have limits that subsection
+describes. If a `mkcert.exe` process were ever left running regardless,
 `chezmoi apply` itself would still be unblocked — the primary problem
 this bound exists to prevent — with, at worst, a lingering orphaned
 process to clean up by hand.) Run the initial opt-in `chezmoi apply`
@@ -210,6 +209,81 @@ real interactive-RDP-with-logged-in-user-vs-plain-SSH comparison. If
 you observe different behavior (a fast failure instead of a hang, for
 example) in your own SSH session, please report it so this note can be
 refined.
+
+### Job-stop behaviour on Windows PowerShell 5.1 and pwsh 7
+
+The script runs `mkcert -install` in a background job and calls
+`Stop-Job` after a bound. This subsection records whether a native child
+process survived that stop, once for each PowerShell edition. Both rows
+come from one temporary probe run on a `windows-latest` GitHub Actions
+runner, dated 2026-10-14. The probe used the mkcert v1.4.4 release
+binary, a throwaway `CAROOT`, and `TRUST_STORES=system`, and it ran a
+native `ping.exe` sleeper as a control. The probe workflow was deleted by
+the change that added this subsection, so the run links below are the
+evidence.
+
+| Edition | Host executable | PSVersion | mkcert | Survivors after `Stop-Job` | Result |
+| --- | --- | --- | --- | --- | --- |
+| Windows PowerShell 5.1 | `powershell.exe` | 5.1.26100.33438 | v1.4.4 | None observed, by name or by parent process id | No matching survivor observed |
+| pwsh 7 | `pwsh.exe` | 7.6.6 | v1.4.4 | None observed, by name or by parent process id | No matching survivor observed |
+
+Run links: [run 38574478124, Windows PowerShell 5.1 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115887850309)
+and [run 38574478124, pwsh 7 job](https://github.com/kurone-kito/dotfiles/actions/runs/38574478124/job/115888799841).
+
+Observed output for Windows PowerShell 5.1 (timestamps removed):
+
+```text
+RESULT edition=Desktop psversion=5.1.26100.33438 host_exe=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.EXE host_pid=9532
+RESULT mkcert_url=https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe mkcert_version=v1.4.4
+RESULT throwaway_caroot=D:\a\_temp\probe-Desktop\caroot trust_stores=system
+RESULT case=mkcert-install job_host_pid=7888 bound_seconds=60
+OUT mkcert: Created a new local CA
+RESULT case=mkcert-install outcome=stopped-at-bound elapsed_seconds=60 job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=mkcert-install survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=mkcert-install survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT case=native-sleep job_host_pid=10192 bound_seconds=15
+RESULT case=native-sleep outcome=stopped-at-bound job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=native-sleep survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=native-sleep survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT edition=Desktop done
+```
+
+Observed output for pwsh 7 (timestamps removed):
+
+```text
+RESULT edition=Core psversion=7.6.6 host_exe=C:\Program Files\PowerShell\7\pwsh.EXE host_pid=5688
+RESULT mkcert_url=https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe mkcert_version=v1.4.4
+RESULT throwaway_caroot=D:\a\_temp\probe-Core\caroot trust_stores=system
+RESULT case=mkcert-install job_host_pid=6968 bound_seconds=60
+OUT mkcert: Created a new local CA
+RESULT case=mkcert-install outcome=stopped-at-bound elapsed_seconds=60 job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=mkcert-install survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=mkcert-install survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT case=native-sleep job_host_pid=1392 bound_seconds=15
+RESULT case=native-sleep outcome=stopped-at-bound job_state_before_stop=Running job_state_after_stop=Stopped
+RESULT case=native-sleep survivors_3s_after_stop_by_name=none survivors_3s_after_stop_by_ppid=none job_host_alive_3s=False
+RESULT case=native-sleep survivors_8s_after_remove_by_name=none survivors_8s_after_remove_by_ppid=none job_host_alive_8s=False
+RESULT edition=Core done
+```
+
+The `OUT mkcert:` line drops a trailing emoji from mkcert's output, which
+the workflow log shows as garbled characters.
+
+How the result was judged: in both editions the mkcert job was still
+running at the 60-second bound, after mkcert had printed
+`Created a new local CA`. The `ping.exe` control was still running at its
+15-second bound, because `ping -n 300` cannot finish that quickly. The
+checks ran 3 and 8 seconds after the stop. They observed no process named
+`mkcert` or `PING` and no process whose parent process id was the job
+host, and the job host itself was gone within 3 seconds in every case.
+This records no matching survivor. It does not prove that no child process
+can survive `Stop-Job`. The probe did not snapshot child processes before
+the stop. The checks also miss a child that exits between snapshots, a
+child reparented when the job host stops, and a child with another
+executable name. The probe ran the downloaded release binary directly, not
+the mise shim that the documented Windows setup resolves. Because no
+matching survivor was observed, the known-limitation and follow-up path
+for a surviving child is not triggered.
 
 ## Verifying the registration
 
