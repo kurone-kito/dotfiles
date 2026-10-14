@@ -67,8 +67,17 @@ text = " ".join(paragraph)
 
 # Only the required-list sentence counts. A later sentence in the same
 # paragraph (the lite file's optional staleRequestRecovery note) is not
-# part of the schema-required list.
-end = text.find(". ")
+# part of the schema-required list. The sentence ends at the first ". "
+# outside backticks, so a required name that contains ". " does not end
+# the sentence early.
+end = -1
+in_code = False
+for i, ch in enumerate(text):
+    if ch == "`":
+        in_code = not in_code
+    elif not in_code and text.startswith(". ", i):
+        end = i
+        break
 sentence = text[: end + 1] if end != -1 else text
 listed = re.findall(r"`([^`]+)`", sentence)
 
@@ -177,17 +186,20 @@ PY
 
 @test "negative: an extra backticked name in the required-list sentence fails the check" {
   local copy="$BATS_TEST_TMPDIR/idd-advisory-wait.instructions.md"
-  local name
+  local name sentinel
   name="$(sed -n 2p "$FIXTURE")"
+  # The sentinel must not be a real field, so pick one the fixture lacks.
+  sentinel="staleBogusField"
+  while grep -qxF "$sentinel" "$FIXTURE"; do sentinel="${sentinel}X"; done
   cp "$FULL_FILE" "$copy"
   # Add a backticked name that the fixture does not list just before a real
   # fixture name in the required-field paragraph. The anchor is picked at run
   # time and found anywhere in the paragraph, so neither a later pin nor a
   # reflowed paragraph breaks this mutation.
-  python3 -I - "$copy" "$FULL_LEAD" "$name" <<'PY'
+  python3 -I - "$copy" "$FULL_LEAD" "$name" "$sentinel" <<'PY'
 import sys
 
-path, lead, name = sys.argv[1], sys.argv[2], sys.argv[3]
+path, lead, name, sentinel = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 with open(path, encoding="utf-8") as f:
     doc = f.read().split("\n")
 start = next(i for i, line in enumerate(doc) if line.startswith(lead))
@@ -196,7 +208,7 @@ for i in range(start, len(doc)):
     if doc[i].strip() == "":
         break
     if f"`{name}`" in doc[i]:
-        doc[i] = doc[i].replace(f"`{name}`", f"`staleBogusField`, `{name}`", 1)
+        doc[i] = doc[i].replace(f"`{name}`", f"`{sentinel}`, `{name}`", 1)
         found = True
         break
 if not found:
@@ -207,6 +219,18 @@ PY
   run check_required_paragraph "$FIXTURE" "$copy" "$FULL_LEAD"
   assert_failure
   assert_output --partial 'extra'
+}
+
+@test "a required name containing '. ' does not end the required-list sentence" {
+  local dir="$BATS_TEST_TMPDIR/dotted"
+  mkdir -p "$dir"
+  printf '%s\n' "sha-placeholder" "protocolVersion" "a. b" > "$dir/fixture.txt"
+  printf '%s\n' \
+    "Required fields (stop and ask if any are missing): \`protocolVersion\`, \`a. b\`. A later sentence mentions \`staleRequestRecovery\`." \
+    > "$dir/instructions.md"
+  run check_required_paragraph "$dir/fixture.txt" "$dir/instructions.md" \
+    "Required fields (stop and ask if any are missing):"
+  assert_success
 }
 
 @test "negative: a repeated name in the required-list sentence fails the check" {
