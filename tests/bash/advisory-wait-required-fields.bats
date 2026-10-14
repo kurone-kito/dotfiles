@@ -110,9 +110,8 @@ PY
   assert_success
 }
 
-@test "fixture names are identifiers and unique (no fixed count)" {
+@test "fixture names are non-empty, backtick-free, and unique (no fixed count)" {
   run python3 -I - "$FIXTURE" <<'PY'
-import re
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as f:
@@ -120,7 +119,9 @@ with open(sys.argv[1], encoding="utf-8") as f:
 if not names:
     print("error: fixture lists no required names")
     sys.exit(1)
-bad = [n for n in names if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", n)]
+# JSON Schema property names may be any string, so only reject what this
+# line-based, backtick-delimited fixture cannot hold.
+bad = [n for n in names if "`" in n or n != n.strip()]
 dups = sorted({n for n in names if names.count(n) > 1})
 if bad or dups:
     print(f"error: bad names {bad}, duplicates {dups}")
