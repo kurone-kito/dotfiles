@@ -29,6 +29,7 @@ setup() {
   # Nothing from the surrounding session may reach the wrapper.
   unset PUEUE_GROUP PUEUE_CONFIG_PATH PUEUE_WORKER_ID
   unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE
+  unset SANDBOX
 
   export HOME="$BATS_TEST_TMPDIR/home"
   PARALLELISM_FILE="$HOME/.config/dotfiles/pueue-parallelism"
@@ -71,6 +72,14 @@ teardown() {
     hold="$(cat "$FAKE_PUEUE_STATE/hold.pid")"
     kill "$hold" 2> /dev/null || true
   fi
+  # The real-daemon case sets SANDBOX; a failed assertion must not leave its
+  # daemon or directory behind.
+  case "${SANDBOX:-}" in
+    /tmp/pq.*)
+      stop_sandbox_daemon
+      rm -rf -- "$SANDBOX"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
