@@ -241,7 +241,15 @@ main() {
   trap 'on_signal 143' TERM
   trap 'on_signal 129' HUP
   add_error=$(mktemp "${TMPDIR:-/tmp}/with-pueue.XXXXXX") || add_error=/dev/null
-  task_id=$(pueue add --group "$group_name" --working-directory "$PWD" --print-task-id -- "$command_line" 2> "$add_error")
+  # The client ignores INT, TERM and HUP (ignored dispositions survive exec): a
+  # terminal's Ctrl-C reaches the whole process group, and a client that died
+  # after the daemon accepted the task but before it printed the id would
+  # strand a task that nothing can remove. The handlers above run as soon as
+  # the add has returned.
+  task_id=$(
+    trap '' INT TERM HUP
+    exec pueue add --group "$group_name" --working-directory "$PWD" --print-task-id -- "$command_line" 2> "$add_error"
+  )
   local add_status=$?
   if [ "$add_status" -ne 0 ]; then
     [ "$add_error" = /dev/null ] || { cat -- "$add_error" >&2; rm -f -- "$add_error"; }

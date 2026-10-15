@@ -28,7 +28,7 @@ setup() {
 
   # Nothing from the surrounding session may reach the wrapper.
   unset PUEUE_GROUP PUEUE_CONFIG_PATH PUEUE_WORKER_ID
-  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE FAKE_PUEUE_PAUSE_AFTER_ADD
+  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE FAKE_PUEUE_PAUSE_AFTER_ADD FAKE_PUEUE_ADD_HOLD
   unset SANDBOX
 
   export HOME="$BATS_TEST_TMPDIR/home"
@@ -234,6 +234,12 @@ case "${1:-}" in
     # pueue joins the words after -- with spaces and hands them to sh -c.
     printf '%s' "$*" > "$state/tasks/$id/cmd"
     if [ -n "${FAKE_PUEUE_PAUSE_AFTER_ADD:-}" ]; then : > "$state/paused-$group"; fi
+    if [ -n "${FAKE_PUEUE_ADD_HOLD:-}" ]; then
+      # The daemon has accepted the task; the client has not printed the id.
+      echo $$ > "$state/add.pid"
+      : > "$state/adding"
+      while [ ! -e "$state/release" ]; do sleep 0.05; done
+    fi
     printf '%s\n' "$id"
     ;;
   start)
@@ -703,6 +709,35 @@ ROWS
   FAKE_PUEUE_FAIL=log-empty wrap sh -c "$(mark_command 6)"
   assert_failure 6
   [[ "$stderr" == *"could not read the output"* ]] || fail "no warning: $stderr"
+}
+
+@test "queue: an interrupt that also reaches the add client does not strand the accepted task" {
+  cd "$WORK" || return 1
+  FAKE_PUEUE_ADD_HOLD=1 "$BASH_BIN" "$WRAPPER" sh -c "$(mark_command 0)" > "$BATS_TEST_TMPDIR/add.out" 2>&1 &
+  echo $! > "$BATS_TEST_TMPDIR/wrapper.pid"
+
+  local waited=0
+  while [ ! -e "$FAKE_PUEUE_STATE/adding" ] && [ "$waited" -lt 100 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  [ -e "$FAKE_PUEUE_STATE/adding" ] || fail "the wrapper never reached pueue add"
+
+  # A terminal's Ctrl-C reaches the wrapper and the client in flight alike.
+  kill -TERM "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
+  kill -TERM "$(cat "$FAKE_PUEUE_STATE/add.pid")" 2> /dev/null || true
+  : > "$FAKE_PUEUE_STATE/release"
+
+  local status=0
+  wait "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")" || status=$?
+  rm -f "$BATS_TEST_TMPDIR/wrapper.pid"
+  [ "$status" -eq 143 ] || fail "exit $status"
+  # The accepted task was found by its id and removed, and never ran.
+  [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the accepted task was left in the queue"
+  run calls
+  assert_line "remove 0"
+  assert_equal "$(ran_count)" "0"
+  assert_equal "$(executions)" "0"
 }
 
 @test "queue: a failed wait cleans up the task and exits non-zero without a second copy" {
