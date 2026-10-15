@@ -128,9 +128,11 @@ default pueue group is never touched.
 - pueue sends the caller's environment and working directory with the
   task, so the command sees what a direct run would see. pueue keeps that
   environment in the task's state until the task is removed, so the
-  wrapper removes its own finished task once it has read the result. It
-  never runs `pueue clean`, which would also drop other sessions' tasks
-  before they read them.
+  wrapper removes its own finished task once it has read the result,
+  retrying briefly. If the task stays, the wrapper prints a warning that
+  names its id and the `pueue remove <id>` command, and still returns the
+  command's exit status. It never runs `pueue clean`, which would also
+  drop other sessions' tasks before they read them.
 - An interrupt (`INT`, `TERM` or `HUP`) while enqueueing or waiting kills
   and removes that one task, so an abandoned call does not keep holding
   a slot. The `pueue add` client itself ignores those signals: a

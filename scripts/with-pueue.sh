@@ -124,15 +124,25 @@ queue_reachable() {
   pueue status --json > /dev/null 2>&1
 }
 
-# Best effort: take one task out of the queue so an interrupted call does not
-# leave it holding a slot.
-remove_task() {
+# Best effort: stop the task so an interrupted call does not leave it holding
+# a slot.
+kill_task() {
   [ -n "$task_id" ] || return 0
   pueue kill "$task_id" > /dev/null 2>&1
+  return 0
+}
+
+# Best effort: take the task out of the queue. A task that is still being
+# killed cannot be removed yet, and a daemon may reconnect a moment late, so
+# retry briefly. pueue keeps the caller's environment in a task until it is
+# removed, so a task that stays is named in a warning.
+remove_task() {
+  [ -n "$task_id" ] || return 0
   for _ in 1 2 3 4 5; do
     pueue remove "$task_id" > /dev/null 2>&1 && return 0
     sleep 0.2
   done
+  say "could not remove task $task_id; it keeps the captured environment until 'pueue remove $task_id' is run"
   return 0
 }
 
@@ -141,6 +151,7 @@ on_signal() {
   local status="$1"
   [ -z "$wait_pid" ] || kill "$wait_pid" > /dev/null 2>&1
   [ -z "$tick_pid" ] || kill "$tick_pid" > /dev/null 2>&1
+  kill_task
   remove_task
   [ -z "$add_error" ] || [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
   exit "$status"
@@ -284,6 +295,7 @@ main() {
   local wait_status=$?
   wait_pid=""
   if [ "$wait_status" -ne 0 ]; then
+    kill_task
     remove_task
     die 1 "waiting for task $task_id failed"
   fi
@@ -303,7 +315,7 @@ main() {
     say "could not read the output of task $task_id"
   fi
 
-  pueue remove "$task_id" > /dev/null 2>&1
+  remove_task
   exit "$exit_status"
 }
 

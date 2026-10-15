@@ -280,6 +280,7 @@ case "${1:-}" in
     exit 0
     ;;
   remove)
+    if fails remove; then exit 1; fi
     id="$2"
     if [ -d "$state/tasks/$id" ]; then
       rm -rf -- "$state/tasks/$id"
@@ -597,6 +598,22 @@ assert_refused_before_anything() {
   assert_failure
   assert_equal "$(ran_count)" "0"
   assert_equal "$(executions)" "0"
+}
+
+@test "queue: a finished task that cannot be removed is retried, named in a warning, and the status is kept" {
+  FAKE_PUEUE_FAIL=remove wrap sh -c "$(mark_command 5)"
+  assert_failure 5
+  assert_equal "$(ran_count)" "1"
+  [[ "$stderr" == *"could not remove task 0"* ]] || fail "no warning naming the task: $stderr"
+  [[ "$stderr" == *"pueue remove 0"* ]] || fail "the warning does not say how to remove it: $stderr"
+  run calls
+  assert_equal "$(grep -c -x 'remove 0' "$FAKE_PUEUE_STATE/calls.log")" "5"
+}
+
+@test "queue: a finished task that cannot be removed does not turn success into failure" {
+  FAKE_PUEUE_FAIL=remove wrap sh -c "$(mark_command 0)"
+  assert_success
+  [[ "$stderr" == *"could not remove task 0"* ]] || fail "no warning: $stderr"
 }
 
 @test "queue: a failed group listing exits non-zero and neither enqueues nor runs the command" {
