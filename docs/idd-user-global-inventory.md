@@ -151,6 +151,23 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
   upstream statement is in
   [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md#preconditions).
 
+The table below gives each directory that the run touches. The installer
+creates a harness directory only as a leaf whose parent exists. So `.codex/`
+is created under `$HOME`, and `.config/opencode/` is created under `.config/`.
+
+| Directory (relative to `$HOME`) | Before the run                                   | Created by the run                |
+| ------------------------------- | ------------------------------------------------ | --------------------------------- |
+| `.local/`                       | Must exist                                       | No                                |
+| `.local/share/`                 | Must exist                                       | No                                |
+| `.local/share/idd-skill/`       | Absent                                           | Yes, the data root                |
+| `.claude/`                      | Must exist                                       | No                                |
+| `.claude/skills/`               | Absent                                           | Yes, the Claude skill root        |
+| `.agents/`                      | Must exist                                       | No                                |
+| `.agents/skills/`               | Absent                                           | Yes, the agent skill root         |
+| `.config/`                      | Must exist, because OpenCode is selected by default | No                             |
+| `.codex/`                       | Absent                                           | Yes, as a harness directory       |
+| `.config/opencode/`             | Absent                                           | Yes, as a harness directory       |
+
 ## What the installer writes
 
 | Item           | Location (relative to `$HOME`)                                                                             | Kind                                            |
