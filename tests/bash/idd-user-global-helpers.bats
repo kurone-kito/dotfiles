@@ -73,6 +73,16 @@ report_failure() {
   echo "node: $(node --version 2>&1 || echo 'not found')" >&2
 }
 
+# Run one POSIX wrapper with a PATH that holds neither node nor npx, so the
+# wrapper's fail-loud guard is the only code that can answer.
+run_without_npx() {
+  local name="$1"
+  shift
+  mkdir -p "$BATS_TEST_TMPDIR/bare-bin"
+  ln -sf "$BIN_DIR/executable_$name" "$BATS_TEST_TMPDIR/bare-bin/$name"
+  run --separate-stderr env -i PATH="$BATS_TEST_TMPDIR/bare-bin" /bin/sh "$BATS_TEST_TMPDIR/bare-bin/$name" "$@"
+}
+
 @test "executable_idd-activation pins upstream commit e4d425ee" {
   assert_file_contains "$BIN_DIR/executable_idd-activation" "$UPSTREAM_COMMIT"
 }
@@ -117,4 +127,16 @@ report_failure() {
     report_failure
     return 1
   fi
+}
+
+@test "idd-activation fails loudly with a message when npx is missing" {
+  run_without_npx idd-activation
+  assert_failure
+  assert_stderr --partial 'npx is required'
+}
+
+@test "idd-effective-config fails loudly with a message when npx is missing" {
+  run_without_npx idd-effective-config
+  assert_failure
+  assert_stderr --partial 'npx is required'
 }
