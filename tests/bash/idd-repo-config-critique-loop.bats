@@ -30,6 +30,11 @@
 #   severity-tiered critique deferral, and GitHub API read caching/load
 #   control (issue #563, roadmap #540): schema-aligned adoption while
 #   keeping the repository's established overlays.
+# - issueAuthoring.journalIssue against docs/idd-policy.md (issue #638):
+#   requested by a Copilot review on PR #610. The config moved to a new
+#   journal while the doc row kept the former one, and nothing detected
+#   the drift. The two journalIssue tests compare the doc's value cell
+#   with the config and show that the comparison fails on a stale value.
 
 bats_require_minimum_version 1.5.0
 
@@ -39,6 +44,27 @@ setup() {
   load 'helpers/bats-file/load'
 
   CONFIG_PATH="$BATS_TEST_DIRNAME/../../.github/idd/config.json"
+  POLICY_DOC_PATH="$BATS_TEST_DIRNAME/../../docs/idd-policy.md"
+}
+
+# Print the journal reference in the value cell (third column) of the
+# docs/idd-policy.md table row whose second column is the
+# issueAuthoring.journalIssue key. Print nothing, and exit non-zero, when
+# the row or the reference is missing.
+journal_issue_doc_reference() {
+  awk -F'|' '$2 ~ /issueAuthoring\.journalIssue/ {print $3}' "$1" \
+    | grep -o 'kurone-kito/dotfiles#[0-9]*'
+}
+
+# Print issueAuthoring.journalIssue from the config file. A missing key
+# raises, so the caller never compares against a placeholder.
+journal_issue_configured_value() {
+  python3 -c "
+import json
+import sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    print(json.load(f)['issueAuthoring']['journalIssue'])
+" "$1"
 }
 
 @test ".github/idd/config.json declares the repository-local critiqueLoop.delegate" {
@@ -147,4 +173,43 @@ assert external_check_waivers.get('authorityPolicy') == 'owners-and-maintainers-
     external_check_waivers
 assert external_check_waivers.get('maxValidity') == 'PT24H', external_check_waivers
 " "$CONFIG_PATH"
+}
+
+@test "docs/idd-policy.md journalIssue row names the journal configured in .github/idd/config.json" {
+  assert_file_exists "$CONFIG_PATH"
+  assert_file_exists "$POLICY_DOC_PATH"
+
+  configured="$(journal_issue_configured_value "$CONFIG_PATH")"
+  assert_regex "$configured" '^kurone-kito/dotfiles#[0-9]+$'
+
+  # assert_output compares the whole output, so a value cell that holds
+  # more than one reference fails here as well.
+  run journal_issue_doc_reference "$POLICY_DOC_PATH"
+  assert_success
+  assert_output "$configured"
+}
+
+@test "journalIssue sync check rejects a docs/idd-policy.md value cell that names the former journal" {
+  assert_file_exists "$CONFIG_PATH"
+  assert_file_exists "$POLICY_DOC_PATH"
+
+  configured="$(journal_issue_configured_value "$CONFIG_PATH")"
+  assert_regex "$configured" '^kurone-kito/dotfiles#[0-9]+$'
+
+  # Rewrite only the value cell (third column) of the key row, whatever
+  # number it holds now, so the case stays valid after the journal moves.
+  stale_doc="$BATS_TEST_TMPDIR/idd-policy-former-journal.md"
+  awk -F'|' -v OFS='|' '
+    $2 ~ /issueAuthoring\.journalIssue/ {
+      sub(/kurone-kito\/dotfiles#[0-9]+/, "kurone-kito/dotfiles#380", $3)
+    }
+    { print }
+  ' "$POLICY_DOC_PATH" > "$stale_doc"
+
+  run journal_issue_doc_reference "$stale_doc"
+  assert_success
+  # Assert the exact stale value first, so an empty extraction cannot let
+  # the inequality below pass.
+  assert_output "kurone-kito/dotfiles#380"
+  assert_not_equal "$output" "$configured"
 }
