@@ -61,13 +61,13 @@ Describe '32-editor' {
     $script:Dir = (New-Item -ItemType Directory -Path (Join-Path $TestDrive ([guid]::NewGuid().ToString('N')))).FullName
   }
 
+  # The test functions and aliases below are created in the scope of their own
+  # It block and vanish with it, so no cleanup is needed (or wanted: removing
+  # `nvim` or `edit` by name could delete a command the caller's session
+  # already had).
   AfterEach {
     foreach ($name in @('EDITOR', 'VISUAL')) {
       [Environment]::SetEnvironmentVariable($name, $script:Saved[$name])
-    }
-    foreach ($name in @('nvim', 'edit')) {
-      Remove-Item "Function:\$name" -ErrorAction SilentlyContinue
-      Remove-Item "Alias:\$name" -ErrorAction SilentlyContinue
     }
   }
 
