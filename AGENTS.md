@@ -118,12 +118,25 @@ skipped (and why), and the SSH cause.
 
 ## Testing
 
-Run tests after modifying any script in `home/`:
+After modifying any script in `home/` or any documentation, run the
+full checks through the queue wrapper, so that parallel sessions do not
+overload the host (see
+[docs/pueue-validation-queue.md](docs/pueue-validation-queue.md)):
 
-- **Bash** (Linux/macOS/WSL):
-  `tests/bash/helpers/bats-core/bin/bats tests/bash/`
-- **PowerShell** (Windows):
-  `Invoke-Pester tests/powershell/ -Output Detailed`
+- **Lint and spelling** (Markdown lint with auto-fix, then cspell):
+  `scripts/with-pueue.sh scripts/run-fix-validate.sh`
+- **Tests** (bats, plus Pester when the branch touches a
+  PowerShell-relevant path):
+  `scripts/with-pueue.sh scripts/run-validate.sh`
+
+Without `pueue` the wrapper simply runs the command. It is a bash
+script: on Windows, use it from WSL to get the queue (in Git Bash it
+runs the command directly).
+
+`scripts/run-validate.sh` runs both suites, but skips the PowerShell
+one when the current branch's diff touches no PowerShell-relevant
+path — this is what `pre-push-validate`/`post-fix-validate` invoke
+(through the wrapper).
 
 On non-Windows `pwsh`, Windows-only Pester scopes are skipped. The
 authoritative full PowerShell run remains Windows local execution and
@@ -133,11 +146,17 @@ PowerShell 5.1). The Unix-scoped tests (marked
 `-Skip:($IsWindows -ne $false)`) run on Linux in the advisory
 `PowerShell tests (Pester, Linux)` job.
 
-`scripts/run-validate.sh` runs both suites, but skips the PowerShell
-one when the current branch's diff touches no PowerShell-relevant
-path — this is what `pre-push-validate`/`post-fix-validate` invoke.
+These are the suites that `scripts/run-validate.sh` runs. Run them
+directly (not queued) only for a single file or a single suite, never
+as the full run:
 
-Ensure submodules are initialized first:
+- **Bash** (Linux/macOS/WSL):
+  `tests/bash/helpers/bats-core/bin/bats tests/bash/`; one file:
+  `tests/bash/helpers/bats-core/bin/bats tests/bash/with-pueue.bats`
+- **PowerShell** (Windows):
+  `Invoke-Pester tests/powershell/ -Output Detailed`
+
+Ensure submodules are initialized first (a plain command, not queued):
 `git submodule update --init --recursive`
 
 ## IDD Workflow
