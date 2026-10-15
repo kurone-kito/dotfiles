@@ -425,7 +425,7 @@ _mise_tools_table() {
   # Print the unbroken comment block directly above the pair as one line,
   # so a phrase wrapped across two comment lines still matches.
   run awk '
-    /^#/ { line = $0; sub(/^# ?/, "", line); block = block (block == "" ? "" : " ") line; next }
+    /^[[:space:]]*#/ { line = $0; sub(/^[[:space:]]*# ?/, "", line); block = block (block == "" ? "" : " ") line; next }
     /^"aqua:Nukesor\/pueue\/pueue" = / { print block; found = 1; exit }
     { block = "" }
     END { if (!found) exit 1 }
@@ -443,14 +443,14 @@ _mise_tools_table() {
 
   assert_file_exist "$config"
 
-  # Scan the key part of every non-comment line (everything before the
-  # first `=`; a table header has none) for the bare words, so indented,
-  # quoted, backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and
-  # table-header (`[tools.mise]`) forms are all caught while a value such
-  # as a ~/.config/mise path is not. A hyphen or underscore joins a longer
-  # name, which is allowed. Padding the line avoids ^ and $ inside groups,
-  # which not every grep engine handles.
-  run bash -c 'grep -v "^[[:space:]]*#" "$1" | sed "s/=.*//; s/^/ /; s/\$/ /" | grep -Eiq "[^[:alnum:]_-](mise|chezmoi)[^[:alnum:]_-]"' _ "$config"
+  # Scan the key part of every key line (everything before the first `=`)
+  # and every table header for the bare words, so indented, quoted,
+  # backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and table-header
+  # (`[tools.mise]`) forms are all caught. A value, including a line of a
+  # multi-line array such as a ~/.config/mise path, is not scanned. A hyphen
+  # or underscore joins a longer name, which is allowed. Padding the line
+  # avoids ^ and $ inside groups, which not every grep engine handles.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -E "=|^[[:space:]]*\[[^],=]*\][[:space:]]*(#.*)?$" | sed "s/=.*//; s/^/ /; s/\$/ /" | grep -Eiq "[^[:alnum:]_-](mise|chezmoi)[^[:alnum:]_-]"' _ "$config"
   assert_failure 1
 }
 
