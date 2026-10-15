@@ -14,10 +14,7 @@ ENTRY_FILES=(CLAUDE.md AGENTS.md README.md .github/copilot-instructions.md)
 
 LINT_RUN='scripts/with-pueue.sh scripts/run-fix-validate.sh'
 TEST_RUN='scripts/with-pueue.sh scripts/run-validate.sh'
-SKIP_SENTENCE='scripts/run-validate.sh runs both suites, but skips the PowerShell one when the current branch'"'"'s diff touches no PowerShell-relevant path'
-AUTHORITY_SENTENCE='authoritative full PowerShell run remains Windows local execution and Windows CI'
 SUBMODULE_STEP='git submodule update --init --recursive'
-FALLBACK_SENTENCE='Without pueue the wrapper simply runs the command, unless the rendered ~/.config/dotfiles/pueue-parallelism file is corrupt: then it stops with status 2 first.'
 
 setup() {
   load 'helpers/bats-support/load'
@@ -48,6 +45,25 @@ entry_section() {
 # prompt in front, no backticks or blanks behind.
 normalize_line() {
   sed -E 's/^[[:space:]]*//; s/^([-*]|[0-9]+\.)[[:space:]]+//; s/^`+//; s/^\$ //; s/`+[[:space:]]*$//; s/[[:space:]]+$//'
+}
+
+# Succeed when one sentence of the text $1 contains every term given after it.
+# Sentences are split at a full stop followed by a blank.
+sentence_with_terms() {
+  local text="$1" sentence term ok
+  shift
+  while IFS= read -r sentence; do
+    ok=1
+    for term in "$@"; do
+      case "$sentence" in *"$term"*) ;; *)
+        ok=0
+        break
+        ;;
+      esac
+    done
+    [ "$ok" -eq 1 ] && return 0
+  done < <(printf '%s\n' "$text" | sed -E 's/\. /.\n/g')
+  return 1
 }
 
 # Print one message per problem found in the Testing section of $1; print
@@ -90,12 +106,16 @@ entry_problems() {
     echo "bare suite before the queued runs"
   fi
 
-  # Prose rules run on the collapsed text: one line, single blanks, no
-  # backticks, so a sentence that wraps across lines still matches.
+  # Prose rules run on the collapsed text (one line, single blanks, no
+  # backticks, so a sentence that wraps still matches) and ask for the meaning
+  # rather than the exact wording: one sentence must carry every stable term.
   collapsed="$(printf '%s\n' "$section" | tr '\n' ' ' | tr -s ' ' | tr -d '`')"
-  case "$collapsed" in *"$SKIP_SENTENCE"*) ;; *) echo "missing skip-Pester statement" ;; esac
-  case "$collapsed" in *"$AUTHORITY_SENTENCE"*) ;; *) echo "missing Windows authority statement" ;; esac
-  case "$collapsed" in *"$FALLBACK_SENTENCE"*) ;; *) echo "missing fallback statement" ;; esac
+  sentence_with_terms "$collapsed" 'scripts/run-validate.sh' 'skips' 'no PowerShell-relevant path' ||
+    echo "missing skip-Pester statement"
+  sentence_with_terms "$collapsed" 'authoritative' 'full PowerShell run' 'Windows CI' ||
+    echo "missing Windows authority statement"
+  sentence_with_terms "$collapsed" 'pueue-parallelism' 'corrupt' 'status 2' ||
+    echo "missing fallback statement"
 }
 
 # ---------------------------------------------------------------------------
@@ -226,9 +246,24 @@ mutate() {
 @test "mutation: dropping the corrupt-file qualification of the fallback is reported" {
   local rel
   for rel in "${ENTRY_FILES[@]}"; do
-    mutate "$rel" 'unless the' 'and the'
+    mutate "$rel" 'with status 2 first' 'with an error first'
     run entry_problems "$MUTANT/$rel"
     assert_output 'missing fallback statement'
+  done
+}
+
+@test "a rewording that keeps the meaning of the kept sentences is accepted" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    mutate "$rel" 'but skips the PowerShell' 'yet skips the PowerShell'
+    run entry_problems "$MUTANT/$rel"
+    assert_output ''
+    mutate "$rel" 'remains Windows local execution' 'stays with Windows local execution'
+    run entry_problems "$MUTANT/$rel"
+    assert_output ''
+    mutate "$rel" 'stops with status 2 first' 'ends with status 2 before anything else'
+    run entry_problems "$MUTANT/$rel"
+    assert_output ''
   done
 }
 
