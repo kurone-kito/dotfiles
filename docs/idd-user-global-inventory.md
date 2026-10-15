@@ -109,9 +109,10 @@ The list holds only when all of the following are true before the run:
 
 - `$HOME` is an absolute path that does not start with `//`, and the
   directories under [Preconditions](#preconditions-for-an-isolated-home) exist.
-- `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `CODEX_HOME` are unset or are not
-  qualified roots, so the defaults apply. The run set the XDG variables to
-  the default locations under its HOME, which gives the same layout.
+- `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `CODEX_HOME` are unset, are not
+  qualified roots, or are set to the default locations under `HOME`, so the
+  defaults apply. The run set the XDG variables to the default locations
+  under its HOME, which gives the same layout.
 - The harness list is the default: all three harnesses, `claude`, `codex`,
   and `opencode`.
 - No entry file, data root, skill root, `.codex/`, `.config/opencode/`,
@@ -147,11 +148,13 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
   [run record](#run-record) shows. The installer creates
   `.local/share/idd-skill/`, `.claude/skills/`, `.agents/skills/`, `.codex/`,
   and `.config/opencode/` itself.
-- If `XDG_DATA_HOME` or `XDG_CONFIG_HOME` is a qualified root, that value
-  itself must exist, because it is the parent of the data root or of the
-  OpenCode directory. If `CODEX_HOME` is a qualified root, its parent must
-  exist. This page assumes all three are unset, or set to the default
-  locations under `HOME`, as in the run. The upstream statement is in
+- If `XDG_DATA_HOME` is a qualified root, that value itself must exist,
+  because it is the parent of the data root. If `XDG_CONFIG_HOME` is a
+  qualified root and OpenCode is selected, that value itself must exist,
+  as the parent of the OpenCode directory. If `CODEX_HOME` is a qualified
+  root and Codex CLI is selected, its parent must exist. This page assumes
+  all three are unset, or set to the default locations under `HOME`, as in
+  the run. The upstream statement is in
   [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md#preconditions).
 
 The table below gives each root and harness directory that the run uses, and
