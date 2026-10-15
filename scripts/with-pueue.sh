@@ -23,7 +23,11 @@
 #      directly.
 #   4. Otherwise create the `dotfiles` group when it is not listed, set its
 #      parallelism, enqueue the command in the caller's working directory,
-#      wait, print the task's output and return the task's exit status.
+#      wait, print the task's output and return the task's exit status. The
+#      group is dedicated to this wrapper, so while it waits the wrapper
+#      resumes the group when it finds it paused (pueue can pause a group
+#      after a failed task); otherwise one failed validation would leave
+#      every queued one waiting forever.
 #      Every failure before the daemon accepts the task exits non-zero and
 #      runs nothing; once it has accepted the task the command is never
 #      started a second time locally.
@@ -31,7 +35,9 @@
 # The default group and the user's pueue.yml are never changed.
 #
 # Test knobs (not part of the interface): WITH_PUEUE_START_POLLS and
-# WITH_PUEUE_START_POLL_DELAY bound the wait for a freshly started daemon.
+# WITH_PUEUE_START_POLL_DELAY bound the wait for a freshly started daemon;
+# WITH_PUEUE_POLL_DELAY is the tick of the wait loop (the group is checked
+# every 20 ticks).
 
 set -u
 
@@ -39,9 +45,12 @@ group_name=dotfiles
 parallelism_file="${HOME:-}/.config/dotfiles/pueue-parallelism"
 start_polls="${WITH_PUEUE_START_POLLS:-20}"
 start_poll_delay="${WITH_PUEUE_START_POLL_DELAY:-0.25}"
+poll_delay="${WITH_PUEUE_POLL_DELAY:-0.5}"
+resume_every=20
 
 task_id=""
 wait_pid=""
+tick_pid=""
 add_error=""
 
 say() {
@@ -131,9 +140,24 @@ remove_task() {
 on_signal() {
   local status="$1"
   [ -z "$wait_pid" ] || kill "$wait_pid" > /dev/null 2>&1
+  [ -z "$tick_pid" ] || kill "$tick_pid" > /dev/null 2>&1
   remove_task
   [ -z "$add_error" ] || [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
   exit "$status"
+}
+
+# The group is dedicated to this wrapper and a task waits forever in a paused
+# group, so resume it when the listing shows it paused (pueue pauses a group
+# after a failed task when daemon.pause_group_on_failure is on). Best effort:
+# a failure here leaves the decision to the wait.
+resume_group_if_paused() {
+  local listing
+  listing=$(pueue group 2> /dev/null) || return 0
+  if printf '%s\n' "$listing" | grep -q "^Group \"$group_name\" .*: paused"; then
+    say "the pueue group $group_name is paused; resuming it"
+    pueue start --group "$group_name" > /dev/null 2>&1
+  fi
+  return 0
 }
 
 # Map pueue's task result to an exit status; "unreadable" when it is not Done.
@@ -203,6 +227,8 @@ main() {
   pueue parallel "$parallelism" --group "$group_name" > /dev/null 2>&1 ||
     die 1 "could not set the parallelism of the pueue group $group_name to $parallelism; not running the command"
 
+  resume_group_if_paused
+
   local command_line="" argument
   for argument in "$@"; do
     command_line+=" $(shell_quote "$argument")"
@@ -233,6 +259,19 @@ main() {
   # From here on the daemon owns the task: never run the command locally.
   pueue wait "$task_id" --quiet > /dev/null 2>&1 &
   wait_pid=$!
+  # The tick runs in the background and is waited for with the builtin, so a
+  # trapped signal is acted on at once instead of after the sleep.
+  local tick=0
+  while kill -0 "$wait_pid" > /dev/null 2>&1; do
+    sleep "$poll_delay" &
+    tick_pid=$!
+    wait "$tick_pid" > /dev/null 2>&1
+    tick_pid=""
+    tick=$((tick + 1))
+    if [ $((tick % resume_every)) -eq 0 ]; then
+      resume_group_if_paused
+    fi
+  done
   wait "$wait_pid"
   local wait_status=$?
   wait_pid=""

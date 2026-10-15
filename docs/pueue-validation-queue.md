@@ -88,10 +88,11 @@ In this order:
    would otherwise keep the caller's output pipe open and a caller that
    reads the wrapper's output would never see it end.
 5. Otherwise it creates the `dotfiles` group when it is not listed,
-   sets the group's parallelism, adds the command as a task in the
-   caller's working directory, waits for it, prints its output and
-   returns its exit status. The wrapper does not parse pueue's rejection
-   when a group already exists; it lists the groups to find out.
+   sets the group's parallelism, resumes the group if it is paused, adds
+   the command as a task in the caller's working directory, waits for it,
+   prints its output and returns its exit status. The wrapper does not
+   parse pueue's rejection when a group already exists; it lists the
+   groups to find out.
 
 Every failure before the daemon accepts the task (a failed group listing,
 a group that cannot be created, a failed parallelism update, a failed
@@ -101,6 +102,20 @@ has accepted the task the command is never started a second time locally;
 if the result cannot be read, the wrapper exits non-zero and leaves
 the finished task in place, so `pueue log <id>` can still show what
 happened.
+
+## A paused group
+
+pueue can pause a group by itself: with `daemon.pause_group_on_failure`
+(or `pause_all_on_failure`) enabled in `pueue.yml`, one failed task pauses
+its group, and a task queued in a paused group waits until someone resumes
+it. A failed validation is routine here, and it would otherwise leave
+every other session's validation waiting forever. The `dotfiles` group is
+dedicated to the wrapper, so the wrapper resumes it: it looks at the group
+before enqueueing and about every ten seconds while it waits, and runs
+`pueue start --group dotfiles` when the listing says the group is paused
+(with a note on standard error). If you want to stop validation, interrupt
+the callers; pausing the group does not hold them back for long. The
+default pueue group is never touched.
 
 ## Exit status, output and cleanup
 
@@ -133,8 +148,9 @@ before this change.
 ## Troubleshooting
 
 - `pueue status` lists the tasks, and `pueue group` the groups with their
-  parallelism. A task that never starts is waiting for a free slot in the
-  `dotfiles` group.
+  parallelism and whether they run. A task that never starts is waiting
+  for a free slot in the `dotfiles` group, or the group is paused and the
+  wrapper is about to resume it.
 - To stop the daemon, run `pueue shutdown`.
 - To run a command without the queue, call it directly, for example
   `scripts/run-validate.sh`.

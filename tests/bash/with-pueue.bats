@@ -28,7 +28,7 @@ setup() {
 
   # Nothing from the surrounding session may reach the wrapper.
   unset PUEUE_GROUP PUEUE_CONFIG_PATH PUEUE_WORKER_ID
-  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE
+  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE FAKE_PUEUE_PAUSE_AFTER_ADD
   unset SANDBOX
 
   export HOME="$BATS_TEST_TMPDIR/home"
@@ -53,6 +53,7 @@ setup() {
   # Fast daemon-start polling for the cases where the daemon never comes up.
   export WITH_PUEUE_START_POLLS=2
   export WITH_PUEUE_START_POLL_DELAY=0.01
+  export WITH_PUEUE_POLL_DELAY=0.01
 
   build_safe_path
   install_fake_pueue
@@ -93,8 +94,8 @@ build_safe_path() {
   mkdir -p "$SAFE_BIN"
   local tool tool_path
   for tool in awk basename bash cat chmod cp cut date dirname env grep head jq \
-    id kill ln ls mkdir mkfifo mktemp mv od printf pwd readlink rm rmdir sed sh sleep sort \
-    tail tr touch true false uname wc; do
+    id kill ln ls mkdir mkfifo mktemp mv od pgrep printf pwd readlink rm rmdir sed sh sleep \
+    sort tail tr touch true false uname wc; do
     tool_path="$(command -v "$tool" 2> /dev/null)" || continue
     case "$tool_path" in /*) ln -sf "$tool_path" "$SAFE_BIN/$tool" ;; esac
   done
@@ -131,7 +132,9 @@ list_groups() {
   local group
   while IFS= read -r group; do
     [ -n "$group" ] || continue
-    printf 'Group "%s" (%s parallel): running\n' "$group" "$(cat "$state/parallel-$group" 2> /dev/null || echo 1)"
+    status=running
+    [ ! -e "$state/paused-$group" ] || status=paused
+    printf 'Group "%s" (%s parallel): %s\n' "$group" "$(cat "$state/parallel-$group" 2> /dev/null || echo 1)" "$status"
   done < "$state/groups"
   return 0
 }
@@ -230,7 +233,15 @@ case "${1:-}" in
     printf '%s' "$cwd" > "$state/tasks/$id/cwd"
     # pueue joins the words after -- with spaces and hands them to sh -c.
     printf '%s' "$*" > "$state/tasks/$id/cmd"
+    if [ -n "${FAKE_PUEUE_PAUSE_AFTER_ADD:-}" ]; then : > "$state/paused-$group"; fi
     printf '%s\n' "$id"
+    ;;
+  start)
+    daemon_up || exit 1
+    if fails start; then exit 1; fi
+    # pueue start --group <name>
+    rm -f "$state/paused-$3"
+    printf 'Group "%s" is being resumed.\n' "$3"
     ;;
   wait)
     daemon_up || exit 1
@@ -240,6 +251,13 @@ case "${1:-}" in
       : > "$state/waiting"
       while :; do sleep 0.1; done
     fi
+    paused_group="$(cat "$state/tasks/$id/group" 2> /dev/null)"
+    hung=0
+    while [ -e "$state/paused-$paused_group" ]; do
+      hung=$((hung + 1))
+      [ "$hung" -le 100 ] || exit 1
+      sleep 0.05
+    done
     run_task "$id"
     if fails wait; then exit 1; fi
     exit 0
@@ -534,6 +552,47 @@ assert_refused_before_anything() {
   refute_line --partial "clean"
 }
 
+@test "queue: a running group is never started or resumed" {
+  wrap sh -c 'exit 0'
+  assert_success
+  run calls
+  refute_line --partial "start "
+}
+
+@test "paused: a group found paused before enqueueing is resumed, with a message" {
+  wrap sh -c 'exit 0'
+  : > "$FAKE_PUEUE_STATE/calls.log"
+  : > "$FAKE_PUEUE_STATE/paused-dotfiles"
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(ran_count)" "1"
+  [[ "$stderr" == *"paused"* ]] || fail "no message: $stderr"
+  run calls
+  assert_line "start --group dotfiles"
+  # The wait loop would also resume it, so require the resume to come first.
+  local start_line add_line
+  start_line="$(grep -n -x 'start --group dotfiles' "$FAKE_PUEUE_STATE/calls.log" | head -1 | cut -d: -f1)"
+  add_line="$(grep -n '^add --group' "$FAKE_PUEUE_STATE/calls.log" | head -1 | cut -d: -f1)"
+  [ -n "$start_line" ] && [ -n "$add_line" ] && [ "$start_line" -lt "$add_line" ] ||
+    fail "the group was not resumed before the task was added (start at $start_line, add at $add_line)"
+}
+
+@test "paused: a group paused while the task waits is resumed by the wait loop" {
+  FAKE_PUEUE_PAUSE_AFTER_ADD=1 wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(ran_count)" "1"
+  assert_equal "$(executions)" "1"
+  run calls
+  assert_line "start --group dotfiles"
+}
+
+@test "paused: when the group cannot be resumed the wrapper fails without a local copy" {
+  FAKE_PUEUE_PAUSE_AFTER_ADD=1 FAKE_PUEUE_FAIL=start wrap sh -c "$(mark_command 0)"
+  assert_failure
+  assert_equal "$(ran_count)" "0"
+  assert_equal "$(executions)" "0"
+}
+
 @test "queue: a failed group listing exits non-zero and neither enqueues nor runs the command" {
   FAKE_PUEUE_FAIL=group-list wrap sh -c "$(mark_command 0)"
   assert_failure
@@ -658,7 +717,7 @@ ROWS
 
 @test "queue: SIGTERM while waiting removes the task and exits 143" {
   cd "$WORK" || return 1
-  FAKE_PUEUE_WAIT_HOLD=1 "$BASH_BIN" "$WRAPPER" sh -c 'exit 0' > "$BATS_TEST_TMPDIR/term.out" 2>&1 &
+  WITH_PUEUE_POLL_DELAY=30 FAKE_PUEUE_WAIT_HOLD=1 "$BASH_BIN" "$WRAPPER" sh -c 'exit 0' > "$BATS_TEST_TMPDIR/term.out" 2>&1 &
   echo $! > "$BATS_TEST_TMPDIR/wrapper.pid"
 
   local waited=0
@@ -668,11 +727,24 @@ ROWS
   done
   [ -e "$FAKE_PUEUE_STATE/waiting" ] || fail "the wrapper never reached wait"
 
+  # The wrapper's own tick (a `sleep 30`) is its only direct child named sleep.
+  local tick_sleep=""
+  tick_sleep="$(pgrep -P "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")" -x sleep | head -1)"
+  [ -n "$tick_sleep" ] || fail "the wrapper has no tick sleeping"
+
   kill -TERM "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
-  local status=0
+  local status=0 started=$SECONDS
   wait "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")" || status=$?
   rm -f "$BATS_TEST_TMPDIR/wrapper.pid"
   [ "$status" -eq 143 ] || fail "exit $status"
+  # The 30 s tick must not delay the handler, and must not outlive it.
+  [ $((SECONDS - started)) -lt 10 ] || fail "the handler waited for the tick"
+  local gone=0
+  while kill -0 "$tick_sleep" 2> /dev/null && [ "$gone" -lt 20 ]; do
+    sleep 0.1
+    gone=$((gone + 1))
+  done
+  ! kill -0 "$tick_sleep" 2> /dev/null || fail "the tick sleep outlived the wrapper"
   run calls
   assert_line "kill 0"
   assert_line "remove 0"
