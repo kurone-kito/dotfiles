@@ -132,6 +132,8 @@ list_groups() {
   local group
   while IFS= read -r group; do
     [ -n "$group" ] || continue
+    # A vanished dotfiles group is simply not listed.
+    if [ -e "$state/vanished" ] && [ "$group" = dotfiles ]; then continue; fi
     status=running
     [ ! -e "$state/paused-$group" ] || status=paused
     printf 'Group "%s" (%s parallel): %s\n' "$group" "$(cat "$state/parallel-$group" 2> /dev/null || echo 1)" "$status"
@@ -205,6 +207,7 @@ case "${1:-}" in
         count=$(($(cat "$state/list-count" 2> /dev/null || echo 0) + 1))
         echo "$count" > "$state/list-count"
         if fails group-list; then exit 1; fi
+        if fails group-vanish && [ "$count" -ge 2 ]; then : > "$state/vanished"; fi
         if fails group-relist && [ "$count" -ge 2 ]; then exit 1; fi
         list_groups
         ;;
@@ -250,6 +253,7 @@ case "${1:-}" in
     printf '%s' "$*" > "$state/tasks/$id/cmd"
     if [ -n "${FAKE_PUEUE_PAUSE_AFTER_ADD:-}" ]; then : > "$state/paused-$group"; fi
     if fails group-flaky; then : > "$state/flaky"; fi
+    if fails group-vanish-late; then : > "$state/vanished"; fi
     if [ "${FAKE_PUEUE_ADD_HOLD:-}" = after ]; then
       # The daemon has accepted the task; the client has not printed the id.
       echo $$ > "$state/add.pid"
@@ -273,6 +277,7 @@ case "${1:-}" in
       [ "$starts" -gt 2 ] || exit 1
     fi
     # pueue start --group <name>
+    if fails start-vanish; then : > "$state/vanished"; fi
     rm -f "$state/paused-$3"
     printf 'Group "%s" is being resumed.\n' "$3"
     ;;
@@ -613,7 +618,7 @@ assert_refused_before_anything() {
   wrap sh -c "$(mark_command 0)"
   assert_success
   assert_equal "$(ran_count)" "1"
-  [[ "$stderr" == *"paused"* ]] || fail "no message: $stderr"
+  [[ "$stderr" == *"not running"* ]] || fail "no message: $stderr"
   run calls
   assert_line "start --group dotfiles"
   # The wait loop would also resume it, so require the resume to come first.
@@ -643,6 +648,35 @@ assert_refused_before_anything() {
   run calls
   refute_output --partial "add --group"
   [[ "$explanation" == *"could not confirm"* ]] || fail "no explanation: $explanation"
+}
+
+@test "paused: a group that is missing from the listing before enqueueing stops the call" {
+  FAKE_PUEUE_FAIL=group-vanish wrap sh -c "$(mark_command 0)"
+  assert_failure
+  assert_equal "$(ran_count)" "0"
+  run calls
+  refute_output --partial "add --group"
+  refute_line --partial "start "
+}
+
+@test "paused: a resumed group that is not listed afterwards is not confirmed running" {
+  : > "$FAKE_PUEUE_STATE/paused-dotfiles"
+  FAKE_PUEUE_FAIL=start-vanish wrap sh -c "$(mark_command 0)"
+  assert_failure
+  assert_equal "$(ran_count)" "0"
+  run calls
+  refute_output --partial "add --group"
+}
+
+@test "paused: a group that disappears while the task waits makes the wrapper give up and remove its task" {
+  local started=$SECONDS
+  FAKE_PUEUE_FAIL=group-vanish-late FAKE_PUEUE_WAIT_DELAY=8 wrap sh -c "$(mark_command 0)"
+  assert_failure
+  local explanation="$stderr"
+  [ $((SECONDS - started)) -lt 6 ] || fail "the wrapper waited for the task to end"
+  assert_equal "$(ran_count)" "0"
+  [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the abandoned task was left in the queue"
+  [[ "$explanation" == *"gave up waiting for task 0"* ]] || fail "no explanation: $explanation"
 }
 
 @test "paused: a group listing that cannot be read before enqueueing stops the call" {

@@ -194,26 +194,34 @@ on_signal() {
   exit "$status"
 }
 
-# True when the group listing on stdin shows the dotfiles group paused.
-group_is_paused() {
-  grep -q "^Group \"$group_name\" .*: paused"
+# True when the group listing on stdin shows the dotfiles group, whatever its
+# state. A group that is missing from the listing is not running.
+group_is_listed() {
+  grep -q "^Group \"$group_name\" "
 }
 
-# Succeeds only when the group is known to be running: it was, or it was
-# paused and has been resumed. The group is dedicated to this wrapper and a
-# task waits forever in a paused group, so resume it (pueue pauses a group
-# after a failed task when daemon.pause_group_on_failure is on). The result of
-# the start is never trusted: another session may have resumed the group at
-# the same moment, so a fresh listing decides. A listing that cannot be read
-# counts as not confirmed.
+# True when the group listing on stdin shows the dotfiles group running.
+group_is_running() {
+  grep -q "^Group \"$group_name\" .*: running"
+}
+
+# Succeeds only when the group is known to be running: the listing shows it
+# running, or it was listed but not running (paused) and has been resumed. A
+# group missing from the listing, or a listing that cannot be read, is not
+# confirmed. The group is dedicated to this wrapper and a task waits forever in
+# a paused group, so resume it (pueue pauses a group after a failed task when
+# daemon.pause_group_on_failure is on). The result of the start is never
+# trusted: another session may have resumed the group at the same moment, so a
+# fresh listing decides.
 ensure_group_running() {
   local listing
   listing=$(pueue group 2> /dev/null) || return 1
-  printf '%s\n' "$listing" | group_is_paused || return 0
-  say "the pueue group $group_name is paused; resuming it"
+  printf '%s\n' "$listing" | group_is_running && return 0
+  printf '%s\n' "$listing" | group_is_listed || return 1
+  say "the pueue group $group_name is not running (paused); resuming it"
   pueue start --group "$group_name" > /dev/null 2>&1
   for _ in 1 2 3; do
-    listing=$(pueue group 2> /dev/null) && ! printf '%s\n' "$listing" | group_is_paused && return 0
+    listing=$(pueue group 2> /dev/null) && printf '%s\n' "$listing" | group_is_running && return 0
     sleep 0.2
   done
   return 1

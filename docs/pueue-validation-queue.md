@@ -119,6 +119,10 @@ before enqueueing and about every ten seconds while it waits, and runs
 on its own: a fresh listing decides, so a resume by another session at
 the same moment counts. The default pueue group is never touched.
 
+The group counts as running only when the listing shows it, and shows it
+running. A group that is missing from the listing, or a listing that
+cannot be read, is not confirmed.
+
 If the group cannot be confirmed running, waiting would never end, so the
 wrapper stops instead. Before it enqueues anything it exits non-zero with
 "could not confirm that the pueue group dotfiles is running" and the
