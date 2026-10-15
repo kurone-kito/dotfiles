@@ -82,7 +82,7 @@ read_parallelism() (
 
   # Read byte-exactly: command substitution alone would drop every trailing
   # newline, so a second one would pass.
-  content=$(cat -- "$path"; printf x) || {
+  content=$(cat -- "$path" && printf x) || {
     say "refusing $path: unreadable"
     return 1
   }

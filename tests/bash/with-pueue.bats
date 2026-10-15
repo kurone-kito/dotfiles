@@ -460,6 +460,16 @@ assert_refused_before_anything() {
   done < <(corrupt_contents)
 }
 
+@test "parallelism: a read error is reported as unreadable, not as a bad value" {
+  set_parallelism_file '2\n'
+  printf '#!/bin/sh\nexit 1\n' > "$FAKE_BIN/cat"
+  chmod +x "$FAKE_BIN/cat"
+  wrap sh -c "$(mark_command 0)"
+  [ "$status" -eq 2 ] || fail "exit $status"
+  [[ "$stderr" == *"unreadable"* ]] || fail "a read error was not reported as unreadable: $stderr"
+  assert_equal "$(ran_count)" "0"
+}
+
 @test "parallelism: a directory, an unreadable file and a dangling symlink are refused" {
   rm -f "$PARALLELISM_FILE"
   mkdir "$PARALLELISM_FILE"
