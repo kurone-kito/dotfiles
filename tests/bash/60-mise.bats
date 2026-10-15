@@ -376,17 +376,27 @@ MOCK
 # pueue ships two binaries (client and daemon) in one release. mise has no
 # `pueue` registry shorthand, so each binary is pinned by its
 # package-qualified aqua id.
+
+# Prints the lines of the [tools] table: after its header, up to the next
+# table header. A pin that drifts under [settings] is ignored by mise.
+_mise_tools_table() {
+  awk '/^\[/ { in_tools = ($0 == "[tools]"); next } in_tools' "$1"
+}
+
 @test "pins pueue and pueued to their package-qualified aqua ids at latest" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+  local tools="$BATS_TEST_TMPDIR/tools-table.toml"
 
-  run grep -cFx '"aqua:Nukesor/pueue/pueue" = "latest"' "$config"
+  _mise_tools_table "$config" > "$tools"
+
+  run grep -cFx '"aqua:Nukesor/pueue/pueue" = "latest"' "$tools"
   assert_output 1
-  run grep -cFx '"aqua:Nukesor/pueue/pueued" = "latest"' "$config"
+  run grep -cFx '"aqua:Nukesor/pueue/pueued" = "latest"' "$tools"
   assert_output 1
 
   # The daemon pin directly follows the client pin, so the one comment
   # block above the pair covers both.
-  run grep -A1 -Fx '"aqua:Nukesor/pueue/pueue" = "latest"' "$config"
+  run grep -A1 -Fx '"aqua:Nukesor/pueue/pueue" = "latest"' "$tools"
   assert_success
   assert_line --index 1 '"aqua:Nukesor/pueue/pueued" = "latest"'
 
@@ -400,9 +410,10 @@ MOCK
 
   assert_file_exist "$config"
 
-  run grep -Eq '^"?pueued?"?[[:space:]]*=' "$config"
+  run grep -Eq '^[[:space:]]*"?pueued?"?[[:space:]]*=' "$config"
   assert_failure 1
-  run grep -Fq '"aqua:Nukesor/pueue"' "$config"
+  # The comment may quote the bare id; no key may.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -Fq "\"aqua:Nukesor/pueue\""' _ "$config"
   assert_failure 1
   # The explanatory comment may name the pueue-lib tags; no key may.
   run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -q "pueue-lib"' _ "$config"
@@ -431,8 +442,13 @@ MOCK
 @test "does not add mise or chezmoi to the managed tools" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
-  # Covers the bare keys and backend-qualified forms such as aqua:jdx/mise.
-  run grep -Eq '^"?([a-z]+:[^"]*/)?(mise|chezmoi)"?[[:space:]]*=' "$config"
+  assert_file_exist "$config"
+
+  # Scan every non-comment line for the bare words, so indented, quoted,
+  # backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and table-header
+  # (`[tools.mise]`) forms are all caught. A hyphen or underscore joins a
+  # longer name, which is allowed.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -Eq "(^|[^[:alnum:]_-])(mise|chezmoi)($|[^[:alnum:]_-])"' _ "$config"
   assert_failure 1
 }
 
