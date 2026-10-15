@@ -44,10 +44,12 @@ A collection of configuration files that we use.
 
 - [GNU Readline](https://tiswww.cwru.edu/php/chet/readline/rltop.html) —
 input line editing
+- [Neovim](https://neovim.io/) — editor configuration, installed via mise
 - [psmux](https://github.com/psmux/psmux) — Windows-native tmux-compatible
   multiplexer
 - [tmux](https://github.com/tmux/tmux) — terminal multiplexer
-- [Vim](https://www.vim.org/) — editor configuration
+- [Vim](https://www.vim.org/) — legacy editor configuration that
+  will be removed on 2027-01-15
 
 ### Network tools
 
