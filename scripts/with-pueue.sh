@@ -213,6 +213,7 @@ task_exit_status() {
       elif $result == "Success" then "0"
       elif ($result | type) == "object" and ($result.Failed | type) == "number"
         and $result.Failed >= 1 and $result.Failed <= 255
+        and $result.Failed == ($result.Failed | floor)
       then ($result.Failed | floor | tostring)
       else "1"
       end'

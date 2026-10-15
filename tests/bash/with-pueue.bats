@@ -704,6 +704,9 @@ assert_refused_before_anything() {
 {"Failed":0}|1
 {"Failed":256}|1
 {"Failed":-1}|1
+{"Failed":42.5}|1
+{"Failed":1.5}|1
+{"Failed":3.0}|3
 "Killed"|1
 "Errored"|1
 {"FailedToSpawn":"boom"}|1
