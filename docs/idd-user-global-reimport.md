@@ -77,12 +77,12 @@ re-import changes that pin on purpose, and updates this page in the same change.
      added to the source;
    - a file that the source has and the staging tree lacks is removed only after
      the maintainer decides so.
-4. Check the preserved seams separately, because they are not part of the
-   comparison in step 2. If an upstream change would alter what a seam depends
-   on, for example the entry text that the inlined Copilot CLI and Gemini copies
-   repeat, or a policy key that the config seam would need to carry, do not
-   change the seam in the re-import. Stop, record the change on the tracking
-   issue, and wait for the maintainer's decision.
+4. Check the other preserved seams separately, because they are not part of the
+   comparison in step 2. If an upstream change would alter what one of them
+   depends on, for example a policy key that the config seam would need to
+   carry, do not change that seam in the re-import. Stop, record the change on
+   the tracking issue, and wait for the maintainer's decision. The copies of the
+   entry text are not covered by this stop rule, because step 3 updates them.
 5. When the pin changes, the new version is a new directory, and the `current`
    link moves to it in the same change. Update the pin on this page and on the
    tracking issue together. The old version directory is removed only after the
