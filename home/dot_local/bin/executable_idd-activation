@@ -1,0 +1,16 @@
+#!/bin/sh
+# Expose the upstream `idd-activation` helper of kurone-kito/idd-skill
+# v0.16.0 on PATH for the user-global IDD payload (dotfiles issue #646,
+# roadmap #643). The helper is the read-only activation gate that decides
+# whether the user-global IDD entry text applies to the current directory.
+#
+# This wrapper runs commit e4d425ee28b1893dd45c4996b2506619018c4b2b (the
+# v0.16.0 tag) from its codeload tarball, the same ephemeral-npx form the
+# repository uses for its pins. Repo-local IDD work stays on its own pin
+# (v0.14.0 in .github/idd/config.json); this wrapper does not change that
+# pin. Nothing is installed globally: npx fetches the tarball into its own
+# cache and runs the bin from there.
+#
+# Usage: idd-activation [--cwd <path>] [-h|--help]
+# Prints one JSON object with active, tier, instructionsRoot, and reason.
+exec npx --yes --package "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/e4d425ee28b1893dd45c4996b2506619018c4b2b" idd-activation "$@"
