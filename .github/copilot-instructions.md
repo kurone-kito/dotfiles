@@ -345,11 +345,38 @@ scripts:
 
 ### Running tests
 
-Bash (Linux/macOS/WSL):
+Initialize the submodules first (a plain command, not queued; the test
+runner lives in them):
 
 ```bash
 git submodule update --init --recursive
+```
+
+Run the full checks through the queue wrapper, so that parallel sessions
+do not overload the host (see
+[docs/pueue-validation-queue.md](../docs/pueue-validation-queue.md)).
+Lint and spelling (Markdown lint with auto-fix, then cspell) first, then
+the tests (bats, plus Pester when the branch touches a
+PowerShell-relevant path):
+
+```bash
+scripts/with-pueue.sh scripts/run-fix-validate.sh
+scripts/with-pueue.sh scripts/run-validate.sh
+```
+
+Without `pueue` the wrapper simply runs the command, unless the
+rendered `~/.config/dotfiles/pueue-parallelism` file is corrupt: then it
+stops with status 2 first. It is a bash script: on Windows, use it from
+WSL to get the queue (in Git Bash it runs the command directly).
+
+The suites that `scripts/run-validate.sh` runs can also be run directly
+(not queued) for a single file or a single suite, never as the full run.
+
+Bash (Linux/macOS/WSL):
+
+```bash
 tests/bash/helpers/bats-core/bin/bats tests/bash/
+tests/bash/helpers/bats-core/bin/bats tests/bash/with-pueue.bats  # one file
 ```
 
 PowerShell (Windows):
@@ -368,7 +395,8 @@ PowerShell 5.1). The Unix-scoped tests (marked
 
 `scripts/run-validate.sh` runs both suites, but skips the PowerShell
 one when the current branch's diff touches no PowerShell-relevant
-path — this is what `pre-push-validate`/`post-fix-validate` invoke.
+path — this is what `pre-push-validate`/`post-fix-validate` invoke
+(through the wrapper).
 
 ### Validating Windows-only logic on Linux
 
