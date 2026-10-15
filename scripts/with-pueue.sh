@@ -49,9 +49,12 @@ poll_delay="${WITH_PUEUE_POLL_DELAY:-0.5}"
 resume_every=20
 
 task_id=""
+task_label=""
 wait_pid=""
 tick_pid=""
+add_pid=""
 add_error=""
+add_out=""
 
 say() {
   printf 'with-pueue: %s\n' "$*" >&2
@@ -146,14 +149,45 @@ remove_task() {
   return 0
 }
 
+# The id of the task the daemon accepted under this call's unique label, found
+# in the queue state. Used when the client that should have printed the id
+# died, was interrupted, or failed after the daemon had already accepted the
+# task. A task accepted a moment ago may not show yet, so look a few times.
+find_task_by_label() {
+  local found
+  [ -n "$task_label" ] || return 1
+  for _ in 1 2 3; do
+    found=$(pueue status --json 2> /dev/null |
+      jq -r --arg label "$task_label" '[.tasks[] | select(.label == $label) | .id][0] // empty' 2> /dev/null) || found=""
+    if [ -n "$found" ]; then
+      printf '%s' "$found"
+      return 0
+    fi
+    sleep 0.2
+  done
+  return 1
+}
+
+cleanup_temp_files() {
+  [ -z "$add_error" ] || [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
+  [ -z "$add_out" ] || rm -f -- "$add_out"
+  add_error=""
+  add_out=""
+}
+
 # shellcheck disable=SC2329 # invoked through the traps set in main
 on_signal() {
   local status="$1"
   [ -z "$wait_pid" ] || kill "$wait_pid" > /dev/null 2>&1
   [ -z "$tick_pid" ] || kill "$tick_pid" > /dev/null 2>&1
+  [ -z "$add_pid" ] || kill "$add_pid" > /dev/null 2>&1
+  if [ -z "$task_id" ]; then
+    # Interrupted before the id arrived: the daemon may still have accepted it.
+    task_id=$(find_task_by_label) || task_id=""
+  fi
   kill_task
   remove_task
-  [ -z "$add_error" ] || [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
+  cleanup_temp_files
   exit "$status"
 }
 
@@ -246,34 +280,39 @@ main() {
   done
   command_line=${command_line# }
 
-  # Handlers first: remove_task does nothing while task_id is empty, and a
-  # signal that arrives during the add is acted on once the add has returned.
+  # Handlers first. The client runs in the background and is waited for with
+  # the builtin, so a signal is acted on at once even when the client stalls.
+  # The task carries a unique label: if the client dies, is interrupted, or
+  # fails after the daemon accepted the task, the task is found by its label
+  # instead of being stranded.
   trap 'on_signal 130' INT
   trap 'on_signal 143' TERM
   trap 'on_signal 129' HUP
   add_error=$(mktemp "${TMPDIR:-/tmp}/with-pueue.XXXXXX") || add_error=/dev/null
-  # The client ignores INT, TERM and HUP (ignored dispositions survive exec): a
-  # terminal's Ctrl-C reaches the whole process group, and a client that died
-  # after the daemon accepted the task but before it printed the id would
-  # strand a task that nothing can remove. The handlers above run as soon as
-  # the add has returned.
-  task_id=$(
-    trap '' INT TERM HUP
-    exec pueue add --group "$group_name" --working-directory "$PWD" --print-task-id -- "$command_line" 2> "$add_error"
-  )
+  add_out=$(mktemp "${TMPDIR:-/tmp}/with-pueue.XXXXXX") || {
+    cleanup_temp_files
+    die 1 "could not create a temporary file; not running the command"
+  }
+  task_label="with-pueue-$$-$(date +%s)-$RANDOM"
+  pueue add --group "$group_name" --working-directory "$PWD" --label "$task_label" --print-task-id -- "$command_line" > "$add_out" 2> "$add_error" &
+  add_pid=$!
+  wait "$add_pid"
   local add_status=$?
-  if [ "$add_status" -ne 0 ]; then
-    [ "$add_error" = /dev/null ] || { cat -- "$add_error" >&2; rm -f -- "$add_error"; }
-    task_id=""
+  add_pid=""
+  task_id=$(cat -- "$add_out" 2> /dev/null)
+  case $task_id in
+    '' | *[!0-9]*) task_id="" ;;
+  esac
+  if [ "$add_status" -ne 0 ] || [ -z "$task_id" ]; then
+    [ "$add_error" = /dev/null ] || cat -- "$add_error" >&2
+    # A daemon that accepted the task before the client failed still owns it.
+    task_id=$(find_task_by_label) || task_id=""
+    kill_task
+    remove_task
+    cleanup_temp_files
     die 1 "could not enqueue the command; not running it"
   fi
-  [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
-  case $task_id in
-    '' | *[!0-9]*)
-      task_id=""
-      die 1 "pueue did not return a task id; not running the command"
-      ;;
-  esac
+  cleanup_temp_files
 
   # From here on the daemon owns the task: never run the command locally.
   pueue wait "$task_id" --quiet > /dev/null 2>&1 &

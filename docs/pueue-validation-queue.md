@@ -135,11 +135,14 @@ default pueue group is never touched.
   drop other sessions' tasks before they read them.
 - An interrupt (`INT`, `TERM` or `HUP`) while enqueueing or waiting kills
   and removes that one task, so an abandoned call does not keep holding
-  a slot. The `pueue add` client itself ignores those signals: a
-  terminal's Ctrl-C reaches every process of the foreground group, and a
-  client that died after the daemon accepted the task but before it
-  printed the id would leave a task nothing can remove. The wrapper acts
-  on the interrupt as soon as the add has returned.
+  a slot. Every task carries a label of its own (`with-pueue-<pid>-<time>-
+  <random>`). The `pueue add` client runs in the background and is waited
+  for, so an interrupt is acted on at once even if the client stalls. When
+  the task id has not arrived yet, because the client died, was
+  interrupted or failed after the daemon had accepted the task, the
+  wrapper finds the task by its label in the queue state and removes it.
+  A failed enqueue is cleaned up the same way: nothing the daemon accepted
+  is left behind, and the command is not run.
 - The wrapper assumes pueue's default task shell, a POSIX `sh -c` on
   Linux and macOS. A `shell_command` in your `pueue.yml` that is not
   POSIX-compatible would not parse the command line.

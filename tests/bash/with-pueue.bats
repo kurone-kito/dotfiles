@@ -172,9 +172,9 @@ case "${1:-}" in
         else
           result="{\"Failed\":$code}"
         fi
-        tasks="$("$FAKE_JQ" -c --arg id "$id" --argjson result "$result" '. + {($id): {id: ($id|tonumber), status: {Done: {result: $result}}}}' <<< "$tasks")"
+        tasks="$("$FAKE_JQ" -c --arg id "$id" --arg label "$(cat "$dir/label" 2> /dev/null)" --argjson result "$result" '. + {($id): {id: ($id|tonumber), label: (if $label == "" then null else $label end), status: {Done: {result: $result}}}}' <<< "$tasks")"
       else
-        tasks="$("$FAKE_JQ" -c --arg id "$id" '. + {($id): {id: ($id|tonumber), status: "Running"}}' <<< "$tasks")"
+        tasks="$("$FAKE_JQ" -c --arg id "$id" --arg label "$(cat "$dir/label" 2> /dev/null)" '. + {($id): {id: ($id|tonumber), label: (if $label == "" then null else $label end), status: "Running"}}' <<< "$tasks")"
       fi
     done
     "$FAKE_JQ" -c -n --argjson tasks "$tasks" '{tasks: $tasks, groups: {}}'
@@ -216,10 +216,11 @@ case "${1:-}" in
     daemon_up || exit 1
     if fails add; then exit 1; fi
     shift
-    group='' cwd='' print=0
+    group='' cwd='' print=0 label=''
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --group) group="$2"; shift 2 ;;
+        --label) label="$2"; shift 2 ;;
         --working-directory) cwd="$2"; shift 2 ;;
         --print-task-id) print=1; shift ;;
         --) shift; break ;;
@@ -227,19 +228,30 @@ case "${1:-}" in
       esac
     done
     if fails add-garbage; then echo "Task added"; exit 0; fi
+    if [ "${FAKE_PUEUE_ADD_HOLD:-}" = before ]; then
+      # The client is stuck before the daemon has accepted anything.
+      echo $$ > "$state/add.pid"
+      : > "$state/adding"
+      held=0
+      while [ ! -e "$state/release" ] && [ "$held" -lt 300 ]; do sleep 0.05; held=$((held + 1)); done
+    fi
     id="$(next_id)"
     mkdir -p "$state/tasks/$id"
+    printf '%s' "$label" > "$state/tasks/$id/label"
     printf '%s' "$group" > "$state/tasks/$id/group"
     printf '%s' "$cwd" > "$state/tasks/$id/cwd"
     # pueue joins the words after -- with spaces and hands them to sh -c.
     printf '%s' "$*" > "$state/tasks/$id/cmd"
     if [ -n "${FAKE_PUEUE_PAUSE_AFTER_ADD:-}" ]; then : > "$state/paused-$group"; fi
-    if [ -n "${FAKE_PUEUE_ADD_HOLD:-}" ]; then
+    if [ "${FAKE_PUEUE_ADD_HOLD:-}" = after ]; then
       # The daemon has accepted the task; the client has not printed the id.
       echo $$ > "$state/add.pid"
       : > "$state/adding"
-      while [ ! -e "$state/release" ]; do sleep 0.05; done
+      held=0
+      while [ ! -e "$state/release" ] && [ "$held" -lt 300 ]; do sleep 0.05; held=$((held + 1)); done
     fi
+    # The daemon accepted the task but the client reports a failure.
+    if fails add-late-fail; then exit 1; fi
     printf '%s\n' "$id"
     ;;
   start)
@@ -255,7 +267,9 @@ case "${1:-}" in
     if [ -n "${FAKE_PUEUE_WAIT_HOLD:-}" ]; then
       echo $$ > "$state/hold.pid"
       : > "$state/waiting"
-      while :; do sleep 0.1; done
+      held=0
+      while [ "$held" -lt 300 ]; do sleep 0.1; held=$((held + 1)); done
+      exit 1
     fi
     paused_group="$(cat "$state/tasks/$id/group" 2> /dev/null)"
     hung=0
@@ -506,7 +520,7 @@ assert_refused_before_anything() {
   assert_line "group"
   assert_line "group add dotfiles"
   assert_line "parallel 2 --group dotfiles"
-  assert_output --regexp "add --group dotfiles --working-directory $WORK --print-task-id -- "
+  assert_output --regexp "add --group dotfiles --working-directory $WORK --label with-pueue-[0-9]+-[0-9]+-[0-9]+ --print-task-id -- "
   assert_line "wait 0 --quiet"
 }
 
@@ -738,33 +752,101 @@ ROWS
   [[ "$stderr" == *"could not read the output"* ]] || fail "no warning: $stderr"
 }
 
-@test "queue: an interrupt that also reaches the add client does not strand the accepted task" {
+# Start the wrapper in the background with the add held (FAKE_PUEUE_ADD_HOLD is
+# "before" or "after" the daemon accepted the task) and wait until it is held.
+start_held_add() {
   cd "$WORK" || return 1
-  FAKE_PUEUE_ADD_HOLD=1 "$BASH_BIN" "$WRAPPER" sh -c "$(mark_command 0)" > "$BATS_TEST_TMPDIR/add.out" 2>&1 &
+  FAKE_PUEUE_ADD_HOLD="$1" "$BASH_BIN" "$WRAPPER" sh -c "$(mark_command 0)" > "$BATS_TEST_TMPDIR/add.out" 2>&1 &
   echo $! > "$BATS_TEST_TMPDIR/wrapper.pid"
-
   local waited=0
   while [ ! -e "$FAKE_PUEUE_STATE/adding" ] && [ "$waited" -lt 100 ]; do
     sleep 0.1
     waited=$((waited + 1))
   done
   [ -e "$FAKE_PUEUE_STATE/adding" ] || fail "the wrapper never reached pueue add"
+}
 
+# Wait for the held wrapper; its exit status is left in HELD_STATUS (not
+# printed, because `wait` only works in the shell that started the job). A
+# wrapper that has not exited after 10 s is released and killed, and reported
+# as status 999, so a regression fails the test instead of hanging it.
+finish_held_add() {
+  local pid waited=0
+  pid="$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
+  while kill -0 "$pid" 2> /dev/null && [ "$waited" -lt 100 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  HELD_STATUS=0
+  if kill -0 "$pid" 2> /dev/null; then
+    : > "$FAKE_PUEUE_STATE/release"
+    kill -KILL "$pid" 2> /dev/null || true
+    HELD_STATUS=999
+  fi
+  local wait_status=0
+  wait "$pid" || wait_status=$?
+  [ "$HELD_STATUS" -eq 999 ] || HELD_STATUS=$wait_status
+  rm -f "$BATS_TEST_TMPDIR/wrapper.pid"
+}
+
+@test "queue: an interrupt that also kills the add client finds the accepted task by its label" {
+  start_held_add after
   # A terminal's Ctrl-C reaches the wrapper and the client in flight alike.
   kill -TERM "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
   kill -TERM "$(cat "$FAKE_PUEUE_STATE/add.pid")" 2> /dev/null || true
-  : > "$FAKE_PUEUE_STATE/release"
-
-  local status=0
-  wait "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")" || status=$?
-  rm -f "$BATS_TEST_TMPDIR/wrapper.pid"
-  [ "$status" -eq 143 ] || fail "exit $status"
-  # The accepted task was found by its id and removed, and never ran.
+  finish_held_add
+  [ "$HELD_STATUS" -eq 143 ] || fail "exit $HELD_STATUS"
   [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the accepted task was left in the queue"
   run calls
   assert_line "remove 0"
   assert_equal "$(ran_count)" "0"
   assert_equal "$(executions)" "0"
+}
+
+@test "queue: an interrupt while the add client stalls is acted on at once" {
+  start_held_add after
+  local started=$SECONDS
+  kill -TERM "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
+  finish_held_add
+  [ "$HELD_STATUS" -eq 143 ] || fail "exit $HELD_STATUS"
+  [ $((SECONDS - started)) -lt 10 ] || fail "the wrapper waited for the stalled client"
+  # The stalled client is stopped and the accepted task is cleaned up.
+  local gone=0
+  while kill -0 "$(cat "$FAKE_PUEUE_STATE/add.pid")" 2> /dev/null && [ "$gone" -lt 20 ]; do
+    sleep 0.1
+    gone=$((gone + 1))
+  done
+  ! kill -0 "$(cat "$FAKE_PUEUE_STATE/add.pid")" 2> /dev/null || fail "the stalled client outlived the wrapper"
+  [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the accepted task was left in the queue"
+  assert_equal "$(ran_count)" "0"
+}
+
+@test "queue: an interrupt before the daemon accepted anything leaves nothing to remove" {
+  start_held_add before
+  kill -TERM "$(cat "$BATS_TEST_TMPDIR/wrapper.pid")"
+  finish_held_add
+  [ "$HELD_STATUS" -eq 143 ] || fail "exit $HELD_STATUS"
+  assert_equal "$(ls "$FAKE_PUEUE_STATE/tasks" | wc -l | tr -d ' ')" "0"
+  run calls
+  refute_line --partial "remove "
+  assert_equal "$(ran_count)" "0"
+}
+
+@test "queue: an add that fails after the daemon accepted the task removes it and does not run" {
+  FAKE_PUEUE_FAIL=add-late-fail wrap sh -c "$(mark_command 0)"
+  assert_failure
+  [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the accepted task was left in the queue"
+  run calls
+  assert_line "remove 0"
+  assert_equal "$(ran_count)" "0"
+  assert_equal "$(executions)" "0"
+}
+
+@test "queue: every task is added under a label of its own" {
+  wrap sh -c 'exit 0'
+  assert_success
+  run calls
+  assert_output --regexp "add --group dotfiles --working-directory $WORK --label with-pueue-[0-9]+-[0-9]+-[0-9]+ --print-task-id -- "
 }
 
 @test "queue: a failed wait cleans up the task and exits non-zero without a second copy" {
