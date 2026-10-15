@@ -187,12 +187,16 @@ source_editor_script() {
   mkdir -p "$HOME/.config/shell/conf.d"
   : > "$HOME/.config/shell/conf.d/30-editor.sh"
   : > "$HOME/.config/shell/conf.d/60-mise.sh"
+  # The new script is deployed before this run_once_after script runs, so a
+  # pattern that also matched it would delete it on every machine.
+  : > "$HOME/.config/shell/conf.d/62-editor.sh"
 
   run sh "$CLEANUP"
 
   assert_success
   assert_file_not_exist "$HOME/.config/shell/conf.d/30-editor.sh"
   assert_file_exist "$HOME/.config/shell/conf.d/60-mise.sh"
+  assert_file_exist "$HOME/.config/shell/conf.d/62-editor.sh"
 }
 
 @test "the cleanup script exits 0 when the old file is already gone" {
@@ -364,6 +368,8 @@ assert_control_has_no_nvim() {
   mv "$HOME/.config/shell/conf.d/62-editor.sh" "$HOME/.config/shell/conf.d/30-editor.sh"
 
   login_probe bash "$ACTIVATE_DIR"
+  # The activation must have worked, or a missing editor proves nothing.
+  [ "${output%%|*}" = "$ACTIVATE_DIR/nvim" ] || fail "the activated nvim is not visible: $output"
   local rest="${output#*|}"
   [ "${rest%%|*}" != nvim ] || fail "the 30- name still found nvim: $output"
 }
