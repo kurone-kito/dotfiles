@@ -59,6 +59,7 @@ words:
   - cygheap
   - dataenvdeploylabel
   - datamkcertinstall
+  - datapueueparallelism
   - datazellij
   - datazellijweb
   - dbrgn

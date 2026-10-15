@@ -260,12 +260,13 @@ the recorded machine-readable policy. Absent values keep the gate
 enabled and default approval actors to
 `owners-and-maintainers-only`.
 
+<!-- dotfiles-divergence: queued-validation-commands -->
 <!-- dprint-ignore-start -->
 | Name | Commands |
 | --- | --- |
-| **fix-validate** | `npx markdownlint-cli2 --fix && npx markdownlint-cli2 && npx cspell lint "**" --no-progress` |
-| **pre-push-validate** | `scripts/run-validate.sh` |
-| **post-fix-validate** | `scripts/run-validate.sh` |
+| **fix-validate** | `scripts/with-pueue.sh scripts/run-fix-validate.sh` |
+| **pre-push-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
+| **post-fix-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
 | **install-deps** | `git submodule update --init --recursive` |
 | **issue-scope** | `roadmap-first` |
 | **orphan-first-policy** | `none` |

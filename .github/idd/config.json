@@ -29,9 +29,9 @@
   },
   "commands": {
     "install-deps": "git submodule update --init --recursive",
-    "fix-validate": "npx markdownlint-cli2 --fix && npx markdownlint-cli2 && npx cspell lint \"**\" --no-progress",
-    "pre-push-validate": "scripts/run-validate.sh",
-    "post-fix-validate": "scripts/run-validate.sh"
+    "fix-validate": "scripts/with-pueue.sh scripts/run-fix-validate.sh",
+    "pre-push-validate": "scripts/with-pueue.sh scripts/run-validate.sh",
+    "post-fix-validate": "scripts/with-pueue.sh scripts/run-validate.sh"
   },
   "helperRuntime": {
     "profile": "ephemeral-npx",
