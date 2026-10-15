@@ -188,6 +188,23 @@ See [Deploying sshd_config](sshd-config-setup.md).
 See
 [Configuring the systemd-tmpfiles /tmp cleanup age](tmpfiles-cleanup-setup.md).
 
+## pueue validation queue (`data.pueue.parallelism`)
+
+| Field         | Type    | Required | Default | Purpose                                                                                  |
+| ------------- | ------- | -------- | ------- | ---------------------------------------------------------------------------------------- |
+| `parallelism` | integer | no       | `2`     | How many tasks the `dotfiles` pueue group runs at once. A whole number from `1` to `9007199254740991`. |
+
+An omitted key renders as `2`, a provisional default rather than a
+measured limit; no policy upper bound is set. `0`, a negative number, a
+string, a boolean, a fraction, `inf`, `nan` and a number above
+`9007199254740991` (2^53 - 1, the largest integer a template prints
+exactly) fail the render and the error names `parallelism`. chezmoi
+renders the value to `~/.config/dotfiles/pueue-parallelism` for
+`scripts/with-pueue.sh` to read; the default pueue group and `pueue.yml`
+are left unchanged.
+
+See [Queueing heavy validation with pueue](pueue-validation-queue.md).
+
 ## mkcert local CA (`data.mkcert.install`)
 
 | Field                   | Type    | Required | Default | Purpose                                                                                                                                                                                                                |
@@ -348,6 +365,9 @@ defaultShellFallbackToLegacy = false
 
 [data.tmpfiles]
 age = "2d"
+
+[data.pueue]
+parallelism = 3
 
 [data.mkcert]
 install = true

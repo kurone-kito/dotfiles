@@ -191,6 +191,32 @@ defaultShellFallbackToLegacy = {{ dig "defaultShellFallbackToLegacy" false $sshS
 [data.tmpfiles]
 age = {{ $tmpfilesAge | quote }}
 {{- end }}
+{{- /* data.pueue.parallelism: validated exactly as in
+     home/dot_config/dotfiles/pueue-parallelism.tmpl (keep the two in sync).
+     The default 2 is omitted; any other whole number from 1 to
+     9007199254740991 is re-emitted as an integer, and an invalid value fails
+     the render instead of being dropped, so the next apply cannot silently
+     fall back to 2. */ -}}
+{{- $pueue := dig "pueue" dict . }}
+{{- if not (kindIs "map" $pueue) }}
+{{-   fail (printf "data.pueue must be a table that can hold parallelism; got %#v" $pueue) }}
+{{- end }}
+{{- $pueueParallelism := 2 }}
+{{- if hasKey $pueue "parallelism" }}
+{{-   $pueueParallelism = get $pueue "parallelism" }}
+{{- end }}
+{{- if not (or (kindIs "int" $pueueParallelism) (kindIs "int64" $pueueParallelism) (kindIs "float64" $pueueParallelism)) }}
+{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $pueueParallelism) }}
+{{- end }}
+{{- $pueueParallelismValue := float64 $pueueParallelism }}
+{{- if or (lt $pueueParallelismValue 1.0) (gt $pueueParallelismValue 9007199254740991.0) (ne $pueueParallelismValue (floor $pueueParallelismValue)) }}
+{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $pueueParallelism) }}
+{{- end }}
+{{- if ne $pueueParallelismValue 2.0 }}
+
+[data.pueue]
+parallelism = {{ printf "%.0f" $pueueParallelismValue }}
+{{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
 {{- $mkcertInstallTimeout := dig "mkcert" "installTimeoutSeconds" 180 . }}
 {{- $mkcertInstallTimeoutIsDefault := and (or (kindIs "int64" $mkcertInstallTimeout) (kindIs "int" $mkcertInstallTimeout) (kindIs "float64" $mkcertInstallTimeout)) (eq (printf "%v" $mkcertInstallTimeout) "180") }}
@@ -267,6 +293,12 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # and docs/tmpfiles-cleanup-setup.md. Linux-only; the generated file is a
 # staging copy at ~/.config/tmpfiles.d/tmp.conf, deployed to
 # /etc/tmpfiles.d/tmp.conf manually.
+#
+# pueue validation queue ([data.pueue]):
+# docs/chezmoi-toml-reference.md#pueue-validation-queue-datapueueparallelism
+# and docs/pueue-validation-queue.md. Optional parallelism of the
+# `dotfiles` pueue group (default 2), rendered to
+# ~/.config/dotfiles/pueue-parallelism for scripts/with-pueue.sh to read.
 #
 # mkcert local CA ([data.mkcert]):
 # docs/chezmoi-toml-reference.md#mkcert-local-ca-datamkcertinstall and

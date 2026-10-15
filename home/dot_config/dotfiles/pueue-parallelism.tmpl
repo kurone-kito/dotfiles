@@ -1,0 +1,38 @@
+{{- /* pueue-parallelism: how many tasks the `dotfiles` pueue group runs at
+     once, rendered to ~/.config/dotfiles/pueue-parallelism for
+     scripts/with-pueue.sh to read (the wrapper never asks chezmoi: `chezmoi
+     data` prints the whole data map, secrets included). See
+     docs/pueue-validation-queue.md and docs/chezmoi-toml-reference.md.
+
+     Reads the optional data.pueue.parallelism. An omitted key renders as 2,
+     and so does a missing file. This is a provisional default, not a measured
+     capacity limit, and no policy upper bound is set. The render fails, naming
+     the key, unless the value is a whole number from 1 to 9007199254740991
+     (2^53 - 1, the largest integer a float64 holds exactly, so the printed
+     digits are always the configured value): 0 (pueue treats 0 as
+     unlimited), a negative, a string, a boolean, a fraction, a larger number
+     and the TOML values inf and nan are all refused. TOML supplies int64, the
+     JSON test config supplies a number that may come through as float64; both
+     count when they are whole. The file is the integer in decimal and exactly
+     one newline.
+
+     The same validation sits in .chezmoi.toml.tmpl, which re-emits a
+     non-default value so `chezmoi init` keeps it. Keep the two in sync;
+     tests/bash/pueue-parallelism-tmpl.bats runs one case table against both.
+     This template does not touch the default group or pueue.yml. */ -}}
+{{- $pueue := dig "pueue" dict . -}}
+{{- if not (kindIs "map" $pueue) -}}
+{{-   fail (printf "data.pueue must be a table that can hold parallelism; got %#v" $pueue) -}}
+{{- end -}}
+{{- $parallelism := 2 -}}
+{{- if hasKey $pueue "parallelism" -}}
+{{-   $parallelism = get $pueue "parallelism" -}}
+{{- end -}}
+{{- if not (or (kindIs "int" $parallelism) (kindIs "int64" $parallelism) (kindIs "float64" $parallelism)) -}}
+{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $parallelism) -}}
+{{- end -}}
+{{- $parallelismValue := float64 $parallelism -}}
+{{- if or (lt $parallelismValue 1.0) (gt $parallelismValue 9007199254740991.0) (ne $parallelismValue (floor $parallelismValue)) -}}
+{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $parallelism) -}}
+{{- end -}}
+{{ printf "%.0f" $parallelismValue }}
