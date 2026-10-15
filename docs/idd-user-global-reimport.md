@@ -69,8 +69,10 @@ re-import changes that pin on purpose, and updates this page in the same change.
 
    Until #648 lands, the chezmoi sources in the table do not exist. This page
    describes the sources that it will create.
-3. Update the chezmoi source where payload or skill-tree bytes differ. A file
-   that exists on one side only is also a difference:
+3. Update the chezmoi source where payload or skill-tree bytes differ. If
+   `user-global/entry.md` differs, also update each copy of it listed under
+   Preserved seams, in the same change. A file that exists on one side only is
+   also a difference:
    - a file that the staging tree adds inside the payload or a skill tree is
      added to the source;
    - a file that the source has and the staging tree lacks is removed only after
@@ -91,8 +93,18 @@ roadmap #643.
 
 ## Preserved seams
 
-These local parts of the chezmoi source stay as they are during a re-import:
+These local parts of the chezmoi source are not replaced by the payload. Apart
+from the copies of the entry text, which follow the payload file, they stay as
+they are during a re-import:
 
+- The four copies of the entry text, which #649 introduces. Each is a managed
+  block whose body matches `user-global/entry.md` byte for byte:
+  `home/dot_codex/AGENTS.md.tmpl`, `home/dot_copilot/copilot-instructions.md.tmpl`,
+  `home/dot_gemini/GEMINI.md.tmpl`, and the extended OpenCode render of
+  `home/dot_config/opencode/AGENTS.md.tmpl`. The Copilot CLI and Gemini copies
+  are inlined, because upstream does not wire those harnesses. The Claude
+  template imports the deployed file instead, and the compact OpenCode render
+  carries no copy.
 - `home/dot_config/idd-skill/config.json.tmpl` keeps only the CodeRabbit critique
   delegate and the telemetry hook. Upstream dogfood policy keys are not copied
   into it.
@@ -103,8 +115,6 @@ These local parts of the chezmoi source stay as they are during a re-import:
   and otherwise opens `.github/instructions/idd-overview-core.instructions.md`
   under that root. This repository adds no `opencode.json` source, because a
   second `instructions` entry would load the activation entry twice.
-- The activation text for Copilot CLI and Gemini is introduced by #649 and
-  inlined, because upstream does not wire those harnesses.
 - The repo-local IDD corpus (`.github/instructions/`, `.claude/skills/`,
   `docs/idd-*`, and `.github/idd/config.json`) is not replaced by the payload.
   The user-global payload and the repo-local import are separate.
