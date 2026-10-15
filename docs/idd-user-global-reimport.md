@@ -28,11 +28,12 @@ re-import changes that pin on purpose, and updates this page in the same change.
 ## Re-import procedure
 
 1. Stage the install in an isolated root, not in the operator's home directory.
-   - Use an empty directory as `HOME`, with these parent directories created
-     first: `.local/share` and `.claude` and `.agents`; `.config` as well, because
-     the default harness list includes OpenCode; and the parent of any qualified
-     `XDG_DATA_HOME`, `XDG_CONFIG_HOME` or `CODEX_HOME`. The installer refuses a
-     missing parent before it writes anything.
+   - Use an empty directory as `HOME`, with these directories created first:
+     `.local/share`, `.claude`, `.agents` and `.config`, because the default
+     harness list includes OpenCode. Also create each of `XDG_DATA_HOME` and
+     `XDG_CONFIG_HOME` that is a qualified root, because the installer does not
+     create those roots, and the parent of a qualified `CODEX_HOME`. The
+     installer refuses a missing parent before it writes anything.
    - Unset `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `CODEX_HOME`, or point each
      at a path under that root. A qualified value of any of them overrides the
      `HOME` default, and the shell defaults in this repository keep an inherited
@@ -58,8 +59,11 @@ re-import changes that pin on purpose, and updates this page in the same change.
    Skip `receipt.json`, which chezmoi does not deploy. The installer also edits
    three harness entry files, and chezmoi does not render those edits:
    - `~/.claude/CLAUDE.md`, from `home/dot_claude/CLAUDE.md.tmpl`;
-   - `~/.codex/AGENTS.md`, from `home/dot_codex/AGENTS.md.tmpl`;
-   - `opencode.json`, which has no chezmoi source.
+   - `$CODEX_HOME/AGENTS.md` when `CODEX_HOME` is a qualified root, otherwise
+     `~/.codex/AGENTS.md`, from `home/dot_codex/AGENTS.md.tmpl`;
+   - `opencode.json` under `$XDG_CONFIG_HOME/opencode/` when `XDG_CONFIG_HOME`
+     is a qualified root, otherwise under `~/.config/opencode/`. It has no
+     chezmoi source.
 
    The wiring that chezmoi adds to the first two is tracked by #649.
 
