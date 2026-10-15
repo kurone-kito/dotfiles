@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 # Regression coverage for OpenCode's compact default and full opt-in profile,
 # and for the user-global spans that the extended OpenCode render shares with
-# the other agents' renders. Every check compares renders of this working tree
-# with each other and never with another revision, so an intended edit of the
-# shared template keeps them green.
+# the other agents' renders. No check reads another revision of the repository:
+# the render checks compare renders of this working tree with each other, so an
+# intended edit of the shared template keeps them green.
 
 bats_require_minimum_version 1.5.0
 
