@@ -116,6 +116,10 @@ skipped (and why), and the SSH cause.
 
 ## Testing
 
+Ensure submodules are initialized first (a plain command, not queued;
+the test runner lives in them):
+`git submodule update --init --recursive`
+
 After modifying any script in `home/` or any documentation, run the
 full checks through the queue wrapper, so that parallel sessions do not
 overload the host (see
@@ -154,9 +158,6 @@ as the full run:
   `tests/bash/helpers/bats-core/bin/bats tests/bash/with-pueue.bats`
 - **PowerShell** (Windows):
   `Invoke-Pester tests/powershell/ -Output Detailed`
-
-Ensure submodules are initialized first (a plain command, not queued):
-`git submodule update --init --recursive`
 
 ## IDD Workflow
 

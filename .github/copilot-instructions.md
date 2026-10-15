@@ -345,6 +345,13 @@ scripts:
 
 ### Running tests
 
+Initialize the submodules first (a plain command, not queued; the test
+runner lives in them):
+
+```bash
+git submodule update --init --recursive
+```
+
 Run the full checks through the queue wrapper, so that parallel sessions
 do not overload the host (see
 [docs/pueue-validation-queue.md](../docs/pueue-validation-queue.md)).
@@ -364,12 +371,10 @@ WSL to get the queue (in Git Bash it runs the command directly).
 
 The suites that `scripts/run-validate.sh` runs can also be run directly
 (not queued) for a single file or a single suite, never as the full run.
-Initialize the submodules first (a plain command, not queued).
 
 Bash (Linux/macOS/WSL):
 
 ```bash
-git submodule update --init --recursive
 tests/bash/helpers/bats-core/bin/bats tests/bash/
 tests/bash/helpers/bats-core/bin/bats tests/bash/with-pueue.bats  # one file
 ```

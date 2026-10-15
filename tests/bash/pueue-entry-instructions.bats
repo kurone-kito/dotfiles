@@ -80,6 +80,10 @@ entry_problems() {
   printf '%s\n' "$normalized" | grep -qxF "$LINT_RUN" || echo "missing queued lint run"
   printf '%s\n' "$normalized" | grep -qxF "$TEST_RUN" || echo "missing queued test run"
   printf '%s\n' "$normalized" | grep -qxF "$SUBMODULE_STEP" || echo "missing direct submodule step"
+  # The single-suite instructions stay: the bare bats and Pester runs that
+  # scripts/run-validate.sh executes, for a single file or suite.
+  printf '%s\n' "$normalized" | grep -qE '^tests/bash/helpers/bats-core/bin/bats tests/bash/' || echo "missing direct bats run"
+  printf '%s\n' "$normalized" | grep -qE '^Invoke-Pester tests/powershell/' || echo "missing direct Pester run"
 
   # The wrapper may only be applied to the two scripts: an allowlist, so
   # `with-pueue.sh bats ...`, `with-pueue.sh git submodule ...` and a
@@ -104,6 +108,14 @@ entry_problems() {
   bare_line="$(printf '%s\n' "$normalized" | grep -n -E '^(tests/bash/helpers/bats-core/bin/bats|Invoke-Pester)' | head -1 | cut -d: -f1)"
   if [ -n "$bare_line" ] && { [ -z "$wrapper_line" ] || [ "$bare_line" -lt "$wrapper_line" ]; }; then
     echo "bare suite before the queued runs"
+  fi
+
+  # The submodules hold the test runner that scripts/run-validate.sh calls, so
+  # the plain initialization step comes before the first queued run.
+  local submodule_line
+  submodule_line="$(printf '%s\n' "$normalized" | grep -n -xF "$SUBMODULE_STEP" | head -1 | cut -d: -f1)"
+  if [ -n "$submodule_line" ] && [ -n "$wrapper_line" ] && [ "$submodule_line" -gt "$wrapper_line" ]; then
+    echo "submodule step after the queued runs"
   fi
 
   # Prose rules run on the collapsed text (one line, single blanks, no
@@ -318,6 +330,42 @@ mutate() {
     ' "$REPO_ROOT/$rel" > "$MUTANT/$rel"
     run entry_problems "$MUTANT/$rel"
     assert_output 'bare suite before the queued runs'
+  done
+}
+
+@test "mutation: dropping the direct bats run is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    mutate "$rel" 'tests/bash/helpers/bats-core/bin/bats' 'tests/bash/helpers/bats-core/bin/true'
+    run entry_problems "$MUTANT/$rel"
+    assert_output 'missing direct bats run'
+  done
+}
+
+@test "mutation: dropping the direct Pester run is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    mutate "$rel" 'Invoke-Pester' 'Invoke-Nothing'
+    run entry_problems "$MUTANT/$rel"
+    assert_output 'missing direct Pester run'
+  done
+}
+
+@test "mutation: a submodule step that comes after the queued runs is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    # Replace the step where it is and append it again at the end of the
+    # section, after the queued runs.
+    mutate "$rel" "$SUBMODULE_STEP" 'git submodule status'
+    awk -v step="$SUBMODULE_STEP" '
+      /^```/ { fence = !fence }
+      started && !fence && /^## / { print "`" step "`"; print ""; started = 0 }
+      !done && !fence && /^## Testing$/ { started = 1; done = 1 }
+      { print }
+    ' "$MUTANT/$rel" > "$MUTANT/$rel.moved"
+    mv "$MUTANT/$rel.moved" "$MUTANT/$rel"
+    run entry_problems "$MUTANT/$rel"
+    assert_output 'submodule step after the queued runs'
   done
 }
 
