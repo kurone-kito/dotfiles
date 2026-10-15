@@ -238,6 +238,17 @@ MSI installers, and setup.windows issue 111 explicitly deferred a
 decision on `dotnet`. Describe this as today's dual-install state, not
 as exclusive to either repository.
 
+### Vim
+
+This repository does not install Vim on Windows. The Windows Vim install
+through mise is not pursued, because Vim is being retired (see #627).
+Separately, mise 2026.10.9 does not apply filters in `bin_path`, so it
+cannot compute the version directory (see the hold comments on #619).
+Any Vim package that setup.windows declares belongs to setup.windows. The
+apt and Homebrew Vim packages belong to setup.ubuntu and setup.macos.
+This repository's own Vim configuration
+will be removed on 2027-01-15.
+
 ## What stays in WinGet
 
 Five *portable* packages stay WinGet-only by design, per the rationale

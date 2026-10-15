@@ -2,6 +2,12 @@
 " vim: set ft=vim :
 
 " -------------------------------------------------------------------
+" Legacy notice
+" -------------------------------------------------------------------
+" Vim is legacy here. Neovim (home/dot_config/nvim) replaces it, and this
+" configuration will be removed on 2027-01-15.
+
+" -------------------------------------------------------------------
 " vim-plug auto-bootstrap
 " -------------------------------------------------------------------
 let data_dir = has('nvim') ? stdpath('data') . '/site' : '~/.vim'
