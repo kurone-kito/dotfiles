@@ -129,9 +129,10 @@ overload the host (see
   PowerShell-relevant path):
   `scripts/with-pueue.sh scripts/run-validate.sh`
 
-Without `pueue` the wrapper simply runs the command. It is a bash
-script: on Windows, use it from WSL to get the queue (in Git Bash it
-runs the command directly).
+Without `pueue` the wrapper simply runs the command, unless the
+rendered `~/.config/dotfiles/pueue-parallelism` file is corrupt: then it
+stops with status 2 first. It is a bash script: on Windows, use it from
+WSL to get the queue (in Git Bash it runs the command directly).
 
 `scripts/run-validate.sh` runs both suites, but skips the PowerShell
 one when the current branch's diff touches no PowerShell-relevant

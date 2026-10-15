@@ -17,6 +17,7 @@ TEST_RUN='scripts/with-pueue.sh scripts/run-validate.sh'
 SKIP_SENTENCE='scripts/run-validate.sh runs both suites, but skips the PowerShell one when the current branch'"'"'s diff touches no PowerShell-relevant path'
 AUTHORITY_SENTENCE='authoritative full PowerShell run remains Windows local execution and Windows CI'
 SUBMODULE_STEP='git submodule update --init --recursive'
+FALLBACK_SENTENCE='Without pueue the wrapper simply runs the command, unless the rendered ~/.config/dotfiles/pueue-parallelism file is corrupt: then it stops with status 2 first.'
 
 setup() {
   load 'helpers/bats-support/load'
@@ -94,6 +95,7 @@ entry_problems() {
   collapsed="$(printf '%s\n' "$section" | tr '\n' ' ' | tr -s ' ' | tr -d '`')"
   case "$collapsed" in *"$SKIP_SENTENCE"*) ;; *) echo "missing skip-Pester statement" ;; esac
   case "$collapsed" in *"$AUTHORITY_SENTENCE"*) ;; *) echo "missing Windows authority statement" ;; esac
+  case "$collapsed" in *"$FALLBACK_SENTENCE"*) ;; *) echo "missing fallback statement" ;; esac
 }
 
 # ---------------------------------------------------------------------------
@@ -218,6 +220,15 @@ mutate() {
     mutate "$rel" 'overload the host' 'overload the host, unlike Invoke-Pester or tests/bash/helpers/bats-core/bin/bats,'
     run entry_problems "$MUTANT/$rel"
     assert_output ''
+  done
+}
+
+@test "mutation: dropping the corrupt-file qualification of the fallback is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    mutate "$rel" 'unless the' 'and the'
+    run entry_problems "$MUTANT/$rel"
+    assert_output 'missing fallback statement'
   done
 }
 

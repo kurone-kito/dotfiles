@@ -357,9 +357,10 @@ scripts/with-pueue.sh scripts/run-fix-validate.sh
 scripts/with-pueue.sh scripts/run-validate.sh
 ```
 
-Without `pueue` the wrapper simply runs the command. It is a bash
-script: on Windows, use it from WSL to get the queue (in Git Bash it
-runs the command directly).
+Without `pueue` the wrapper simply runs the command, unless the
+rendered `~/.config/dotfiles/pueue-parallelism` file is corrupt: then it
+stops with status 2 first. It is a bash script: on Windows, use it from
+WSL to get the queue (in Git Bash it runs the command directly).
 
 The suites that `scripts/run-validate.sh` runs can also be run directly
 (not queued) for a single file or a single suite, never as the full run.
