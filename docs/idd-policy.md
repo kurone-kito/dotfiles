@@ -1090,6 +1090,7 @@ Current slugs:
 | `session-offset-direct-index`        | Documents the `discover.selectionDesync: session-offset` contract the repository decided in #573: with more than one entry in the score tie band, the offset picks that entry directly, and the milestone-scope, effort, and shared-file preferences do not reorder it; they still apply when the setting is `off` or the band has one entry. Marks the clarifying sentences in `idd-discover.instructions.md`, the corrected milestone-scope sentence in `docs/idd-design-rationale.md`, the session-offset reference in `docs/idd-helper-scripts.md`, the milestone-scope row in `docs/policy-constants.md`, the qualified overlap note in `docs/idd-helper-scripts.md`, and the effort-order rule in the installed `issue-authoring` contract | #573 |
 | `instruction-size-limits-not-enforced` | Records that this repository does not enforce the upstream instruction size limits (per-file and bundle, including the 98% check) and accepts the overage measured at `b683a54`. Marks the introductory paragraph of the `Runtime Instruction Size and Bundle Budgets` section in `docs/policy-constants.md` | #601 |
 | `advisory-trigger-pull-request-target-only` | The trigger sentence in the `idd-advisory-convergence` Copilot-review poll section of `docs/policy-constants.md`, which keeps the `pull_request_target`-only wording. The pinned upstream sentence also names `pull_request`. In `.github/workflows/idd-advisory-convergence.yml`, `pull_request_target` is the only pull-request trigger; the file also declares `workflow_dispatch` and `workflow_call`. Commit `f36f0ae` made the change | #606 |
+| `queued-validation-commands` | The Project commands table in `.github/instructions/idd-overview-core.instructions.md`: its `fix-validate`, `pre-push-validate` and `post-fix-validate` cells are the wrapper invocations `scripts/with-pueue.sh scripts/run-fix-validate.sh` and `scripts/with-pueue.sh scripts/run-validate.sh`, equal to the same three strings in `.github/idd/config.json`, so concurrent sessions queue their heavy validation through pueue (see `docs/pueue-validation-queue.md`). A forced re-import (`idd-onboard --import`, then `--substitute`, checked with the pinned `v0.14.0` on a temporary copy) restores the three `commands` rows of the JSON from the pre-import file and `--substitute` fills the table cells from those rows, so the cells come back by themselves; the overwrite drops this marker comment, so a re-import must re-add it above the table and confirm that the cells still equal the JSON strings. No other file under `.github/instructions/` mentions pueue | #625 |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -1525,18 +1526,24 @@ can create, comment on, and close that tracking issue.
 ### `idd-doctor` findings
 
 A full `idd-doctor` run (pinned `ephemeral-npx` spec) now exits
-`result: passed` with two `WARN`s in a worktree that has already
-wired `core.hooksPath` (three on a fresh clone that has not — see that
-bullet below) and no `ERROR`. The two `WARN`s in the hooksPath-wired
-case read, verbatim:
+`result: passed` with no `WARN` and no `ERROR` in a worktree that has
+already wired `core.hooksPath` (checked for #625 with the pinned
+`v0.14.0` tarball: `result: passed (0 warning(s))`), and with one
+`WARN` on a fresh clone that has not — see that bullet below.
+
+Until issue #625 the same run also reported two toolchain-residue
+`WARN`s: the live `fix-validate` command string and the overview table
+contained the name of a tool of the upstream toolchain. #625 moved that
+pipeline into `scripts/run-fix-validate.sh`, so those strings are now
+wrapper invocations and the warnings are gone (see the struck-through
+bullet below). For the record, they read, verbatim:
 
 ```text
 WARN  toolchain residue detected for marker prefix "dotfiles": .github/idd/config.json "fix-validate" contains "markdownlint-cli2"
 WARN  toolchain residue detected for marker prefix "dotfiles": overview project commands table "fix-validate" contains "markdownlint-cli2"
 ```
 
-A fresh clone (`core.hooksPath` unset) additionally emits this third
-line:
+A fresh clone (`core.hooksPath` unset) emits this line:
 
 ```text
 WARN  worktreeGuard.enabled is true but the commit/push guard is not active in this environment (core.hooksPath = (unset)); B1 primary-worktree commits will NOT be blocked here. Wire it with: git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push — or, if an existing hook manager already owns core.hooksPath here, chain each hook to the corresponding .githooks/* script instead of repointing directly; see ONBOARDING.md's "Coexisting with an existing hook manager" section
@@ -1552,14 +1559,20 @@ recorded
 here so #150's kind of verification sweep does not have to
 rediscover them:
 
-- **Toolchain residue, `markdownlint-cli2`** (two instances: the
-  config command table and the overview project-commands table): a
-  false-positive pattern match against the pinned upstream commit's
-  own toolchain, which happens to use the same tool, not a residual
-  upstream-marker-prefix string. `idd-doctor`'s toolchain-residue
-  scanner has no per-finding waiver flag (confirmed via
-  `idd-doctor --help` while investigating #218), so this is accepted
-  as permanent noise rather than suppressed.
+- ~~**Toolchain residue, `markdownlint-cli2`**~~ (two instances: the
+  config command table and the overview project-commands table;
+  resolved by #625): a false-positive pattern match against the pinned
+  upstream commit's own toolchain, which happens to use the same tool,
+  not a residual upstream-marker-prefix string. `idd-doctor`'s
+  toolchain-residue scanner has no per-finding waiver flag (confirmed
+  via `idd-doctor --help` while investigating #218), so it was
+  accepted as noise until #625 moved the pipeline into
+  `scripts/run-fix-validate.sh` and pointed the three heavy validation
+  command strings at `scripts/with-pueue.sh`. The strings no longer
+  name the tool, so the scanner finds nothing; the table cells carry
+  the `queued-validation-commands` divergence (see the
+  [Divergence Register](#divergence-register)). The earlier paragraphs
+  that quote these warnings stay as the history they are.
 - ~~**Command mismatch between `.github/idd/config.json` and the
   overview project-commands table**~~ (two instances:
   `pre-push-validate` and `post-fix-validate`) -- traced to commit
@@ -1822,10 +1835,11 @@ future verification sweep does not have to rediscover them:
   occurrences as plain text anywhere in a scanned file and cannot
   distinguish either usage from genuine unresolved residue -- the same
   false-positive shape as the `markdownlint-cli2` toolchain-residue
-  warnings above. `idd-doctor`'s own, separately-scoped placeholder
-  check (`no unresolved {{...}} placeholders in IDD-managed files`)
-  passes clean at both pins, and a manual repository-wide grep scoped
-  to the IDD-managed surface (`.github/instructions/`,
+  warnings above (resolved since by #625). `idd-doctor`'s own,
+  separately-scoped placeholder check (`no unresolved {{...}}
+  placeholders in IDD-managed files`) passes clean at both pins, and a
+  manual repository-wide grep scoped to the IDD-managed surface
+  (`.github/instructions/`,
   `.github/workflows/` excluding `${{ ... }}` Actions expressions,
   `docs/idd-*`, `docs/onboarding/`, `.claude/skills/`) found no other
   unexplained `{{...}}` residue as of this round (see

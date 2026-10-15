@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# Run one heavy command through the shared pueue queue, or directly when no
+# queue is usable, and return its exit status.
+#
+# Usage: scripts/with-pueue.sh [--] <command> [args...]
+#
+# Concurrent sessions on one host overlap on heavy validation. The `dotfiles`
+# pueue group serializes them; how many tasks it runs at once comes from the
+# one-line file chezmoi renders to ~/.config/dotfiles/pueue-parallelism (2
+# when the file is missing). See docs/pueue-validation-queue.md.
+#
+# Order of decisions:
+#   1. A rendered parallelism file that is not one positive whole number
+#      (plus at most one trailing newline) is refused with status 2, before
+#      anything else runs, whatever else is true.
+#   2. A non-empty PUEUE_GROUP means this call is already inside a queued
+#      task (pueue sets it): run the command directly, so a nested call never
+#      takes another slot.
+#   3. Without pueue, pueued or jq, on a Windows shell (MINGW, MSYS, CYGWIN:
+#      pueue runs a task through PowerShell there, not through a POSIX sh, so
+#      the quoted command line below would not mean what it says), or when
+#      one start attempt of the daemon leaves it unreachable, run the command
+#      directly.
+#   4. Otherwise create the `dotfiles` group when it is not listed, set its
+#      parallelism, enqueue the command in the caller's working directory,
+#      wait, print the task's output and return the task's exit status.
+#      Every failure before the daemon accepts the task exits non-zero and
+#      runs nothing; once it has accepted the task the command is never
+#      started a second time locally.
+#
+# The default group and the user's pueue.yml are never changed.
+#
+# Test knobs (not part of the interface): WITH_PUEUE_START_POLLS and
+# WITH_PUEUE_START_POLL_DELAY bound the wait for a freshly started daemon.
+
+set -u
+
+group_name=dotfiles
+parallelism_file="${HOME:-}/.config/dotfiles/pueue-parallelism"
+start_polls="${WITH_PUEUE_START_POLLS:-20}"
+start_poll_delay="${WITH_PUEUE_START_POLL_DELAY:-0.25}"
+
+task_id=""
+wait_pid=""
+add_error=""
+
+say() {
+  printf 'with-pueue: %s\n' "$*" >&2
+}
+
+die() {
+  local status="$1"
+  shift
+  say "$*"
+  exit "$status"
+}
+
+# Print the validated parallelism (2 when the file is missing); status 1 and a
+# message on stderr when the file is not acceptable. Runs in a subshell with
+# the C locale so the byte count below does not depend on the caller's locale.
+read_parallelism() (
+  LC_ALL=C
+  local path="$parallelism_file" content size nl=$'\n'
+
+  if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+    printf '2\n'
+    return 0
+  fi
+  if [ ! -f "$path" ] || [ ! -r "$path" ]; then
+    say "refusing $path: not a readable regular file"
+    return 1
+  fi
+
+  # Read byte-exactly: command substitution alone would drop every trailing
+  # newline, so a second one would pass.
+  content=$(cat -- "$path"; printf x) || {
+    say "refusing $path: unreadable"
+    return 1
+  }
+  content=${content%x}
+
+  # A NUL byte cannot live in a shell variable, so compare the byte counts.
+  size=$(wc -c < "$path") || return 1
+  size=${size//[[:space:]]/}
+  if [ "${#content}" -ne "$size" ]; then
+    say "refusing $path: contains a NUL byte"
+    return 1
+  fi
+
+  case $content in
+    *"$nl") content=${content%"$nl"} ;;
+  esac
+  case $content in
+    '' | *[!0-9]* | 0*)
+      say "refusing $path: expected one positive whole number and at most one trailing newline"
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$content"
+)
+
+# Single-quote one argument for a POSIX shell (not printf %q, whose $'..'
+# form a plain sh may not parse).
+shell_quote() {
+  local rest="$1" out="'" quote="'"
+  while [[ $rest == *"$quote"* ]]; do
+    out+="${rest%%"$quote"*}'\\''"
+    rest=${rest#*"$quote"}
+  done
+  out+="$rest'"
+  printf '%s' "$out"
+}
+
+queue_reachable() {
+  pueue status --json > /dev/null 2>&1
+}
+
+# Best effort: take one task out of the queue so an interrupted call does not
+# leave it holding a slot.
+remove_task() {
+  [ -n "$task_id" ] || return 0
+  pueue kill "$task_id" > /dev/null 2>&1
+  for _ in 1 2 3 4 5; do
+    pueue remove "$task_id" > /dev/null 2>&1 && return 0
+    sleep 0.2
+  done
+  return 0
+}
+
+# shellcheck disable=SC2329 # invoked through the traps set in main
+on_signal() {
+  local status="$1"
+  [ -z "$wait_pid" ] || kill "$wait_pid" > /dev/null 2>&1
+  remove_task
+  [ -z "$add_error" ] || [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
+  exit "$status"
+}
+
+# Map pueue's task result to an exit status; "unreadable" when it is not Done.
+task_exit_status() {
+  jq -r --arg id "$1" '
+    (.tasks[$id].status.Done.result) as $result
+    | if $result == null then "unreadable"
+      elif $result == "Success" then "0"
+      elif ($result | type) == "object" and ($result.Failed | type) == "number"
+        and $result.Failed >= 1 and $result.Failed <= 255
+      then ($result.Failed | floor | tostring)
+      else "1"
+      end'
+}
+
+main() {
+  local parallelism status_json exit_status log_json listing
+
+  if [ "${1:-}" = "--" ]; then
+    shift
+  fi
+  if [ "$#" -eq 0 ]; then
+    say "usage: with-pueue.sh [--] <command> [args...]" >&2
+    exit 2
+  fi
+
+  parallelism=$(read_parallelism) || exit 2
+
+  if [ -n "${PUEUE_GROUP:-}" ]; then
+    exec "$@"
+  fi
+  if ! command -v pueue > /dev/null 2>&1 ||
+    ! command -v pueued > /dev/null 2>&1 ||
+    ! command -v jq > /dev/null 2>&1; then
+    exec "$@"
+  fi
+  case $(uname -s 2> /dev/null) in
+    MINGW* | MSYS* | CYGWIN*) exec "$@" ;;
+  esac
+
+  if ! queue_reachable; then
+    # One start attempt. Its exit status says nothing about reachability, and
+    # the daemon would keep this call's output pipe open, so cut all three.
+    pueued -d < /dev/null > /dev/null 2>&1 3>&-
+    local poll=0
+    while [ "$poll" -lt "$start_polls" ]; do
+      queue_reachable && break
+      sleep "$start_poll_delay"
+      poll=$((poll + 1))
+    done
+    if ! queue_reachable; then
+      exec "$@"
+    fi
+  fi
+
+  listing=$(pueue group 2> /dev/null) || die 1 "could not list the pueue groups; not running the command"
+  if ! printf '%s\n' "$listing" | grep -q "^Group \"$group_name\" "; then
+    if ! pueue group add "$group_name" > /dev/null 2>&1; then
+      # A concurrent session may have created it first. Decide from a fresh
+      # listing; the rejection text is never parsed.
+      listing=$(pueue group 2> /dev/null) || die 1 "could not create the pueue group $group_name; not running the command"
+      printf '%s\n' "$listing" | grep -q "^Group \"$group_name\" " ||
+        die 1 "could not create the pueue group $group_name; not running the command"
+    fi
+  fi
+
+  pueue parallel "$parallelism" --group "$group_name" > /dev/null 2>&1 ||
+    die 1 "could not set the parallelism of the pueue group $group_name to $parallelism; not running the command"
+
+  local command_line="" argument
+  for argument in "$@"; do
+    command_line+=" $(shell_quote "$argument")"
+  done
+  command_line=${command_line# }
+
+  # Handlers first: remove_task does nothing while task_id is empty, and a
+  # signal that arrives during the add is acted on once the add has returned.
+  trap 'on_signal 130' INT
+  trap 'on_signal 143' TERM
+  trap 'on_signal 129' HUP
+  add_error=$(mktemp "${TMPDIR:-/tmp}/with-pueue.XXXXXX") || add_error=/dev/null
+  task_id=$(pueue add --group "$group_name" --working-directory "$PWD" --print-task-id -- "$command_line" 2> "$add_error")
+  local add_status=$?
+  if [ "$add_status" -ne 0 ]; then
+    [ "$add_error" = /dev/null ] || { cat -- "$add_error" >&2; rm -f -- "$add_error"; }
+    task_id=""
+    die 1 "could not enqueue the command; not running it"
+  fi
+  [ "$add_error" = /dev/null ] || rm -f -- "$add_error"
+  case $task_id in
+    '' | *[!0-9]*)
+      task_id=""
+      die 1 "pueue did not return a task id; not running the command"
+      ;;
+  esac
+
+  # From here on the daemon owns the task: never run the command locally.
+  pueue wait "$task_id" --quiet > /dev/null 2>&1 &
+  wait_pid=$!
+  wait "$wait_pid"
+  local wait_status=$?
+  wait_pid=""
+  if [ "$wait_status" -ne 0 ]; then
+    remove_task
+    die 1 "waiting for task $task_id failed"
+  fi
+
+  status_json=$(pueue status --json 2> /dev/null) || die 1 "could not read the state of task $task_id"
+  exit_status=$(printf '%s' "$status_json" | task_exit_status "$task_id") || exit_status=unreadable
+  status_json=""
+  if [ "$exit_status" = unreadable ]; then
+    die 1 "could not read the result of task $task_id"
+  fi
+
+  if log_json=$(pueue log --json --full "$task_id" 2> /dev/null) &&
+    printf '%s' "$log_json" | jq -j --arg id "$task_id" '
+      if (.[$id].output | type) == "string" then .[$id].output else error("no output") end'; then
+    :
+  else
+    say "could not read the output of task $task_id"
+  fi
+
+  pueue remove "$task_id" > /dev/null 2>&1
+  exit "$exit_status"
+}
+
+main "$@"
