@@ -66,7 +66,12 @@ tool use.
 
 When synchronizing user-global guidance, preserve the compact default
 and full opt-in. Verify absent/false and true OpenCode renderings, and
-confirm the other agents' rendered outputs remain unchanged.
+confirm that two spans stay identical in the extended OpenCode rendering
+and in every other agent's rendering: the commit rules (from the
+`## Commit rules` heading up to the SSH key discovery step) and the
+closing text (from the unsigned-commit step to the last line). Text that
+an agent's own template adds around the shared template does not count.
+`tests/bash/opencode-instruction-profiles.bats` checks both spans.
 
 The user-global layer is repository-independent and intentionally
 smaller than the canonical `.github/copilot-instructions.md`. It
@@ -99,5 +104,6 @@ ladder), Coding standards, and Guardrails.
   `home/dot_config/opencode/` together. Those sources are `.tmpl`
   files, the OpenCode compact template under `home/.chezmoitemplates/`,
   and `home/dot_gemini/AGENTS.md`. Preserve OpenCode's compact default
-  and extended opt-in, and verify both OpenCode renders plus unchanged
-  peer-agent outputs.
+  and extended opt-in, and verify both OpenCode renders plus the shared
+  spans of the peer-agent renders (see
+  [OpenCode instruction profiles](#opencode-instruction-profiles)).

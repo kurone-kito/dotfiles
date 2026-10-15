@@ -17,7 +17,8 @@ immediately, without depending on a redirect.
   project's Conventional Commits rules and keep each commit atomic.
 - When synchronizing user-global guidance, preserve OpenCode's compact
   default and `data.opencode.extendedInstructions = true` opt-in; verify
-  both OpenCode renders and unchanged outputs for the other agents.
+  both OpenCode renders and that the shared spans stay identical in the
+  other agents' renders (see `docs/ai-strategy.md`).
 - Do not modify community documents (`CODE_OF_CONDUCT*`,
   `CONTRIBUTING*`) without explicit approval.
 - End only the processes you started, by a recorded PID or process
