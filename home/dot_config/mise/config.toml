@@ -107,6 +107,16 @@ yt-dlp = "latest"
 # investigated and wants (`mise tool neovim` confirms the bare-name
 # resolution). Pin the backend explicitly.
 "aqua:neovim/neovim" = "latest"
+# pueue (client) and pueued (daemon) are two binaries from one release,
+# so each needs its own entry. mise 2026.10.9 has no `pueue` registry
+# shorthand (`mise registry pueue` fails) and bare `aqua:Nukesor/pueue`
+# does not resolve; only the package-qualified ids below do. `latest`
+# follows the release tags, not the `pueue-lib-*` tags that also appear
+# in the remote list.
+# Windows ARM: the aqua recipe covers it with x64 emulation
+# (`windows_arm_emulation: true`), not with a native asset.
+"aqua:Nukesor/pueue/pueue" = "latest"
+"aqua:Nukesor/pueue/pueued" = "latest"
 "aqua:supabase/cli" = "latest"
 
 # Bitwarden is the one deliberate exception to the registry-shorthand

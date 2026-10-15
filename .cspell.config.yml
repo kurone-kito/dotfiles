@@ -114,6 +114,7 @@ words:
   - Ngrok
   - Nlcjpw
   - nnoremap
+  - Nukesor
   - nvmrc
   - ollama
   - onlogon
@@ -123,6 +124,8 @@ words:
   - psfzf
   - psmux
   - pstoprc
+  - pueue
+  - pueued
   - pylint
   - qwen
   - rafamadriz
