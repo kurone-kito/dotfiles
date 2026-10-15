@@ -156,7 +156,8 @@ directly (not queued) only for a single file or a single suite, never
 as the full run:
 
 - **Bash** (Linux/macOS/WSL):
-  `tests/bash/helpers/bats-core/bin/bats tests/bash/`; one file:
+  `tests/bash/helpers/bats-core/bin/bats tests/bash/`
+  and, for one file only:
   `tests/bash/helpers/bats-core/bin/bats tests/bash/with-pueue.bats`
 - **PowerShell** (Windows):
   `Invoke-Pester tests/powershell/ -Output Detailed`

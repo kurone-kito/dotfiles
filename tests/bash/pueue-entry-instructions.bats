@@ -6,7 +6,7 @@
 # explanations the issue asks to keep. The checker is a pair of shell functions
 # below; mutation cases run it on edited copies to prove that it fails when a
 # section omits any required piece.
-# cspell:words pueue
+# cspell:words gsub pueue
 
 bats_require_minimum_version 1.5.0
 
@@ -15,6 +15,8 @@ ENTRY_FILES=(CLAUDE.md AGENTS.md README.md .github/copilot-instructions.md)
 LINT_RUN='scripts/with-pueue.sh scripts/run-fix-validate.sh'
 TEST_RUN='scripts/with-pueue.sh scripts/run-validate.sh'
 SUBMODULE_STEP='git submodule update --init --recursive'
+PESTER_RUN='Invoke-Pester tests/powershell/ -Output Detailed'
+BATS_RUN='tests/bash/helpers/bats-core/bin/bats tests/bash/'
 
 setup() {
   load 'helpers/bats-support/load'
@@ -79,11 +81,20 @@ entry_problems() {
 
   printf '%s\n' "$normalized" | grep -qxF "$LINT_RUN" || echo "missing queued lint run"
   printf '%s\n' "$normalized" | grep -qxF "$TEST_RUN" || echo "missing queued test run"
+  # Lint runs first: it may auto-fix files that the tests then read.
+  local lint_at test_at
+  lint_at="$(printf '%s\n' "$normalized" | grep -n -xF "$LINT_RUN" | head -1 | cut -d: -f1)"
+  test_at="$(printf '%s\n' "$normalized" | grep -n -xF "$TEST_RUN" | head -1 | cut -d: -f1)"
+  if [ -n "$lint_at" ] && [ -n "$test_at" ] && [ "$test_at" -lt "$lint_at" ]; then
+    echo "queued test run before the queued lint run"
+  fi
   printf '%s\n' "$normalized" | grep -qxF "$SUBMODULE_STEP" || echo "missing direct submodule step"
   # The single-suite instructions stay: the bare bats and Pester runs that
   # scripts/run-validate.sh executes, for a single file or suite.
-  printf '%s\n' "$normalized" | grep -qE '^tests/bash/helpers/bats-core/bin/bats tests/bash/' || echo "missing direct bats run"
-  printf '%s\n' "$normalized" | grep -qE '^Invoke-Pester tests/powershell/' || echo "missing direct Pester run"
+  # Whole-suite lines are matched exactly, so the one-file example cannot
+  # stand in for them.
+  printf '%s\n' "$normalized" | grep -qxF "$BATS_RUN" || echo "missing direct bats run"
+  printf '%s\n' "$normalized" | grep -qxF "$PESTER_RUN" || echo "missing direct Pester run"
 
   # The wrapper may only be applied to the two scripts: an allowlist, so
   # `with-pueue.sh bats ...`, `with-pueue.sh git submodule ...` and a
@@ -339,6 +350,53 @@ mutate() {
     mutate "$rel" 'tests/bash/helpers/bats-core/bin/bats' 'tests/bash/helpers/bats-core/bin/true'
     run entry_problems "$MUTANT/$rel"
     assert_output 'missing direct bats run'
+  done
+}
+
+@test "mutation: keeping only the one-file bats example is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    # The whole-suite command is pointed at another directory; the one-file
+    # example stays.
+    mkdir -p "$MUTANT/$(dirname "$rel")"
+    awk '
+      /^```/ { fence = !fence }
+      started && !fence && /^## / { started = 0 }
+      !done && !fence && /^## Testing$/ { started = 1; done = 1 }
+      started && /bats-core\/bin\/bats tests\/bash\/(`|$)/ {
+        sub(/bats-core\/bin\/bats tests\/bash\//, "bats-core/bin/bats tests/bash/some-dir/")
+      }
+      { print }
+    ' "$REPO_ROOT/$rel" > "$MUTANT/$rel"
+    if cmp -s "$REPO_ROOT/$rel" "$MUTANT/$rel"; then
+      fail "the mutation of $rel changed nothing"
+    fi
+    run entry_problems "$MUTANT/$rel"
+    assert_output 'missing direct bats run'
+  done
+}
+
+@test "mutation: a queued test run placed before the queued lint run is reported" {
+  local rel
+  for rel in "${ENTRY_FILES[@]}"; do
+    # Swap the two scripts everywhere in the section.
+    mkdir -p "$MUTANT/$(dirname "$rel")"
+    awk '
+      /^```/ { fence = !fence }
+      started && !fence && /^## / { started = 0 }
+      !done && !fence && /^## Testing$/ { started = 1; done = 1 }
+      started {
+        gsub(/scripts\/run-fix-validate\.sh/, "@@LINT@@")
+        gsub(/scripts\/run-validate\.sh/, "scripts/run-fix-validate.sh")
+        gsub(/@@LINT@@/, "scripts/run-validate.sh")
+      }
+      { print }
+    ' "$REPO_ROOT/$rel" > "$MUTANT/$rel"
+    if cmp -s "$REPO_ROOT/$rel" "$MUTANT/$rel"; then
+      fail "the mutation of $rel changed nothing"
+    fi
+    run entry_problems "$MUTANT/$rel"
+    assert_output --partial 'queued test run before the queued lint run'
   done
 }
 
