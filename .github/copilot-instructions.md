@@ -22,7 +22,9 @@ and OpenCode reads `~/.config/opencode/AGENTS.md`. See
 
 When synchronizing user-global guidance, preserve OpenCode's compact
 default and `data.opencode.extendedInstructions = true` opt-in. Verify
-both OpenCode renderings and confirm other agents' outputs are unchanged.
+both OpenCode renderings and confirm that the shared spans stay identical
+in the other agents' renderings (see
+[docs/ai-strategy.md](../docs/ai-strategy.md)).
 
 ## Conversation
 
