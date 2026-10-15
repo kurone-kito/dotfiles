@@ -373,16 +373,15 @@ MOCK
   assert_failure 1
 }
 
-# pueue ships two binaries (client and daemon) in one release. mise has no
-# `pueue` registry shorthand, so each binary is pinned by its
-# package-qualified aqua id.
-
 # Prints the lines of the [tools] table: after its header, up to the next
 # table header. A pin that drifts under [settings] is ignored by mise.
 _mise_tools_table() {
-  awk '/^\[/ { in_tools = ($0 == "[tools]"); next } in_tools' "$1"
+  awk '/^\[/ { in_tools = ($0 ~ /^\[tools\][[:space:]]*(#.*)?$/); next } in_tools' "$1"
 }
 
+# pueue ships two binaries (client and daemon) in one release. mise has no
+# `pueue` registry shorthand, so each binary is pinned by its
+# package-qualified aqua id.
 @test "pins pueue and pueued to their package-qualified aqua ids at latest" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
   local tools="$BATS_TEST_TMPDIR/tools-table.toml"
@@ -410,7 +409,7 @@ _mise_tools_table() {
 
   assert_file_exist "$config"
 
-  run grep -Eq '^[[:space:]]*"?pueued?"?[[:space:]]*=' "$config"
+  run grep -Eq "^[[:space:]]*[\"']?pueued?[\"']?[[:space:]]*=" "$config"
   assert_failure 1
   # The comment may quote the bare id; no key may.
   run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -Fq "\"aqua:Nukesor/pueue\""' _ "$config"
@@ -444,11 +443,14 @@ _mise_tools_table() {
 
   assert_file_exist "$config"
 
-  # Scan every non-comment line for the bare words, so indented, quoted,
-  # backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and table-header
-  # (`[tools.mise]`) forms are all caught. A hyphen or underscore joins a
-  # longer name, which is allowed.
-  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -Eq "(^|[^[:alnum:]_-])(mise|chezmoi)($|[^[:alnum:]_-])"' _ "$config"
+  # Scan the key part of every non-comment line (everything before the
+  # first `=`; a table header has none) for the bare words, so indented,
+  # quoted, backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and
+  # table-header (`[tools.mise]`) forms are all caught while a value such
+  # as a ~/.config/mise path is not. A hyphen or underscore joins a longer
+  # name, which is allowed. Padding the line avoids ^ and $ inside groups,
+  # which not every grep engine handles.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | sed "s/=.*//; s/^/ /; s/\$/ /" | grep -Eiq "[^[:alnum:]_-](mise|chezmoi)[^[:alnum:]_-]"' _ "$config"
   assert_failure 1
 }
 
