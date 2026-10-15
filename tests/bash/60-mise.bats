@@ -373,6 +373,69 @@ MOCK
   assert_failure 1
 }
 
+# pueue ships two binaries (client and daemon) in one release. mise has no
+# `pueue` registry shorthand, so each binary is pinned by its
+# package-qualified aqua id.
+@test "pins pueue and pueued to their package-qualified aqua ids at latest" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  run grep -cFx '"aqua:Nukesor/pueue/pueue" = "latest"' "$config"
+  assert_output 1
+  run grep -cFx '"aqua:Nukesor/pueue/pueued" = "latest"' "$config"
+  assert_output 1
+
+  # The daemon pin directly follows the client pin, so the one comment
+  # block above the pair covers both.
+  run grep -A1 -Fx '"aqua:Nukesor/pueue/pueue" = "latest"' "$config"
+  assert_success
+  assert_line --index 1 '"aqua:Nukesor/pueue/pueued" = "latest"'
+
+  # Every non-comment line that mentions pueue must be one of the two pins.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -i pueue | grep -vFx -e "\"aqua:Nukesor/pueue/pueue\" = \"latest\"" -e "\"aqua:Nukesor/pueue/pueued\" = \"latest\""' _ "$config"
+  assert_failure 1
+}
+
+@test "does not add a bare pueue shorthand or pin a pueue-lib tag" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  assert_file_exist "$config"
+
+  run grep -Eq '^"?pueued?"?[[:space:]]*=' "$config"
+  assert_failure 1
+  run grep -Fq '"aqua:Nukesor/pueue"' "$config"
+  assert_failure 1
+  # The explanatory comment may name the pueue-lib tags; no key may.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -q "pueue-lib"' _ "$config"
+  assert_failure 1
+}
+
+@test "records why pueue is pinned by package id and how Windows ARM is covered" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  # Print the unbroken comment block directly above the pair as one line,
+  # so a phrase wrapped across two comment lines still matches.
+  run awk '
+    /^#/ { line = $0; sub(/^# ?/, "", line); block = block (block == "" ? "" : " ") line; next }
+    /^"aqua:Nukesor\/pueue\/pueue" = / { print block; found = 1; exit }
+    { block = "" }
+    END { if (!found) exit 1 }
+  ' "$config"
+  assert_success
+  assert_output --partial "no \`pueue\` registry shorthand"
+  assert_output --partial "Windows ARM"
+  assert_output --partial "windows_arm_emulation"
+  assert_output --partial "x64 emulation"
+  assert_output --partial "not with a native asset"
+}
+
+@test "does not add mise or chezmoi to the managed tools" {
+  local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
+
+  # Covers the bare keys and backend-qualified forms such as aqua:jdx/mise.
+  run grep -Eq '^"?([a-z]+:[^"]*/)?(mise|chezmoi)"?[[:space:]]*=' "$config"
+  assert_failure 1
+}
+
 @test "declares ollama with the plain registry short name" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
