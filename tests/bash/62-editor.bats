@@ -122,34 +122,47 @@ source_editor_script() {
 # Sourcing safety
 # ---------------------------------------------------------------------------
 
-@test "sourcing under set -eu never aborts the caller and leaves no helper variable" {
+@test "sourcing under set -eu never aborts the caller and keeps the caller's own _editor" {
   local stub_set stub_none
   make_stub_dir nvim
   stub_set="$STUB_DIR"
   mkdir -p "$BATS_TEST_TMPDIR/empty"
   stub_none="$BATS_TEST_TMPDIR/empty"
 
+  # The file is sourced into the user's shell, so it must neither clobber a
+  # variable the caller already has (here the old scratch name `_editor`) nor
+  # leave a new one behind.
   local shell_bin
   for shell_bin in "$SH_BIN" "$BASH_BIN"; do
     run env -u EDITOR -u VISUAL PATH="$stub_set" "$shell_bin" -eu -c \
-      '. "$0"; printf "%s %s %s" "$EDITOR" "$VISUAL" "${_editor-gone}"' "$SCRIPT"
+      '_editor=keep; . "$0"; printf "%s %s %s" "$EDITOR" "$VISUAL" "$_editor"' "$SCRIPT"
     assert_success
-    assert_output "nvim nvim gone"
+    assert_output "nvim nvim keep"
 
     run env -u EDITOR -u VISUAL PATH="$stub_none" "$shell_bin" -eu -c \
-      '. "$0"; printf "%s %s %s" "${EDITOR-unset}" "${VISUAL-unset}" "${_editor-gone}"' "$SCRIPT"
+      '_editor=keep; . "$0"; printf "%s %s %s" "${EDITOR-unset}" "${VISUAL-unset}" "$_editor"' "$SCRIPT"
     assert_success
-    assert_output "unset unset gone"
+    assert_output "unset unset keep"
+
+    run env -u EDITOR -u VISUAL PATH="$stub_set" "$shell_bin" -eu -c \
+      '. "$0"; printf "%s" "${_editor-gone}"' "$SCRIPT"
+    assert_success
+    assert_output "gone"
   done
 }
 
-@test "zsh: sourcing under set -eu never aborts the caller and leaves no helper variable" {
+@test "zsh: sourcing under set -eu never aborts the caller and keeps the caller's own _editor" {
   require_zsh
   make_stub_dir nvim
   run env -u EDITOR -u VISUAL PATH="$STUB_DIR" "$(command -v zsh)" -eu -c \
-    '. "$0"; printf "%s %s %s" "$EDITOR" "$VISUAL" "${_editor-gone}"' "$SCRIPT"
+    '_editor=keep; . "$0"; printf "%s %s %s" "$EDITOR" "$VISUAL" "$_editor"' "$SCRIPT"
   assert_success
-  assert_output "nvim nvim gone"
+  assert_output "nvim nvim keep"
+
+  run env -u EDITOR -u VISUAL PATH="$STUB_DIR" "$(command -v zsh)" -eu -c \
+    '. "$0"; printf "%s" "${_editor-gone}"' "$SCRIPT"
+  assert_success
+  assert_output "gone"
 }
 
 # ---------------------------------------------------------------------------
@@ -343,6 +356,8 @@ assert_control_has_no_nvim() {
     '' | vim | vi) ;;
     *) fail "control: EDITOR is '$editor' although no nvim is on PATH" ;;
   esac
+  # What the login shell ends up with when mise activates nothing.
+  CONTROL_FIELDS="$rest"
 }
 
 @test "bash: a login shell picks the nvim that mise activates" {
@@ -370,6 +385,8 @@ assert_control_has_no_nvim() {
   login_probe bash "$ACTIVATE_DIR"
   # The activation must have worked, or a missing editor proves nothing.
   [ "${output%%|*}" = "$ACTIVATE_DIR/nvim" ] || fail "the activated nvim is not visible: $output"
-  local rest="${output#*|}"
-  [ "${rest%%|*}" != nvim ] || fail "the 30- name still found nvim: $output"
+  # The old order sees only what the control saw: the activated nvim is
+  # visible by then, yet it changes neither variable.
+  [ "${output#*|}" = "$CONTROL_FIELDS" ] ||
+    fail "the 30- name changed the outcome from '$CONTROL_FIELDS': $output"
 }
