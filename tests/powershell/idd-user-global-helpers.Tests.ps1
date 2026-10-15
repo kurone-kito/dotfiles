@@ -22,12 +22,18 @@ Describe 'user-global IDD activation helper twins' {
     $emptyDir = Join-Path ([IO.Path]::GetTempPath()) ('idd-no-npx-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
     $originalPath = $env:PATH
+    $originalPreference = $ErrorActionPreference
     try {
+      # Windows PowerShell 5.1 turns a native command's stderr into a
+      # terminating error under 2>&1 when the preference is Stop, which
+      # would throw before the exit code is read. Run the child with Continue.
+      $ErrorActionPreference = 'Continue'
       $env:PATH = $emptyDir
       $output = & $script:PwshExe -NoProfile -File $wrapper 2>&1
       $exitCode = $LASTEXITCODE
     } finally {
       $env:PATH = $originalPath
+      $ErrorActionPreference = $originalPreference
       Remove-Item -LiteralPath $emptyDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     $exitCode | Should -Be 1
