@@ -448,9 +448,10 @@ _mise_tools_table() {
   # backend-qualified (aqua:jdx/mise, npm:chezmoi), dotted and table-header
   # (`[tools.mise]`) forms are all caught. A value, including a line of a
   # multi-line array such as a ~/.config/mise path, is not scanned. A hyphen
-  # or underscore joins a longer name, which is allowed. Padding the line
-  # avoids ^ and $ inside groups, which not every grep engine handles.
-  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -E "=|^[[:space:]]*\[[^],=]*\][[:space:]]*(#.*)?$" | sed "s/=.*//; s/^/ /; s/\$/ /" | grep -Eiq "[^[:alnum:]_-](mise|chezmoi)[^[:alnum:]_-]"' _ "$config"
+  # or underscore joins a longer name, which is allowed. A comment after a
+  # table header is dropped first. Padding the line avoids ^ and $ inside
+  # groups, which not every grep engine handles.
+  run bash -c 'grep -v "^[[:space:]]*#" "$1" | grep -E "=|^[[:space:]]*\[[^],=]*\][[:space:]]*(#.*)?$" | sed "s/=.*//; s/\][[:space:]]*#.*/]/; s/^/ /; s/\$/ /" | grep -Eiq "[^[:alnum:]_-](mise|chezmoi)[^[:alnum:]_-]"' _ "$config"
   assert_failure 1
 }
 
