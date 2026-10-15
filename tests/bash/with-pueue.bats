@@ -1192,8 +1192,30 @@ config_command() {
 }
 
 # ---------------------------------------------------------------------------
-# A real pueue, when the binaries are on PATH (opt-in: skipped otherwise)
+# A real pueue, when the binaries are on PATH (skipped otherwise, unless
+# REQUIRE_REAL_PUEUE asks for the case, as the CI job does)
 # ---------------------------------------------------------------------------
+
+# True when REQUIRE_REAL_PUEUE makes the real-daemon case mandatory: any value
+# but empty or 0. CI sets it, so a runner that lost the binaries fails instead
+# of reporting a skip; a developer machine without pueue leaves it unset.
+real_pueue_required() {
+  case "${REQUIRE_REAL_PUEUE:-}" in
+    '' | 0) return 1 ;;
+  esac
+  return 0
+}
+
+# $@ are the pueue binaries missing from the original PATH. Skip the case, or
+# fail naming them when it is mandatory. Call it directly, never inside
+# $(...): skip and fail have to reach the test's own shell.
+missing_real_pueue() {
+  if real_pueue_required; then
+    fail "REQUIRE_REAL_PUEUE is set, but missing from PATH: $*"
+    return
+  fi
+  skip "not installed: $*"
+}
 
 # Run the wrapper against the sandbox daemon. $1: expected exit status, the
 # rest: the command. The wrapper's output goes through a FIFO read by a
@@ -1245,9 +1267,17 @@ stop_sandbox_daemon() {
 }
 
 @test "real pueue: runs through a real daemon, creates the group, and updates its parallelism" {
-  local pueue_bin pueued_bin
-  pueue_bin="$(PATH="$_ORIG_PATH" command -v pueue)" || skip "pueue is not installed"
-  pueued_bin="$(PATH="$_ORIG_PATH" command -v pueued)" || skip "pueued is not installed"
+  local pueue_bin pueued_bin missing=()
+  pueue_bin="$(PATH="$_ORIG_PATH" command -v pueue)" || missing+=(pueue)
+  pueued_bin="$(PATH="$_ORIG_PATH" command -v pueued)" || missing+=(pueued)
+  if [ "${#missing[@]}" -gt 0 ]; then
+    missing_real_pueue "${missing[@]}"
+  fi
+
+  # The fake-daemon cases above shorten these waits to milliseconds. A real
+  # daemon needs the wrapper's own defaults to come up, or a slow runner would
+  # take the direct path and prove nothing.
+  unset WITH_PUEUE_START_POLLS WITH_PUEUE_START_POLL_DELAY WITH_PUEUE_POLL_DELAY
 
   # A short path: a unix socket path must fit in SUN_LEN.
   SANDBOX="$(mktemp -d /tmp/pq.XXXXXX)"
@@ -1294,4 +1324,32 @@ stop_sandbox_daemon() {
   stop_sandbox_daemon
   rm -rf -- "$SANDBOX"
   assert_equal "$tasks" "{}"
+}
+
+# The two helpers above decide between skipping and failing the real-daemon
+# case. They get cases of their own, named so that the 'real pueue' filter
+# still selects only the daemon case.
+@test "REQUIRE_REAL_PUEUE: unset, empty and 0 leave the real-daemon case optional" {
+  unset REQUIRE_REAL_PUEUE
+  run real_pueue_required
+  assert_failure
+  REQUIRE_REAL_PUEUE= run real_pueue_required
+  assert_failure
+  REQUIRE_REAL_PUEUE=0 run real_pueue_required
+  assert_failure
+}
+
+@test "REQUIRE_REAL_PUEUE: any other value makes the real-daemon case mandatory" {
+  local value
+  for value in 1 true 00 yes; do
+    REQUIRE_REAL_PUEUE="$value" run real_pueue_required
+    assert_success
+  done
+}
+
+@test "REQUIRE_REAL_PUEUE: a mandatory case fails and names every missing binary" {
+  REQUIRE_REAL_PUEUE=1 run missing_real_pueue pueue pueued
+  assert_failure
+  assert_output --partial "REQUIRE_REAL_PUEUE is set"
+  assert_output --partial "pueue pueued"
 }

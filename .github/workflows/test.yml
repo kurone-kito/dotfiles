@@ -60,8 +60,26 @@ jobs:
       always() &&
       (needs.detect-changes.result != 'success' || needs.detect-changes.outputs.requires_full_ci == 'true')
     runs-on: ubuntu-latest
+    # The job starts a real pueue daemon (see PUEUE_VERSION below), which can
+    # hang in a way the fakes of the other cases cannot. A normal run takes
+    # about four minutes; lint.yml uses the same bound.
+    timeout-minutes: 15
     env:
       CHEZMOI_VERSION: v2.71.0
+      # pueue is pinned on purpose: the fake pueue in
+      # tests/bash/with-pueue.bats models exactly this version, so a newer
+      # release that behaves differently has to fail the real-daemon case
+      # instead of slipping in unnoticed. To bump it, change the version and
+      # both digests together. The digests are in
+      # `gh api repos/Nukesor/pueue/releases/tags/<tag>` (`.assets[].digest`);
+      # confirm them by hashing the downloaded files before pinning them here.
+      # They are for the x86_64-unknown-linux-musl release assets.
+      PUEUE_VERSION: v4.0.4
+      PUEUE_SHA256: c1b10d7e4e62211075ddd0e1dc3e8cbfc5a43d662cb3be7402a28504e23fcb51
+      PUEUED_SHA256: 5afeff6adbafb909e8d54e2caff158e6966c2adffa2c09e60fd631cc51b60390
+      # Fail, instead of skip, the real-daemon case of with-pueue.bats when
+      # pueue or pueued is missing from PATH.
+      REQUIRE_REAL_PUEUE: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -84,6 +102,45 @@ jobs:
       # chezmoi-dependent tests self-skip silently.
       - name: Verify chezmoi
         run: chezmoi --version
+      # The real-daemon case of with-pueue.bats needs pueue and pueued.
+      # They go to the same directory as chezmoi, which is on PATH already.
+      - name: Cache pueue binaries
+        id: cache-pueue
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.local/bin/pueue
+            ~/.local/bin/pueued
+          key: pueue-${{ runner.os }}-${{ runner.arch }}-${{ env.PUEUE_VERSION }}
+      # Download into an empty directory and run nothing from it until both
+      # digests match the values pinned above.
+      - name: Install pueue
+        if: steps.cache-pueue.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base="https://github.com/Nukesor/pueue/releases/download/$PUEUE_VERSION"
+          download_dir="$(mktemp -d)"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+            -o "$download_dir/pueue" "$base/pueue-x86_64-unknown-linux-musl"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 \
+            -o "$download_dir/pueued" "$base/pueued-x86_64-unknown-linux-musl"
+          printf '%s  %s\n' \
+            "$PUEUE_SHA256" "$download_dir/pueue" \
+            "$PUEUED_SHA256" "$download_dir/pueued" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$download_dir/pueue" "$download_dir/pueued" "$HOME/.local/bin/"
+          rm -rf -- "$download_dir"
+      # Runs on a cache hit too: the cache is not a trusted source, so the
+      # installed files are checked against the pinned digests on every run
+      # before anything executes them.
+      - name: Verify pueue
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' \
+            "$PUEUE_SHA256" "$HOME/.local/bin/pueue" \
+            "$PUEUED_SHA256" "$HOME/.local/bin/pueued" | sha256sum -c -
+          pueue --version
+          pueued --version
       - name: Install zsh if missing
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
