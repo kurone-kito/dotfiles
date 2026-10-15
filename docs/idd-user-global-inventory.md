@@ -114,7 +114,8 @@ The list holds only when all of the following are true before the run:
   the default locations under its HOME, which gives the same layout.
 - The harness list is the default: all three harnesses, `claude`, `codex`,
   and `opencode`.
-- No entry file, `.codex/`, `.config/opencode/`, or skill file exists yet.
+- No entry file, data root, skill root, `.codex/`, `.config/opencode/`,
+  or skill file exists yet.
 
 An existing entry file is edited rather than created. The receipt then
 records it as `managed-block` or `json-instruction`, not as `file`.
@@ -130,8 +131,9 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
 
 - `HOME` must be an absolute path that does not start with `//`.
 - These directories must already exist. The installer never creates the
-  directory above a root or a harness directory. Below each root it creates
-  each missing directory with one non-recursive mkdir, parents first. A
+  directory above the data root, a skill root, or a harness directory. It
+  creates the data root, the two skill roots, and each missing directory
+  below them, with one non-recursive mkdir at a time, parents first. A
   missing parent refuses the whole run before any write:
   - `$HOME/.local/share`, the parent of the data root, so `$HOME/.local`
     must exist too;
@@ -145,28 +147,34 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
   [run record](#run-record) shows. The installer creates
   `.local/share/idd-skill/`, `.claude/skills/`, `.agents/skills/`, `.codex/`,
   and `.config/opencode/` itself.
-- If `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, or `CODEX_HOME` is a qualified root,
-  the same rule applies to its parent directory. This page assumes they are
-  unset, or set to the default locations under `HOME`, as in the run. The
-  upstream statement is in
+- If `XDG_DATA_HOME` or `XDG_CONFIG_HOME` is a qualified root, that value
+  itself must exist, because it is the parent of the data root or of the
+  OpenCode directory. If `CODEX_HOME` is a qualified root, its parent must
+  exist. This page assumes all three are unset, or set to the default
+  locations under `HOME`, as in the run. The upstream statement is in
   [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md#preconditions).
 
-The table below gives each directory that the run touches. The installer
-creates a harness directory only as a leaf whose parent exists. So `.codex/`
-is created under `$HOME`, and `.config/opencode/` is created under `.config/`.
+The table below gives each root and harness directory that the run uses, and
+the parent directories above them. The other directories the run creates are
+listed in [Sorted path list](#sorted-path-list). The installer creates a
+harness directory only as a leaf whose parent exists. So `.codex/` is created
+under `$HOME`, and `.config/opencode/` is created under `.config/`. `.claude/`
+is the exception: it is also the parent of the Claude skill root, so a missing
+`.claude/` refuses the run and is never created. The rows assume the default
+harness list (see [Assumptions](#assumptions)).
 
-| Directory (relative to `$HOME`) | Before the run                                   | Created by the run                |
-| ------------------------------- | ------------------------------------------------ | --------------------------------- |
-| `.local/`                       | Must exist                                       | No                                |
-| `.local/share/`                 | Must exist                                       | No                                |
-| `.local/share/idd-skill/`       | Absent                                           | Yes, the data root                |
-| `.claude/`                      | Must exist                                       | No                                |
-| `.claude/skills/`               | Absent                                           | Yes, the Claude skill root        |
-| `.agents/`                      | Must exist                                       | No                                |
-| `.agents/skills/`               | Absent                                           | Yes, the agent skill root         |
-| `.config/`                      | Must exist, because OpenCode is selected by default | No                             |
-| `.codex/`                       | Absent                                           | Yes, as a harness directory       |
-| `.config/opencode/`             | Absent                                           | Yes, as a harness directory       |
+| Directory (relative to `$HOME`) | Before the run                                     | Created by the run          |
+| ------------------------------- | -------------------------------------------------- | --------------------------- |
+| `.local/`                       | Must exist                                         | No                          |
+| `.local/share/`                 | Must exist                                         | No                          |
+| `.local/share/idd-skill/`       | Absent                                             | Yes, the data root          |
+| `.claude/`                      | Must exist, as the parent of the Claude skill root | No                          |
+| `.claude/skills/`               | Absent                                             | Yes, the Claude skill root  |
+| `.agents/`                      | Must exist, as the parent of the agent skill root  | No                          |
+| `.agents/skills/`               | Absent                                             | Yes, the agent skill root   |
+| `.config/`                      | Must exist when OpenCode is selected               | No                          |
+| `.codex/`                       | Absent                                             | Yes, as a harness directory |
+| `.config/opencode/`             | Absent                                             | Yes, as a harness directory |
 
 ## What the installer writes
 
