@@ -45,13 +45,15 @@ parallelism = 3
 - **Default:** `2` when the key is omitted. This is a provisional
   default, not a measured capacity limit, and no policy upper bound is
   set. Raise or lower it for your machine.
-- **Valid values:** a whole number from 1 to 9007199254740991. `0` is
-  refused because pueue would read it as "unlimited". A negative number,
-  a string, a boolean, a fraction, the TOML values `inf` and `nan`, and
-  any number above 9007199254740991 (2^53 - 1, the largest integer a
-  template can print exactly) are refused too. `chezmoi apply` and
-  `chezmoi init` fail with an error that names `parallelism` instead of
-  silently using `2`.
+- **Valid values:** a positive whole number. A TOML integer is used
+  exactly as written, up to the largest TOML integer. A float (a TOML
+  `3.0`, say) counts only when it is whole and at most 9007199254740991
+  (2^53 - 1, the largest integer a float holds exactly), so the printed
+  digits are always the configured value. `0` is refused because pueue
+  would read it as "unlimited". A negative number, a string, a boolean, a
+  fraction, the TOML values `inf` and `nan`, and a larger float are
+  refused too. `chezmoi apply` and `chezmoi init` fail with an error that
+  names `parallelism` instead of silently using `2`.
 - **Where it lands:** chezmoi renders the value to
   `~/.config/dotfiles/pueue-parallelism`, one integer and one newline.
   The wrapper reads that file directly and never runs `chezmoi data`,

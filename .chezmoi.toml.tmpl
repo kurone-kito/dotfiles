@@ -193,10 +193,10 @@ age = {{ $tmpfilesAge | quote }}
 {{- end }}
 {{- /* data.pueue.parallelism: validated exactly as in
      home/dot_config/dotfiles/pueue-parallelism.tmpl (keep the two in sync).
-     The default 2 is omitted; any other whole number from 1 to
-     9007199254740991 is re-emitted as an integer, and an invalid value fails
-     the render instead of being dropped, so the next apply cannot silently
-     fall back to 2. */ -}}
+     The default 2 is omitted; any other positive whole number is re-emitted
+     as an integer (a TOML integer exactly as written, a whole float up to
+     9007199254740991), and an invalid value fails the render instead of
+     being dropped, so the next apply cannot silently fall back to 2. */ -}}
 {{- $pueue := dig "pueue" dict . }}
 {{- if not (kindIs "map" $pueue) }}
 {{-   fail (printf "data.pueue must be a table that can hold parallelism; got %#v" $pueue) }}
@@ -205,17 +205,25 @@ age = {{ $tmpfilesAge | quote }}
 {{- if hasKey $pueue "parallelism" }}
 {{-   $pueueParallelism = get $pueue "parallelism" }}
 {{- end }}
-{{- if not (or (kindIs "int" $pueueParallelism) (kindIs "int64" $pueueParallelism) (kindIs "float64" $pueueParallelism)) }}
-{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $pueueParallelism) }}
+{{- $pueueKind := kindOf $pueueParallelism }}
+{{- $pueueText := "" }}
+{{- if or (eq $pueueKind "int") (eq $pueueKind "int64") }}
+{{-   if lt $pueueParallelism 1 }}
+{{-     fail (printf "data.pueue.parallelism must be a positive whole number; got %#v" $pueueParallelism) }}
+{{-   end }}
+{{-   $pueueText = printf "%d" $pueueParallelism }}
+{{- else if eq $pueueKind "float64" }}
+{{-   if or (lt $pueueParallelism 1.0) (gt $pueueParallelism 9007199254740991.0) (ne $pueueParallelism (floor $pueueParallelism)) }}
+{{-     fail (printf "data.pueue.parallelism must be a positive whole number (a float only up to 9007199254740991, which it holds exactly); got %#v" $pueueParallelism) }}
+{{-   end }}
+{{-   $pueueText = printf "%.0f" $pueueParallelism }}
+{{- else }}
+{{-   fail (printf "data.pueue.parallelism must be a positive whole number; got %#v" $pueueParallelism) }}
 {{- end }}
-{{- $pueueParallelismValue := float64 $pueueParallelism }}
-{{- if or (lt $pueueParallelismValue 1.0) (gt $pueueParallelismValue 9007199254740991.0) (ne $pueueParallelismValue (floor $pueueParallelismValue)) }}
-{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $pueueParallelism) }}
-{{- end }}
-{{- if ne $pueueParallelismValue 2.0 }}
+{{- if ne $pueueText "2" }}
 
 [data.pueue]
-parallelism = {{ printf "%.0f" $pueueParallelismValue }}
+parallelism = {{ $pueueText }}
 {{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
 {{- $mkcertInstallTimeout := dig "mkcert" "installTimeoutSeconds" 180 . }}

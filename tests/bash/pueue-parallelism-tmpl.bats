@@ -67,6 +67,8 @@ valid_rows() {
 {"pueue":{"parallelism":12}}|12
 {"pueue":{"parallelism":100}}|100
 {"pueue":{"parallelism":9007199254740991}}|9007199254740991
+{"pueue":{"parallelism":9007199254740993}}|9007199254740993
+{"pueue":{"parallelism":9223372036854775807}}|9223372036854775807
 ROWS
 }
 
@@ -82,9 +84,9 @@ invalid_rows() {
 {"pueue":{"parallelism":false}}
 {"pueue":{"parallelism":2.5}}
 {"pueue":{"parallelism":0.5}}
-{"pueue":{"parallelism":9007199254740992}}
-{"pueue":{"parallelism":9007199254740993}}
 {"pueue":{"parallelism":1e30}}
+{"pueue":{"parallelism":1.5e19}}
+{"pueue":{"parallelism":9007199254740993.5}}
 {"pueue":{"parallelism":null}}
 {"pueue":{"parallelism":[2]}}
 {"pueue":{"parallelism":{"n":2}}}
@@ -157,7 +159,8 @@ ROWS
 }
 
 # TOML-only values: inf and nan parse as float64 and a large integer as
-# int64, none of which the JSON test config can express.
+# int64, neither of which the JSON test config can express. A TOML float
+# beyond 2^53 - 1 is refused; a TOML integer is not limited that way.
 toml_invalid_values() {
   cat << 'ROWS'
 inf
@@ -165,10 +168,8 @@ inf
 -inf
 nan
 +nan
-9007199254740992
-9007199254740993
-9223372036854775807
 1e30
+1.5e19
 0
 -3
 0.5
@@ -188,6 +189,19 @@ ROWS
     [ "$status" -ne 0 ] || fail "configuration template accepted $value"
     [[ "$stderr" == *parallelism* ]] || fail "$value: the configuration template's error does not name parallelism: $stderr"
   done < <(toml_invalid_values)
+}
+
+@test "both templates render any TOML integer exactly, with no upper bound below int64" {
+  local value
+  for value in 9007199254740992 9007199254740993 123456789012345678 9223372036854775807; do
+    _write_toml_config "$value"
+    run --separate-stderr _render_file
+    assert_success
+    assert_output "$value"
+    run --separate-stderr _render_config
+    assert_success
+    assert_line "parallelism = $value"
+  done
 }
 
 @test "both templates keep the largest exact integer and render it unchanged from TOML" {

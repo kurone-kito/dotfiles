@@ -6,15 +6,16 @@
 
      Reads the optional data.pueue.parallelism. An omitted key renders as 2,
      and so does a missing file. This is a provisional default, not a measured
-     capacity limit, and no policy upper bound is set. The render fails, naming
-     the key, unless the value is a whole number from 1 to 9007199254740991
-     (2^53 - 1, the largest integer a float64 holds exactly, so the printed
-     digits are always the configured value): 0 (pueue treats 0 as
-     unlimited), a negative, a string, a boolean, a fraction, a larger number
-     and the TOML values inf and nan are all refused. TOML supplies int64, the
-     JSON test config supplies a number that may come through as float64; both
-     count when they are whole. The file is the integer in decimal and exactly
-     one newline.
+     capacity limit, and no upper bound is set. The render fails, naming the
+     key, unless the value is a positive whole number: 0 (pueue treats 0 as
+     unlimited), a negative, a string, a boolean and a fraction are refused.
+     TOML supplies an integer (int64), which is printed exactly as written;
+     the JSON test config supplies a number that arrives as float64, and a
+     TOML float such as 3.0 does too. A float counts only when it is whole and
+     at most 9007199254740991 (2^53 - 1, the largest integer a float64 holds
+     exactly), so the printed digits are always the configured value; inf, nan
+     and larger floats are refused. The file is the integer in decimal and
+     exactly one newline.
 
      The same validation sits in .chezmoi.toml.tmpl, which re-emits a
      non-default value so `chezmoi init` keeps it. Keep the two in sync;
@@ -28,11 +29,19 @@
 {{- if hasKey $pueue "parallelism" -}}
 {{-   $parallelism = get $pueue "parallelism" -}}
 {{- end -}}
-{{- if not (or (kindIs "int" $parallelism) (kindIs "int64" $parallelism) (kindIs "float64" $parallelism)) -}}
-{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $parallelism) -}}
+{{- $kind := kindOf $parallelism -}}
+{{- $text := "" -}}
+{{- if or (eq $kind "int") (eq $kind "int64") -}}
+{{-   if lt $parallelism 1 -}}
+{{-     fail (printf "data.pueue.parallelism must be a positive whole number; got %#v" $parallelism) -}}
+{{-   end -}}
+{{-   $text = printf "%d" $parallelism -}}
+{{- else if eq $kind "float64" -}}
+{{-   if or (lt $parallelism 1.0) (gt $parallelism 9007199254740991.0) (ne $parallelism (floor $parallelism)) -}}
+{{-     fail (printf "data.pueue.parallelism must be a positive whole number (a float only up to 9007199254740991, which it holds exactly); got %#v" $parallelism) -}}
+{{-   end -}}
+{{-   $text = printf "%.0f" $parallelism -}}
+{{- else -}}
+{{-   fail (printf "data.pueue.parallelism must be a positive whole number; got %#v" $parallelism) -}}
 {{- end -}}
-{{- $parallelismValue := float64 $parallelism -}}
-{{- if or (lt $parallelismValue 1.0) (gt $parallelismValue 9007199254740991.0) (ne $parallelismValue (floor $parallelismValue)) -}}
-{{-   fail (printf "data.pueue.parallelism must be a whole number from 1 to 9007199254740991; got %#v" $parallelism) -}}
-{{- end -}}
-{{ printf "%.0f" $parallelismValue }}
+{{ $text }}

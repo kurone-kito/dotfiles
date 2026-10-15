@@ -192,16 +192,19 @@ See
 
 | Field         | Type    | Required | Default | Purpose                                                                                  |
 | ------------- | ------- | -------- | ------- | ---------------------------------------------------------------------------------------- |
-| `parallelism` | integer | no       | `2`     | How many tasks the `dotfiles` pueue group runs at once. A whole number from `1` to `9007199254740991`. |
+| `parallelism` | integer | no       | `2`     | How many tasks the `dotfiles` pueue group runs at once. A positive whole number. |
 
 An omitted key renders as `2`, a provisional default rather than a
-measured limit; no policy upper bound is set. `0`, a negative number, a
-string, a boolean, a fraction, `inf`, `nan` and a number above
-`9007199254740991` (2^53 - 1, the largest integer a template prints
-exactly) fail the render and the error names `parallelism`. chezmoi
-renders the value to `~/.config/dotfiles/pueue-parallelism` for
-`scripts/with-pueue.sh` to read; the default pueue group and `pueue.yml`
-are left unchanged.
+measured limit; no upper bound is set. A TOML integer is used exactly as
+written, up to the largest TOML integer (`9223372036854775807`). A float
+(a TOML `3.0`, or a number the JSON test config reads as a float) counts
+only when it is whole and at most `9007199254740991` (2^53 - 1, the
+largest integer a float holds exactly), so the printed digits are always
+the configured value. `0`, a negative number, a string, a boolean, a
+fraction, `inf`, `nan` and a larger float fail the render and the error
+names `parallelism`. chezmoi renders the value to
+`~/.config/dotfiles/pueue-parallelism` for `scripts/with-pueue.sh` to
+read; the default pueue group and `pueue.yml` are left unchanged.
 
 See [Queueing heavy validation with pueue](pueue-validation-queue.md).
 
