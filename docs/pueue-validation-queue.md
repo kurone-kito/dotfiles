@@ -113,9 +113,18 @@ every other session's validation waiting forever. The `dotfiles` group is
 dedicated to the wrapper, so the wrapper resumes it: it looks at the group
 before enqueueing and about every ten seconds while it waits, and runs
 `pueue start --group dotfiles` when the listing says the group is paused
-(with a note on standard error). If you want to stop validation, interrupt
-the callers; pausing the group does not hold them back for long. The
-default pueue group is never touched.
+(with a note on standard error). The result of the start is never trusted
+on its own: a fresh listing decides, so a resume by another session at
+the same moment counts. The default pueue group is never touched.
+
+If the group cannot be confirmed running, waiting would never end, so the
+wrapper stops instead. Before it enqueues anything it exits non-zero with
+"could not confirm that the pueue group dotfiles is running" and the
+command is not run. While it waits, three checks in a row that fail
+(about thirty seconds) make it kill and remove its own task and exit
+non-zero; a single failed check, or failed ones interleaved with good
+ones, is tolerated. If you want to stop validation, interrupt the
+callers; pausing the group does not hold them back for long.
 
 ## Exit status, output and cleanup
 

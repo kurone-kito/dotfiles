@@ -28,7 +28,7 @@ setup() {
 
   # Nothing from the surrounding session may reach the wrapper.
   unset PUEUE_GROUP PUEUE_CONFIG_PATH PUEUE_WORKER_ID
-  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE FAKE_PUEUE_PAUSE_AFTER_ADD FAKE_PUEUE_ADD_HOLD
+  unset FAKE_PUEUE_FAIL FAKE_PUEUE_RESULT FAKE_PUEUE_WAIT_HOLD FAKE_PUEUED_MODE FAKE_PUEUE_PAUSE_AFTER_ADD FAKE_PUEUE_ADD_HOLD FAKE_PUEUE_WAIT_DELAY
   unset SANDBOX
 
   export HOME="$BATS_TEST_TMPDIR/home"
@@ -196,6 +196,12 @@ case "${1:-}" in
         echo "New group \"$3\" has been created"
         ;;
       '')
+        if [ -e "$state/flaky" ]; then
+          # Every other listing fails once a task has been added.
+          flaky=$(($(cat "$state/flaky-count" 2> /dev/null || echo 0) + 1))
+          echo "$flaky" > "$state/flaky-count"
+          [ $((flaky % 2)) -eq 0 ] || exit 1
+        fi
         count=$(($(cat "$state/list-count" 2> /dev/null || echo 0) + 1))
         echo "$count" > "$state/list-count"
         if fails group-list; then exit 1; fi
@@ -243,6 +249,7 @@ case "${1:-}" in
     # pueue joins the words after -- with spaces and hands them to sh -c.
     printf '%s' "$*" > "$state/tasks/$id/cmd"
     if [ -n "${FAKE_PUEUE_PAUSE_AFTER_ADD:-}" ]; then : > "$state/paused-$group"; fi
+    if fails group-flaky; then : > "$state/flaky"; fi
     if [ "${FAKE_PUEUE_ADD_HOLD:-}" = after ]; then
       # The daemon has accepted the task; the client has not printed the id.
       echo $$ > "$state/add.pid"
@@ -257,6 +264,14 @@ case "${1:-}" in
   start)
     daemon_up || exit 1
     if fails start; then exit 1; fi
+    # Another session resumes the group at the same moment; this call fails.
+    if fails start-race; then rm -f "$state/paused-$3"; exit 1; fi
+    # Fails twice, then works: a hiccup, not a lasting problem.
+    if fails start-twice; then
+      starts=$(($(cat "$state/start-count" 2> /dev/null || echo 0) + 1))
+      echo "$starts" > "$state/start-count"
+      [ "$starts" -gt 2 ] || exit 1
+    fi
     # pueue start --group <name>
     rm -f "$state/paused-$3"
     printf 'Group "%s" is being resumed.\n' "$3"
@@ -278,6 +293,7 @@ case "${1:-}" in
       [ "$hung" -le 100 ] || exit 1
       sleep 0.05
     done
+    [ -z "${FAKE_PUEUE_WAIT_DELAY:-}" ] || sleep "$FAKE_PUEUE_WAIT_DELAY"
     run_task "$id"
     if fails wait; then exit 1; fi
     exit 0
@@ -617,27 +633,62 @@ assert_refused_before_anything() {
   assert_line "start --group dotfiles"
 }
 
-@test "paused: when the group cannot be resumed the wrapper fails without a local copy" {
-  FAKE_PUEUE_PAUSE_AFTER_ADD=1 FAKE_PUEUE_FAIL=start wrap sh -c "$(mark_command 0)"
+@test "paused: a group that cannot be resumed before enqueueing is not enqueued into" {
+  : > "$FAKE_PUEUE_STATE/paused-dotfiles"
+  FAKE_PUEUE_FAIL=start wrap sh -c "$(mark_command 0)"
   assert_failure
+  local explanation="$stderr"
   assert_equal "$(ran_count)" "0"
   assert_equal "$(executions)" "0"
-}
-
-@test "queue: a finished task that cannot be removed is retried, named in a warning, and the status is kept" {
-  FAKE_PUEUE_FAIL=remove wrap sh -c "$(mark_command 5)"
-  assert_failure 5
-  assert_equal "$(ran_count)" "1"
-  [[ "$stderr" == *"could not remove task 0"* ]] || fail "no warning naming the task: $stderr"
-  [[ "$stderr" == *"pueue remove 0"* ]] || fail "the warning does not say how to remove it: $stderr"
   run calls
-  assert_equal "$(grep -c -x 'remove 0' "$FAKE_PUEUE_STATE/calls.log")" "5"
+  refute_output --partial "add --group"
+  [[ "$explanation" == *"could not confirm"* ]] || fail "no explanation: $explanation"
 }
 
-@test "queue: a finished task that cannot be removed does not turn success into failure" {
-  FAKE_PUEUE_FAIL=remove wrap sh -c "$(mark_command 0)"
+@test "paused: a group listing that cannot be read before enqueueing stops the call" {
+  FAKE_PUEUE_FAIL=group-relist wrap sh -c "$(mark_command 0)"
+  assert_failure
+  assert_equal "$(ran_count)" "0"
+  run calls
+  refute_output --partial "add --group"
+}
+
+@test "paused: a group that cannot be resumed while waiting makes the wrapper give up and remove its task" {
+  local started=$SECONDS
+  FAKE_PUEUE_PAUSE_AFTER_ADD=1 FAKE_PUEUE_FAIL=start wrap sh -c "$(mark_command 0)"
+  assert_failure
+  local explanation="$stderr"
+  [ $((SECONDS - started)) -lt 20 ] || fail "the wrapper kept waiting"
+  assert_equal "$(ran_count)" "0"
+  assert_equal "$(executions)" "0"
+  [ ! -d "$FAKE_PUEUE_STATE/tasks/0" ] || fail "the abandoned task was left in the queue"
+  run calls
+  assert_line "kill 0"
+  assert_line "remove 0"
+  [[ "$explanation" == *"gave up waiting for task 0"* ]] || fail "no explanation: $explanation"
+}
+
+@test "paused: a failed start is judged by a fresh listing, so another session's resume counts" {
+  : > "$FAKE_PUEUE_STATE/paused-dotfiles"
+  FAKE_PUEUE_FAIL=start-race wrap sh -c "$(mark_command 0)"
   assert_success
-  [[ "$stderr" == *"could not remove task 0"* ]] || fail "no warning: $stderr"
+  assert_equal "$(ran_count)" "1"
+}
+
+@test "paused: failed checks interleaved with good ones never add up to giving up" {
+  # Every other listing fails while the task waits for about 2 s, which is
+  # around ten checks: five failures in all, never three in a row.
+  FAKE_PUEUE_FAIL=group-flaky FAKE_PUEUE_WAIT_DELAY=2 wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(ran_count)" "1"
+  assert_equal "$(executions)" "1"
+}
+
+@test "paused: two failed checks in a row while waiting are tolerated" {
+  FAKE_PUEUE_PAUSE_AFTER_ADD=1 FAKE_PUEUE_FAIL=start-twice wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(ran_count)" "1"
+  assert_equal "$(executions)" "1"
 }
 
 @test "queue: a failed group listing exits non-zero and neither enqueues nor runs the command" {
