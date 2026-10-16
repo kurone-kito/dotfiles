@@ -5,8 +5,8 @@
 Re-import procedure: https://github.com/kurone-kito/dotfiles/blob/master/docs/idd-user-global-reimport.md
 
 In this setup `idd-activation` is deployed to `~/.local/bin`. If it is not on `PATH`,
-run `~/.local/bin/idd-activation` instead, or `idd-activation.ps1` in that directory
-on Windows. The `node` fallback in the entry text does not work here, because the
+run `~/.local/bin/idd-activation` instead, or `~/.local/bin/idd-activation.cmd` on
+Windows. The `node` fallback in the entry text does not work here, because the
 payload has no `scripts/` directory.
 
 {{ template "ai-agent-user-global" (dict
