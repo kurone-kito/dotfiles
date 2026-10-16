@@ -150,7 +150,7 @@ write_deployed_payload() {
   run "$SCRIPT"
 
   assert_success
-  assert_output --partial "not linking"
+  assert_output --partial "cannot be resolved safely"
   [ ! -e "$HOME/.local/share/idd-skill/missing" ]
 }
 

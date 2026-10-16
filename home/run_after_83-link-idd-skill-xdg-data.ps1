@@ -122,6 +122,12 @@ if ($onWindows) {
 # elsewhere an absolute path that does not start with //. The value is trimmed
 # first, as the installer does.
 $raw = ([string]$env:XDG_DATA_HOME).Trim()
+# Device paths (\\?\ and \\.\) are not normalized like ordinary paths, so the
+# containment check cannot see them: refuse them.
+if ($raw.StartsWith('\\?\') -or $raw.StartsWith('\\.\')) {
+  Write-Warning 'idd-skill data: device paths are not supported; not linking.'
+  exit 0
+}
 if ($onWindows) {
   $qualified = ($raw -match '^[A-Za-z]:[\\/]') -or $raw.StartsWith('\\')
 } else {
@@ -131,7 +137,12 @@ if (-not $qualified) { exit 0 }
 
 # Normalize with GetFullPath, then drop trailing separators from a non-root
 # path only: a drive root such as D:\ keeps its separator, as upstream accepts it.
-$xdgDataHome = [System.IO.Path]::GetFullPath($raw)
+try {
+  $xdgDataHome = [System.IO.Path]::GetFullPath($raw)
+} catch {
+  Write-Warning "idd-skill data: $raw is not a valid path; not linking."
+  exit 0
+}
 if ($xdgDataHome -ne [System.IO.Path]::GetPathRoot($xdgDataHome)) {
   $xdgDataHome = $xdgDataHome.TrimEnd('\', '/')
 }
@@ -155,7 +166,8 @@ if ($physXdg.Equals($physRendered, $ignoreCase) -or $physXdg.StartsWith("$physRe
 
 if (-not (Test-Path -LiteralPath $rendered -PathType Container)) { exit 0 }
 
-$target = Join-Path $xdgDataHome 'idd-skill'
+# Combine, not Join-Path: Join-Path fails when the drive of the root does not exist.
+$target = [System.IO.Path]::Combine($xdgDataHome, 'idd-skill')
 
 $existing = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
 if ($existing) {

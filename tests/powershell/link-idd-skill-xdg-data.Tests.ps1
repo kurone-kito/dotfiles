@@ -76,6 +76,7 @@ Describe 'link-idd-skill-xdg-data' {
 
     Get-Item -LiteralPath (Join-Path $env:XDG_DATA_HOME 'idd-skill') -Force `
       -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+    Test-Path -LiteralPath $env:XDG_DATA_HOME | Should -BeFalse
   }
 
   It 'no-ops when XDG_DATA_HOME is a relative path' {
@@ -253,6 +254,33 @@ Describe 'link-idd-skill-xdg-data' {
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*is not a directory*'
     Get-Content -LiteralPath $file -Raw | Should -BeLike '*keep*'
+  }
+
+  It 'warns and does not abort when XDG_DATA_HOME names a drive that does not exist' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $used = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name })
+    $free = ('Z'..'A') | Where-Object { $used -notcontains $_ } | Select-Object -First 1
+    if (-not $free) {
+      Set-ItResult -Skipped -Because 'no free drive letter on this host'
+      return
+    }
+    $env:XDG_DATA_HOME = "$($free):\idd-data"
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*could not create*'
+  }
+
+  It 'refuses an XDG_DATA_HOME given as a device path on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $env:XDG_DATA_HOME = '\\?\C:\idd-device-path'
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*device paths*'
+    Test-Path -LiteralPath 'C:\idd-device-path' | Should -BeFalse
   }
 
   It 'creates the current pointer as a directory junction on Windows' -Skip:($IsWindows -eq $false) {
