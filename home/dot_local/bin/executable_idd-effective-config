@@ -1,0 +1,27 @@
+#!/bin/sh
+# Expose the upstream `idd-effective-config` helper of kurone-kito/idd-skill
+# v0.16.0 on PATH for the user-global IDD payload (dotfiles issue #646,
+# roadmap #643). The helper is a read-only diagnostic: it prints the
+# effective local policy as JSON, with the layer each leaf came from.
+#
+# This wrapper runs commit e4d425ee28b1893dd45c4996b2506619018c4b2b (the
+# v0.16.0 tag) from its codeload tarball, the same ephemeral-npx form the
+# repository uses for its pins. Repo-local IDD work stays on its own pin
+# (v0.14.0 in .github/idd/config.json); this wrapper does not change that
+# pin. Nothing is installed globally: npx fetches the tarball into its own
+# cache and runs the bin from there.
+#
+# The upstream CLI exits 0 with no output on a Node.js below its engines
+# floor, so the wrapper checks for npx and that floor first and fails loudly.
+#
+# Usage: idd-effective-config [--key <dotted.path>] [--no-user-global] [-h|--help]
+if ! command -v npx >/dev/null 2>&1; then
+  echo "idd-effective-config: npx is required (Node.js 22.23.2+, 24.2.0+, or 26+)" >&2
+  exit 1
+fi
+if ! node -e "const [a, b, c] = process.versions.node.split('.').map(Number); process.exit((a === 22 && (b > 23 || (b === 23 && c >= 2))) || (a === 24 && b >= 2) || a >= 26 ? 0 : 1);" 2>/dev/null; then
+  echo "idd-effective-config: needs Node.js 22.23.2+, 24.2.0+, or 26+ (found: $(node -v 2>/dev/null || echo none))" >&2
+  exit 1
+fi
+
+exec npx --yes --package "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/e4d425ee28b1893dd45c4996b2506619018c4b2b" idd-effective-config "$@"

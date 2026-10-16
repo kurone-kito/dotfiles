@@ -85,6 +85,13 @@ jobs:
         with:
           submodules: true
           fetch-depth: 0
+      # The user-global activation helper tests run the v0.16.0 CLI, which
+      # needs Node.js 22.23.2+, 24.2.0+, or 26+. Provision the repository pin
+      # rather than trust the runner's ambient node (same step as the sibling
+      # IDD workflows).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
       - name: Cache chezmoi binary
         id: cache-chezmoi
         uses: actions/cache@v6
