@@ -1,0 +1,169 @@
+---
+type: guide
+title: Getting Started with IDD
+description: Walks a new adopter through the shortest safe path from deciding to adopt IDD to running the first Issue-Driven Development loop.
+tags: [getting-started, onboarding]
+---
+
+# Getting Started with IDD
+
+Use this guide when you want the shortest safe path from deciding a
+repository should adopt IDD to the first Issue-Driven Development loop.
+It is procedural on purpose. Deeper rules stay in the workflow and
+phase reference files.
+
+## Before You Start
+
+Choose the repository that will adopt IDD and confirm who is allowed to
+grant agent credentials, review pull requests, and merge. Review
+`docs/permissions.md` before giving an unattended or merge-capable agent
+access to GitHub.
+
+The agent that imports or runs IDD needs access to:
+
+- `git`
+- an authenticated `gh` CLI or equivalent GitHub integration
+- `jq`
+- Node.js/npm with `npx` (optional; only required if the project's
+  validate commands use `npx`. Non-Node.js projects should set validate
+  commands to their project tooling or to `true` as a no-op — see
+  [Tooling boundary](customization.md#tooling-boundary))
+- a REST client such as `curl` for reliable operational marker posting
+
+## 1. Import the Template
+
+Open an agent session in the target repository and ask it to import the
+IDD template from the idd-skill source repository. If the template has
+already been copied, start from the local `ONBOARDING.md` file instead.
+
+The onboarding guide is a thin orchestrator: it copies the portable
+instruction files, asks for project-specific command values, and
+updates agent entry files such as `AGENTS.md` (Codex CLI, OpenCode,
+Grok Build, and Cursor CLI), `CLAUDE.md`, `GEMINI.md`, or Copilot
+instructions. When a capable helper runtime is available, it points
+the session at `idd-onboard --hear` instead of walking through the
+policy and placeholder companion docs by hand.
+
+### Validate the import with IDD doctor (optional)
+
+After importing IDD, use the command for the helper runtime profile
+selected by the repository to catch common setup drift. For the
+`vendored-node` profile, run:
+
+```sh
+node scripts/idd-doctor.mjs
+```
+
+For the `package-manager` profile, invoke the generated `idd:doctor`
+package.json script through the configured package manager, such as
+`npm run idd:doctor --`. For the `ephemeral-npx` profile, run:
+
+```sh
+npx --yes --package <helper-package-spec> idd-doctor
+```
+
+When the repository sets `helperRuntime.launcher` to `pnpm-dlx`, or to `auto`
+on a machine where it resolves to `pnpm-dlx`, run the same helper through pnpm
+instead: `pnpm dlx --package <helper-package-spec> idd-doctor`. The
+[helper script reference](idd-helper-scripts.md) explains the launcher values
+and the upgrade order.
+
+The `instructions-only` profile has no doctor helper, so skip this
+optional check.
+
+The report checks core IDD file presence, unresolved placeholders,
+marker-prefix consistency, command-table sanity, and (when `gh` access
+is available) branch-protection and required-check signals.
+
+### Install user-globally (optional)
+
+To install IDD for the current user rather than only in one repository, install
+the instruction payload and the issue-authoring and idd-spec-audit skills for
+Claude Code, Codex CLI, or OpenCode:
+
+```sh
+node scripts/idd-onboard.mjs --install-user-global [--harness <list>] [--dry-run]
+```
+
+Run the command from a checkout of `kurone-kito/idd-skill`. Before the first
+install, create the parent directories that the installer does not create
+itself. These are the parent of the data root, for example `~/.local/share` or
+`$XDG_DATA_HOME`; `~/.claude` and `~/.agents` for every run; `~/.config`, or a
+qualified `XDG_CONFIG_HOME`, when OpenCode is selected; and, when Codex CLI is
+selected, the parent of a qualified `CODEX_HOME` you set. The full preconditions
+are in the [user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md#preconditions).
+
+Run with `--dry-run` first to see the plan. To remove the installation, run
+`node scripts/idd-onboard.mjs --uninstall`, and see the guide for the file list,
+the failure outcome, and the activation rules.
+
+## 2. Choose the Review Policy
+
+Before the first full loop, decide whether the default Copilot advisory
+review policy applies. If it does not, choose another profile from
+`docs/idd-review-policy-profiles.md`, apply the matching
+`profiles/<profile>/README.md` artifact, and capture its verification
+evidence before agents reach PR review and merge phases.
+
+Keep this decision explicit. Review policy changes are workflow changes,
+not just documentation preferences.
+
+### Merge policy
+
+Before unattended runs begin, choose and record a merge policy with
+`human_merge` preselected as the distributed default, and ask
+whether the operator wants to opt in to `fully_autonomous_merge` or
+prefers `separate_merge_agent` as a non-default split-authority profile.
+Keep the selected policy in repository documentation that future IDD
+sessions read. Missing policy defaults to `human_merge`;
+unknown recorded policy values must stop with a maintainer hold until
+corrected.
+
+## 3. Prepare Issues
+
+IDD works from GitHub Issues. At least one issue should be ready before
+the loop starts:
+
+- limited enough for one reviewable change
+- verifiable with lint, tests, CI, or another explicit check
+- autonomous, with no unresolved human decision or external blocker
+
+For broad requests, use the optional issue-authoring companion to draft
+a roadmap and focused child issues before starting the execution loop.
+Use task-list links to group active roadmap work. Reserve the
+blocked-by marker (using your configured prefix) for true sequential
+dependencies on a separate roadmap.
+
+When a project has genuine parallel tracks or multi-session coordination
+boundaries, nested roadmap hierarchies let each track close
+independently before the parent roadmap closes. See
+[Roadmap Claim Guardrails](idd-workflow.md#roadmap-claim-guardrails)
+in the workflow guide for how nested roadmap claims stay
+coordination-only and how bottom-up audit closes each level.
+
+## 4. Start the Loop
+
+Ask the agent to start the IDD workflow in the target repository. The
+agent should read the repository entry file, then route through
+`docs/idd-workflow.md` and the phase files under `.github/instructions/`.
+
+The normal loop is:
+
+1. Discover a ready roadmap or orphan issue.
+2. Claim exactly one issue with an ownership marker.
+3. Create a branch and worktree.
+4. Implement, validate, and self-review.
+5. Open a pull request.
+6. Triage review feedback and fix accepted items.
+7. Recheck CI, review freshness, advisory state, and claim ownership.
+8. Merge with a merge commit and clean up stale operational markers.
+
+## 5. Know Where to Go Next
+
+Use the repository's broader docs index as the high-level map when one
+exists. Use `docs/idd-workflow.md` when an agent or maintainer needs
+phase routing details, and use `.github/instructions/*.instructions.md`
+as the authoritative execution rules.
+
+Keep the README short. It should help a first-time reader understand
+what IDD is, why it exists, and which guide to read next.

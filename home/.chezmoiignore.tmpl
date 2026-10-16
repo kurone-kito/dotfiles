@@ -17,6 +17,7 @@ cleanup-editor-confd.sh
 70-deploy-env-files.sh
 25-deploy-secret-files.sh
 82-link-idd-skill-xdg-config.sh
+83-link-idd-skill-xdg-data.sh
 90-reconcile-claude-code.sh
 99-secret-status-summary.sh
 .bashrc
@@ -27,6 +28,7 @@ cleanup-editor-confd.sh
 .config/bash/**
 .config/zsh/**
 .config/sheldon/**
+.local/share/idd-skill/current
 {{- else }}
 AppData
 .psmux.conf
@@ -43,6 +45,7 @@ generate-authorized-keys.ps1
 70-deploy-env-files.ps1
 25-deploy-secret-files.ps1
 82-link-idd-skill-xdg-config.ps1
+83-link-idd-skill-xdg-data.ps1
 90-reconcile-claude-code.ps1
 99-secret-status-summary.ps1
 link-powershell-profile.ps1
