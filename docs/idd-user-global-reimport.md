@@ -51,6 +51,11 @@ re-import changes that pin on purpose, and updates this page in the same change.
    | `~/.claude/skills/issue-authoring/`, `~/.claude/skills/idd-spec-audit/` | `home/dot_claude/skills/issue-authoring/`, `home/dot_claude/skills/idd-spec-audit/` | the same paths |
    | `~/.agents/skills/issue-authoring/`, `~/.agents/skills/idd-spec-audit/` | `home/dot_agents/skills/issue-authoring/`, `home/dot_agents/skills/idd-spec-audit/` | the same paths |
 
+   Chezmoi encodes a leading dot in a source name as `dot_`. The payload's
+   `.github/instructions/` files, for example, are `dot_github/instructions/`
+   under `home/dot_local/share/idd-skill/<version>/`. Compare each staged path
+   after applying that mapping.
+
    The data root is `~/.local/share/idd-skill`, or `$XDG_DATA_HOME/idd-skill`
    when `XDG_DATA_HOME` is a qualified root. The chezmoi sources always deploy to
    `~/.local/share/idd-skill`. When `XDG_DATA_HOME` is a qualified root other than
