@@ -130,7 +130,9 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
 
 ## Preconditions for an isolated HOME
 
-- `HOME` must be an absolute path that does not start with `//`.
+- A *qualified root* is an absolute path that does not start with `//`.
+  `HOME` must be a qualified root. An environment value named below counts
+  only when it is a qualified root; otherwise the default applies.
 - These directories must already exist. The installer never creates the
   directory above the data root, a skill root, or a harness directory. It
   creates the data root, the two skill roots, and each missing directory
@@ -153,8 +155,8 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
   qualified root and OpenCode is selected, that value itself must exist,
   as the parent of the OpenCode directory. If `CODEX_HOME` is a qualified
   root and Codex CLI is selected, its parent must exist. This page assumes
-  all three are unset, or set to the default locations under `HOME`, as in
-  the run. The upstream statement is in
+  all three are unset, are not qualified roots, or are set to the default
+  locations under `HOME`, as in the run. The upstream statement is in
   [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md#preconditions).
 
 The table below gives each root and harness directory that the run uses, and
@@ -193,8 +195,8 @@ harness list (see [Assumptions](#assumptions)).
 | Codex entry    | `.codex/AGENTS.md`                                                                                         | file, created, and directory `.codex/` created  |
 | OpenCode entry | `.config/opencode/opencode.json`                                                                           | file, created, and directory `.config/opencode/` created |
 
-- `$CODEX_HOME` replaces `.codex` when it is a qualified root, and
-  `$XDG_CONFIG_HOME` replaces `.config` when it is a qualified root.
+- `$XDG_DATA_HOME` replaces `.local/share`, `$CODEX_HOME` replaces `.codex`,
+  and `$XDG_CONFIG_HOME` replaces `.config`, each when it is a qualified root.
 - A fresh install records each entry file as a whole file. The receipt lists
   every created path except `receipt.json` itself.
 - The installer does not copy `scripts/` helpers.
