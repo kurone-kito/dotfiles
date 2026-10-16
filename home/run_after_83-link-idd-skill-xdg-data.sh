@@ -83,6 +83,15 @@ case "${xdg_trimmed}" in
 esac
 xdg_data_home="$(printf '%s' "${xdg_trimmed}" | sed -e 's#\(.\)/*$#\1#')"
 
+# A newline in the root cannot be walked reliably (command substitution strips
+# newlines from names), so refuse it rather than check a different path.
+case "${xdg_data_home}" in
+  *$'\n'*)
+    echo "idd-skill data: ${xdg_data_home} contains a newline; not linking." >&2
+    exit 0
+    ;;
+esac
+
 if [ ! -d "${rendered}" ]; then
   exit 0
 fi

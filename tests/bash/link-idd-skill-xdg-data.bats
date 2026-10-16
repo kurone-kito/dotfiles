@@ -205,6 +205,28 @@ write_deployed_payload() {
   [ ! -e "$HOME/.local/share/idd-skill/0.16.0/idd-skill" ]
 }
 
+@test "reports the reason and does not abort when the root cannot be created" {
+  write_deployed_payload
+  printf 'x' > "$BATS_TEST_TMPDIR/file"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/file/sub"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --regexp 'could not create .*: .+; not linking'
+}
+
+@test "refuses a root that contains a newline without creating anything" {
+  write_deployed_payload
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/newline"$'\n'"line"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "contains a newline"
+  [ ! -e "$BATS_TEST_TMPDIR/newline" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
   write_deployed_payload
   export XDG_DATA_HOME="///"
