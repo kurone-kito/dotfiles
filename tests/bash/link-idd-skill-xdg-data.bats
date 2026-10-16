@@ -218,13 +218,16 @@ write_deployed_payload() {
 
 @test "refuses a root that contains a newline without creating anything" {
   write_deployed_payload
-  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/newline"$'\n'"line"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/newline"$'\n'"/line"
 
   run "$SCRIPT"
 
   assert_success
   assert_output --partial "contains a newline"
-  [ ! -e "$BATS_TEST_TMPDIR/newline" ]
+  refute_output --partial "linked"
+  shopt -s nullglob
+  created=( "$BATS_TEST_TMPDIR"/newline* )
+  [ "${#created[@]}" -eq 0 ]
 }
 
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
