@@ -167,6 +167,18 @@ write_deployed_payload() {
   [ ! -e "$BATS_TEST_TMPDIR/missing" ]
 }
 
+@test "links through a \"..\" that stays inside an existing prefix" {
+  write_deployed_payload
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/home/../custom-data"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "linked"
+  [ -L "$BATS_TEST_TMPDIR/custom-data/idd-skill" ]
+  [ "$(readlink "$BATS_TEST_TMPDIR/custom-data/idd-skill")" = "$HOME/.local/share/idd-skill" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
   write_deployed_payload
   export XDG_DATA_HOME="///"

@@ -65,7 +65,7 @@ physical_path() {
   case "${tail}/" in
     */../*) return 1 ;;
   esac
-  dir="$(cd -P "${p}" && pwd -P)"
+  dir="$(cd -P "${p}" 2>/dev/null && pwd -P)" || return 1
   normalize_lexically "${dir}${tail}"
 }
 
@@ -87,6 +87,22 @@ if [ ! -d "${rendered}" ]; then
   exit 0
 fi
 
+# True when the path, or one of its ancestors, is the same directory as ref. Two
+# spellings that name one directory (a case-insensitive filesystem, a bind mount)
+# have the same inode, which -ef compares.
+is_same_or_inside() {
+  local p="$1" ref="$2"
+  while :; do
+    if [ -e "${p}" ] && [ "${p}" -ef "${ref}" ]; then
+      return 0
+    fi
+    if [ "${p}" = "/" ]; then
+      return 1
+    fi
+    p="$(dirname "${p}")"
+  done
+}
+
 # Refuse when the root is the default directory, or is the deployed tree or
 # something inside it, under any alias. Comparing physical paths covers both
 # plain spellings and symlinks; a link there would point back into the payload.
@@ -99,9 +115,15 @@ default_physical="$(physical_path "${default_data_home}")" || exit 0
 if [ "${xdg_physical}" = "${default_physical}" ]; then
   exit 0
 fi
+if [ -e "${xdg_physical}" ] && [ "${xdg_physical}" -ef "${default_data_home}" ]; then
+  exit 0
+fi
 case "${xdg_physical}/" in
   "${rendered_physical}/"*) exit 0 ;;
 esac
+if is_same_or_inside "${xdg_physical}" "${rendered}"; then
+  exit 0
+fi
 
 target="${xdg_data_home%/}/idd-skill"
 
