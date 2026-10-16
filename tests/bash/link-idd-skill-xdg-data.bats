@@ -201,6 +201,7 @@ write_deployed_payload() {
   run "$SCRIPT"
 
   assert_success
+  assert_output ""
   [ ! -e "$HOME/.local/share/idd-skill/0.16.0/idd-skill" ]
 }
 

@@ -149,12 +149,12 @@ if [ -e "${xdg_data_home}" ] && [ ! -d "${xdg_data_home}" ]; then
   echo "idd-skill data: ${xdg_data_home} exists and is not a directory; not linking." >&2
   exit 0
 fi
-if ! mkdir -p "${xdg_data_home}" 2>/dev/null; then
-  echo "idd-skill data: could not create ${xdg_data_home}; not linking." >&2
+if ! err="$(mkdir -p "${xdg_data_home}" 2>&1)"; then
+  echo "idd-skill data: could not create ${xdg_data_home}: ${err}; not linking." >&2
   exit 0
 fi
-if ! ln -s "${rendered}" "${target}" 2>/dev/null; then
-  echo "idd-skill data: could not link ${target} -> ${rendered}; not linking." >&2
+if ! err="$(ln -s "${rendered}" "${target}" 2>&1)"; then
+  echo "idd-skill data: could not link ${target} -> ${rendered}: ${err}; not linking." >&2
   exit 0
 fi
 echo "idd-skill data: linked ${target} -> ${rendered}"
