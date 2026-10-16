@@ -242,6 +242,19 @@ Describe 'link-idd-skill-xdg-data' {
       Should -Match ('(?m)^\$version = ' + [regex]::Escape("'$version'"))
   }
 
+  It 'warns and leaves a file in place when XDG_DATA_HOME is an existing file' {
+    Write-DeployedPayload
+    $file = Join-Path $TestDrive 'not-a-directory'
+    Set-Content -LiteralPath $file -Value 'keep'
+    $env:XDG_DATA_HOME = $file
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*is not a directory*'
+    Get-Content -LiteralPath $file -Raw | Should -BeLike '*keep*'
+  }
+
   It 'creates the current pointer as a directory junction on Windows' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
     $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'

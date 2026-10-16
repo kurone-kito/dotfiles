@@ -169,8 +169,20 @@ if ($existing) {
   exit 0
 }
 
-if (-not (Test-Path -LiteralPath $xdgDataHome -PathType Container)) {
-  $null = New-Item -ItemType Directory -Path $xdgDataHome -Force
+# An existing file in place of the root cannot hold the link: warn, and do not abort
+# the apply. A failed directory creation warns in the same way.
+if (Test-Path -LiteralPath $xdgDataHome) {
+  if (-not (Test-Path -LiteralPath $xdgDataHome -PathType Container)) {
+    Write-Warning "idd-skill data: $xdgDataHome exists and is not a directory; not linking."
+    exit 0
+  }
+} else {
+  try {
+    $null = New-Item -ItemType Directory -Path $xdgDataHome -Force
+  } catch {
+    Write-Warning "idd-skill data: could not create ${xdgDataHome}: $($_.Exception.Message); not linking."
+    exit 0
+  }
 }
 
 try {

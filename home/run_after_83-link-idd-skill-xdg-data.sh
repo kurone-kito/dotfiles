@@ -106,9 +106,12 @@ is_same_or_inside() {
 # Refuse when the root is the default directory, or is the deployed tree or
 # something inside it, under any alias. Comparing physical paths covers both
 # plain spellings and symlinks; a link there would point back into the payload.
-rendered_physical="$(physical_path "${rendered}")"
+rendered_physical="$(physical_path "${rendered}")" || {
+  echo "idd-skill data: ${rendered} cannot be resolved safely; not linking." >&2
+  exit 0
+}
 xdg_physical="$(physical_path "${xdg_data_home}")" || {
-  echo "idd-skill data: ${xdg_data_home} cannot be resolved safely (a dangling link, or a '..' below a missing path); not linking." >&2
+  echo "idd-skill data: ${xdg_data_home} cannot be resolved safely (a dangling link, a '..' below a missing path, or a directory that cannot be entered); not linking." >&2
   exit 0
 }
 default_physical="$(physical_path "${default_data_home}")" || exit 0
@@ -140,6 +143,18 @@ if [ -e "${target}" ]; then
   exit 0
 fi
 
-mkdir -p "${xdg_data_home}"
-ln -s "${rendered}" "${target}"
+# An existing file in place of the root cannot hold the link: warn, and do not abort
+# the apply. A failed mkdir or ln warns in the same way.
+if [ -e "${xdg_data_home}" ] && [ ! -d "${xdg_data_home}" ]; then
+  echo "idd-skill data: ${xdg_data_home} exists and is not a directory; not linking." >&2
+  exit 0
+fi
+if ! mkdir -p "${xdg_data_home}" 2>/dev/null; then
+  echo "idd-skill data: could not create ${xdg_data_home}; not linking." >&2
+  exit 0
+fi
+if ! ln -s "${rendered}" "${target}" 2>/dev/null; then
+  echo "idd-skill data: could not link ${target} -> ${rendered}; not linking." >&2
+  exit 0
+fi
 echo "idd-skill data: linked ${target} -> ${rendered}"

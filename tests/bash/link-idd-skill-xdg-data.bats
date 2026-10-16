@@ -179,6 +179,31 @@ write_deployed_payload() {
   [ "$(readlink "$BATS_TEST_TMPDIR/custom-data/idd-skill")" = "$HOME/.local/share/idd-skill" ]
 }
 
+@test "warns and leaves a file in place when XDG_DATA_HOME is an existing file" {
+  write_deployed_payload
+  printf 'keep' > "$BATS_TEST_TMPDIR/not-a-directory"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/not-a-directory"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "is not a directory"
+  [ "$(cat "$BATS_TEST_TMPDIR/not-a-directory")" = "keep" ]
+}
+
+@test "refuses a root that differs from the payload only by letter case, where the filesystem ignores case" {
+  write_deployed_payload
+  if [ ! -d "$HOME/.local/share/IDD-SKILL" ]; then
+    skip "needs a case-insensitive filesystem"
+  fi
+  export XDG_DATA_HOME="$HOME/.local/share/IDD-SKILL/0.16.0"
+
+  run "$SCRIPT"
+
+  assert_success
+  [ ! -e "$HOME/.local/share/idd-skill/0.16.0/idd-skill" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
   write_deployed_payload
   export XDG_DATA_HOME="///"
