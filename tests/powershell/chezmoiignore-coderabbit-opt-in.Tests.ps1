@@ -104,11 +104,11 @@ Describe 'CodeRabbit launcher opt-in in .chezmoiignore.tmpl' -Skip:(-not $script
     ) {
       $off = Invoke-IgnoreRender -Os $Os -CoderabbitJson '{"review": false}'
       $off.ExitCode | Should -Be 0
-      $offRest = @($off.Lines | Where-Object { $_ -notmatch 'coderabbit-critique' })
+      $offRest = @($off.Lines | Where-Object { $_ -notmatch 'coderabbit-critique|coderabbit-authoring-review' })
       foreach ($json in '{"review": "lite"}', '{"review": "deep"}') {
         $other = Invoke-IgnoreRender -Os $Os -CoderabbitJson $json
         $other.ExitCode | Should -Be 0
-        @($other.Lines | Where-Object { $_ -notmatch 'coderabbit-critique' }) | Should -Be $offRest
+        @($other.Lines | Where-Object { $_ -notmatch 'coderabbit-critique|coderabbit-authoring-review' }) | Should -Be $offRest
       }
     }
 

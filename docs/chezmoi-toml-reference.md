@@ -56,7 +56,7 @@ deployed or wired until `review` is set.
 
 | Field        | Type                          | Required | Default | Purpose                                                                                                                                                  |
 | ------------ | ----------------------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `review`     | boolean \| `"lite"` \| `"deep"` | no       | `false` | `false` deploys nothing; `true` or `"lite"` deploys the `coderabbit-critique` launchers and the user-global delegate; `"deep"` also sets `CODERABBIT_CRITIQUE_DEEP=1`. |
+| `review`     | boolean \| `"lite"` \| `"deep"` | no       | `false` | `false` deploys nothing; `true` or `"lite"` deploys the `coderabbit-critique` launchers, the user-global critique delegate, and the issue-authoring draft reviewer (`coderabbit-authoring-review`); `"deep"` also sets `CODERABBIT_CRITIQUE_DEEP=1`. |
 | `deepReview` | boolean                       | no       | `false` | **Deprecated** alias for `review = "deep"`; every use prints a deprecation notice.                                                                       |
 
 `review` wins whenever it is present. The two keys resolve as follows:

@@ -1,0 +1,258 @@
+#!/bin/sh
+# Review one issue draft with the CodeRabbit CLI, as the IDD issue-authoring
+# delegate (issueAuthoring.adversarialReview.delegate). Reads one JSON object
+# {title, body, packet} on stdin, commits it as draft.md in a temporary git
+# repository outside the caller's checkout, runs `coderabbit review` there,
+# and prints the review text on stdout.
+#
+# Fails (non-zero exit, empty stdout) whenever the review cannot run or does
+# not exit 0: coderabbit missing, an unauthenticated or timed-out auth probe,
+# a temporary repository that cannot be created or committed, a review that
+# times out, or a non-zero review. A review that starts and exits 0 is a
+# clean verdict, including when its stdout is empty.
+#
+# The caller's checkout is never touched: this process keeps its own working
+# directory, and only the coderabbit child runs inside the temporary
+# repository. The temporary repository is removed afterwards only when it
+# still matches the paths and file contents this script created; anything
+# else is kept and its path is printed on stderr.
+#
+# CODERABBIT_CRITIQUE_TIMEOUT (default 300 seconds) bounds both the auth probe
+# and the review. CODERABBIT_CRITIQUE_DEEP, when it is 1, true or yes
+# (case-insensitive), adds --deep to the review, as the critique launcher does.
+set -eu
+
+# An inherited repository override would make the git calls below act on the
+# caller's repository, so drop every such variable first.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_NAMESPACE
+
+usage() {
+  printf '%s\n' 'Usage: coderabbit-authoring-review'
+}
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -eq 1 ] && { [ "$1" = '--help' ] || [ "$1" = '-h' ]; }; then
+    usage
+    exit 0
+  fi
+  usage >&2
+  exit 2
+fi
+
+fail() {
+  printf '%s\n' "coderabbit-authoring-review: $*" >&2
+  exit 1
+}
+
+TIMEOUT_SECONDS="${CODERABBIT_CRITIQUE_TIMEOUT:-300}"
+case "$TIMEOUT_SECONDS" in
+  '' | *[!0-9]*) TIMEOUT_SECONDS=300 ;;
+  *) [ "$TIMEOUT_SECONDS" -gt 0 ] 2>/dev/null || TIMEOUT_SECONDS=300 ;;
+esac
+
+timeout_cmd_is_compatible() {
+  help_output=$("$1" --help 2>&1) || true
+  case "$help_output" in
+    *--kill-after*) ;;
+    *) return 1 ;;
+  esac
+  case "$help_output" in
+    *--preserve-status*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1 && timeout_cmd_is_compatible timeout; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1 && timeout_cmd_is_compatible gtimeout; then
+  TIMEOUT_CMD="gtimeout"
+fi
+[ -n "$TIMEOUT_CMD" ] || fail 'no timeout/gtimeout with --kill-after and --preserve-status; failing closed'
+
+command -v jq >/dev/null 2>&1 || fail 'jq is required to check the draft; failing closed'
+command -v git >/dev/null 2>&1 || fail 'git is required to commit the draft; failing closed'
+command -v coderabbit >/dev/null 2>&1 || fail 'coderabbit is not on PATH'
+
+if command -v sha256sum >/dev/null 2>&1; then
+  hash_file() { sha256sum "$1" | cut -d ' ' -f 1; }
+elif command -v shasum >/dev/null 2>&1; then
+  hash_file() { shasum -a 256 "$1" | cut -d ' ' -f 1; }
+else
+  fail 'sha256sum or shasum is required to verify the temporary repository; failing closed'
+fi
+
+# Read the draft and check its exact shape before anything is created: one
+# object with title, body and packet; packet with exactly goal, constraints,
+# evidence, relationships and checklist; goal, title, body and every array
+# item non-empty strings; arrays may be empty.
+input=$(cat)
+printf '%s' "$input" | jq -e '
+  def nonempty_string: type == "string" and length > 0;
+  def string_array: type == "array" and all(.[]; nonempty_string);
+  type == "object"
+  and (keys | sort) == ["body", "packet", "title"]
+  and (.title | nonempty_string)
+  and (.body | nonempty_string)
+  and (.packet | type == "object")
+  and ((.packet | keys | sort) == ["checklist", "constraints", "evidence", "goal", "relationships"])
+  and (.packet.goal | nonempty_string)
+  and (.packet.constraints | string_array)
+  and (.packet.evidence | string_array)
+  and (.packet.relationships | string_array)
+  and (.packet.checklist | string_array)
+' > /dev/null 2>&1 || fail 'stdin is not one draft object with title, body and packet of the expected shape'
+
+RESULT_STATUS=1
+ROOT=""
+WORK=""
+MANIFEST=""
+CHILD_PID=""
+CLEANED=0
+
+# Snapshot the temporary repository: one line per path under ROOT with its
+# type and, for regular files, a SHA-256. Symbolic links are recorded as links
+# and never followed.
+snapshot() {
+  find -P "$ROOT" -mindepth 1 | LC_ALL=C sort | while IFS= read -r path; do
+    if [ -L "$path" ]; then
+      printf 'l\t-\t%s\n' "$path"
+    elif [ -d "$path" ]; then
+      printf 'd\t-\t%s\n' "$path"
+    elif [ -f "$path" ]; then
+      printf 'f\t%s\t%s\n' "$(hash_file "$path")" "$path"
+    else
+      printf 'o\t-\t%s\n' "$path"
+    fi
+  done
+}
+
+# Remove the temporary repository only when it matches the manifest taken
+# before the review. Anything that differs is kept and reported. Removal walks
+# children before parents and never follows a link. Never changes the exit
+# status.
+cleanup_root() {
+  [ "$CLEANED" -eq 0 ] || return 0
+  CLEANED=1
+  [ -n "$ROOT" ] && [ -d "$ROOT" ] || return 0
+  current="$WORK/current.manifest"
+  if ! snapshot > "$current" 2>/dev/null || ! cmp -s "$MANIFEST" "$current"; then
+    printf '%s\n' "coderabbit-authoring-review: kept temporary repository at $ROOT (its contents differ from what this run created)" >&2
+    return 0
+  fi
+  find -P "$ROOT" -depth -mindepth 1 | while IFS= read -r path; do
+    case "$path" in
+      "$ROOT"/*) ;;
+      *) exit 1 ;;
+    esac
+    if [ -d "$path" ] && [ ! -L "$path" ]; then
+      rmdir -- "$path" || exit 1
+    else
+      rm -f -- "$path" || exit 1
+    fi
+  done || {
+    printf '%s\n' "coderabbit-authoring-review: kept temporary repository at $ROOT (removal stopped)" >&2
+    return 0
+  }
+  rmdir -- "$ROOT" 2>/dev/null || printf '%s\n' "coderabbit-authoring-review: kept temporary repository at $ROOT" >&2
+}
+
+cleanup_work() {
+  [ -n "$WORK" ] && [ -d "$WORK" ] || return 0
+  rm -f -- "$WORK/manifest" "$WORK/current.manifest" "$WORK/probe.out" "$WORK/review.out" "$WORK/review.err" "$WORK/probe.err"
+  rmdir -- "$WORK" 2>/dev/null || true
+}
+
+on_exit() {
+  cleanup_root
+  cleanup_work
+}
+
+on_signal() {
+  if [ -n "$CHILD_PID" ]; then
+    kill -TERM "$CHILD_PID" 2>/dev/null || true
+  fi
+  exit 130
+}
+
+trap on_exit EXIT
+trap on_signal INT TERM HUP
+
+# The temporary repository must sit outside the caller's checkout.
+caller_top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$caller_top" ]; then
+  case "${TMPDIR:-/tmp}/" in
+    "$caller_top"/*) fail 'TMPDIR is inside the current checkout; point TMPDIR outside it' ;;
+  esac
+fi
+
+ROOT=$(mktemp -d "${TMPDIR:-/tmp}/coderabbit-authoring-review.XXXXXX") || fail 'cannot create the temporary repository'
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/coderabbit-authoring-review-work.XXXXXX") || fail 'cannot create the work directory'
+MANIFEST="$WORK/manifest"
+
+git_in_root() {
+  git -C "$ROOT" -c user.name=coderabbit-authoring-review \
+    -c user.email=coderabbit-authoring-review@invalid \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+
+git_in_root init -q || fail 'cannot initialise the temporary repository'
+git_in_root commit -q --allow-empty -m 'empty base' || fail 'cannot commit the empty base'
+BASE=$(git_in_root rev-parse HEAD) || fail 'cannot read the base commit'
+
+# Render draft.md. The file is new, and noclobber refuses to replace anything.
+set -C
+printf '%s' "$input" | jq -r '
+  "# " + .title, "",
+  .body, "",
+  "## Goal", "", .packet.goal, "",
+  "## Constraints", "", (.packet.constraints[] | "- " + .), "",
+  "## Evidence", "", (.packet.evidence[] | "- " + .), "",
+  "## Relationships", "", (.packet.relationships[] | "- " + .), "",
+  "## Checklist", "", (.packet.checklist[] | "- [ ] " + .)
+' > "$ROOT/draft.md"
+set +C
+
+git_in_root add draft.md || fail 'cannot stage draft.md'
+git_in_root commit -q -m 'issue draft' || fail 'cannot commit draft.md'
+
+# Freeze what this run created. Anything that appears under ROOT later is not
+# ours and keeps the directory in place.
+snapshot > "$MANIFEST" || fail 'cannot snapshot the temporary repository'
+
+# Run a command in the temporary repository, bounded by the timeout, and wait
+# for it. Only this process group's timeout child is ever signalled.
+run_bounded() {
+  out=$1
+  err=$2
+  shift 2
+  ( cd "$ROOT" && export GIT_OPTIONAL_LOCKS=0 && exec "$TIMEOUT_CMD" --kill-after=10 --preserve-status "$TIMEOUT_SECONDS" "$@" ) > "$out" 2> "$err" &
+  CHILD_PID=$!
+  status=0
+  wait "$CHILD_PID" || status=$?
+  CHILD_PID=""
+  return "$status"
+}
+
+printf '%s\n' 'coderabbit-authoring-review: reviewing the draft in a temporary repository' >&2
+
+run_bounded "$WORK/probe.out" "$WORK/probe.err" coderabbit auth status --agent || fail 'the auth probe failed or timed out'
+jq -e '.authenticated == true' "$WORK/probe.out" > /dev/null 2>&1 || fail 'coderabbit is not authenticated'
+
+deep=""
+case "${CODERABBIT_CRITIQUE_DEEP:-}" in
+  1 | [Tt][Rr][Uu][Ee] | [Yy][Ee][Ss]) deep="--deep" ;;
+esac
+
+REVIEW_STATUS=0
+if [ -n "$deep" ]; then
+  run_bounded "$WORK/review.out" "$WORK/review.err" coderabbit review --agent --base "$BASE" --deep || REVIEW_STATUS=$?
+else
+  run_bounded "$WORK/review.out" "$WORK/review.err" coderabbit review --agent --base "$BASE" || REVIEW_STATUS=$?
+fi
+
+if [ "$REVIEW_STATUS" -eq 0 ]; then
+  cat "$WORK/review.out"
+fi
+RESULT_STATUS=$REVIEW_STATUS
+exit "$RESULT_STATUS"

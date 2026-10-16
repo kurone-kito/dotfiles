@@ -191,3 +191,34 @@ print(json.dumps(json.load(sys.stdin)['critiqueLoop']['telemetryHook'], sort_key
   assert_failure
   assert_regex "$stderr" 'data\.coderabbit\.review'
 }
+
+@test "off renders no issueAuthoring fragment and only critiqueLoop" {
+  for coderabbit in absent '{"review": false}'; do
+    run _render "$BATS_TEST_TMPDIR/home" "$coderabbit"
+
+    assert_success
+    echo "$output" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+assert list(c) == ['critiqueLoop'], c
+assert 'delegate' not in c['critiqueLoop'], c
+assert 'telemetryHook' in c['critiqueLoop'], c
+"
+  done
+}
+
+@test "lite and deep render the combined authoring delegate" {
+  for coderabbit in '{"review": "lite"}' '{"review": "deep"}'; do
+    run _render "$BATS_TEST_TMPDIR/home" "$coderabbit"
+
+    assert_success
+    echo "$output" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)
+d = c['issueAuthoring']['adversarialReview']['delegate']
+assert d['mode'] == 'combined', d
+assert d['command'].startswith(\"'\") and d['command'].endswith(\"coderabbit-authoring-review'\"), d
+assert 'delegate' in c['critiqueLoop'], c
+"
+  done
+}

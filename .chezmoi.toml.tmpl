@@ -30,7 +30,9 @@ sshhost = {{ dig "sshhost" "" $profile | quote }}
      dropping review = false next to a legacy deepReview = true would flip the
      resolved mode. Anything else is dropped with a warning. The values are
      copied, not resolved; home/.chezmoitemplates/coderabbit-review-mode owns
-     the resolution and its validation at apply time. */ -}}
+     the resolution and its validation at apply time. The same review value
+     also opts in the issue-authoring draft reviewer (see
+     docs/coderabbit-deep-review.md). */ -}}
 {{- $coderabbit := dig "coderabbit" dict . }}
 {{- if not (kindIs "map" $coderabbit) }}
 {{-   warnf "data.coderabbit is not a table; not re-emitting it" }}

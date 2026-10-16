@@ -101,11 +101,11 @@ _assert_listed_once() {
   for os in linux windows; do
     run --separate-stderr _render_ignore "$os" '{"review": "lite"}'
     assert_success
-    lite_list=$(printf '%s\n' "$output" | grep -v 'coderabbit-critique')
+    lite_list=$(printf '%s\n' "$output" | grep -v -e 'coderabbit-critique' -e 'coderabbit-authoring-review')
 
     run --separate-stderr _render_ignore "$os" '{"review": false}'
     assert_success
-    off_list=$(printf '%s\n' "$output" | grep -v 'coderabbit-critique')
+    off_list=$(printf '%s\n' "$output" | grep -v -e 'coderabbit-critique' -e 'coderabbit-authoring-review')
 
     assert_equal "$off_list" "$lite_list"
   done
@@ -116,4 +116,46 @@ _assert_listed_once() {
 
   assert_failure
   assert_regex "$stderr" 'data\.coderabbit\.review'
+}
+
+_assert_not_listed() {
+  assert_equal "$(printf '%s\n' "$output" | grep -c -x -F -e "$1")" 0
+}
+
+# The draft reviewer follows the same opt-in and .cmd rules as the critique
+# launchers (see the critique tests above).
+
+@test "off ignores the authoring draft reviewer on Linux and Windows" {
+  for os in linux windows; do
+    for coderabbit in absent '{}' '{"review": false}'; do
+      run --separate-stderr _render_ignore "$os" "$coderabbit"
+
+      assert_success
+      _assert_listed_once '.local/bin/coderabbit-authoring-review'
+      _assert_listed_once '.local/bin/coderabbit-authoring-review.ps1'
+      _assert_listed_once '.local/bin/coderabbit-authoring-review.cmd'
+    done
+  done
+}
+
+@test "the authoring .cmd twin stays ignored on Linux in every mode" {
+  for coderabbit in '{"review": "lite"}' '{"review": "deep"}'; do
+    run --separate-stderr _render_ignore linux "$coderabbit"
+
+    assert_success
+    _assert_listed_once '.local/bin/coderabbit-authoring-review.cmd'
+    _assert_not_listed '.local/bin/coderabbit-authoring-review'
+    _assert_not_listed '.local/bin/coderabbit-authoring-review.ps1'
+  done
+}
+
+@test "lite and deep deploy the authoring draft reviewer on Windows" {
+  for coderabbit in '{"review": "lite"}' '{"review": "deep"}'; do
+    run --separate-stderr _render_ignore windows "$coderabbit"
+
+    assert_success
+    _assert_not_listed '.local/bin/coderabbit-authoring-review'
+    _assert_not_listed '.local/bin/coderabbit-authoring-review.ps1'
+    _assert_not_listed '.local/bin/coderabbit-authoring-review.cmd'
+  done
 }

@@ -12,6 +12,12 @@ resolves to "lite" or "deep" (home/.chezmoitemplates/coderabbit-review-mode,
 docs/coderabbit-deep-review.md), because it may send the branch diff to an
 external service. critiqueLoop.telemetryHook is rendered in every mode.
 
+The same opt-in also renders issueAuthoring.adversarialReview.delegate, which
+sends a finished issue draft to coderabbit-authoring-review through the same
+mode. The draft reviewer is a sibling of the C-phase delegate: it reads one
+JSON object on stdin and reviews the draft in a temporary repository, never
+the caller's checkout.
+
 mode: "combined" runs both this delegate and the per-agent critique
 mechanism every C1 pass and unions their findings, rather than only
 falling back to the per-agent mechanism when this delegate fails --
@@ -40,7 +46,7 @@ and never gates C-phase control flow, unlike the delegate above.
      critiqueLoop.delegate and critiqueLoop.telemetryHook below render
      from the exact same logic instead of two hand-duplicated copies. */ -}}
 {{- $binCommand := dict -}}
-{{- range $bin := list "coderabbit-critique" "idd-critique-telemetry" -}}
+{{- range $bin := list "coderabbit-critique" "idd-critique-telemetry" "coderabbit-authoring-review" -}}
 {{-   $unixPath := printf "%s%s.local%sbin%s%s" $home $sep $sep $sep $bin -}}
 {{/*   critiqueLoop.*.command is run as a shell command (see
        docs/idd-workflow.md's Critique pass invocation section), so the
@@ -65,4 +71,11 @@ and never gates C-phase control flow, unlike the delegate above.
         "mode" "combined") -}}
 {{- end -}}
 {{- $config := dict "critiqueLoop" $critiqueLoop -}}
+{{- if ne (includeTemplate "coderabbit-review-mode" . | trim) "off" -}}
+{{-   $config = set $config "issueAuthoring" (dict
+        "adversarialReview" (dict
+          "delegate" (dict
+            "command" (get $binCommand "coderabbit-authoring-review")
+            "mode" "combined"))) -}}
+{{- end -}}
 {{ $config | toPrettyJson }}

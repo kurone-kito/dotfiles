@@ -115,6 +115,15 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
     It 'delegate.mode stays combined' {
       $script:Config.critiqueLoop.delegate.mode | Should -Be 'combined'
     }
+
+    It 'issueAuthoring delegate.command uses pwsh -NoProfile -File pointing at coderabbit-authoring-review.ps1' {
+      $script:Config.issueAuthoring.adversarialReview.delegate.command |
+        Should -Match '^pwsh -NoProfile -File ".*coderabbit-authoring-review\.ps1"$'
+    }
+
+    It 'issueAuthoring delegate.mode stays combined' {
+      $script:Config.issueAuthoring.adversarialReview.delegate.mode | Should -Be 'combined'
+    }
   }
 
   Context 'Windows rendering without pwsh on PATH (powershell.exe fallback)' {
@@ -177,6 +186,11 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       $script:Config.critiqueLoop.telemetryHook.command |
         Should -Match '^powershell\.exe -NoProfile -File ".*idd-critique-telemetry\.ps1"$'
     }
+
+    It 'issueAuthoring delegate.command falls back to powershell.exe -NoProfile -File pointing at coderabbit-authoring-review.ps1' {
+      $script:Config.issueAuthoring.adversarialReview.delegate.command |
+        Should -Match '^powershell\.exe -NoProfile -File ".*coderabbit-authoring-review\.ps1"$'
+    }
   }
 
   Context 'non-Windows rendering (mirrors tests/bash/idd-skill-config-tmpl.bats coverage)' {
@@ -197,6 +211,11 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
       $script:Config.critiqueLoop.telemetryHook.PSObject.Properties.Name |
         Should -Not -Contain 'mode'
     }
+
+    It 'issueAuthoring delegate.command is single-quoted and names coderabbit-authoring-review' {
+      $script:Config.issueAuthoring.adversarialReview.delegate.command |
+        Should -Match "^'.*coderabbit-authoring-review'$"
+    }
   }
 
   Context 'review off (the default) on Windows' {
@@ -207,6 +226,10 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
 
     It 'renders successfully' {
       $script:Render.ExitCode | Should -Be 0
+    }
+
+    It 'renders no issueAuthoring delegate' {
+      $script:Config.PSObject.Properties.Name | Should -Not -Contain 'issueAuthoring'
     }
 
     It 'renders no delegate' {
@@ -227,6 +250,10 @@ Describe 'config.json.tmpl' -Skip:(-not $script:HasChezmoi) {
 
     It 'renders successfully' {
       $script:Render.ExitCode | Should -Be 0
+    }
+
+    It 'renders no issueAuthoring delegate' {
+      $script:Config.PSObject.Properties.Name | Should -Not -Contain 'issueAuthoring'
     }
 
     It 'renders no delegate' {
