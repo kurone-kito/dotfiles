@@ -51,7 +51,7 @@ BeforeAll {
   }
 }
 
-Describe 'coderabbit-authoring-review arguments' -Skip:($IsWindows -ne $false) {
+Describe 'coderabbit-authoring-review arguments' {
   It 'prints the usage line on stdout for --help and exits 0' {
     $result = Invoke-Subject -StdinText '' -Arguments @('--help')
     $result.Code | Should -Be 0
@@ -64,7 +64,7 @@ Describe 'coderabbit-authoring-review arguments' -Skip:($IsWindows -ne $false) {
   }
 }
 
-Describe 'coderabbit-authoring-review stdin' -Skip:($IsWindows -ne $false) {
+Describe 'coderabbit-authoring-review stdin' {
   It 'fails with empty stdout for input that is not the expected draft shape' {
     foreach ($input in @(
         '',
@@ -80,12 +80,16 @@ Describe 'coderabbit-authoring-review stdin' -Skip:($IsWindows -ne $false) {
   }
 }
 
-Describe 'coderabbit-authoring-review review run' -Skip:($IsWindows -ne $false) {
+Describe 'coderabbit-authoring-review review run' {
   BeforeEach {
     $script:StubDir = Join-Path ([IO.Path]::GetTempPath()) ('cra-stub.' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $script:StubDir | Out-Null
-    $stub = Join-Path $script:StubDir 'coderabbit'
-    @'
+    # One stub per host: a POSIX script on Unix, a batch file on Windows.
+    # Both answer the auth probe and the review, and fail with exit 3 when
+    # STUB_MODE is fail.
+    if ($IsWindows -eq $false) {
+      $stub = Join-Path $script:StubDir 'coderabbit'
+      @'
 #!/bin/sh
 case "$1 $2" in
   'auth status') printf '{"authenticated": true}\n'; exit 0 ;;
@@ -95,7 +99,27 @@ case "$1 $2" in
 esac
 exit 9
 '@ | Set-Content -LiteralPath $stub -NoNewline
-    & chmod +x $stub
+      & chmod +x $stub
+    } else {
+      $stub = Join-Path $script:StubDir 'coderabbit.cmd'
+      $batch = @(
+        '@echo off',
+        'if "%~1 %~2"=="auth status" goto probe',
+        'if "%~1 %~2"=="review --agent" goto review',
+        'exit /b 9',
+        ':probe',
+        'echo {"authenticated": true}',
+        'exit /b 0',
+        ':review',
+        'if "%STUB_MODE%"=="fail" (',
+        'echo partial review',
+        'exit /b 3',
+        ')',
+        'echo REVIEW OK',
+        'exit /b 0'
+      ) -join "`r`n"
+      Set-Content -LiteralPath $stub -Value ($batch + "`r`n") -NoNewline
+    }
     $script:SavedPath = $env:PATH
     $env:PATH = $script:StubDir + [IO.Path]::PathSeparator + $env:PATH
     $script:SavedEnv = @{}
