@@ -53,8 +53,9 @@ updates together with the payload. The compact OpenCode render carries only
 its routing section. Cursor CLI documents no file-based global instruction
 file, so it is not wired. Grok Build reads the Claude file through its
 `[compat.claude]` layer, but whether Grok follows the `@` import inside that
-file is not verified. The link line sits outside the managed block, so
-uninstalling the payload leaves it behind. The installer also writes OpenCode's
+file is not verified. The link line and the deployment note sit outside the
+managed block, so uninstalling the payload leaves them behind. The installer
+also writes OpenCode's
 `opencode.json` instructions when OpenCode is selected, which is its default.
 Extended OpenCode users should run the installer with `--harness claude,codex`
 so the entry is not loaded twice.
