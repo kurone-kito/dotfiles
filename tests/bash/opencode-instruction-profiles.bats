@@ -192,14 +192,20 @@ _block_body() {
 REIMPORT_LINK='docs/idd-user-global-reimport.md'
 
 @test "the Codex, Copilot, Gemini and extended OpenCode blocks carry the vendored entry text byte for byte" {
-  local entry="$REPO_ROOT/home/dot_local/share/idd-skill/0.16.0/user-global/entry.md"
-  local rel out
+  local version entry rel out
+  # Follow the payload link, so that a bumped payload fails here until each
+  # copy names the new version.
+  version=$(cat "$REPO_ROOT/home/dot_local/share/idd-skill/symlink_current")
+  entry="$REPO_ROOT/home/dot_local/share/idd-skill/$version/user-global/entry.md"
+  [ -f "$entry" ] || fail "symlink_current does not name a vendored payload"
   _write_config '{"data":{"opencode":{"extendedInstructions":true}}}'
   for rel in \
     dot_codex/AGENTS.md.tmpl \
     dot_copilot/copilot-instructions.md.tmpl \
     dot_gemini/GEMINI.md.tmpl \
     dot_config/opencode/AGENTS.md.tmpl; do
+    grep -qF "dot_local/share/idd-skill/$version/user-global/entry.md" "$REPO_ROOT/home/$rel" ||
+      fail "$rel does not include the entry.md of payload $version"
     out="$BATS_TEST_TMPDIR/block-$(basename "$rel").md"
     _render_peer "$rel" > "$out" || fail "$rel does not render"
     _block_body "$out" > "$BATS_TEST_TMPDIR/body.md"
