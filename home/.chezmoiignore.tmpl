@@ -50,6 +50,7 @@ link-powershell-profile.ps1
 .local/bin/set-openssh-default-shell.ps1
 .local/bin/repair-git-bash-aslr.ps1
 .local/bin/coderabbit-critique.cmd
+.local/bin/coderabbit-authoring-review.cmd
 .local/bin/idd-critique-telemetry.cmd
 .local/bin/idd-critique-telemetry-report.cmd
 {{- end }}
@@ -71,7 +72,10 @@ Library/LaunchAgents/**
 {{- if eq $coderabbitMode "off" }}
 .local/bin/coderabbit-critique
 .local/bin/coderabbit-critique.ps1
+.local/bin/coderabbit-authoring-review
+.local/bin/coderabbit-authoring-review.ps1
 {{-   if eq .chezmoi.os "windows" }}
 .local/bin/coderabbit-critique.cmd
+.local/bin/coderabbit-authoring-review.cmd
 {{-   end }}
 {{- end }}
