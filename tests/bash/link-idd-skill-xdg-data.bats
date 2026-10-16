@@ -95,6 +95,42 @@ write_deployed_payload() {
   [ ! -e "$HOME/.local/share/idd-skill/0.16.0/idd-skill" ]
 }
 
+@test "no-ops when XDG_DATA_HOME is a link to the deployed data root (no self-link)" {
+  write_deployed_payload
+  ln -s "$HOME/.local/share/idd-skill" "$BATS_TEST_TMPDIR/alias-root"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/alias-root"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output ""
+  [ ! -e "$HOME/.local/share/idd-skill/idd-skill" ]
+}
+
+@test "no-ops when XDG_DATA_HOME is a link into the deployed tree (no self-link)" {
+  write_deployed_payload
+  ln -s "$HOME/.local/share/idd-skill/0.16.0" "$BATS_TEST_TMPDIR/alias-inner"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/alias-inner"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output ""
+  [ ! -e "$HOME/.local/share/idd-skill/0.16.0/idd-skill" ]
+}
+
+@test "no-ops when XDG_DATA_HOME is a missing child of a link into the deployed tree" {
+  write_deployed_payload
+  ln -s "$HOME/.local/share/idd-skill" "$BATS_TEST_TMPDIR/alias-missing"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/alias-missing/sub"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output ""
+  [ ! -e "$HOME/.local/share/idd-skill/sub" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is a relative path" {
   write_deployed_payload
   export XDG_DATA_HOME="relative/data"
@@ -204,9 +240,10 @@ write_deployed_payload() {
     /^\{\{- end \}\}/ { block = "" }
     /^83-link-idd-skill-xdg-data\.sh$/ { print "sh:" block }
     /^83-link-idd-skill-xdg-data\.ps1$/ { print "ps1:" block }
+    /^\.local\/share\/idd-skill\/current$/ { print "current:" block }
   ' "$ignore_file"
   assert_success
-  assert_output "$(printf 'sh:windows\nps1:other')"
+  assert_output "$(printf 'sh:windows\ncurrent:windows\nps1:other')"
 }
 
 @test "rendered ignore list on this host excludes the 83 .ps1 and keeps the 83 .sh" {
@@ -219,4 +256,5 @@ write_deployed_payload() {
   assert_success
   assert_line '83-link-idd-skill-xdg-data.ps1'
   refute_line '83-link-idd-skill-xdg-data.sh'
+  refute_line '.local/share/idd-skill/current'
 }

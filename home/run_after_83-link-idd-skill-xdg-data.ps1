@@ -18,28 +18,33 @@ $ErrorActionPreference = 'Stop'
 $defaultDataHome = Join-Path (Join-Path $HOME '.local') 'share'
 $rendered = Join-Path $defaultDataHome 'idd-skill'
 
-# Trim surrounding whitespace and trailing separators before the qualified-root
-# test. The trailing-separator strip mirrors the installer's path normalization.
-$xdgDataHome = ([string]$env:XDG_DATA_HOME).Trim().TrimEnd('\', '/')
-
 # The qualified-root rule of isQualifiedConfigRoot in upstream
 # src/scripts/idd-config.mts: on Windows a drive-absolute path or a UNC path;
-# elsewhere an absolute path that does not start with //. The installer itself
-# refuses Windows, so the Windows branch only decides whether this link is made.
+# elsewhere an absolute path that does not start with //. The value is trimmed
+# first, as the installer does. The installer itself refuses Windows, so the
+# Windows branch only decides whether this link is made.
+$raw = ([string]$env:XDG_DATA_HOME).Trim()
 $onWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
 if ($onWindows) {
-  $qualified = ($xdgDataHome -match '^[A-Za-z]:[\\/]') -or $xdgDataHome.StartsWith('\\')
+  $qualified = ($raw -match '^[A-Za-z]:[\\/]') -or $raw.StartsWith('\\')
 } else {
-  $qualified = $xdgDataHome.StartsWith('/') -and -not $xdgDataHome.StartsWith('//')
+  $qualified = $raw.StartsWith('/') -and -not $raw.StartsWith('//')
 }
 if (-not $qualified) { exit 0 }
+
+# Normalize with GetFullPath, then drop trailing separators from a non-root
+# path only: a drive root such as D:\ keeps its separator, as upstream accepts it.
+$xdgDataHome = [System.IO.Path]::GetFullPath($raw)
+if ($xdgDataHome -ne [System.IO.Path]::GetPathRoot($xdgDataHome)) {
+  $xdgDataHome = $xdgDataHome.TrimEnd('\', '/')
+}
 
 # Compare canonical full paths, so a forward-slash or differently cased spelling
 # of the same directory counts as the same directory.
 $separator = [System.IO.Path]::DirectorySeparatorChar
 $canonDefault = [System.IO.Path]::GetFullPath($defaultDataHome).TrimEnd('\', '/')
 $canonRendered = [System.IO.Path]::GetFullPath($rendered).TrimEnd('\', '/')
-$canonXdg = [System.IO.Path]::GetFullPath($xdgDataHome).TrimEnd('\', '/')
+$canonXdg = $xdgDataHome
 $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
 
 if ($canonXdg.Equals($canonDefault, $ignoreCase)) { exit 0 }

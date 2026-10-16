@@ -23,13 +23,25 @@ exec </dev/null
 default_data_home="${HOME}/.local/share"
 rendered="${default_data_home}/idd-skill"
 
+# The physical (symlink-resolved) form of a path. The longest existing ancestor
+# is resolved, and the components below it are appended, so an alias that
+# points into the deployed tree is seen through even when the root itself does
+# not exist yet.
+physical_path() {
+  local p="$1" tail="" dir
+  while [ ! -d "${p}" ]; do
+    tail="/$(basename "${p}")${tail}"
+    p="$(dirname "${p}")"
+  done
+  dir="$(cd -P "${p}" && pwd -P)"
+  printf '%s%s' "${dir}" "${tail}"
+}
+
 # Trim surrounding whitespace, then keep only a qualified root (the rule of
 # isQualifiedConfigRoot in upstream src/scripts/idd-config.mts). The trailing
-# slash strip mirrors the installer's path normalization, so an equal path
-# compares equal to the default below. It also turns a bare "/" into an empty
-# value, which is refused here; the installer would accept it, but a data root at
-# the filesystem root is not a practical case.
-xdg_data_home="$(printf '%s' "${XDG_DATA_HOME:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's#/*$##')"
+# slash strip mirrors the installer's path normalization, but it keeps a lone
+# "/" as it is, so a filesystem-root setting is qualified here as it is upstream.
+xdg_data_home="$(printf '%s' "${XDG_DATA_HOME:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's#\(.\)/*$#\1#')"
 case "${xdg_data_home}" in
   /*) ;;
   *) exit 0 ;;
@@ -38,25 +50,27 @@ case "${xdg_data_home}" in
   //*) exit 0 ;;
 esac
 
-# The same directory as the deployed default (a string match, or the same file
-# through a link), so there is nothing to bridge.
-if [ "${xdg_data_home}" = "${default_data_home}" ] || [ "${xdg_data_home}" -ef "${default_data_home}" ]; then
-  exit 0
-fi
-
-# Inside the deployed tree itself: a link there would point back at its own parent.
-case "${xdg_data_home}/" in
-  "${rendered}/"*) exit 0 ;;
-esac
-
 if [ ! -d "${rendered}" ]; then
   exit 0
 fi
 
-target="${xdg_data_home}/idd-skill"
+# Refuse when the root is the default directory, or is the deployed tree or
+# something inside it, under any alias. Comparing physical paths covers both
+# plain spellings and symlinks; a link there would point back into the payload.
+rendered_physical="$(physical_path "${rendered}")"
+xdg_physical="$(physical_path "${xdg_data_home}")"
+default_physical="$(physical_path "${default_data_home}")"
+if [ "${xdg_physical}" = "${default_physical}" ]; then
+  exit 0
+fi
+case "${xdg_physical}/" in
+  "${rendered_physical}/"*) exit 0 ;;
+esac
+
+target="${xdg_data_home%/}/idd-skill"
 
 if [ -L "${target}" ]; then
-  if [ "${target}" -ef "${rendered}" ] || [ "$(readlink "${target}")" = "${rendered}" ]; then
+  if [ "$(readlink "${target}")" = "${rendered}" ] || [ "${target}" -ef "${rendered}" ]; then
     exit 0
   fi
   echo "idd-skill data: ${target} is a symlink to a different target; not overwriting." >&2
