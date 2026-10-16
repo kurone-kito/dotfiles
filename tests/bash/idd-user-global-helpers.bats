@@ -83,6 +83,26 @@ run_without_npx() {
   run --separate-stderr env -i PATH="$BATS_TEST_TMPDIR/bare-bin" /bin/sh "$BATS_TEST_TMPDIR/bare-bin/$name" "$@"
 }
 
+# A stand-in node for the Node.js floor probe. The probe reads
+# process.versions.node, so substitute FAKE_NODE_VERSION into the probe and
+# evaluate it with the real node. The wrapper's own expression then decides.
+# Shell builtins only: the test PATH holds no sed.
+make_versioned_node() {
+  mkdir -p "$1"
+  cat > "$1/node" <<'NODE'
+#!/bin/sh
+if [ "$1" = "-v" ]; then echo "v$FAKE_NODE_VERSION"; exit 0; fi
+case "$2" in
+  *process.versions.node*) ;;
+  *) exit 1 ;;
+esac
+pre=${2%%process.versions.node*}
+post=${2#*process.versions.node}
+exec "$REAL_NODE" -e "$pre'$FAKE_NODE_VERSION'$post"
+NODE
+  chmod +x "$1/node"
+}
+
 @test "executable_idd-activation pins upstream commit e4d425ee" {
   assert_file_contains "$BIN_DIR/executable_idd-activation" "$UPSTREAM_COMMIT"
 }
@@ -155,4 +175,35 @@ run_without_npx() {
   assert_failure
   assert_output ''
   assert_stderr --partial 'needs Node.js 22.23.2+, 24.2.0+, or 26+ (found: v20.11.0)'
+}
+
+@test "the Node.js floor accepts 22.23.2, 24.2.0 and 26 and rejects the boundaries below" {
+  local name v fake_bin="$BATS_TEST_TMPDIR/boundary-bin" real_node
+  real_node="$(command -v node || true)"
+  if [ -z "$real_node" ]; then
+    echo "node is required to evaluate the Node.js floor probe" >&2
+    return 1
+  fi
+  make_versioned_node "$fake_bin"
+  printf '#!/bin/sh\nexit 0\n' > "$fake_bin/npx"
+  chmod +x "$fake_bin/npx"
+  ln -sf "$BIN_DIR/executable_idd-activation" "$fake_bin/idd-activation"
+  ln -sf "$BIN_DIR/executable_idd-effective-config" "$fake_bin/idd-effective-config"
+
+  for name in idd-activation idd-effective-config; do
+    for v in 22.23.2 22.23.3 24.2.0 24.21.0 26.0.0; do
+      run --separate-stderr env -i PATH="$fake_bin" REAL_NODE="$real_node" FAKE_NODE_VERSION="$v" /bin/sh "$fake_bin/$name"
+      if [ "$status" -ne 0 ]; then
+        echo "$name: Node $v should pass the floor (status $status): $stderr" >&2
+        return 1
+      fi
+    done
+    for v in 22.23.1 22.18.0 23.11.0 24.1.9 25.0.0 20.11.0; do
+      run --separate-stderr env -i PATH="$fake_bin" REAL_NODE="$real_node" FAKE_NODE_VERSION="$v" /bin/sh "$fake_bin/$name"
+      if [ "$status" -eq 0 ] || [[ "$stderr" != *'needs Node.js'* ]]; then
+        echo "$name: Node $v should be rejected (status $status): $stderr" >&2
+        return 1
+      fi
+    done
+  done
 }

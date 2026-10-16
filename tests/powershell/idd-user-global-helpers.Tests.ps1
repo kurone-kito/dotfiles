@@ -69,4 +69,24 @@ Describe 'user-global IDD activation helper twins' {
     $exitCode | Should -Be 1
     ($output | Out-String) | Should -Match 'needs Node.js 22.23.2\+, 24.2.0\+, or 26\+'
   }
+
+  It 'the Node.js floor probe accepts 22.23.2, 24.2.0 and 26 and rejects the boundaries below' {
+    Get-Command node -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty -Because 'node is needed to evaluate the floor probe'
+    foreach ($twin in $script:Twins) {
+      # Take the probe from the twin itself, so the test checks the shipped expression.
+      $line = Get-Content -LiteralPath (Join-Path $script:BinDir $twin) | Where-Object { $_ -match '^& node -e ".*" 2>\$null$' } | Select-Object -First 1
+      $line | Should -Not -BeNullOrEmpty -Because "$twin must carry the floor probe"
+      $js = [regex]::Match($line, '^& node -e "(.*)" 2>\$null$').Groups[1].Value
+      foreach ($version in @('22.23.2', '22.23.3', '24.2.0', '24.21.0', '26.0.0')) {
+        $probe = $js.Replace('process.versions.node', "'$version'")
+        & node -e $probe 2>$null
+        $LASTEXITCODE | Should -Be 0 -Because "$twin accepts Node $version"
+      }
+      foreach ($version in @('22.23.1', '22.18.0', '23.11.0', '24.1.9', '25.0.0', '20.11.0')) {
+        $probe = $js.Replace('process.versions.node', "'$version'")
+        & node -e $probe 2>$null
+        $LASTEXITCODE | Should -Be 1 -Because "$twin rejects Node $version"
+      }
+    }
+  }
 }
