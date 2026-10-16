@@ -127,11 +127,11 @@ they are during a re-import:
   section of `home/.chezmoitemplates/opencode-compact-instructions`, and only the
   compact render carries it. The section runs `idd-activation` from the
   repository directory, falls back to `~/.local/bin/idd-activation` when `PATH`
-  lacks it (on Windows, `~/.local/bin/idd-activation.cmd`), and opens `.github/instructions/idd-overview-core.instructions.md`
-  under the reported `instructionsRoot` only when `active` is `true`. Where a
-  lite file exists for the phase,
-  it reads `.github/instructions/lite/idd-<phase>-lite.instructions.md` under that
-  root instead of the standard phase file. This repository adds no
+  lacks it (on Windows, `~/.local/bin/idd-activation.cmd`). When `active` is
+  `true`, it reads the lite file for the phase under the reported
+  `instructionsRoot` when that file exists, and otherwise opens
+  `.github/instructions/idd-overview-core.instructions.md` under that root. This
+  repository adds no
   `opencode.json` source, because a second `instructions` entry would load the
   activation entry twice.
 - The repo-local IDD corpus (`.github/instructions/`, `.claude/skills/`,
