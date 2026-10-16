@@ -55,10 +55,11 @@ file, so it is not wired. Grok Build reads the Claude file through its
 `[compat.claude]` layer, but whether Grok follows the `@` import inside that
 file is not verified. The link line and the deployment note sit outside the
 managed block, so uninstalling the payload leaves them behind. The installer
-also writes OpenCode's
-`opencode.json` instructions when OpenCode is selected, which is its default.
-Extended OpenCode users should run the installer with `--harness claude,codex`
-so the entry is not loaded twice.
+also writes OpenCode's `opencode.json` instructions when OpenCode is selected,
+which is its default, and for extended OpenCode users that loads the entry
+twice. This setup does not run the installer against the live home. Only an
+isolated staging run of the installer should pass `--harness claude,codex`,
+which leaves `opencode.json` unwritten.
 
 **Precedence rule**: project-level instructions always take
 precedence over the user-global file. Each shared-template body opens
