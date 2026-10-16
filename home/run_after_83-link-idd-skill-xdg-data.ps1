@@ -33,12 +33,13 @@ $version = '0.16.0'
 # The physical form of a path, as the OS resolves it: each symbolic link or
 # junction on the way is followed, and the rest of the path is appended to its
 # target. A relative target is taken from the link's own directory; a rooted
-# target without a drive, such as \Users\x, is on the drive of the link. A ".."
-# after a link goes to the parent of the link's target. PowerShell 5.1 reports a
-# share target as UNC\server\share, which is read back as \\server\share. A
-# volume mount point (a Volume{GUID} target) is not followed. Returns $null past
-# 16 links. Other aliases, such as subst drives and UNC administrative shares,
-# are not resolved.
+# target without a drive, such as \Users\x, is on the drive of the link. On
+# POSIX a ".." after a link goes to the parent of the link's target; on Windows
+# ".." is collapsed lexically before the walk, as the Win32 path APIs do.
+# PowerShell 5.1 reports a share target as UNC\server\share, which is read back
+# as \\server\share. A volume mount point (a Volume{GUID} target) is not
+# followed. Returns $null past 16 links. Other aliases, such as subst drives and
+# UNC administrative shares, are not resolved.
 function script:Get-PhysicalPath([string]$path, [int]$depth = 0) {
   if ($depth -gt 16) { return $null }
   # On Windows, GetFullPath expands an 8.3 short name to its long form (for a
