@@ -118,9 +118,11 @@ input line editing
 
 ### CodeRabbit critique delegate
 
-The user-global CodeRabbit critique delegate is off by default: a machine that
-applies this repository deploys no `coderabbit-critique` launcher until you opt
-in, because the delegate may send branch diffs to CodeRabbit. Enable it, and
+The user-global CodeRabbit critique delegate and the issue-authoring draft
+reviewer are off by default: a machine that applies this repository deploys
+no `coderabbit-critique` or `coderabbit-authoring-review` launcher until you opt
+in, because the delegate may send branch diffs and the draft reviewer may send
+issue drafts to CodeRabbit. Enable it, and
 choose a review depth, from chezmoi with this configuration:
 
 ```toml

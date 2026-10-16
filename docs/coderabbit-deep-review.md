@@ -10,6 +10,8 @@ The CodeRabbit critique delegate is **off by default**. A machine that applies
 this repository deploys no `coderabbit-critique` launcher and wires no
 user-global `critiqueLoop.delegate` until the operator opts in, because the
 delegate may send the current branch diff to CodeRabbit, an external service.
+The same opt-in also enables the issue-authoring draft reviewer, which may send
+a finished issue draft.
 
 ## Enable it
 
@@ -37,6 +39,19 @@ timeout, fallback behavior, or machine-level persistence. The
 `critiqueLoop.telemetryHook` in the same file is a separate observability sink
 and is rendered in every mode.
 
+## Issue-authoring draft reviewer
+
+`true`, `"lite"` and `"deep"` also deploy `coderabbit-authoring-review`,
+`coderabbit-authoring-review.ps1` and, on Windows,
+`coderabbit-authoring-review.cmd`, and render
+`issueAuthoring.adversarialReview.delegate` (`mode: "combined"`) in
+`~/.config/idd-skill/config.json`. The draft reviewer sends one finished issue
+draft (its title, body and packet) to CodeRabbit, not a branch diff. It commits
+the draft in a temporary repository outside your checkout, runs the review
+there, and removes that repository afterwards unless it no longer matches what
+the launcher created. A failed or timed-out review fails closed with empty
+output, and the native issue-authoring reviewer still runs.
+
 ## Disable it
 
 Set `review = false` (it wins over the deprecated `deepReview`) or remove both
@@ -52,11 +67,11 @@ Launchers that an earlier apply already deployed are **not** removed
 automatically. Chezmoi only stops managing a path it now ignores, so delete
 them by hand if you want them gone. In POSIX shells:
 
-    rm -f ~/.local/bin/coderabbit-critique ~/.local/bin/coderabbit-critique.ps1 ~/.local/bin/coderabbit-critique.cmd
+    rm -f ~/.local/bin/coderabbit-critique ~/.local/bin/coderabbit-critique.ps1 ~/.local/bin/coderabbit-critique.cmd ~/.local/bin/coderabbit-authoring-review ~/.local/bin/coderabbit-authoring-review.ps1 ~/.local/bin/coderabbit-authoring-review.cmd
 
 In PowerShell:
 
-    Remove-Item -Force -ErrorAction SilentlyContinue "$HOME/.local/bin/coderabbit-critique", "$HOME/.local/bin/coderabbit-critique.ps1", "$HOME/.local/bin/coderabbit-critique.cmd"
+    Remove-Item -Force -ErrorAction SilentlyContinue "$HOME/.local/bin/coderabbit-critique", "$HOME/.local/bin/coderabbit-critique.ps1", "$HOME/.local/bin/coderabbit-critique.cmd", "$HOME/.local/bin/coderabbit-authoring-review", "$HOME/.local/bin/coderabbit-authoring-review.ps1", "$HOME/.local/bin/coderabbit-authoring-review.cmd"
 
 ## Machines that relied on the old always-on deployment
 
