@@ -281,3 +281,24 @@ REIMPORT_LINK='docs/idd-user-global-reimport.md'
   run find "$REPO_ROOT/home" -name 'opencode.json*'
   assert_output ''
 }
+
+@test "the re-import link sits after each managed block, outside it" {
+  local rel out end_line link_line
+  _write_config '{"data":{"opencode":{"extendedInstructions":true}}}'
+  for rel in \
+    dot_claude/CLAUDE.md.tmpl \
+    dot_codex/AGENTS.md.tmpl \
+    dot_copilot/copilot-instructions.md.tmpl \
+    dot_gemini/GEMINI.md.tmpl \
+    dot_config/opencode/AGENTS.md.tmpl; do
+    out="$BATS_TEST_TMPDIR/placement-$(basename "$rel").md"
+    _render_peer "$rel" > "$out" || fail "$rel does not render"
+    end_line=$(grep -n -F '<!-- idd-skill:user-global:end -->' "$out" | head -1 | cut -d: -f1)
+    link_line=$(grep -n -F "$REIMPORT_LINK" "$out" | head -1 | cut -d: -f1)
+    [ -n "$end_line" ] && [ -n "$link_line" ] || fail "$rel lacks the block end or the link"
+    [ "$link_line" -gt "$end_line" ] || fail "$rel links the re-import procedure inside the managed block"
+    if _block_body "$out" | grep -qF "$REIMPORT_LINK"; then
+      fail "$rel puts the link inside the managed block"
+    fi
+  done
+}
