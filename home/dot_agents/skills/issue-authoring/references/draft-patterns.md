@@ -1,0 +1,842 @@
+# Draft Patterns
+
+Load this file after reading
+[`contract.md`](contract.md) when you need concrete examples or a quick
+chooser for output shapes.
+
+## Example triggers
+
+- "Break this request into IDD-ready issues before we implement
+  anything."
+- "Draft a roadmap for this feature and split the ready work."
+- "Turn this broad request into reviewable orphan issues."
+- "Check whether an existing issue should be extended instead of opening
+  a new one."
+
+## Output chooser
+
+Draft an orphan issue only when one autonomous task can finish the work
+and the target repository discovers orphans (`issue-scope:
+roadmap-first`, the default, via the orphan fallback, or
+`orphan-first`). If the repository uses `orphan-first-policy:
+maintainer-approved`, include a post-publication approval step after the
+final issue content is stable. If the repository sets `issue-scope:
+roadmap` (roadmap-only) or a public repository uses
+`orphan-first-policy: public-disabled`, draft a roadmap package instead.
+
+If the repository keeps the broader secure-by-default issue-author
+approval gate, use the same post-publication approval note whenever the
+issue author will not be self-authorizing under the repository's
+`maintainer-approval-actors` policy. The configured ready label from
+`approvalSignals.readyLabelName` (default: `idd:ready`) is accepted
+according to `approvalSignals.labelFreshnessMode` (`presence-only` by
+default, optional `event-freshness`), while standalone `IDD ready`
+comments from a maintainer approval actor must stay fresh against the
+latest issue content and generated-plan update (or an equivalent
+draft-stability signal). Until that approval condition is
+satisfied, later discovery should treat the issue as part of the
+approval-needed fallback bucket instead of the normal ready-to-start
+set.
+
+Draft a roadmap plus sub-issues when the request needs visible
+sequencing, parallel tracks, or multi-session handoff.
+
+Draft only stable non-ready buckets when the work still depends on a
+human decision, missing asset, or unclear verification. In an interactive
+session, ask first for an operator-answerable product, policy, or design
+choice, or for a missing concrete surface or objective verification, under the
+interactive rule in [Human-dependency isolation](contract.md#human-dependency-isolation),
+unless an unchanged route applies. A missing asset stays `blocked-by-human`.
+
+## Under-clarification stop rule
+
+Before drafting a `ready` issue, confirm you can name a concrete surface
+to edit and an objective verification for it. If, after bounded
+clarification, you still cannot, route the candidate to `needs-decision`,
+or for an interactive choice ask first under the interactive rule in
+[Human-dependency isolation](contract.md#human-dependency-isolation) — do not
+publish a confidently-vague `ready` issue. Reliability over speed.
+
+This is an Intake-phase gate on your own confidence, not a wording
+judgment on an already-written draft — it is distinct from the
+"Under-specified" band in the next section, which assesses a body that
+has already been drafted.
+
+**Example**: "Improve the error handling in the API layer" fails this
+check — no concrete surface, no objective verification — even before
+you consider how detailed to write the body. Ask which endpoint or
+module, and what the observable failure mode is, under the interactive rule
+(or route the request to `needs-decision` in a session that is not
+interactive) instead of guessing at a plausible-sounding scope.
+
+## Specificity target
+
+Execution-ready issue drafts should land in a middle band:
+
+- **Under-specified**: a high-range model still has to infer the real
+  implementation shape because the issue names only a vague goal,
+  omits the likely surface to edit, or leaves verification too loose.
+- **Target range**: a solid mid-tier cloud model can hold a stable plan
+  without extra clarification. The issue points at the relevant
+  document, schema, or code surface, explains the constraint, and keeps
+  acceptance criteria verifiable without dictating every edit.
+- **Over-specified**: even a lightweight model could follow the issue as
+  a script because the body prescribes exact edit order, wording, or
+  implementation steps that reviewers do not need.
+
+If a draft feels like it needs a high-range model just to guess the intended
+change, it is still too vague. If it reads like line-by-line assembly
+instructions, it is too detailed.
+
+## Specificity checklist before publishing
+
+Before you publish a ready issue, confirm:
+
+- the title and background name the concrete artifact or surface that
+  should change
+- a mid-tier cloud model could choose a stable implementation direction
+  without hidden repository archaeology or a follow-up clarification loop
+- the acceptance criteria verify the outcome, not a step-by-step
+  implementation recipe
+- candidate files, examples, and notes act as cues rather than an
+  exhaustive script
+- removing one concrete detail would make the issue feel high-range-only,
+  while adding more detail would start turning it into a lightweight
+  model script
+
+## Mechanical pre-publish gate
+
+For a roadmap, child, or orphan body, run the completed-draft adversarial
+review in [contract.md](contract.md#completed-draft-adversarial-review)
+before this linter. The linter then runs on the reviewed body. A draft
+carrier body is linted, not reviewed.
+
+Before you publish a drafted **ready orphan, roadmap, or child** body,
+run the `audit-authored-issue` linter against it when a helper runtime
+is available. Before you publish a draft carrier, also run it with
+`--shape carrier` (it takes no `--expect-bucket`). It mechanically catches
+shape and marker mistakes — a
+missing or duplicated autopilot-suitability footer, a wrong
+markerPrefix, a missing required heading for the declared shape, a
+malformed dependency marker — that a confident narrative can otherwise
+mask. For the `orphan` and `child` shapes, it also runs the same A4/A4.5
+triage evaluators Discover runs later, so most viability/suitability
+failures surface here instead of only at claim time -- pass `--title`
+(or lead the draft with a `# <title>` line) so those checks can
+evaluate:
+
+```sh
+node scripts/audit-authored-issue.mjs --shape orphan \
+  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
+  --body-file draft.md
+```
+
+Before newly publishing a body into the `needs-decision` or
+`blocked-by-human` bucket instead, also run it, adding
+`--expect-bucket <needs-decision|blocked-by-human>` (choose the one
+matching value) — without it, the marker/label checks that key off
+`authoring-bucket` never fire, since a non-ready body is otherwise
+never run through this gate at all. Passing `--expect-bucket` also
+skips the ready-shape-only checks (the suitability footer and required
+headings) that a bucket body like `#431` below is never expected to
+carry, and downgrades a failing A4/A4.5 triage finding to a warning
+instead of a failure, since such a body is meant to be non-ready:
+
+```sh
+node scripts/audit-authored-issue.mjs --shape orphan \
+  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
+  --body-file draft.md \
+  --expect-bucket needs-decision \
+  --label status:authoring \
+  --label status:needs-decision
+```
+
+Pass `--expect-bucket needs-decision` and both labels in every Stage 1
+re-lint while the issue is held and the Stage 2 release-checklist lint.
+For a body with the `review-needs-decision` marker, also pass
+`--origin-issue <claimed-issue>` matching its sole `Refs` line. The
+marker check requires the configured authoring label and rejects a
+missing or mismatched expected origin. Use the target repository's
+configured label names in place of these defaults.
+
+**Always pass `--marker-prefix`** with the prefix resolved under
+[contract.md's Target marker prefix](contract.md#target-marker-prefix):
+without it, the linter falls back to reading
+`.github/idd/config.json` from the current working directory, and
+silently defaults to this source repository's own `idd-skill` prefix
+when that file is missing or unreadable — producing a false pass or
+fail against the wrong prefix instead of an error.
+
+Use `--shape roadmap` or `--shape child` for those shapes,
+`--shape carrier` for a draft carrier, `--stdin`
+instead of `--body-file` when the draft is not yet on disk, and
+`--label <name>` (repeatable) to pass proposed labels for the check
+that a suitability score of `1` carries the configured
+`blocked-by-human` label (default `status:blocked-by-human`), unless an
+`authoring-bucket: needs-decision` marker substitutes the configured
+needs-decision label instead (see
+[Authoring-bucket marker](contract.md#authoring-bucket-marker));
+use `--config <path>` to point at a policy that overrides the label
+name — this check is also one-directional, it does not flag the
+reverse, a non-`1` score paired with the label. Fix every reported
+finding and re-run before publishing; a `passed: false` report means
+the draft is not ready yet, regardless of how complete the narrative
+reads.
+
+When the proposed issue touches a file governed by the target repository's
+configured `bundleBudgets` or `instructionSizeBudgets` entries — or an
+`idd-template/` source that maps to a generated target through
+`syncPairs` (or an equivalent source-to-target mapping), including
+onboarding documents — also apply the contract's
+[context-ceiling check](contract.md#codebase-fidelity-validation) before treating
+`bundleBudgets.limitBytes` as available headroom; that limit is not the
+only constraint. Apply the same check when the proposed issue adds a bundle
+member or changes the `bundleBudgets`, `instructionSizeBudgets`, or
+`contextCeiling` policy, evaluating
+the proposed post-change memberships and limits as well as current entries.
+
+**No helper runtime available (`instructions-only` profile):** the
+linter cannot run. `instructions-only` is a first-class supported
+fallback, not a waiver — manually re-verify the same checks against
+[contract.md's Mechanical pre-publish gate](contract.md#mechanical-pre-publish-gate)
+before publishing instead. A draft carrier has no manual route: without a
+helper runtime it cannot be published (see
+[Draft carrier](contract.md#draft-carrier)).
+
+## Hidden human-dependency quick check
+
+Before you publish a `ready` issue, confirm:
+
+- the implementation does not still depend on unresolved credentials,
+  access, or unavailable infrastructure
+- unresolved product, policy, or design choices have been routed to
+  `needs-decision` instead of being buried in implementation steps, and an
+  interactive session has asked the operator first under the interactive rule
+  in [Human-dependency isolation](contract.md#human-dependency-isolation)
+- acceptance criteria use objective verification, while optional
+  post-implementation review stays optional
+- roadmap narrative does not hide human-dependent work that belongs in a
+  stable bucket or approval-needed hold
+- dependency markers represent true start blockers rather than grouping
+  related work
+
+## Codebase-fidelity quick check
+
+Before you publish a `ready` issue, confirm:
+
+- when the issue reuses an existing identifier or field name, the
+  specified value matches that name's established semantics in the
+  codebase — it does not overload a name with a new shape or source;
+  remedy: mint a new, distinctly named field instead (see
+  [contract.md's worked example](contract.md#codebase-fidelity-validation))
+- values that are mutable at runtime are flagged to specify a live read
+  at the point of use rather than a one-time capture at construction
+- when a draft changes a documented rule, its candidate-file list names
+  every restating site of the old statement, found by `git grep -n -F`;
+  remedy: see the worked example below
+
+## Rule-change candidate-file example
+
+A rule change names the code and the main paragraph, then adds each
+restating site the search finds. Two phrases of the old statement are
+selected here. The first is "measured from the head"; the same command
+runs again for the second phrase, and the hits of both are merged:
+
+```text
+git grep -n -F "measured from the head" -- docs idd-template .github \
+  schemas skills src tests AGENTS.md CLAUDE.md GEMINI.md \
+  .github/copilot-instructions.md
+```
+
+Its hits become the candidate-file list:
+
+- `src/scripts/example-deadline.mts` (the code)
+- `docs/policy-constants.md` (the main paragraph)
+- `docs/example-helper-reference.md` (restating site: the helper reference
+  still gives the old anchor)
+- `schemas/example.schema.json` (restating site: the description still
+  gives the old anchor)
+
+## Gate-rule verdict table example
+
+A gate rule change adds one table to the acceptance criteria. This one
+shows the shape for the cited-item disposition rule (issue
+`kurone-kito/idd-skill#3942`) and includes the cases that the incidents
+needed. It is not the rule's full case list:
+
+```markdown
+## Acceptance criteria
+
+| Input                                                                                                            | Expected verdict                                                                      | Source decision                                                         |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Suppressed item names a file or line; stamped **Accepted** by a trusted login, posted after the review           | Counts as a disposition                                                               | `kurone-kito/idd-skill#3942` cited-item rule                            |
+| Same item; stamped **Rejected** with no file or line evidence, not in the recorded deferral form                 | Does not count; gate stays open                                                       | PR `kurone-kito/idd-skill#4000` maintainer decision, 2026-10-11         |
+| Same item; stamped **Rejected** naming the file or line as evidence                                              | Counts (commit `kurone-kito/idd-skill@dd807f91b`)                                     | PR `kurone-kito/idd-skill#4000` maintainer decision, 2026-10-11         |
+| Same item; stamped recorded deferral, **Rejected** — deferred to follow-up issue `#<n>` (`<clause>`): `<reason>` | Counts, with or without file or line evidence                                         | `countCitedItemDispositions` deferral form (`review-clause.mts`)        |
+| Same item; reply edited after it was posted                                                                      | Does not count                                                                        | `countCitedItemDispositions` edit check (`review-clause.mts`)           |
+| Same item; reply from a login outside the trusted set                                                            | Does not count                                                                        | `countCitedItemDispositions` trusted-login check (`review-clause.mts`)  |
+| Same item; reply without a review-reply stamp                                                                    | Does not count                                                                        | `countCitedItemDispositions` stamp check (`review-clause.mts`)          |
+| Same item; reply with a review-reply stamp under another prefix                                                  | Counts; the stamp check accepts any prefix                                            | `countCitedItemDispositions` stamp check (`review-clause.mts`)          |
+| Same item; disposition posted in the same second as the review                                                   | Does not count                                                                        | `countCitedItemDispositions` strictly-after check (`review-clause.mts`) |
+| Same item; review submission timestamp does not parse                                                            | Counts zero dispositions (fails closed)                                               | `countCitedItemDispositions` timestamp check (`review-clause.mts`)      |
+| Same item; reply creation timestamp does not parse                                                               | Does not count                                                                        | `countCitedItemDispositions` timestamp check (`review-clause.mts`)      |
+| Per-item view empty or count-mismatched                                                                          | Fails closed: every item counts as cited (commit `kurone-kito/idd-skill@8666020ea`)   | `citationBreakdown` (`copilot-review-body.mts`)                         |
+| Suppressed item names no file or line; trusted review-ack after the review                                       | Covered by the ack                                                                    | `ackCoversSuppressedFindings` (`review-clause.mts`)                     |
+| Suppressed count is zero                                                                                         | Suppressed-findings clause satisfied without a reply; item-count clause still applies | `suppressedClauseSatisfied` (`advisory-convergence.mts`)                |
+```
+
+Each row is one input case. A case that the table omits is a gap to add
+before the issue is published.
+
+## Destructive operations example
+
+An uninstall that removes only what its install recorded adds one table to
+the acceptance criteria. Each row is one case of the
+[Destructive operations](contract.md#destructive-operations) section. The
+Source decision column names the case and the incident behind it, and a case
+with no observed incident is marked preventive:
+
+```markdown
+## Acceptance criteria
+
+| Input                                                                                                                            | Expected verdict                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Source decision                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| A file the install did not record was already at a managed path before the install, and it is byte-identical to the payload file | Uninstall leaves the file in place; the install never records it as its own                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Destructive operations case 1 (PR `kurone-kito/idd-skill#4073`, comment 4249375122)                       |
+| The user added a file beside the managed files, or edited a payload file after the install                                       | Uninstall refuses, reports the file, and removes nothing; the file survives                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Destructive operations case 2 (PR `kurone-kito/idd-skill#4073`, review thread on the full-uninstall path) |
+| The install meets an existing file at a managed path that the install did not create                                             | Install does not replace it; a wanted overwrite is an open question for operator approval                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Destructive operations case 3 (preventive; no observed incident yet)                                      |
+| A component of the managed path is a symbolic link, or a path component does not exist yet                                       | Each existing component of the target path below the root is checked with a no-follow stat before the first write or removal; a symlinked parent below the root is refused; a missing component is created only after the existing ones above it are checked; the final component is written with a no-follow open, so a write to a final-component link is refused, and a removed link is unlinked, not followed; a multiply-linked file is not written; a window the platform cannot close is an open risk the body states for the operator to accept; uninstall does not follow the link | Destructive operations case 4 (PR `kurone-kito/idd-skill#4073`, comment 4249375009)                       |
+| A recorded directory contains a symbolic link                                                                                    | Uninstall removes the link itself and does not descend through it; it refuses, removing nothing, if any path it would remove lies outside the root                                                                                                                                                                                                                                                                                                                                                                                                                                          | Destructive operations case 5 (preventive; no observed incident yet)                                      |
+| A symbolic link under the data root points outside it, and the operation writes or removes through the managed path              | Nothing outside the root is written or removed, including through a link the install created itself; a write or removal through a symlinked parent below the root is refused                                                                                                                                                                                                                                                                                                                                                                                                                | Destructive operations case 6 (PR `kurone-kito/idd-skill#4073`, comment 4249375009)                       |
+```
+
+## Example orphan issue
+
+- `## Background` or `## Goal`
+- `## Proposed change`
+- `## Acceptance criteria`
+- optional `## Candidate files` — see
+  [contract.md's Candidate files format](contract.md#candidate-files-format)
+  for the exact parse contract before populating it
+- an autopilot-suitability footer at the end of the body (visible
+  line + `<!-- <marker-prefix>-autopilot-suitability: N -->` marker)
+
+Use this shape when the work is narrow enough to pass the IDD viability
+gate on its own and the target repository can actually discover orphan
+issues (`issue-scope: roadmap-first`, the default, via the orphan
+fallback, or `orphan-first`). If the repository sets
+`issue-scope: roadmap` (roadmap-only), prefer a one-item roadmap package
+instead of publishing a standalone orphan issue.
+
+## Review-needs-decision follow-up example
+
+This body waits for a person's decision on a review finding. Replace the
+example issue and review-comment references with the claimed issue and
+the source comment; when an E10, Tier 2, or Tier 3 finding triggered the
+deferral, link the comment that states the stop.
+
+```markdown
+## Background
+
+The review identified an unresolved choice about how this behavior
+should work. See the [source review comment](https://github.com/example/project/pull/42#discussion_r123).
+
+## Decision needed
+
+Should the caller receive a retryable error, or should the operation
+wait for an explicit recovery action?
+
+## Options
+
+- **Recommended: return a retryable error.** This keeps the API
+  responsive, with the cost that callers must handle a new error case.
+- **Wait for recovery.** This keeps the caller path simple, with the
+  cost that requests can remain open indefinitely.
+
+## Open questions
+
+- Which client behavior should the API promise for existing callers?
+
+## Candidate files
+
+- `src/api/operation.mts`
+
+<!-- idd-skill-authoring-defer-source: review-needs-decision -->
+
+Refs #123
+Blocked by #123
+
+_Autopilot suitability: 1 / 5 -- higher is more autopilot-suitable; below the configured floor is human-oriented._
+
+<!-- idd-skill-autopilot-suitability: 1 -->
+<!-- idd-skill-authoring-bucket: needs-decision -->
+```
+
+Keep review text paraphrased or inside a fenced code block. A quoted
+line outside a fence must not begin with `Refs`, `Blocked by`, or
+`Depends on`, and a quoted HTML marker stays inside a fence so Discover
+does not mistake it for a live marker. These warnings are preventive; no
+observed incident yet. The mechanical gate requires the marker, matching
+`--origin-issue`, sole `Refs` origin, needs-decision bucket marker, and
+both configured labels; the completed-draft review checks these five
+headings because `--expect-bucket` does not lint headings for a non-ready
+body.
+
+## Example roadmap package
+
+Roadmap issue:
+
+- `## Goal`
+- `## Background` or `## Why this matters`
+- `## Tracks`
+- `## Success criteria`
+- one `<!-- <marker-prefix>-roadmap-id: ... -->` marker
+- an autopilot-suitability footer at the end of the body
+
+Child issue:
+
+- title with a concrete task summary
+- `## Background`
+- `## Proposed change`
+- `## Acceptance criteria`
+- `## Candidate files`
+- optional dependency line or sequential roadmap marker when needed
+- an autopilot-suitability footer at the end of the body
+
+Keep ready child issues in the roadmap task list rather than grouping
+them with hidden dependency markers.
+
+## Nested roadmap chooser note
+
+Use a nested roadmap when one roadmap track needs its own coordination
+boundary, active child list, or multi-session handoff. Keep the parent
+roadmap pointing to the nested roadmap, and keep the nested roadmap
+pointing to the leaf execution issues it coordinates.
+
+Parent roadmap `## Tracks` excerpt:
+
+```md
+- [ ] #510 — backend track roadmap
+```
+
+Nested roadmap `#510` `## Tracks` excerpt:
+
+```md
+- [ ] #511 — define the backend contract
+- [ ] #512 — wire the contract into Discover
+```
+
+Treat `#510` as a coordination/audit node, not as a normal execution
+issue. Do not replace that relationship with `Blocked by #NNN` or
+`<!-- <marker-prefix>-blocked-by: ... -->` only to group the leaf
+issues under the parent roadmap.
+
+## Dependency minimization examples
+
+### Natural parallel decomposition
+
+Roadmap `## Tracks` excerpt:
+
+```md
+- [ ] #401 — update the issue-authoring contract
+- [ ] #402 — add draft-pattern examples
+
+_Parallel note: #401 and #402 can proceed independently once the roadmap
+exists because neither task depends on the other's output._
+```
+
+This is the preferred shape for sibling tasks that can be reviewed and
+verified independently. The roadmap keeps both tasks visible in its task
+list, and the short note explains the safe parallelism without adding a
+fake `Blocked by` edge.
+
+**Caveat — shared CI check definitions.** File-disjoint tracks are not
+automatically execution-order-independent: if one track edits a shared
+CI check's own workflow _definition_ (e.g. a `.yml` file), any other
+in-flight track whose CI run relies on that check inherits a hidden
+ordering dependency, even though the tracks' own edited files never
+overlap. `gh run rerun` reuses the original event's workflow definition,
+so a fix merged to the base branch on a sibling track stays invisible to
+a rerun until a new event (a branch-sync merge of the base branch, or
+reopening the PR) picks it up (see
+`.github/instructions/idd-ci.instructions.md`'s Rerun
+mechanics). Observed 2026-10-05 in a private adopter and reproduced on
+2026-10-09 (issue `#3859`). Note this dependency in the roadmap's
+parallel note rather than assuming disjoint files always mean safe
+parallelism.
+
+### Artificial decomposition
+
+Bad serial chain:
+
+```md
+#401 — update the issue-authoring contract
+#402 — add draft-pattern examples
+
+Blocked by #401
+```
+
+This is over-serialized when `#402` can be reviewed and verified without
+waiting for `#401`. Do not create a serial chain just to make the order
+feel tidy.
+
+Bad split for parallelism:
+
+```md
+#410 — add one checklist bullet
+#411 — add one example paragraph
+#412 — add one anti-pattern sentence
+```
+
+This is an artificial split when the three edits form one natural,
+cohesive authoring change. Do not break a single reviewable task into
+multiple sibling issues only to widen parallel execution.
+
+### Finalize or verify track that asserts sibling-produced state
+
+Anti-pattern — prose sequencing only:
+
+```md
+#450 — finalize the config, reconcile the docs, verify the combined result
+
+Blocked by #440
+
+_Runs after the wiring tracks #441-#445._
+```
+
+The hard `Blocked by #440` names only the build foundation, and the
+after-the-siblings ordering lives in prose. Once `#440` closes, Discover
+reports `#450` startable and A4.5 passes it (Actionability inspects the body,
+not completability) — but its acceptance criteria assert state that only the
+unmerged `#441`–`#445` produce, so claiming it means failing acceptance or
+doing the siblings' work.
+
+Correct — encode `Blocked by` on each sibling whose output the acceptance
+criteria depend on:
+
+```md
+#450 — finalize the config, reconcile the docs, verify the combined result
+
+Blocked by #440
+Blocked by #441
+Blocked by #442
+Blocked by #443
+Blocked by #444
+Blocked by #445
+```
+
+Now Discover and A4.5 defer `#450` until every sibling merges, so it is
+claimed only when its acceptance criteria can actually pass.
+
+**Prefix-first**: resolve `<marker-prefix>` from the target repository's
+onboarding or IDD docs before emitting any of these markers —
+`roadmap-id`, `blocked-by`, `autopilot-suitability`, or `effort` — not
+just the dependency markers shown above. Never default to `idd-skill`
+in an installed bundle; use it only when the target repository actually
+configured that prefix.
+
+## Human-dependency isolation examples
+
+The examples below show how to move unavoidable human side effects to
+explicit boundaries rather than hiding them inside a ready execution
+issue. See [`contract.md`](contract.md) for the routing rules
+(`needs-decision`, `blocked-by-human`, `deferred`, approval-needed).
+
+### Front-loaded pattern
+
+Use this when coding cannot start safely until a person provides a
+decision, credential, permission, or external setup.
+
+**Bad (mixed)**: One execution issue that mixes implementation with an
+unresolved credential gap:
+
+```md
+## Background
+
+Add Stripe webhook support.
+
+## Proposed change
+
+Implement the `/api/webhooks/stripe` endpoint.
+
+## Acceptance criteria
+
+- Stripe webhook secret is configured in production.
+- Endpoint returns 200 for valid events.
+```
+
+This fails the IDD viability gate: the "Stripe webhook secret is
+configured in production" criterion requires a person to perform an
+action in an external system before the issue can be verified. The agent
+cannot autonomously confirm the outcome.
+
+**Good (front-loaded)**: Separate the human-dependent setup into its own
+issue, then write the autonomous implementation issue that depends on it.
+The `## Tracks` task list should contain only ready execution issues;
+route the non-ready blocker to a separate section or a stable non-ready
+bucket.
+
+Roadmap body excerpt:
+
+```md
+## Non-ready prerequisites
+
+- **[blocked-by-human]** #431 — obtain Stripe webhook secret for CI
+  _(must close before #432 can start)_
+
+## Tracks
+
+- [ ] #432 — implement /api/webhooks/stripe endpoint
+```
+
+`#431` — `blocked-by-human` issue:
+
+```md
+## Background
+
+The Stripe webhook endpoint (tracked in #432) needs a test-mode webhook
+secret in CI so automated tests can verify the signature check.
+
+## Required action
+
+1. Create a test-mode Stripe webhook in the Stripe dashboard.
+2. Store the signing secret in the `STRIPE_WEBHOOK_SECRET` repository
+   secret.
+3. Reply on this issue with the secret name once added.
+
+## Ready signal
+
+Close this issue after confirming the secret is available in CI.
+
+<!-- {marker-prefix}-authoring-bucket: blocked-by-human -->
+```
+
+`#432` — autonomous execution issue (Blocked by #431):
+
+```md
+## Background
+
+Parent roadmap: #430
+Blocked by #431
+
+## Proposed change
+
+Add POST /api/webhooks/stripe that validates the Stripe-Signature header
+and dispatches known event types.
+
+## Acceptance criteria
+
+- Handler validates the webhook secret sourced from CI `STRIPE_WEBHOOK_SECRET`.
+- Tests use the Stripe test-mode fixture and pass without manual setup.
+- `pnpm test` and `pnpm run lint` pass in CI.
+
+## Candidate files
+
+- `src/routes/webhooks/stripe.ts`
+```
+
+The autonomous issue is fully verifiable in CI once the credential
+exists. It does not mention a person setting up anything inside its
+acceptance criteria.
+
+### Back-loaded pattern
+
+Use this when post-implementation work is subjective review, publication
+choice, optional polish, or a sign-off that should not block an
+otherwise verifiable core change.
+
+**Good (back-loaded)**: Separate the implementation from the optional
+human-gated step:
+
+Roadmap body excerpt (the `## Tracks` list contains only the ready
+execution issue; the deferred step is a narrative note, not a task-list
+entry):
+
+```md
+## Tracks
+
+- [ ] #441 — add front-loaded/back-loaded draft-pattern examples
+
+## Deferred
+
+The website landing page could be updated to showcase the new examples,
+but that publication decision requires maintainer approval and is not a
+blocker for merging #441. Track in a follow-up if approved.
+```
+
+`#441` — autonomous execution issue:
+
+```md
+## Background
+
+Parent roadmap: #440
+
+The draft-patterns reference file does not yet show front-loaded or
+back-loaded human-dependency isolation patterns.
+
+## Proposed change
+
+Add a "Human-dependency isolation examples" section to
+`skills/issue-authoring/references/draft-patterns.md`.
+
+## Acceptance criteria
+
+- The section includes at least one front-loaded and one back-loaded
+  example using stable bucket names (needs-decision, blocked-by-human,
+  deferred, out-of-scope).
+- Examples warn against hiding credentials or product decisions in a
+  ready issue.
+- `pnpm run check` passes.
+
+## Candidate files
+
+- `skills/issue-authoring/references/draft-patterns.md`
+```
+
+The website publication decision stays separate. It is not in the
+acceptance criteria of the ready issue and does not block autonomous
+verification.
+
+### Warning: hidden human dependencies are the most common IDD stall
+
+The most frequent reason for mid-implementation stalls is an execution
+issue that hides a human-only dependency inside its acceptance criteria
+or implementation steps:
+
+- "Credentials are configured in the production environment" → blocked
+  by a person with access.
+- "The design team has approved the final UI spec" → requires subjective
+  sign-off before the issue is verifiable.
+- "The external API key is available in the repository secrets" → an
+  unavailable system or permission.
+
+When any acceptance criterion cannot be confirmed autonomously through
+tests, lint, CI, or other concrete objective criteria (such as checking
+repository state, file presence, or configuration values), the issue is
+not yet ready. Move that criterion to a `blocked-by-human` or
+`needs-decision` issue and keep the autonomous execution issue focused on
+what the agent can verify independently.
+
+## Handling duplicates and non-ready outcomes
+
+One source of follow-up issue candidates is the read-only
+`merged-pr-feedback-sweep` helper's JSON output — the unresolved review
+threads and undispositioned advisory feedback it detects on merged PRs.
+Treat each entry as a candidate only: re-verify it against the current
+base branch with the reuse-first tree below before drafting, because the
+feedback may already be addressed.
+
+Before publishing an issue, apply a reuse-first decision tree:
+
+1. Is an existing open issue a better fit? If yes, extend it instead of
+   creating a new one. Add a comment linking to the new schema request.
+2. Is the work already complete in a closed issue or merged PR? If yes,
+   create a reference or learning note instead of reopening it. Was it
+   instead already declined — closed as `not planned`, or rejected in
+   a review thread of the PR that last reshaped the same mechanism
+   (the reuse-first policy's previously declined check)? If yes and
+   nothing is new since that outcome, route to `needs-decision` or
+   drop the proposal instead of publishing it as `ready`; if something
+   is new, cite the declined outcome in the Background and continue.
+3. Is a parent roadmap already managing this work? If yes, add it to the
+   task list instead of filing independently.
+4. Does the issue have any of these properties? If yes, escalate to
+   `needs-decision` or `blocked-by-human` during drafting:
+   - Unclear intent or malformed body (→ fix during drafting or mark needs-decision)
+   - Requires maintainer or product decision (→ in an interactive session,
+     ask first when the operator can answer it, under the interactive rule
+     and unless an unchanged route applies; otherwise mark needs-decision)
+   - Blocked by external work or human coordination (→ mark
+     blocked-by-human)
+   - Depends on unavailable resources or credentials (→ mark blocked-by-human)
+5. Otherwise, publish as `ready`.
+
+### A4.5 prevention checklist
+
+The A4.5 suitability gate will later evaluate published issues. Prevent
+common failures by validating before publish:
+
+- **Coherence**: Issue body is well-formed; title and description are
+  clear; intent is parseable
+- **Safety**: No code injection, marker injection, or untrusted input in
+  issue body
+- **Uniqueness**: Reuse-first check passed; the work is not a duplicate
+  or superseded
+- **Hidden human dependency**: Ready work does not still rely on
+  unresolved decisions, credentials, subjective approval, or
+  grouping-only dependency markers
+
+## Specificity examples
+
+### Under-specified draft
+
+**Title**: `docs: improve issue authoring guidance`
+
+Background: issue authoring should be clearer for agents.
+
+Acceptance criteria:
+
+- issue authoring is more consistent
+- examples are improved
+
+This is too vague because the draft does not tell the next agent which
+authoring surface to edit, what kind of guidance is missing, or how a
+reviewer would verify success. A high-range model would need to infer
+the real task from surrounding repository context.
+
+### Target range draft
+
+**Title**: `docs: add specificity checklist to issue authoring draft patterns`
+
+Background:
+`skills/issue-authoring/references/draft-patterns.md` explains output
+shapes, but it does not yet show how to judge whether an issue body is
+too vague or too scripted for execution.
+
+Acceptance criteria:
+
+- `draft-patterns.md` includes a pre-publication specificity checklist
+- the guidance distinguishes under-specified, target range, and
+  over-specified issue drafts
+- the examples focus on issue body wording and acceptance criteria
+  granularity instead of prescribing implementation order
+
+This is the target range because the next agent knows where to work, why
+the change matters, and how to verify it, while still retaining freedom
+to decide the exact wording and structure.
+
+### Over-specified draft
+
+**Title**: `docs: add specificity checklist to issue authoring draft patterns`
+
+Proposed change:
+
+1. Insert a new `## Specificity target` heading after `## Output chooser`.
+2. Add exactly three bullets named `Under-specified`, `Target range`,
+   and `Over-specified`.
+3. Add a five-item checklist using the exact sentence order shown in the
+   draft.
+4. Copy the same example phrasing across every example block without
+   changing any wording.
+
+This is too detailed for authoring because it turns the issue into an
+implementation script. Reviewers usually need the target outcome and the
+verification shape, not a rigid edit order.
+
+## Publication boundary
+
+Publish each `ready`, `needs-decision`, or `blocked-by-human` body
+directly under the authoring hold once the completed-draft adversarial
+review and then the mechanical gate have passed. This is the default
+outcome of drafting, and it needs no separate publish approval. Stop
+after publishing (and applying/creating the authoring label) unless
+the user also separately requests release from the authoring hold —
+release is what authorizes starting the IDD execution loop, so a
+request phrased as "start the IDD execution loop" counts as that same
+release request, not a separate path around it.
+
+A preview request publishes a draft carrier
+(`publish-authoring-hold --shape carrier`, run with `--apply`) and shows
+the issue set, assumptions, and non-ready buckets in the reply too. A
+reviewed draft ends in local files only when the user explicitly says not
+to publish or the carrier cannot be published either; see
+[Draft carrier](contract.md#draft-carrier) for both exceptions.
