@@ -90,14 +90,15 @@ Describe 'user-global IDD activation helper twins' {
     }
   }
 
-  It 'the idd-activation.cmd launcher forwards the twin exit status when npx is missing' -Skip:($env:OS -ne 'Windows_NT') {
+  It 'the <_>.cmd launcher forwards the twin exit status when npx is missing' -ForEach @('idd-activation', 'idd-effective-config') -Skip:($env:OS -ne 'Windows_NT') {
+    $helper = $_
     # The launcher finds its twin by the deployed name, so stage both files
     # under their deployed names (chezmoi drops the executable_ prefix).
     $stageDir = Join-Path ([IO.Path]::GetTempPath()) ('idd-cmd-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $script:BinDir 'executable_idd-activation.cmd') -Destination (Join-Path $stageDir 'idd-activation.cmd')
-    Copy-Item -LiteralPath (Join-Path $script:BinDir 'executable_idd-activation.ps1') -Destination (Join-Path $stageDir 'idd-activation.ps1')
-    $launcher = Join-Path $stageDir 'idd-activation.cmd'
+    Copy-Item -LiteralPath (Join-Path $script:BinDir "executable_$helper.cmd") -Destination (Join-Path $stageDir "$helper.cmd")
+    Copy-Item -LiteralPath (Join-Path $script:BinDir "executable_$helper.ps1") -Destination (Join-Path $stageDir "$helper.ps1")
+    $launcher = Join-Path $stageDir "$helper.cmd"
     # System32 keeps where.exe, and the Windows PowerShell directory keeps
     # powershell.exe. Neither pwsh nor npx is on this PATH, so the twin's
     # npx guard answers, and the launcher must pass its exit status through.
