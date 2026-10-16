@@ -39,4 +39,34 @@ Describe 'user-global IDD activation helper twins' {
     $exitCode | Should -Be 1
     ($output | Out-String) | Should -Match 'npx is required'
   }
+
+  It '<_> fails loudly when Node.js is below the upstream floor' -ForEach $script:Twins {
+    $wrapper = Join-Path $script:BinDir $_
+    $fakeDir = Join-Path ([IO.Path]::GetTempPath()) ('idd-old-node-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $fakeDir -Force | Out-Null
+    # A fake npx passes the first guard. A fake node fails the floor probe,
+    # so only the Node.js floor guard can answer.
+    if ($env:OS -eq 'Windows_NT') {
+      Set-Content -LiteralPath (Join-Path $fakeDir 'node.cmd') -Value "@exit /b 1`r`n" -Encoding ASCII
+      Set-Content -LiteralPath (Join-Path $fakeDir 'npx.cmd') -Value "@exit /b 0`r`n" -Encoding ASCII
+    } else {
+      Set-Content -LiteralPath (Join-Path $fakeDir 'node') -Value "#!/bin/sh`nexit 1`n" -Encoding ASCII
+      Set-Content -LiteralPath (Join-Path $fakeDir 'npx') -Value "#!/bin/sh`nexit 0`n" -Encoding ASCII
+      & chmod +x (Join-Path $fakeDir 'node') (Join-Path $fakeDir 'npx')
+    }
+    $originalPath = $env:PATH
+    $originalPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $env:PATH = $fakeDir
+      $output = & $script:PwshExe -NoProfile -File $wrapper 2>&1
+      $exitCode = $LASTEXITCODE
+    } finally {
+      $env:PATH = $originalPath
+      $ErrorActionPreference = $originalPreference
+      Remove-Item -LiteralPath $fakeDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $exitCode | Should -Be 1
+    ($output | Out-String) | Should -Match 'needs Node.js 22.23.2\+, 24.2.0\+, or 26\+'
+  }
 }

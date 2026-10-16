@@ -140,3 +140,19 @@ run_without_npx() {
   assert_failure
   assert_stderr --partial 'npx is required'
 }
+
+@test "idd-activation fails loudly when Node.js is below the upstream floor" {
+  # A fake npx passes the first guard. A fake node reports v20 and fails the
+  # floor probe, so only the Node.js floor guard can answer.
+  local fake_bin="$BATS_TEST_TMPDIR/old-node-bin"
+  mkdir -p "$fake_bin"
+  printf '#!/bin/sh\nif [ "$1" = "-v" ]; then echo v20.11.0; exit 0; fi\nexit 1\n' > "$fake_bin/node"
+  printf '#!/bin/sh\nexit 0\n' > "$fake_bin/npx"
+  chmod +x "$fake_bin/node" "$fake_bin/npx"
+  ln -sf "$BIN_DIR/executable_idd-activation" "$fake_bin/idd-activation"
+
+  run --separate-stderr env -i PATH="$fake_bin" /bin/sh "$fake_bin/idd-activation"
+  assert_failure
+  assert_output ''
+  assert_stderr --partial 'needs Node.js 22.23.2+, 24.2.0+, or 26+ (found: v20.11.0)'
+}
