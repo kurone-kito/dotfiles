@@ -27,6 +27,28 @@ rendered="${default_data_home}/idd-skill"
 # is resolved, and the components below it are appended, so an alias that
 # points into the deployed tree is seen through even when the root itself does
 # not exist yet.
+# Lexical normalization of an absolute path: "." is dropped and ".." removes the
+# component before it. It is applied only past the resolved existing prefix, so
+# a ".." never climbs through a link the walk has already resolved.
+normalize_lexically() {
+  local path="$1" out="" comp
+  set -f
+  local IFS=/
+  for comp in ${path}; do
+    case "${comp}" in
+      ''|.) ;;
+      ..) out="${out%/*}" ;;
+      *) out="${out}/${comp}" ;;
+    esac
+  done
+  set +f
+  if [ -n "${out}" ]; then
+    printf '%s' "${out}"
+  else
+    printf '/'
+  fi
+}
+
 physical_path() {
   local p="$1" tail="" dir
   while [ ! -d "${p}" ]; do
@@ -34,21 +56,22 @@ physical_path() {
     p="$(dirname "${p}")"
   done
   dir="$(cd -P "${p}" && pwd -P)"
-  printf '%s%s' "${dir}" "${tail}"
+  normalize_lexically "${dir}${tail}"
 }
 
 # Trim surrounding whitespace, then keep only a qualified root (the rule of
 # isQualifiedConfigRoot in upstream src/scripts/idd-config.mts). The trailing
 # slash strip mirrors the installer's path normalization, but it keeps a lone
 # "/" as it is, so a filesystem-root setting is qualified here as it is upstream.
-xdg_data_home="$(printf '%s' "${XDG_DATA_HOME:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's#\(.\)/*$#\1#')"
-case "${xdg_data_home}" in
+xdg_trimmed="$(printf '%s' "${XDG_DATA_HOME:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+case "${xdg_trimmed}" in
   /*) ;;
   *) exit 0 ;;
 esac
-case "${xdg_data_home}" in
+case "${xdg_trimmed}" in
   //*) exit 0 ;;
 esac
+xdg_data_home="$(printf '%s' "${xdg_trimmed}" | sed -e 's#\(.\)/*$#\1#')"
 
 if [ ! -d "${rendered}" ]; then
   exit 0

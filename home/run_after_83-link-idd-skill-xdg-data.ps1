@@ -51,6 +51,40 @@ if ($canonXdg.Equals($canonDefault, $ignoreCase)) { exit 0 }
 # Inside the deployed tree itself: a link there would point back at its own parent.
 if ($canonXdg.StartsWith("$canonRendered$separator", $ignoreCase)) { exit 0 }
 
+# A path that reaches the deployed tree through a link on the way down is an
+# alias of it, whatever its spelling. Walk from the path up to the root and
+# refuse when an existing link on it points at, or inside, the deployed tree.
+# A relative link target is taken relative to the link's own directory.
+function script:Test-AliasesDeployedTree([string]$path) {
+  $p = $path
+  while ($p) {
+    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if ($item -and $item.LinkType) {
+      $linkDir = Split-Path -Parent $p
+      foreach ($linkTarget in @($item.Target)) {
+        if (-not $linkTarget) { continue }
+        $resolved = if ([System.IO.Path]::IsPathRooted([string]$linkTarget)) {
+          [string]$linkTarget
+        } else {
+          [System.IO.Path]::Combine($linkDir, [string]$linkTarget)
+        }
+        $full = [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
+        if ($full.Equals($canonRendered, $ignoreCase) -or $full.StartsWith("$canonRendered$separator", $ignoreCase)) {
+          return $true
+        }
+      }
+    }
+    $parent = Split-Path -Parent $p
+    if (-not $parent -or $parent -eq $p) { break }
+    $p = $parent
+  }
+  return $false
+}
+if (Test-AliasesDeployedTree $xdgDataHome) {
+  Write-Warning "idd-skill data: $xdgDataHome reaches the deployed payload through a link; not linking."
+  exit 0
+}
+
 if (-not (Test-Path -LiteralPath $rendered -PathType Container)) { exit 0 }
 
 $target = Join-Path $xdgDataHome 'idd-skill'

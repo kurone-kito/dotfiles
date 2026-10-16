@@ -131,6 +131,28 @@ write_deployed_payload() {
   [ ! -e "$HOME/.local/share/idd-skill/sub" ]
 }
 
+@test "no-ops when XDG_DATA_HOME climbs through a missing directory into the deployed tree" {
+  write_deployed_payload
+  export XDG_DATA_HOME="$HOME/.local/share/other/../idd-skill"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output ""
+  [ ! -e "$HOME/.local/share/idd-skill/idd-skill" ]
+}
+
+@test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
+  write_deployed_payload
+  export XDG_DATA_HOME="///"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output ""
+  [ ! -e "/idd-skill" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is a relative path" {
   write_deployed_payload
   export XDG_DATA_HOME="relative/data"

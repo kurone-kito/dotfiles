@@ -99,6 +99,18 @@ Describe 'link-idd-skill-xdg-data' {
     Test-Path -LiteralPath (Join-Path $env:XDG_DATA_HOME 'idd-skill') | Should -BeFalse
   }
 
+  It 'no-ops when XDG_DATA_HOME reaches the deployed tree through a link' {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $alias = Join-Path $TestDrive 'alias-root'
+    $null = New-Item -ItemType SymbolicLink -Path $alias -Target $deployedRoot
+    $env:XDG_DATA_HOME = Join-Path $alias '0.16.0'
+
+    { & $script:Subject 3>$null } | Should -Not -Throw
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+      Should -BeFalse
+  }
+
   It 'does not overwrite a link pointing at a different target' {
     Write-DeployedPayload
     $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
