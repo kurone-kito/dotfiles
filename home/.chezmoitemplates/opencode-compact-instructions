@@ -55,7 +55,8 @@ tool use.
 
 For IDD work in a Git repository, run `idd-activation` from the repository
 directory before you start. If it is not on `PATH`, run
-`~/.local/bin/idd-activation` instead. If it reports `active`, open
+`~/.local/bin/idd-activation` instead, or `idd-activation.ps1` in that directory on
+Windows. If it reports `active`, open
 `.github/instructions/idd-overview-core.instructions.md` under the reported
 `instructionsRoot` and follow its phase routing. Where a lite file exists for
 the phase you are in, read `.github/instructions/lite/idd-<phase>-lite.instructions.md`
