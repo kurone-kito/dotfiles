@@ -89,4 +89,26 @@ Describe 'user-global IDD activation helper twins' {
       }
     }
   }
+
+  It 'the idd-activation.cmd launcher forwards the twin exit status when npx is missing' -Skip:($env:OS -ne 'Windows_NT') {
+    $launcher = Join-Path $script:BinDir 'executable_idd-activation.cmd'
+    # System32 keeps where.exe, and the Windows PowerShell directory keeps
+    # powershell.exe. Neither pwsh nor npx is on this PATH, so the twin's
+    # npx guard answers, and the launcher must pass its exit status through.
+    $systemDir = Join-Path $env:SystemRoot 'System32'
+    $psDir = Join-Path $systemDir 'WindowsPowerShell\v1.0'
+    $originalPath = $env:PATH
+    $originalPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $env:PATH = "$systemDir;$psDir"
+      $output = & cmd.exe /d /c $launcher 2>&1
+      $exitCode = $LASTEXITCODE
+    } finally {
+      $env:PATH = $originalPath
+      $ErrorActionPreference = $originalPreference
+    }
+    $exitCode | Should -Be 1
+    ($output | Out-String) | Should -Match 'npx is required'
+  }
 }

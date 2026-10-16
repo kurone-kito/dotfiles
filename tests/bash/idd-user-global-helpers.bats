@@ -177,6 +177,24 @@ NODE
   assert_stderr --partial 'needs Node.js 22.23.2+, 24.2.0+, or 26+ (found: v20.11.0)'
 }
 
+@test "each helper has a .cmd launcher that dispatches to its .ps1 twin" {
+  assert_file_contains "$BIN_DIR/executable_idd-activation.cmd" 'PS1_PATH=%SCRIPT_DIR%idd-activation\.ps1'
+  assert_file_contains "$BIN_DIR/executable_idd-effective-config.cmd" 'PS1_PATH=%SCRIPT_DIR%idd-effective-config\.ps1'
+  assert_file_contains "$BIN_DIR/executable_idd-activation.cmd" 'exit /b %ERRORLEVEL%'
+  assert_file_contains "$BIN_DIR/executable_idd-effective-config.cmd" 'exit /b %ERRORLEVEL%'
+}
+
+@test "the .cmd launchers are excluded from non-Windows applies" {
+  printf '%s\n' '{ "data": {} }' > "$BATS_TEST_TMPDIR/chezmoi-config.json"
+
+  run --separate-stderr chezmoi execute-template --file "$REPO_ROOT/home/.chezmoiignore.tmpl" \
+    --config "$BATS_TEST_TMPDIR/chezmoi-config.json" --config-format json \
+    --source "$REPO_ROOT" --destination "$BATS_TEST_TMPDIR"
+  assert_success
+  assert_line '.local/bin/idd-activation.cmd'
+  assert_line '.local/bin/idd-effective-config.cmd'
+}
+
 @test "the Node.js floor accepts 22.23.2, 24.2.0 and 26 and rejects the boundaries below" {
   local name v fake_bin="$BATS_TEST_TMPDIR/boundary-bin" real_node
   real_node="$(command -v node || true)"
