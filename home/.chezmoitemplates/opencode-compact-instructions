@@ -54,9 +54,10 @@ tool use.
 ## IDD workflow
 
 For IDD work in a Git repository, run `idd-activation` from the repository
-directory before you start. If it reports `active`, read
-`.github/instructions/lite/idd-<phase>-lite.instructions.md` under the reported
-`instructionsRoot` when that file exists for the phase. Otherwise read
-`.github/instructions/idd-overview-core.instructions.md` under that root.
+directory before you start. If it reports `active`, open
+`.github/instructions/idd-overview-core.instructions.md` under the reported
+`instructionsRoot` and follow its phase routing. Where a lite file exists for
+the phase you are in, read `.github/instructions/lite/idd-<phase>-lite.instructions.md`
+under that root instead.
 
 Re-import procedure: https://github.com/kurone-kito/dotfiles/blob/master/docs/idd-user-global-reimport.md
