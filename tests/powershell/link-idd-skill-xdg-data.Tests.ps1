@@ -258,8 +258,8 @@ Describe 'link-idd-skill-xdg-data' {
 
   It 'warns and does not abort when XDG_DATA_HOME names a drive that does not exist' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
-    $used = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name })
-    $free = ('Z'..'A') | Where-Object { $used -notcontains $_ } | Select-Object -First 1
+    $used = @([System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0, 1) })
+    $free = (90..65) | ForEach-Object { [string][char]$_ } | Where-Object { $used -notcontains $_ } | Select-Object -First 1
     if (-not $free) {
       Set-ItResult -Skipped -Because 'no free drive letter on this host'
       return
@@ -269,18 +269,29 @@ Describe 'link-idd-skill-xdg-data' {
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
-      Select-Object -ExpandProperty Message | Should -BeLike '*could not create*'
+      Select-Object -ExpandProperty Message | Should -BeLike "*could not create $($free):\idd-data*"
   }
 
   It 'refuses an XDG_DATA_HOME given as a device path on Windows' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
-    $env:XDG_DATA_HOME = '\\?\C:\idd-device-path'
+    $env:XDG_DATA_HOME = "\\?\$(Join-Path $TestDrive 'dev')"
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*device paths*'
-    Test-Path -LiteralPath 'C:\idd-device-path' | Should -BeFalse
+    Test-Path -LiteralPath (Join-Path $TestDrive 'dev') | Should -BeFalse
+  }
+
+  It 'refuses an XDG_DATA_HOME given as a device path with forward slashes on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $env:XDG_DATA_HOME = '\\?/' + (Join-Path $TestDrive 'dev-slash').Replace('\', '/')
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*device paths*'
+    Test-Path -LiteralPath (Join-Path $TestDrive 'dev-slash') | Should -BeFalse
   }
 
   It 'creates the current pointer as a directory junction on Windows' -Skip:($IsWindows -eq $false) {

@@ -122,9 +122,9 @@ if ($onWindows) {
 # elsewhere an absolute path that does not start with //. The value is trimmed
 # first, as the installer does.
 $raw = ([string]$env:XDG_DATA_HOME).Trim()
-# Device paths (\\?\ and \\.\) are not normalized like ordinary paths, so the
-# containment check cannot see them: refuse them.
-if ($raw.StartsWith('\\?\') -or $raw.StartsWith('\\.\')) {
+# Device paths (\\?\ and \\.\, with either separator) are not normalized like
+# ordinary paths, so the containment check cannot see them: refuse them.
+if ($raw -match '^[\\/]{2}[.?][\\/]') {
   Write-Warning 'idd-skill data: device paths are not supported; not linking.'
   exit 0
 }
