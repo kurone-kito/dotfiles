@@ -1,4 +1,10 @@
-{{- template "ai-agent-user-global" (dict
+<!-- idd-skill:user-global:begin -->
+@{{ .chezmoi.homeDir | replace "\\" "/" }}/.local/share/idd-skill/current/user-global/entry.md
+<!-- idd-skill:user-global:end -->
+
+Re-import procedure: https://github.com/kurone-kito/dotfiles/blob/master/docs/idd-user-global-reimport.md
+
+{{ template "ai-agent-user-global" (dict
   "agent" "Claude Code"
   "path" "~/.claude/CLAUDE.md"
   "breakBeforeFrom" false

@@ -1,4 +1,9 @@
-{{- template "ai-agent-user-global" (dict
+<!-- idd-skill:user-global:begin -->
+{{ include "dot_local/share/idd-skill/0.16.0/user-global/entry.md" }}<!-- idd-skill:user-global:end -->
+
+Re-import procedure: https://github.com/kurone-kito/dotfiles/blob/master/docs/idd-user-global-reimport.md
+
+{{ template "ai-agent-user-global" (dict
   "agent" "GitHub Copilot CLI"
   "path" "~/.copilot/copilot-instructions.md"
   "breakBeforeFrom" true
