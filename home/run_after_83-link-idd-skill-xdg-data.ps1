@@ -25,7 +25,12 @@ $onWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::W
 $defaultDataHome = Join-Path (Join-Path $HOME '.local') 'share'
 $rendered = Join-Path $defaultDataHome 'idd-skill'
 $separator = [System.IO.Path]::DirectorySeparatorChar
-$ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
+# Windows paths are compared without case; other platforms compare exactly.
+$ignoreCase = if ($onWindows) {
+  [System.StringComparison]::OrdinalIgnoreCase
+} else {
+  [System.StringComparison]::Ordinal
+}
 # The payload version the `current` pointer names. It must match the content of
 # home/dot_local/share/idd-skill/symlink_current; a Pester case checks that.
 $version = '0.16.0'

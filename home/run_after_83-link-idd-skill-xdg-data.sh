@@ -52,6 +52,11 @@ normalize_lexically() {
 physical_path() {
   local p="$1" tail="" dir
   while [ ! -d "${p}" ]; do
+    # A link that does not resolve to a directory cannot be followed here, so the
+    # path cannot be shown to be outside the payload. Fail closed: the caller refuses.
+    if [ -L "${p}" ]; then
+      return 1
+    fi
     tail="/$(basename "${p}")${tail}"
     p="$(dirname "${p}")"
   done
@@ -81,8 +86,11 @@ fi
 # something inside it, under any alias. Comparing physical paths covers both
 # plain spellings and symlinks; a link there would point back into the payload.
 rendered_physical="$(physical_path "${rendered}")"
-xdg_physical="$(physical_path "${xdg_data_home}")"
-default_physical="$(physical_path "${default_data_home}")"
+xdg_physical="$(physical_path "${xdg_data_home}")" || {
+  echo "idd-skill data: ${xdg_data_home} passes through a link that does not resolve; not linking." >&2
+  exit 0
+}
+default_physical="$(physical_path "${default_data_home}")" || exit 0
 if [ "${xdg_physical}" = "${default_physical}" ]; then
   exit 0
 fi

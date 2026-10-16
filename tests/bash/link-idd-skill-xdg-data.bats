@@ -142,6 +142,18 @@ write_deployed_payload() {
   [ ! -e "$HOME/.local/share/idd-skill/idd-skill" ]
 }
 
+@test "refuses XDG_DATA_HOME through a dangling link into the payload without creating directories" {
+  write_deployed_payload
+  ln -s "$HOME/.local/share/idd-skill/missing" "$BATS_TEST_TMPDIR/dangling"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/dangling/sub"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "passes through a link that does not resolve"
+  [ ! -e "$HOME/.local/share/idd-skill/missing" ]
+}
+
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
   write_deployed_payload
   export XDG_DATA_HOME="///"

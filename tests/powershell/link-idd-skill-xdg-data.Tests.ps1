@@ -5,11 +5,22 @@ BeforeAll {
   $script:Subject = Join-Path $PSScriptRoot `
     '../../home/run_after_83-link-idd-skill-xdg-data.ps1'
 
+  # The directory link type this host can create: a symbolic link where the
+  # privilege allows it, otherwise a junction. Probed once per Pester run.
+  $probeTarget = Join-Path $TestDrive 'link-probe-target'
+  $null = New-Item -ItemType Directory -Path $probeTarget -Force
+  try {
+    $null = New-Item -ItemType SymbolicLink -Path (Join-Path $TestDrive 'link-probe') -Target $probeTarget -ErrorAction Stop
+    $script:DirectoryLinkType = 'SymbolicLink'
+  } catch {
+    $script:DirectoryLinkType = 'Junction'
+  }
+
   # A directory link: a symbolic link where the host allows it, else a directory
   # junction, which the script also falls back to on Windows.
   function script:New-TestDirectoryLink([string]$Path, [string]$Target) {
     try {
-      $null = New-Item -ItemType SymbolicLink -Path $Path -Target $Target
+      $null = New-Item -ItemType SymbolicLink -Path $Path -Target $Target -ErrorAction Stop
     } catch {
       $null = New-Item -ItemType Junction -Path $Path -Target $Target
     }
@@ -84,7 +95,7 @@ Describe 'link-idd-skill-xdg-data' {
     $target = Join-Path $env:XDG_DATA_HOME 'idd-skill'
     $rendered = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
     $item = Get-Item -LiteralPath $target
-    $item.LinkType | Should -BeIn @('SymbolicLink', 'Junction')
+    $item.LinkType | Should -Be $script:DirectoryLinkType
     $item.Target | Should -Contain $rendered
   }
 
@@ -98,7 +109,7 @@ Describe 'link-idd-skill-xdg-data' {
     @($warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }).Count |
       Should -Be 0
     (Get-Item -LiteralPath (Join-Path $env:XDG_DATA_HOME 'idd-skill')).LinkType |
-      Should -BeIn @('SymbolicLink', 'Junction')
+      Should -Be $script:DirectoryLinkType
   }
 
   It 'no-ops when XDG_DATA_HOME is inside the deployed data root' {
@@ -178,13 +189,12 @@ Describe 'link-idd-skill-xdg-data' {
     Write-DeployedPayload
     $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
     $relative = Join-Path $TestDrive 'relative-root'
-    try {
-      $null = New-Item -ItemType SymbolicLink -Path $relative `
-        -Target (Join-Path 'home' (Join-Path '.local' (Join-Path 'share' 'idd-skill')))
-    } catch {
+    if ($script:DirectoryLinkType -ne 'SymbolicLink') {
       Set-ItResult -Skipped -Because 'a relative symbolic link needs privilege on this host'
       return
     }
+    $null = New-Item -ItemType SymbolicLink -Path $relative -ErrorAction Stop `
+      -Target (Join-Path 'home' (Join-Path '.local' (Join-Path 'share' 'idd-skill')))
     $env:XDG_DATA_HOME = Join-Path $relative '0.16.0'
 
     $warnings = & $script:Subject 3>&1
@@ -201,13 +211,12 @@ Describe 'link-idd-skill-xdg-data' {
     Write-DeployedPayload
     $loopA = Join-Path $TestDrive 'loop-a'
     $loopB = Join-Path $TestDrive 'loop-b'
-    try {
-      $null = New-Item -ItemType SymbolicLink -Path $loopA -Target $loopB
-      $null = New-Item -ItemType SymbolicLink -Path $loopB -Target $loopA
-    } catch {
+    if ($script:DirectoryLinkType -ne 'SymbolicLink') {
       Set-ItResult -Skipped -Because 'a symbolic link loop needs privilege on this host'
       return
     }
+    $null = New-Item -ItemType SymbolicLink -Path $loopA -Target $loopB -ErrorAction Stop
+    $null = New-Item -ItemType SymbolicLink -Path $loopB -Target $loopA -ErrorAction Stop
     $env:XDG_DATA_HOME = Join-Path $loopA 'custom'
 
     $warnings = & $script:Subject 3>&1
