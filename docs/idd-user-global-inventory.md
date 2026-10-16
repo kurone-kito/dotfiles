@@ -29,7 +29,8 @@ Sources read: `docs/user-global-install.md`;
 `scripts/user-global-install.mjs` (generated from
 `src/scripts/user-global-install.mts`); `scripts/user-global-paths.mjs`;
 `scripts/user-global-entry-files.mjs`; `scripts/user-global-receipt.mjs`;
-`scripts/idd-activation.mjs`; `scripts/idd-onboard.mjs`;
+`scripts/idd-activation.mjs`; `scripts/idd-config.mjs`
+(`isQualifiedConfigRoot`); `scripts/idd-onboard.mjs`;
 `audit/sync-manifest.json` (block `idd-template-core-files`);
 `skills/issue-authoring/`; `skills/idd-spec-audit/`;
 `idd-template/user-global/entry.md`; and `package.json` (version `0.16.0`).
@@ -107,7 +108,7 @@ Checks on the run:
 
 The list holds only when all of the following are true before the run:
 
-- `$HOME` is an absolute path that does not start with `//`, and the
+- `$HOME` is a [qualified root](#preconditions-for-an-isolated-home), and the
   directories under [Preconditions](#preconditions-for-an-isolated-home) exist.
 - `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `CODEX_HOME` are unset, are not
   qualified roots, or are set to the default locations under `HOME`, so the
@@ -130,10 +131,11 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
 
 ## Preconditions for an isolated HOME
 
-- A *qualified root* is an absolute path that does not start with `//`,
-  after any surrounding whitespace is removed. `HOME` must be a qualified
-  root. An environment value named below counts only when it is a qualified
-  root; otherwise the default applies.
+- On POSIX, a *qualified root* is an absolute path that does not start with
+  `//`, after any surrounding whitespace is removed. `HOME` must be a
+  qualified root. Each of `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `CODEX_HOME`
+  counts only when it is a qualified root; otherwise the default under `HOME`
+  applies.
 - These directories must already exist. The installer never creates the
   directory above the data root, a skill root, or a harness directory. It
   creates the data root, the two skill roots, and each missing directory
