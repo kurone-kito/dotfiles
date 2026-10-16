@@ -60,6 +60,11 @@ physical_path() {
     tail="/$(basename "${p}")${tail}"
     p="$(dirname "${p}")"
   done
+  # A ".." below the existing prefix depends on components that do not exist, so it
+  # cannot be resolved the way the OS would resolve it later. Fail closed.
+  case "${tail}/" in
+    */../*) return 1 ;;
+  esac
   dir="$(cd -P "${p}" && pwd -P)"
   normalize_lexically "${dir}${tail}"
 }
@@ -87,7 +92,7 @@ fi
 # plain spellings and symlinks; a link there would point back into the payload.
 rendered_physical="$(physical_path "${rendered}")"
 xdg_physical="$(physical_path "${xdg_data_home}")" || {
-  echo "idd-skill data: ${xdg_data_home} passes through a link that does not resolve; not linking." >&2
+  echo "idd-skill data: ${xdg_data_home} cannot be resolved safely (a dangling link, or a '..' below a missing path); not linking." >&2
   exit 0
 }
 default_physical="$(physical_path "${default_data_home}")" || exit 0

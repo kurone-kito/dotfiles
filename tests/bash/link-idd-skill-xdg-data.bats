@@ -131,14 +131,14 @@ write_deployed_payload() {
   [ ! -e "$HOME/.local/share/idd-skill/sub" ]
 }
 
-@test "no-ops when XDG_DATA_HOME climbs through a missing directory into the deployed tree" {
+@test "refuses XDG_DATA_HOME that climbs through a missing directory into the deployed tree" {
   write_deployed_payload
   export XDG_DATA_HOME="$HOME/.local/share/other/../idd-skill"
 
   run "$SCRIPT"
 
   assert_success
-  assert_output ""
+  assert_output --partial "not linking"
   [ ! -e "$HOME/.local/share/idd-skill/idd-skill" ]
 }
 
@@ -150,8 +150,21 @@ write_deployed_payload() {
   run "$SCRIPT"
 
   assert_success
-  assert_output --partial "passes through a link that does not resolve"
+  assert_output --partial "not linking"
   [ ! -e "$HOME/.local/share/idd-skill/missing" ]
+}
+
+@test "refuses XDG_DATA_HOME that climbs through a missing directory into an alias of the payload" {
+  write_deployed_payload
+  ln -s "$HOME/.local/share/idd-skill" "$BATS_TEST_TMPDIR/alias"
+  export XDG_DATA_HOME="$BATS_TEST_TMPDIR/missing/../alias"
+
+  run "$SCRIPT"
+
+  assert_success
+  assert_output --partial "not linking"
+  [ ! -e "$HOME/.local/share/idd-skill/idd-skill" ]
+  [ ! -e "$BATS_TEST_TMPDIR/missing" ]
 }
 
 @test "no-ops when XDG_DATA_HOME is made of several slashes (not a qualified root)" {
