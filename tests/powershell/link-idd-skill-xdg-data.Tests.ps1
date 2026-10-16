@@ -95,7 +95,10 @@ Describe 'link-idd-skill-xdg-data' {
     Write-DeployedPayload
     $env:XDG_DATA_HOME = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'idd-skill' '0.16.0')))
 
-    { & $script:Subject } | Should -Not -Throw
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
     Test-Path -LiteralPath (Join-Path $env:XDG_DATA_HOME 'idd-skill') | Should -BeFalse
   }
 
@@ -106,7 +109,10 @@ Describe 'link-idd-skill-xdg-data' {
     $null = New-Item -ItemType SymbolicLink -Path $alias -Target $deployedRoot
     $env:XDG_DATA_HOME = Join-Path $alias '0.16.0'
 
-    { & $script:Subject 3>$null } | Should -Not -Throw
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
     Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
       Should -BeFalse
   }
@@ -132,7 +138,10 @@ Describe 'link-idd-skill-xdg-data' {
     $null = New-Item -ItemType SymbolicLink -Path $chain -Target $hop
     $env:XDG_DATA_HOME = Join-Path $chain '0.16.0'
 
-    { & $script:Subject 3>$null } | Should -Not -Throw
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
     Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
       Should -BeFalse
   }
@@ -163,7 +172,10 @@ Describe 'link-idd-skill-xdg-data' {
       -Target (Join-Path 'home' (Join-Path '.local' (Join-Path 'share' 'idd-skill')))
     $env:XDG_DATA_HOME = Join-Path $relative '0.16.0'
 
-    { & $script:Subject 3>$null } | Should -Not -Throw
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
     Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
       Should -BeFalse
   }
@@ -212,6 +224,25 @@ Describe 'link-idd-skill-xdg-data' {
     $current.Target | Should -Contain (Join-Path $deployedRoot '0.16.0')
   }
 
+  It 'refuses the deployed root under its long name when HOME is given in 8.3 short form on Windows' -Skip:($IsWindows -eq $false) {
+    $longHome = [System.IO.Path]::GetFullPath($HOME)
+    $shortHome = (New-Object -ComObject Scripting.FileSystemObject).GetFolder($longHome).ShortPath
+    if ($shortHome -eq $longHome) {
+      Set-ItResult -Skipped -Because 'this volume has no 8.3 short names'
+      return
+    }
+    Set-Variable -Name HOME -Value $shortHome -Scope Global -Force
+    Write-DeployedPayload
+    $deployedLong = Join-Path $longHome (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $env:XDG_DATA_HOME = Join-Path $deployedLong '0.16.0'
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
+    Test-Path -LiteralPath (Join-Path $deployedLong (Join-Path '0.16.0' 'idd-skill')) | Should -BeFalse
+  }
+
   It 'keeps a current junction that points at another version on Windows' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
     $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
@@ -224,7 +255,7 @@ Describe 'link-idd-skill-xdg-data' {
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
-      Select-Object -ExpandProperty Message | Should -BeLike '*not overwriting*'
+      Select-Object -ExpandProperty Message | Should -BeLike '*points at*not 0.16.0*'
     (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $other
   }
 

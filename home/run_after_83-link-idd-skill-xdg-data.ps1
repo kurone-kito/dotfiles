@@ -18,8 +18,7 @@
 # symbolic link needs privilege. This script creates `current` as a directory
 # junction instead, which needs none, so the entry path resolves there too. It
 # never replaces an existing `current`: a real directory is left alone, and a
-# link to another version is reported. The version below must match the content
-# of home/dot_local/share/idd-skill/symlink_current; a Pester case checks that.
+# link to another version is reported.
 $ErrorActionPreference = 'Stop'
 
 $onWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
@@ -27,6 +26,9 @@ $defaultDataHome = Join-Path (Join-Path $HOME '.local') 'share'
 $rendered = Join-Path $defaultDataHome 'idd-skill'
 $separator = [System.IO.Path]::DirectorySeparatorChar
 $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
+# The payload version the `current` pointer names. It must match the content of
+# home/dot_local/share/idd-skill/symlink_current; a Pester case checks that.
+$version = '0.16.0'
 
 # The physical form of a path, as the OS resolves it: each symbolic link or
 # junction on the way is followed, and the rest of the path is appended to its
@@ -35,10 +37,17 @@ $ignoreCase = [System.StringComparison]::OrdinalIgnoreCase
 # after a link goes to the parent of the link's target. PowerShell 5.1 reports a
 # share target as UNC\server\share, which is read back as \\server\share. A
 # volume mount point (a Volume{GUID} target) is not followed. Returns $null past
-# 16 links. Other aliases, such as subst drives, 8.3 short names and UNC
-# administrative shares, are not resolved.
+# 16 links. Other aliases, such as subst drives and UNC administrative shares,
+# are not resolved.
 function script:Get-PhysicalPath([string]$path, [int]$depth = 0) {
   if ($depth -gt 16) { return $null }
+  # On Windows, GetFullPath expands an 8.3 short name to its long form (for a
+  # path that exists), so a short-form path compares equal to its long form. It
+  # also collapses ".." lexically, as the Win32 path APIs do. On POSIX the walk
+  # keeps ".." physical.
+  if ($onWindows) {
+    try { $path = [System.IO.Path]::GetFullPath($path) } catch { }
+  }
   $root = [System.IO.Path]::GetPathRoot($path)
   $parts = @($path.Substring($root.Length).Split(
       [char[]]@('\', '/'), [System.StringSplitOptions]::RemoveEmptyEntries))
@@ -79,7 +88,7 @@ function script:Get-PhysicalPath([string]$path, [int]$depth = 0) {
 
 if ($onWindows) {
   $currentPointer = Join-Path $rendered 'current'
-  $versionDir = Join-Path $rendered '0.16.0'
+  $versionDir = Join-Path $rendered $version
   if (Test-Path -LiteralPath $versionDir -PathType Container) {
     $currentItem = Get-Item -LiteralPath $currentPointer -Force -ErrorAction SilentlyContinue
     if (-not $currentItem) {
@@ -94,7 +103,7 @@ if ($onWindows) {
       $physVersion = Get-PhysicalPath $versionDir
       if (-not ($physCurrent -and $physVersion -and $physCurrent.Equals($physVersion, $ignoreCase))) {
         $currentTarget = [string]@($currentItem.Target)[0]
-        Write-Warning "idd-skill data: $currentPointer points at $currentTarget, not 0.16.0; not overwriting."
+        Write-Warning "idd-skill data: $currentPointer points at $currentTarget, not $version; not overwriting."
       }
     } else {
       Write-Warning "idd-skill data: $currentPointer is not a link; not overwriting."
@@ -121,10 +130,10 @@ if ($xdgDataHome -ne [System.IO.Path]::GetPathRoot($xdgDataHome)) {
   $xdgDataHome = $xdgDataHome.TrimEnd('\', '/')
 }
 
-# Compare physical paths, so a link on the way, a different spelling or letter
-# case of the same directory counts as the same directory. A root that resolves
-# to the deployed tree, or to anything inside it, is refused: a link there would
-# point back into its own payload.
+# Compare physical paths, so a link on the way, a different spelling, letter
+# case or 8.3 short name of the same directory counts as the same directory. A
+# root that resolves to the deployed tree, or to anything inside it, is refused:
+# a link there would point back into its own payload.
 $physRendered = Get-PhysicalPath $rendered
 $physDefault = Get-PhysicalPath $defaultDataHome
 $physXdg = Get-PhysicalPath $xdgDataHome
