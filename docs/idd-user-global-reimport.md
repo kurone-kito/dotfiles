@@ -116,8 +116,10 @@ they are during a re-import:
 - The deployment note after the link line in each of the five renders: the four
   copies and the Claude import. The `node` fallback in the entry text needs
   `$PAYLOAD/scripts/`, which this payload does not have, so the note tells the
-  agent to run `~/.local/bin/idd-activation` instead. The note sits outside the
-  managed block, so each copy stays byte-identical to `entry.md`.
+  agent to run `~/.local/bin/idd-activation` instead, or on Windows
+  `~/.local/bin/idd-activation.cmd`, which runs the PowerShell twin with the
+  execution policy bypassed. The note sits outside the managed block, so each
+  copy stays byte-identical to `entry.md`.
 - `home/dot_config/idd-skill/config.json.tmpl` keeps only the CodeRabbit critique
   delegate and the telemetry hook. Upstream dogfood policy keys are not copied
   into it.
@@ -125,7 +127,7 @@ they are during a re-import:
   section of `home/.chezmoitemplates/opencode-compact-instructions`, and only the
   compact render carries it. The section runs `idd-activation` from the
   repository directory, falls back to `~/.local/bin/idd-activation` when `PATH`
-  lacks it, and opens `.github/instructions/idd-overview-core.instructions.md`
+  lacks it (on Windows, `~/.local/bin/idd-activation.cmd`), and opens `.github/instructions/idd-overview-core.instructions.md`
   under the reported `instructionsRoot` only when `active` is `true`. Where a
   lite file exists for the phase,
   it reads `.github/instructions/lite/idd-<phase>-lite.instructions.md` under that
