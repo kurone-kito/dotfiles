@@ -130,9 +130,10 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
 
 ## Preconditions for an isolated HOME
 
-- A *qualified root* is an absolute path that does not start with `//`.
-  `HOME` must be a qualified root. An environment value named below counts
-  only when it is a qualified root; otherwise the default applies.
+- A *qualified root* is an absolute path that does not start with `//`,
+  after any surrounding whitespace is removed. `HOME` must be a qualified
+  root. An environment value named below counts only when it is a qualified
+  root; otherwise the default applies.
 - These directories must already exist. The installer never creates the
   directory above the data root, a skill root, or a harness directory. It
   creates the data root, the two skill roots, and each missing directory
