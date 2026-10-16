@@ -125,8 +125,9 @@ they are during a re-import:
   section of `home/.chezmoitemplates/opencode-compact-instructions`, and only the
   compact render carries it. The section runs `idd-activation` from the
   repository directory, falls back to `~/.local/bin/idd-activation` when `PATH`
-  lacks it, and then opens `.github/instructions/idd-overview-core.instructions.md`
-  under the reported `instructionsRoot`. Where a lite file exists for the phase,
+  lacks it, and opens `.github/instructions/idd-overview-core.instructions.md`
+  under the reported `instructionsRoot` only when `active` is `true`. Where a
+  lite file exists for the phase,
   it reads `.github/instructions/lite/idd-<phase>-lite.instructions.md` under that
   root instead of the standard phase file. This repository adds no
   `opencode.json` source, because a second `instructions` entry would load the

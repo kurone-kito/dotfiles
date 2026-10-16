@@ -228,6 +228,8 @@ REIMPORT_LINK='docs/idd-user-global-reimport.md'
   assert_output 1
   run grep -c 'idd-overview-core.instructions.md' "$BATS_TEST_TMPDIR/compact.md"
   assert_output 1
+  run grep -c 'If `active` is `true`, open' "$BATS_TEST_TMPDIR/compact.md"
+  assert_output 1
   run grep -c -e '^## Commit rules$' -e '^# IDD entry (user-global)$' "$BATS_TEST_TMPDIR/compact.md"
   assert_output 0
 }
