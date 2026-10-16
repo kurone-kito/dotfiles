@@ -111,6 +111,139 @@ Describe 'link-idd-skill-xdg-data' {
       Should -BeFalse
   }
 
+  It 'no-ops when XDG_DATA_HOME is the deployed data root itself' {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $env:XDG_DATA_HOME = $deployedRoot
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
+    Test-Path -LiteralPath (Join-Path $deployedRoot 'idd-skill') | Should -BeFalse
+  }
+
+  It 'no-ops when XDG_DATA_HOME reaches the deployed tree through a chain of links' {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $hop = Join-Path $TestDrive 'hop-root'
+    $chain = Join-Path $TestDrive 'chain-root'
+    $null = New-Item -ItemType SymbolicLink -Path $hop -Target $deployedRoot
+    $null = New-Item -ItemType SymbolicLink -Path $chain -Target $hop
+    $env:XDG_DATA_HOME = Join-Path $chain '0.16.0'
+
+    { & $script:Subject 3>$null } | Should -Not -Throw
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+      Should -BeFalse
+  }
+
+  It 'no-ops when XDG_DATA_HOME reaches the deployed tree through a link to its parent' {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $share = Join-Path $HOME (Join-Path '.local' 'share')
+    $alias = Join-Path $TestDrive 'alias-share'
+    $null = New-Item -ItemType SymbolicLink -Path $alias -Target $share
+    $env:XDG_DATA_HOME = Join-Path $alias (Join-Path 'idd-skill' '0.16.0')
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+      Should -BeFalse
+  }
+
+  # PowerShell 5.1 resolves a relative -Target against the current directory, so
+  # the link is not made there. This case runs on PowerShell 7 only.
+  It 'no-ops when XDG_DATA_HOME reaches the deployed tree through a relative link' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $relative = Join-Path $TestDrive 'relative-root'
+    $null = New-Item -ItemType SymbolicLink -Path $relative `
+      -Target (Join-Path 'home' (Join-Path '.local' (Join-Path 'share' 'idd-skill')))
+    $env:XDG_DATA_HOME = Join-Path $relative '0.16.0'
+
+    { & $script:Subject 3>$null } | Should -Not -Throw
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+      Should -BeFalse
+  }
+
+  # PowerShell 5.1 New-Item refuses a link whose target does not exist yet, and a
+  # loop needs one. This case runs on PowerShell 7 only.
+  It 'refuses an XDG_DATA_HOME whose links form a loop' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+    Write-DeployedPayload
+    $loopA = Join-Path $TestDrive 'loop-a'
+    $loopB = Join-Path $TestDrive 'loop-b'
+    $null = New-Item -ItemType SymbolicLink -Path $loopA -Target $loopB
+    $null = New-Item -ItemType SymbolicLink -Path $loopB -Target $loopA
+    $env:XDG_DATA_HOME = Join-Path $loopA 'custom'
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*nest too deeply*'
+  }
+
+  It 'stays silent when XDG_DATA_HOME is the default data home' {
+    Write-DeployedPayload
+    $env:XDG_DATA_HOME = Join-Path $HOME (Join-Path '.local' 'share')
+
+    $warnings = & $script:Subject 3>&1
+
+    @($warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }).Count |
+      Should -Be 0
+  }
+
+  It 'pins the same version as the symlink_current source' {
+    $source = Join-Path $PSScriptRoot '../../home/dot_local/share/idd-skill/symlink_current'
+    $version = (Get-Content -LiteralPath $source -Raw).Trim()
+    Get-Content -LiteralPath $script:Subject -Raw | Should -Match ([regex]::Escape("'$version'"))
+  }
+
+  It 'creates the current pointer as a directory junction on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+
+    & $script:Subject
+
+    $current = Get-Item -LiteralPath (Join-Path $deployedRoot 'current') -Force
+    $current.LinkType | Should -Be 'Junction'
+    $current.Target | Should -Contain (Join-Path $deployedRoot '0.16.0')
+  }
+
+  It 'keeps a current junction that points at another version on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $other = Join-Path $deployedRoot '0.15.0'
+    $null = New-Item -ItemType Directory -Path $other -Force
+    $currentPointer = Join-Path $deployedRoot 'current'
+    $null = New-Item -ItemType Junction -Path $currentPointer -Target $other
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*not overwriting*'
+    (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $other
+  }
+
+  It 'does not replace a real current directory on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $currentPointer = Join-Path $deployedRoot 'current'
+    $null = New-Item -ItemType Directory -Path $currentPointer -Force
+    Set-Content -Path (Join-Path $currentPointer 'marker.txt') -Value 'pre-existing'
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*is not a link*'
+    Get-Content -LiteralPath (Join-Path $currentPointer 'marker.txt') -Raw |
+      Should -BeLike '*pre-existing*'
+  }
+
   It 'does not overwrite a link pointing at a different target' {
     Write-DeployedPayload
     $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
