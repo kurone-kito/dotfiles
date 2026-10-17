@@ -4,11 +4,11 @@
 # opencode-compact-instructions, CLAUDE.md, AGENTS.md, GEMINI.md and
 # .github/copilot-instructions.md. Each passage is located by its own wording,
 # not by the position or the headings around it. The pre-check passage must
-# name the probe that replaces the old allow-loopback-pinentry test, keep the
-# loopback case, and pre-classify only a pinentry or passphrase failure of the
-# probe. The rules around it must stay as they are. The checker is the shell
-# functions below; the mutation cases run it on edited copies to prove that it
-# fails when a passage drifts.
+# carry the same probe command in every file, keep the loopback case, and
+# pre-classify only the probe's status line for a missing pinentry. The
+# verdict sentences around the probe must stay as they are. The checker is the
+# shell functions below; the mutation cases run it on edited copies to prove
+# that it fails when a passage drifts.
 # cspell:words clearsign gnupg pinentry passphrase
 
 bats_require_minimum_version 1.5.0
@@ -31,6 +31,16 @@ PROBE_TERMS=(
   '--pinentry-mode error'
   '--status-fd 2'
   '--clearsign'
+)
+VERDICT_TERMS=(
+  'Only the status line'
+  'is not pre-classified'
+  'no TTY is attached'
+  'does not set `pinentry-mode loopback`'
+  'does not count toward the three-attempt bound'
+  'still counts as attempt 1'
+  'command timeout'
+  'attempt GPG as normal'
 )
 STATUS_LINE='[GNUPG:] FAILURE sign 67108949'
 
@@ -89,11 +99,26 @@ flatten() {
   tr '\n' ' ' | tr -s ' '
 }
 
+# Print the pre-check passage of the file $2 (relative) under the root $1,
+# flattened to one line.
+pre_check_of() {
+  local marker='No-TTY pre-check'
+  [ "$2" = "$COMPACT" ] && marker='pinentry/TTY failure'
+  list_item_of "$1/$2" "$marker" | flatten
+}
+
+# Print the probe command of the pre-check passage $1 (flattened), with the
+# line continuations and the runs of blanks removed.
+probe_command_of() {
+  printf '%s\n' "$1" | sed -E 's/.*(printf probe \|.*> \/dev\/null).*/\1/' |
+    tr -d '\\' | tr -s ' '
+}
+
 # Print one message per problem found in the signing ladder of the tree rooted
 # at $1; print nothing when every passage is as required. Return 1 when at
 # least one problem was printed.
 signing_problems() {
-  local root="$1" rel marker pre ci flat term status=0
+  local root="$1" rel pre cmd ref='' flat ci term status=0
 
   for rel in "${SIX_FILES[@]}"; do
     if [ ! -f "$root/$rel" ]; then
@@ -102,42 +127,48 @@ signing_problems() {
       continue
     fi
 
-    marker='No-TTY pre-check'
-    [ "$rel" = "$COMPACT" ] && marker='pinentry/TTY failure'
-    pre="$(list_item_of "$root/$rel" "$marker" | flatten)"
+    pre="$(pre_check_of "$root" "$rel")"
     if [ -z "$pre" ]; then
       echo "$rel: pre-check passage not found"
       status=1
-    else
-      for term in "${PROBE_TERMS[@]}" "$STATUS_LINE" 'pinentry-mode loopback' \
-        'Only' 'pinentry or passphrase failure' 'Any other probe'; do
-        case "$pre" in
-          *"$term"*) ;;
-          *)
-            echo "$rel: pre-check passage lacks: $term"
-            status=1
-            ;;
-        esac
-      done
+      continue
+    fi
+
+    for term in "${PROBE_TERMS[@]}" "$STATUS_LINE" "${VERDICT_TERMS[@]}"; do
       case "$pre" in
-        *'not a signing attempt'* | *'not an attempt'*) ;;
+        *"$term"*) ;;
         *)
-          echo "$rel: pre-check passage does not say the probe is not an attempt"
+          echo "$rel: pre-check passage lacks: $term"
           status=1
           ;;
       esac
-      case "$pre" in
-        *allow-loopback-pinentry*)
-          echo "$rel: pre-check passage still depends on allow-loopback-pinentry"
-          status=1
-          ;;
-      esac
-      case "$pre" in
-        *both*)
-          echo "$rel: pre-check passage restates the two-condition rule"
-          status=1
-          ;;
-      esac
+    done
+    case "$pre" in
+      *'not a signing attempt'* | *'not an attempt'*) ;;
+      *)
+        echo "$rel: pre-check passage does not say the probe is not an attempt"
+        status=1
+        ;;
+    esac
+    case "$pre" in
+      *allow-loopback-pinentry*)
+        echo "$rel: pre-check passage still depends on allow-loopback-pinentry"
+        status=1
+        ;;
+    esac
+    case "$pre" in
+      *both*)
+        echo "$rel: pre-check passage restates the two-condition rule"
+        status=1
+        ;;
+    esac
+
+    cmd="$(probe_command_of "$pre")"
+    if [ -z "$ref" ]; then
+      ref="$cmd"
+    elif [ "$cmd" != "$ref" ]; then
+      echo "$rel: probe command differs from ${SIX_FILES[0]}"
+      status=1
     fi
 
     flat="$(flatten < "$root/$rel")"
@@ -169,8 +200,9 @@ signing_problems() {
     fi
   done
 
-  # The two passages that carried the rule against recommending loopback, and
-  # the CI paragraph that restated the two conditions, must agree with the probe.
+  # The copilot file and the shared template also carry the rule against
+  # recommending loopback and a CI paragraph that must use the probe, not the
+  # two conditions that the probe replaced.
   for rel in "$COPILOT" "$SHARED"; do
     flat="$(flatten < "$root/$rel")"
     case "$flat" in
@@ -236,12 +268,28 @@ mutate() {
   done
 }
 
+@test "a probe that differs in one file fails the guard" {
+  mutant_copy
+  mutate "$COPILOT" 's/--local-user/--local-key/'
+  run signing_problems "$MUTANT"
+  assert_failure
+  assert_output --partial "$COPILOT: probe command differs from $SHARED"
+}
+
 @test "restoring the allow-loopback-pinentry clause in CLAUDE.md fails the guard" {
   mutant_copy
   mutate CLAUDE.md 's/run this probe/run this probe (no `allow-loopback-pinentry` in the effective `gpg-agent.conf`)/'
   run signing_problems "$MUTANT"
   assert_failure
   assert_output --partial "CLAUDE.md: pre-check passage still depends on allow-loopback-pinentry"
+}
+
+@test "reversing the not-pre-classified verdict in the copilot file fails the guard" {
+  mutant_copy
+  mutate "$COPILOT" 's/timeout) is not$/timeout) is/'
+  run signing_problems "$MUTANT"
+  assert_failure
+  assert_output --partial "$COPILOT: pre-check passage lacks: is not pre-classified"
 }
 
 @test "restating both conditions in the copilot pre-check fails the guard" {
