@@ -104,7 +104,8 @@ re-import changes that pin on purpose, and updates this page in the same change.
      literals in `tests/powershell/link-idd-skill-xdg-data.Tests.ps1`. Before
      `chezmoi apply` deploys the new version, remove the old junction with a
      non-recursive command, for example
-     `cmd /c rmdir "$HOME\.local\share\idd-skill\current"` in PowerShell. The
+     `cmd /c --% rmdir "%USERPROFILE%\.local\share\idd-skill\current"`
+     in PowerShell. The
      script never replaces an existing `current`: it reports a link to another
      version and leaves it in place, so the old junction stays until it is
      removed.
