@@ -148,16 +148,29 @@ loop on hardware-touch prompts.
 1. **Attempt 1 — GPG.** Try `git commit` (or `git tag -s`,
    `git rebase`) with the configured GPG signing exactly once.
 
-   **No-TTY pre-check.** Skip this attempt and treat it as a
-   pre-classified category (P) failure — still counting as attempt 1,
-   with no signing call made — only when **both** hold: no TTY is
-   attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
-   signing is not already configured (neither `pinentry-mode loopback`
-   in the effective `gpg.conf` nor `allow-loopback-pinentry` in the
-   effective `gpg-agent.conf`). Detect existing configuration only —
-   never configure loopback pinentry automatically. Otherwise (a TTY
-   is present, or either loopback setting is configured), attempt GPG
-   here as normal.
+   **No-TTY pre-check.** Only when no TTY is attached (`tty -s` /
+   `[ -t 0 ]` fails), GPG is the configured method, and the effective
+   `gpg.conf` does not set `pinentry-mode loopback`, run this probe
+   once. It is not a signing attempt and does not count toward the
+   three-attempt bound:
+
+   ```sh
+   printf probe | "$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" \
+     --batch --pinentry-mode error --status-fd 2 \
+     --local-user "$(git config user.signingkey || git config user.email)" \
+     --clearsign > /dev/null
+   ```
+
+   Only a pinentry or passphrase failure of the probe is pre-classified
+   as category (P): its status output has `[GNUPG:] FAILURE sign 67108949`
+   (no pinentry is available; this status line does not depend on the
+   locale). It still counts as attempt 1, and no signing call is made.
+   A probe that exits 0 means the signature needs no prompt: attempt GPG
+   as normal. Any other probe failure (a missing secret key, an
+   unreachable agent, a timeout) is not pre-classified: attempt GPG as
+   normal and classify from its stderr. Detect existing configuration
+   only; never configure loopback pinentry automatically. A TTY present,
+   or `pinentry-mode loopback` configured, means attempt GPG as normal.
 
 2. **On failure, classify the cause from stderr by category** —
    not by exact English/locale strings:
@@ -236,11 +249,12 @@ stops on a conflict, continue it with `git rebase-ssh --continue`
 `git rebase --continue` reverts to GPG-primary signing.
 
 In CI / clearly non-interactive automation, prefer the shortest
-path: apply the no-TTY pre-check above; when both conditions hold, skip
-GPG as the pre-classified category (P) attempt 1, then make a single
-SSH attempt if a fallback key is configured, then use unsigned. When
-either condition does not hold, try GPG once, then make a single SSH
-attempt, then use unsigned. Skip the gpg-agent restart entirely.
+path: apply the no-TTY pre-check above; when its probe reports a
+pinentry or passphrase failure, skip GPG as the pre-classified category
+(P) attempt 1, then make a single SSH attempt if a fallback key is
+configured, then use unsigned. Otherwise, try GPG once, then make a
+single SSH attempt, then use unsigned. Skip the gpg-agent restart
+entirely.
 
 Do **not** recommend `pinentry-mode loopback` as part of automated
 recovery; it is a setup decision that requires non-interactive
