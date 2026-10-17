@@ -148,10 +148,16 @@ yt-dlp = "latest"
 
 "npm:@playwright/cli" = "latest"
 "npm:bash-language-server" = "latest"
-# Same aube low-download-count reputation gate as
-# npm:@microsoft/inshellisense above (see its comment); fast-cli hits
-# it too.
-"npm:fast-cli" = { version = "latest", allow_low_downloads = true }
+# Two aube exceptions on this entry, each for a different gate:
+# - allow_low_downloads: the same low-download-count reputation opt-in
+#   as npm:@microsoft/inshellisense above; fast-cli hits that gate too.
+# - trust_policy_excludes: puppeteer, pulled in by fast-cli, pins
+#   chromium-bidi, whose later releases lack the npm trust evidence that
+#   aube counts, so the trust-downgrade check refuses the install. This
+#   reviewed exception covers only that bare package name, inside this
+#   tool install. It does not say that fast-cli's other dependencies are
+#   trusted.
+"npm:fast-cli" = { version = "latest", allow_low_downloads = true, trust_policy_excludes = ["chromium-bidi"] }
 
 "github:d-kuro/gwq" = "latest"
 "github:anatawa12/git-vrc" = "latest"

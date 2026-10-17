@@ -597,13 +597,14 @@ _mise_tools_table() {
   assert_output --partial 'version = "latest"'
 }
 
-@test "allows low downloads for fast-cli past aube's reputation gate, unpinned" {
+@test "allows low downloads and a reviewed chromium-bidi trust exclusion for fast-cli, unpinned" {
   local config="$BATS_TEST_DIRNAME/../../home/dot_config/mise/config.toml"
 
   run grep '^"npm:fast-cli"' "$config"
   assert_success
   assert_output --partial 'allow_low_downloads = true'
   assert_output --partial 'version = "latest"'
+  assert_output --partial 'trust_policy_excludes = ["chromium-bidi"]'
 }
 
 # ---------------------------------------------------------------------------
