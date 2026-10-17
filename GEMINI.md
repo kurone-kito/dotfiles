@@ -61,16 +61,29 @@ whole ladder is **at most three signing attempts**; each step is a
 **single bounded attempt**. Never loop on hardware-touch prompts.
 
 1. **GPG (attempt 1).** Try the configured GPG signing once.
-   - **No-TTY pre-check.** Skip this attempt and treat it as a
-     pre-classified category (P) failure — still counting as attempt 1,
-     with no signing call made — only when **both** hold: no TTY is
-     attached (`tty -s` / `[ -t 0 ]` fails), and non-interactive GPG
-     signing is not already configured (neither `pinentry-mode loopback`
-     in the effective `gpg.conf` nor `allow-loopback-pinentry` in the
-     effective `gpg-agent.conf`). Detect existing configuration only —
-     never configure loopback pinentry automatically. Otherwise (a TTY
-     is present, or either loopback setting is configured), attempt GPG
-     here as normal.
+   - **No-TTY pre-check.** Only when no TTY is attached (`tty -s` /
+     `[ -t 0 ]` fails), GPG is the configured method, and the effective
+     `gpg.conf` does not set `pinentry-mode loopback`, run this probe
+     once, under the agent's command timeout. It is not a signing attempt
+     and does not count toward the three-attempt bound:
+
+     ```sh
+     printf probe | "$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" \
+       --batch --pinentry-mode error --status-fd 2 \
+       --local-user "$(git config user.signingkey || git config user.email)" \
+       --clearsign > /dev/null
+     ```
+
+     Only the status line `[GNUPG:] FAILURE sign 67108949` on stderr (no
+     pinentry is available; the line does not depend on the locale) is
+     pre-classified as category (P). The skipped GPG attempt still counts
+     as attempt 1, and no signing call is made. A probe that exits 0 means
+     the signature needs no prompt: attempt GPG as normal. Any other probe
+     result (a missing secret key, an unreachable agent, a timeout) is not
+     pre-classified: attempt GPG as normal and classify from its stderr.
+     The probe changes no configuration; never configure loopback pinentry
+     automatically. A TTY present, or `pinentry-mode loopback` configured,
+     means attempt GPG as normal.
 2. **Classify the failure** by category, not by exact strings:
    **(P)** pinentry / TTY / passphrase prompt failure;
    **(C)** missing / unusable secret key (configuration);
