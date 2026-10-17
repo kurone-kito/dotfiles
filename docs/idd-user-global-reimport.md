@@ -90,8 +90,11 @@ re-import changes that pin on purpose, and updates this page in the same change.
    entry text are not covered by this stop rule, because step 3 updates them.
 5. When the pin changes, the new version is a new directory, and the `current`
    link moves to it in the same change. Update the pin on this page and on the
-   tracking issue together. The old version directory is removed only after the
-   maintainer decides so.
+   tracking issue together. Each `{{ include ... }}` path to `user-global/entry.md`
+   in the copies moves to the new version too. The entry-copy test in
+   `tests/bash/opencode-instruction-profiles.bats` reads the version from
+   `symlink_current`, and it fails while a copy still names an older version.
+   The old version directory is removed only after the maintainer decides so.
 
 The tracking issue is the issue that tracks the re-import. Today that is
 roadmap #643.
@@ -110,16 +113,27 @@ they are during a re-import:
   are inlined, because upstream does not wire those harnesses. The Claude
   template imports the deployed file instead, and the compact OpenCode render
   carries no copy.
+- The deployment note after the link line in each of the five renders: the four
+  copies and the Claude import. The `node` fallback in the entry text needs
+  `$PAYLOAD/scripts/`, which this payload does not have, so the note tells the
+  agent to run `~/.local/bin/idd-activation` instead, or on Windows
+  `~/.local/bin/idd-activation.cmd`, which runs the PowerShell twin with the
+  execution policy bypassed. The note sits outside the managed block, so each
+  copy stays byte-identical to `entry.md`.
 - `home/dot_config/idd-skill/config.json.tmpl` keeps only the CodeRabbit critique
   delegate and the telemetry hook. Upstream dogfood policy keys are not copied
   into it.
-- The OpenCode compact routing is introduced by #649. It is one sentence in
-  `home/.chezmoitemplates/opencode-compact-instructions` and
-  `home/dot_config/opencode/AGENTS.md.tmpl`. It reads `.github/instructions/lite/`
-  under the reported `instructionsRoot` when a lite file exists for the phase,
-  and otherwise opens `.github/instructions/idd-overview-core.instructions.md`
-  under that root. This repository adds no `opencode.json` source, because a
-  second `instructions` entry would load the activation entry twice.
+- The OpenCode compact routing is introduced by #649. It is the `## IDD workflow`
+  section of `home/.chezmoitemplates/opencode-compact-instructions`, and only the
+  compact render carries it. The section runs `idd-activation` from the
+  repository directory, falls back to `~/.local/bin/idd-activation` when `PATH`
+  lacks it (on Windows, `~/.local/bin/idd-activation.cmd`). When `active` is
+  `true`, it reads the lite file for the phase under the reported
+  `instructionsRoot` when that file exists, and otherwise opens
+  `.github/instructions/idd-overview-core.instructions.md` under that root. This
+  repository adds no
+  `opencode.json` source, because a second `instructions` entry would load the
+  activation entry twice.
 - The repo-local IDD corpus (`.github/instructions/`, `.claude/skills/`,
   `docs/idd-*`, and `.github/idd/config.json`) is not replaced by the payload.
   The user-global payload and the repo-local import are separate.

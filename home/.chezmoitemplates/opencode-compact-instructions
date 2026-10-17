@@ -50,3 +50,17 @@ The compact profile targets 2–4B models; the extended profile may suit
 users choosing 12–20B models. These are heuristics: parameter count does
 not guarantee context sufficiency, instruction following, or reliable
 tool use.
+
+## IDD workflow
+
+For IDD work in a Git repository, run `idd-activation` from the repository
+directory before you start. If it is not on `PATH`, run
+`~/.local/bin/idd-activation` instead, or `~/.local/bin/idd-activation.cmd` on
+Windows. Read the JSON output. If `active` is `true`, read the lite file for the
+phase you are in, `.github/instructions/lite/idd-<phase>-lite.instructions.md`
+under the reported `instructionsRoot`, when that file exists. Otherwise, open
+`.github/instructions/idd-overview-core.instructions.md` under that root and
+follow its phase routing. If `active` is not `true`, do nothing IDD-specific: run
+no other IDD helper and change no repository state.
+
+Re-import procedure: https://github.com/kurone-kito/dotfiles/blob/master/docs/idd-user-global-reimport.md

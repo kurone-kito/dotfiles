@@ -45,6 +45,22 @@ enabled by default
 scans `~/.claude/CLAUDE*.md`, which `home/dot_claude/CLAUDE.md.tmpl`
 deploys, so it inherits the Claude Code baseline. See roadmap #491.
 
+**IDD entry**: the Claude, Codex, Copilot CLI, Gemini and extended OpenCode
+renders carry the IDD activation entry in a managed block, followed by a link
+to `docs/idd-user-global-reimport.md`. Claude imports the deployed `entry.md`
+with `@`. The other four carry a copy of the vendored text, which a re-import
+updates together with the payload. The compact OpenCode render carries only
+its routing section. Cursor CLI documents no file-based global instruction
+file, so it is not wired. Grok Build reads the Claude file through its
+`[compat.claude]` layer, but whether Grok follows the `@` import inside that
+file is not verified. The link line and the deployment note sit outside the
+managed block, so uninstalling the payload leaves them behind. The installer
+also writes OpenCode's `opencode.json` instructions when OpenCode is selected,
+which is its default, and for extended OpenCode users that loads the entry
+twice. This setup does not run the installer against the live home. Only an
+isolated staging run of the installer should pass `--harness claude,codex`,
+which leaves `opencode.json` unwritten.
+
 **Precedence rule**: project-level instructions always take
 precedence over the user-global file. Each shared-template body opens
 with an explicit deference paragraph stating this rule. The
