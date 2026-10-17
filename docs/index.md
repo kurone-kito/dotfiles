@@ -72,10 +72,12 @@ the table below so this index still covers the full `docs/` bundle.
 | guide | [VS Code Integrated Terminal](vscode-terminal.md) | Explains how this dotfiles PowerShell profile adapts to VS Code's integrated terminal and lists recommended VS Code settings. |
 | guide | [Declaring WinGet package directories in the User PATH](winget-user-path.md) | Explains how to declare a WinGet portable package's real directory so it is registered in the managed User PATH independent of WinGet's symlinks. |
 | guide | [WSL incident recovery runbook](wsl-incident-recovery.md) | Manual SSH checkpoint and evidence-preserving recovery runbook for a Windows host whose WSL guest stops answering. |
+| guide | [WSL incident telemetry](wsl-incident-telemetry.md) | Run the bounded, foreground WSL host evidence collector and review its local JSONL records. |
 | guide | [WSL workload budget](wsl-workload-budget.md) | Manual baseline, admit, observe, reduce, and resume workflow for bounding concurrent heavy jobs in a WSL guest using the incident collector's evidence. |
 | guide | [Zellij Web Client — Mobile Usage Guide](zellij-web-mobile.md) | Covers known limitations and recommended workarounds for using the Zellij web client from mobile devices. |
 | reference | [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md) | Documents every chezmoi.toml configuration path, with each field's type, default, and a link to its deployment guide. |
 | guide | [CodeRabbit critique delegate and review mode](coderabbit-deep-review.md) | Opt in to the CodeRabbit critique delegate, and to its lite or deep review mode, from the chezmoi configuration. |
 | reference | [IDD Policy Configuration](idd-policy.md) | Records this repository's confirmed IDD policy decisions alongside their machine-readable mirror in .github/idd/config.json. |
 | reference | [IDD User-Global Install Inventory](idd-user-global-inventory.md) | Records the paths the idd-skill v0.16.0 user-global installer writes, captured from one isolated installer run at commit e4d425ee, as the reference for the v0.16.0 payload vendoring and re-import tracks. |
+| guide | [Re-importing the user-global IDD payload](idd-user-global-reimport.md) | Records how a re-import keeps this repository's chezmoi copy of the IDD user-global payload in step with a pinned idd-skill commit, and which local seams it must not overwrite. |
 <!-- dprint-ignore-end -->
