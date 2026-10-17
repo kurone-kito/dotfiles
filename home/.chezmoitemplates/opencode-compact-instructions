@@ -17,14 +17,15 @@ These defaults apply across repositories when OpenCode loads
 
 - Use Conventional Commits: lowercase imperative subject, under 72
   characters, no final period. Keep each commit focused.
-- Try the configured signer once. With GPG and no TTY, unless `gpg.conf`
-  sets `pinentry-mode loopback`, first run this probe, which is not an
-  attempt: `printf probe | gpg --batch --pinentry-mode error
-  --status-fd 2 --local-user <signing key> --clearsign > /dev/null`.
-  Only its `[GNUPG:] FAILURE sign 67108949` pinentry or passphrase failure
-  is a pinentry/TTY failure: skip the attempt, still counting it as
-  attempt 1. Any other probe result, including exit 0, attempts GPG as
-  normal. Never enable loopback automatically.
+- Try the configured signer once. With GPG, when no TTY is attached and
+  `gpg.conf` does not set `pinentry-mode loopback`, first run this probe
+  under the agent's command timeout. It is not an attempt and does not
+  count toward the three-attempt bound: `printf probe | "$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" --batch --pinentry-mode error --status-fd 2 --local-user "$(git config user.signingkey || git config user.email)" --clearsign > /dev/null`.
+  Only the status line `[GNUPG:] FAILURE sign 67108949` on stderr is a
+  pinentry/TTY failure (P): skip the attempt, which still counts as
+  attempt 1. A probe that exits 0, or fails for any other reason, is not
+  pre-classified: attempt GPG as normal. Never enable loopback
+  automatically.
 - Classify signing failures: pinentry/TTY (P), missing or unusable key
   (C), agent/socket/IPC or timeout without pinentry evidence (A), and
   unclear runner timeout (U).
