@@ -95,6 +95,19 @@ re-import changes that pin on purpose, and updates this page in the same change.
    `tests/bash/opencode-instruction-profiles.bats` reads the version from
    `symlink_current`, and it fails while a copy still names an older version.
    The old version directory is removed only after the maintainer decides so.
+   - On Windows, `current` is a directory junction that
+     `home/run_after_83-link-idd-skill-xdg-data.ps1` creates at
+     `~/.local/share/idd-skill/current` when `chezmoi apply` runs it, whatever
+     `XDG_DATA_HOME` is set to. The version that junction names is set in three
+     places that must agree: the `$version` constant in that script, the content
+     of `home/dot_local/share/idd-skill/symlink_current`, and the version
+     literals in `tests/powershell/link-idd-skill-xdg-data.Tests.ps1`. Before
+     `chezmoi apply` deploys the new version, remove the old junction with a
+     non-recursive command, for example
+     `cmd /c rmdir "$HOME\.local\share\idd-skill\current"` in PowerShell. The
+     script never replaces an existing `current`: it reports a link to another
+     version and leaves it in place, so the old junction stays until it is
+     removed.
 
 The tracking issue is the issue that tracks the re-import. Today that is
 roadmap #643.
