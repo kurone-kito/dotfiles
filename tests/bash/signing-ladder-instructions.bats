@@ -26,12 +26,11 @@ COMPACT=home/.chezmoitemplates/opencode-compact-instructions
 SHARED=home/.chezmoitemplates/ai-agent-user-global
 COPILOT=.github/copilot-instructions.md
 
-PROBE_TERMS=(
-  'printf probe |'
-  '--pinentry-mode error'
-  '--status-fd 2'
-  '--clearsign'
-)
+# The probe command every passage must state once its line continuations and
+# blanks are normalized: the git-configured executable and signing key, a
+# batch run, the error pinentry mode, the status stream on fd 2, and a
+# clearsign to /dev/null.
+PROBE_CANONICAL='printf probe | "$(git config gpg.openpgp.program || git config gpg.program || echo gpg)" --batch --pinentry-mode error --status-fd 2 --local-user "$(git config user.signingkey || git config user.email)" --clearsign > /dev/null'
 VERDICT_TERMS=(
   'Only the status line'
   'is not pre-classified'
@@ -118,7 +117,7 @@ probe_command_of() {
 # at $1; print nothing when every passage is as required. Return 1 when at
 # least one problem was printed.
 signing_problems() {
-  local root="$1" rel pre cmd ref='' flat ci term status=0
+  local root="$1" rel pre cmd flat ci term status=0
 
   for rel in "${SIX_FILES[@]}"; do
     if [ ! -f "$root/$rel" ]; then
@@ -134,7 +133,7 @@ signing_problems() {
       continue
     fi
 
-    for term in "${PROBE_TERMS[@]}" "$STATUS_LINE" "${VERDICT_TERMS[@]}"; do
+    for term in "$STATUS_LINE" "${VERDICT_TERMS[@]}"; do
       case "$pre" in
         *"$term"*) ;;
         *)
@@ -164,10 +163,8 @@ signing_problems() {
     esac
 
     cmd="$(probe_command_of "$pre")"
-    if [ -z "$ref" ]; then
-      ref="$cmd"
-    elif [ "$cmd" != "$ref" ]; then
-      echo "$rel: probe command differs from ${SIX_FILES[0]}"
+    if [ "$cmd" != "$PROBE_CANONICAL" ]; then
+      echo "$rel: probe command differs from the canonical probe"
       status=1
     fi
 
@@ -264,16 +261,27 @@ mutate() {
     mutate "$rel" 's/--pinentry-mode error/--pinentry-mode ask/'
     run signing_problems "$MUTANT"
     assert_failure
-    assert_output --partial "$rel: pre-check passage lacks: --pinentry-mode error"
+    assert_output --partial "$rel: probe command differs from the canonical probe"
   done
 }
 
-@test "a probe that differs in one file fails the guard" {
+@test "a probe that differs from the canonical command fails the guard" {
   mutant_copy
   mutate "$COPILOT" 's/--local-user/--local-key/'
   run signing_problems "$MUTANT"
   assert_failure
-  assert_output --partial "$COPILOT: probe command differs from $SHARED"
+  assert_output --partial "$COPILOT: probe command differs from the canonical probe"
+}
+
+@test "dropping --batch from the probe in one file fails the guard" {
+  local rel
+  for rel in "${SIX_FILES[@]}"; do
+    mutant_copy
+    mutate "$rel" 's/--batch --pinentry-mode error/--pinentry-mode error/'
+    run signing_problems "$MUTANT"
+    assert_failure
+    assert_output --partial "$rel: probe command differs from the canonical probe"
+  done
 }
 
 @test "restoring the allow-loopback-pinentry clause in CLAUDE.md fails the guard" {
