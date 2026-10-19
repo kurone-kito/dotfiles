@@ -30,6 +30,11 @@ cleanup-editor-confd.sh
 .config/sheldon/**
 .local/share/idd-skill/current
 {{- else }}
+{{- /* The entries below are ignored on non-Windows hosts, so they deploy
+     on Windows only. The idd-*.cmd launchers deploy on Windows
+     unconditionally. The coderabbit-*.cmd launchers are the exception: on
+     Windows they are ignored unless the resolved CodeRabbit mode is lite or
+     deep (see the mode gate below). */}}
 AppData
 .psmux.conf
 generate-git-profiles.ps1
