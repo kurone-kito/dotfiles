@@ -32,7 +32,9 @@
 # signingkey = ""  # default: ""
 # Repository path prefix that activates this profile. It must end with "/".
 # gitdir = "REPLACE: for example ~/work/"  # required
-# Same meaning as data.git.signing_format, for this profile only.
+# Same meaning as data.git.signing_format, for this profile only. "ssh" needs
+# exactly one [data.secret.ssh.keys.*] entry whose signing_profiles lists this
+# profile's label. A signing_fallback = true on the global key does not count.
 # signing_format = ""  # default: unset; allowed values: "gpg", "ssh"
 # Optional SSH host alias. When set, ghq clones under gitdir use it through
 # url.insteadOf.
@@ -45,8 +47,9 @@
 # launchers, the user-global critique delegate and the issue-authoring draft
 # reviewer. "deep" does the same and also sets CODERABBIT_CRITIQUE_DEEP=1.
 # review = false  # default: false; allowed values: false, true, "lite", "deep"
-# Deprecated alias for review = "deep". Every use prints a deprecation notice,
-# so set review instead.
+# Deprecated alias for review = "deep". false does nothing. true selects deep
+# mode only when review is absent; a review value always wins. Every use prints
+# a deprecation notice, so set review instead.
 # deepReview = false  # default: false; deprecated
 
 # OpenCode instruction profile.
@@ -57,8 +60,10 @@
 
 # Secret manager backend.
 # [data.secret]
-# Backend name: "bitwarden", "onepassword", "keepassxc", "local" or "none".
-# manager = "REPLACE: backend name"  # required
+# Secret backend: "bitwarden", "onepassword", "keepassxc", "local" or
+# "none". "none" is a safe starting value with no secret retrieval. Replace it
+# with the backend you use when you need secrets.
+# manager = "none"  # required
 # Local secrets directory. It is used only when manager = "local".
 # local_dir = "~/.config/chezmoi/secrets"  # default
 
@@ -74,7 +79,8 @@
 # File name written under ~/.ssh/.
 # filename = "REPLACE: for example id_ed25519_personal"  # required
 # true registers this key for the global commit-ssh, tag-ssh and rebase-ssh
-# aliases. At most one key may set it.
+# aliases; at most one key may set it. false leaves the key out of those global
+# fallback aliases.
 # signing_fallback = false  # default: false
 # Profile labels (matching data.git.profiles) that also get scope-local
 # fallback aliases.
@@ -113,6 +119,7 @@
 # true clones over SSH. false clones over HTTPS.
 # ssh = true  # default: true
 # true trusts the mise configs found in cloned repositories automatically.
+# false leaves those configs untrusted.
 # mise_trust = false  # default: false
 
 # Extra WinGet package directories added to the User PATH. The repository
@@ -124,7 +131,8 @@
 # Subpath inside the package directory to add to PATH. It may contain one *
 # version-suffix segment.
 # bin = ""  # default: ""
-# false disables an inherited entry of the same key.
+# true keeps the entry enabled. false disables an inherited entry of the same
+# key.
 # enabled = true  # default: true
 
 # Windows OpenSSH server hardening.
@@ -133,11 +141,13 @@
 # clientAliveInterval = 300  # default: 300
 # Missed probes tolerated before the connection is closed.
 # clientAliveCountMax = 5  # default: 5
-# Windows sshd default shell. Allowed values: "cmd", "legacy-powershell",
-# "modern-powershell". Empty means no change.
+# Windows sshd default shell. "cmd" resets the setting to cmd.exe and removes
+# the DefaultShell registry values. "legacy-powershell" sets powershell.exe and
+# fails loudly if it is missing. "modern-powershell" sets pwsh.exe and fails
+# loudly if it is missing. Empty leaves the setting unchanged.
 # defaultShell = ""  # default: "" (no change)
-# With defaultShell = "modern-powershell", fall back to powershell.exe when
-# pwsh.exe is missing or cannot be resolved.
+# true lets "modern-powershell" fall back to powershell.exe when pwsh.exe is
+# missing. false keeps that failure instead.
 # defaultShellFallbackToLegacy = false  # default: false
 
 # systemd-tmpfiles /tmp cleanup age. Linux with systemd-tmpfiles only.
@@ -152,7 +162,7 @@
 
 # Local development CA through mkcert (Windows only).
 # [data.mkcert]
-# true runs mkcert -install on Windows during chezmoi apply.
+# true runs mkcert -install on Windows during chezmoi apply. false skips it.
 # install = false  # default: false
 # Seconds to wait for mkcert -install. Must be a positive whole number no
 # greater than 2147483647.
@@ -176,12 +186,12 @@
 # Zellij, shared by every OS.
 # [data.zellij]
 # true replaces Nerd Font glyphs with ASCII in the shared keybinding and
-# plugin config, for clients without Nerd Fonts.
+# plugin config, for clients without Nerd Fonts. false keeps the glyphs.
 # simplified_ui = false  # default: false
 
 # Built-in Zellij web server.
 # [data.zellij.web]
-# true enables the built-in web server.
+# true enables the built-in web server. false disables it.
 # server = true  # default: true
 # Session-sharing policy passed through to web_sharing.
 # sharing = "on"  # default: "on"
@@ -196,12 +206,11 @@
 # key = ""  # default: "" (required off localhost)
 # Optional reverse-proxy subpath.
 # base_url = ""  # default: ""
-# true enforces HTTPS even when bound to 127.0.0.0/8. It is always enforced
-# off localhost.
+# true enforces HTTPS even when bound to 127.0.0.0/8. false does not enforce
+# it there. HTTPS is always enforced off localhost.
 # enforce_https_on_localhost = false  # default: false
-# Terminal font stack for the web client, passed through as is. The value
-# shown is the default.
-# client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"
+# Terminal font stack for the web client, passed through as is.
+# client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"  # default
 # true blinks the web client cursor. false keeps it steady.
 # client_cursor_blink = true  # default: true
 # Web client cursor style. Allowed values: "block", "bar", "underline".
@@ -212,8 +221,10 @@
 
 # Publish the web server through tailscale serve.
 # [data.zellij.web.tailscale]
-# true publishes the server. It requires data.zellij.web.bind to stay
-# "127.0.0.1"; the ensure-zellij-web wrapper fails otherwise.
+# true publishes the server through tailscale serve. It requires
+# data.zellij.web.bind to stay "127.0.0.1"; the ensure-zellij-web wrapper fails
+# otherwise. false skips the tailscale serve setup and does not remove an
+# existing route.
 # enabled = false  # default: false
 # Tailnet HTTPS port used for the published route.
 # https_port = 443  # default: 443
@@ -221,11 +232,14 @@
 # Autostart for the web server. One table per OS; apply only the table for the
 # OS you use.
 # [data.zellij.web.windows]
-# Windows: "onlogon" registers a per-user Scheduled Task.
+# Windows: "onlogon" registers a per-user Scheduled Task. "disabled" (default)
+# removes that task if it exists.
 # autostart = "disabled"  # default; allowed: "disabled", "onlogon"
 # [data.zellij.web.linux]
-# Linux: "systemd-user" installs a user service.
+# Linux: "systemd-user" installs a user service. "disabled" (default) disables
+# and stops the user service if it exists.
 # autostart = "disabled"  # default; allowed: "disabled", "systemd-user"
 # [data.zellij.web.macos]
-# macOS: "launchagent" registers a LaunchAgent.
+# macOS: "launchagent" registers a LaunchAgent. "disabled" (default) unloads it
+# if it exists.
 # autostart = "disabled"  # default; allowed: "disabled", "launchagent"
