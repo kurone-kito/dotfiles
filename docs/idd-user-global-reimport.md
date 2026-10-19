@@ -139,13 +139,7 @@ they are during a re-import:
   into it.
 - The OpenCode compact routing is introduced by #649. It is the `## IDD workflow`
   section of `home/.chezmoitemplates/opencode-compact-instructions`, and only the
-  compact render carries it. The section runs `idd-activation` from the
-  repository directory, falls back to `~/.local/bin/idd-activation` when `PATH`
-  lacks it (on Windows, `~/.local/bin/idd-activation.cmd`). When `active` is
-  `true`, it reads the lite file for the phase under the reported
-  `instructionsRoot` when that file exists, and otherwise opens
-  `.github/instructions/idd-overview-core.instructions.md` under that root. This
-  repository adds no
+  compact render carries it. This repository adds no
   `opencode.json` source, because a second `instructions` entry would load the
   activation entry twice.
 - The repo-local IDD corpus (`.github/instructions/`, `.claude/skills/`,
