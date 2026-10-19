@@ -1,5 +1,8 @@
 chat:
-  auto_reply: true
+  # Decision (#666): false. The schema describes auto_reply as CodeRabbit replying
+  # without a mention. The four replies cited in #666 were such replies, so
+  # false stops them, and CodeRabbit then replies only when mentioned.
+  auto_reply: false
 early_access: true
 issue_enrichment:
   labeling:
