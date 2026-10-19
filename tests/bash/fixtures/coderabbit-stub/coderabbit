@@ -1,0 +1,12 @@
+#!/bin/sh
+# Test-only stand-in for the coderabbit CLI. Each call appends one line to the
+# suite record, which teardown_suite() in setup_suite.bash reads, and also to
+# CODERABBIT_STUB_RECORD when a test sets it, then exits 127. The suite record
+# is written even when a test overrides the second file, so such a test cannot
+# hide a call from the suite guard.
+line="$*"
+printf '%s\n' "$line" >> "${BATS_SUITE_TMPDIR:?}/coderabbit-calls"
+if [ -n "${CODERABBIT_STUB_RECORD:-}" ]; then
+  printf '%s\n' "$line" >> "$CODERABBIT_STUB_RECORD"
+fi
+exit 127
