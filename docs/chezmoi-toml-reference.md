@@ -20,6 +20,40 @@ user-chosen identifiers; see
 [Secret manager setup](secret-manager-setup.md)'s "Naming conventions"
 for the cross-section consistency convention this repository uses.
 
+## Quick start: copy the sample
+
+[`chezmoi.example.toml`](../chezmoi.example.toml) at the repository root
+lists every setting on this page as a commented-out table or assignment,
+each with a short comment. Copying it activates nothing. Uncomment only the
+settings you want, replace each `REPLACE` value, and leave the rest at their
+defaults.
+
+Run the commands below from the repository root. Each one creates
+`~/.config/chezmoi` when it is missing. The copy step asks before it
+overwrites an existing `chezmoi.toml`.
+
+Unix (`sh`, `bash`, `zsh`):
+
+```sh
+mkdir -p ~/.config/chezmoi
+cp -i chezmoi.example.toml ~/.config/chezmoi/chezmoi.toml
+```
+
+PowerShell (`pwsh`, and Windows PowerShell 5.1):
+
+```powershell
+$dir = Join-Path (Join-Path $HOME '.config') 'chezmoi'
+$dest = Join-Path $dir 'chezmoi.toml'
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+if (-not (Test-Path -LiteralPath $dest) -or (Read-Host "Overwrite ${dest}? (y/N)") -eq 'y') {
+  Copy-Item -LiteralPath 'chezmoi.example.toml' -Destination $dest -Force
+}
+```
+
+If `~/.config/chezmoi/chezmoi.toml` already exists, do not overwrite it.
+Copy only the settings you need from the sample into the existing file, and
+keep the settings it already has.
+
 ## Git identity (`data.git`, `data.git.profiles.<label>`)
 
 `[data.git]` is the **primary** identity, applied to every repository
