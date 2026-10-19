@@ -1,0 +1,252 @@
+# chezmoi.example.toml
+#
+# A copy-ready sample of the project's [data.*] settings. Every table header
+# and assignment below is commented out, so copying this file activates
+# nothing. To use a setting, uncomment its table header and its assignments,
+# then replace each REPLACE value. Keep the defaults for everything else.
+#
+# Copy it to ~/.config/chezmoi/chezmoi.toml; docs/chezmoi-toml-reference.md
+# has the commands. If that file already exists, merge the settings you need
+# instead of overwriting it.
+#
+# Field-by-field types, defaults and required status are in
+# docs/chezmoi-toml-reference.md. Each optional field names its default in a
+# trailing comment. A field whose default is computed says so, and its line
+# can be left out to keep that default.
+
+# Primary git identity, used for every repository unless a profile overrides it.
+# [data.git]
+# name = "REPLACE: your git user name"  # required
+# email = "REPLACE: your git email address"  # required
+# GPG fingerprint for commit signing. An empty string disables GPG signing.
+# signingkey = ""  # default: ""
+# Forces the primary signing backend to "gpg" or "ssh". "ssh" requires exactly
+# one [data.secret.ssh.keys.*] entry with signing_fallback = true.
+# signing_format = ""  # default: unset; allowed values: "gpg", "ssh"
+
+# Directory-scoped identity override for repositories under gitdir.
+# [data.git.profiles.work]
+# name = "REPLACE: display name used under gitdir"  # required
+# email = "REPLACE: commit email used under gitdir"  # required
+# GPG fingerprint for this profile. An empty string disables GPG signing here.
+# signingkey = ""  # default: ""
+# Repository path prefix that activates this profile. It must end with "/".
+# gitdir = "REPLACE: for example ~/work/"  # required
+# Same meaning as data.git.signing_format, for this profile only. "ssh" needs
+# exactly one [data.secret.ssh.keys.*] entry whose signing_profiles lists this
+# profile's label. A signing_fallback = true on the global key does not count.
+# signing_format = ""  # default: unset; allowed values: "gpg", "ssh"
+# Optional SSH host alias. When set, ghq clones under gitdir use it through
+# url.insteadOf.
+# sshhost = ""  # default: ""
+
+# CodeRabbit critique delegate. Off by default: nothing is deployed until
+# review is set.
+# [data.coderabbit]
+# false deploys nothing. true or "lite" deploys the coderabbit-critique
+# launchers, the user-global critique delegate and the issue-authoring draft
+# reviewer. "deep" does the same and also sets CODERABBIT_CRITIQUE_DEEP=1.
+# review = false  # default: false; allowed values: false, true, "lite", "deep"
+# Deprecated alias for review = "deep". false does nothing. true selects deep
+# mode only when review is absent; a review value always wins. Every use prints
+# a deprecation notice, so set review instead.
+# deepReview = false  # default: false; deprecated
+
+# OpenCode instruction profile.
+# [data.opencode]
+# false deploys the compact guidance. true opts in to the full shared
+# user-global text.
+# extendedInstructions = false  # default: false
+
+# Secret manager backend.
+# [data.secret]
+# Secret backend, and the source chezmoi reads secrets from. "bitwarden" uses
+# the Bitwarden CLI (bw); "onepassword" uses the 1Password CLI (op); "keepassxc"
+# uses keepassxc-cli; "local" reads files from local_dir and needs no CLI.
+# "none" skips all secret retrieval, so it is a safe starting value. Replace it
+# with the backend you use when you need secrets.
+# manager = "none"  # required
+# Local secrets directory. It is used only when manager = "local".
+# local_dir = "~/.config/chezmoi/secrets"  # default
+
+# GPG key held in the secret manager. One table per label.
+# [data.secret.gpg.personal]
+# Secret manager item name that holds the GPG key attachments or fields.
+# item = "REPLACE: GPG key item name"  # required
+
+# SSH key held in the secret manager. One table per label.
+# [data.secret.ssh.keys.personal]
+# Secret manager item (SSH Key type) that holds the key pair.
+# item = "REPLACE: SSH key item name"  # required
+# File name written under ~/.ssh/.
+# filename = "REPLACE: for example id_ed25519_personal"  # required
+# true registers this key for the global commit-ssh, tag-ssh and rebase-ssh
+# aliases; at most one key may set it. false leaves the key out of those global
+# fallback aliases.
+# signing_fallback = false  # default: false
+# Profile labels (matching data.git.profiles) that also get scope-local
+# fallback aliases.
+# signing_profiles = []  # default: []
+
+# SSH host entry. Quote the label when it contains dots, for example
+# [data.secret.ssh.hosts."github.com"].
+# [data.secret.ssh.hosts.github-personal]
+# Remote host name.
+# hostname = "github.com"  # required
+# SSH user name.
+# user = "git"  # default: "git"
+# File name of an SSH key declared under data.secret.ssh.keys.
+# identity = "REPLACE: for example id_ed25519_personal"  # required
+# Non-default SSH port. Leave it unset to use the SSH default, 22.
+# port = 0  # default: unset (0), so SSH uses 22
+
+# File attachment copied from the secret manager. One table per label.
+# [data.secret.files.aws-credentials]
+# Secret manager item that holds the file attachment.
+# item = "REPLACE: secret manager item name"  # required
+# Home-relative destination path. Use forward slashes, and do not use "..".
+# target = "REPLACE: for example .aws/credentials"  # required
+# Attachment name override in the secret manager. Leave this line out to keep
+# the default, the basename of target.
+# attachment = "REPLACE: attachment name, for example credentials"  # optional
+
+# Bulk clone of a GitHub or GitLab owner with ghq. One table per label.
+# [data.ghq.clone.personal]
+# GitHub or GitLab user or organization to clone in bulk.
+# owner = "REPLACE: your user or organization name"  # required
+# Secret manager item that holds the personal access token.
+# token_item = "REPLACE: token item name"  # required
+# Git host name.
+# hostname = "github.com"  # default: "github.com"
+# true clones over SSH. false clones over HTTPS.
+# ssh = true  # default: true
+# true trusts the mise configs found in cloned repositories automatically.
+# false leaves those configs untrusted.
+# mise_trust = false  # default: false
+
+# Extra WinGet package directories added to the User PATH. The repository
+# already ships entries for mise, chezmoi, ffmpeg, sqlite and ngrok. Entries
+# merge field by field, so setting only enabled keeps the other fields.
+# [data.wingetUserPath.packages.mypackage]
+# WinGet package id. It matches the Packages\<id>_* directory prefix.
+# id = "REPLACE: for example Publisher.PackageName"  # required
+# Subpath inside the package directory to add to PATH. It may contain one *
+# version-suffix segment.
+# bin = ""  # default: ""
+# true keeps the entry enabled. false disables an inherited entry of the same
+# key.
+# enabled = true  # default: true
+
+# Windows OpenSSH server hardening.
+# [data.ssh.server]
+# Seconds between SSH keepalive probes.
+# clientAliveInterval = 300  # default: 300
+# Missed probes tolerated before the connection is closed.
+# clientAliveCountMax = 5  # default: 5
+# Windows sshd default shell. "cmd" resets the setting to cmd.exe and removes
+# the DefaultShell registry values. "legacy-powershell" sets powershell.exe and
+# fails loudly if it is missing. "modern-powershell" sets pwsh.exe and fails
+# loudly if it is missing. Empty leaves the setting unchanged.
+# defaultShell = ""  # default: "" (no change)
+# true lets "modern-powershell" fall back to powershell.exe when pwsh.exe is
+# missing. false keeps that failure instead.
+# defaultShellFallbackToLegacy = false  # default: false
+
+# systemd-tmpfiles /tmp cleanup age. Linux with systemd-tmpfiles only.
+# [data.tmpfiles]
+# A systemd-tmpfiles time span, for example "2d" or "10d".
+# age = "10d"  # default: "10d"
+
+# Validation queue for pueue.
+# [data.pueue]
+# How many tasks the dotfiles pueue group runs at once. A positive whole number.
+# parallelism = 2  # default: 2
+
+# Local development CA through mkcert (Windows only).
+# [data.mkcert]
+# true runs mkcert -install on Windows during chezmoi apply. false skips it.
+# install = false  # default: false
+# Seconds to wait for mkcert -install. Must be a positive whole number no
+# greater than 2147483647.
+# installTimeoutSeconds = 180  # default: 180
+
+# A .env file taken from the secret manager and written into a repository.
+# One table per label.
+# [data.env.deploy.myapp-env]
+# ghq-style repository path, for example github.com/user/project.
+# repo = "REPLACE: for example github.com/user/project"  # required
+# Secret manager item that holds the .env attachment.
+# item = "REPLACE: secret manager item name"  # required
+# Target file name written into the repository.
+# filename = ".env"  # default: ".env"
+# Subdirectory inside the repository. Empty means the repository root.
+# subpath = ""  # default: "" (repository root)
+# Attachment name override in the secret manager. Leave this line out to keep
+# the default, the same as filename.
+# attachment = "REPLACE: attachment name, for example .env"  # optional
+
+# Zellij, shared by every OS.
+# [data.zellij]
+# true replaces Nerd Font glyphs with ASCII in the shared keybinding and
+# plugin config, for clients without Nerd Fonts. false keeps the glyphs.
+# simplified_ui = false  # default: false
+
+# Built-in Zellij web server.
+# [data.zellij.web]
+# true sets web_server in the generated Zellij configuration. false turns it
+# off. A local server can still be started by hand or by ensure-zellij-web, so
+# false does not block either.
+# server = true  # default: true
+# Session-sharing policy passed through to web_sharing.
+# sharing = "on"  # default: "on"
+# Address the local web server listens on. Keep 127.0.0.1 when tailscale is
+# enabled.
+# bind = "127.0.0.1"  # default: "127.0.0.1"
+# Port the local web server listens on.
+# port = 8082  # default: 8082
+# TLS certificate file path. Required only when bind is not on 127.0.0.0/8.
+# cert = ""  # default: "" (required off localhost)
+# TLS key file path. Required only when bind is not on 127.0.0.0/8.
+# key = ""  # default: "" (required off localhost)
+# Optional reverse-proxy subpath.
+# base_url = ""  # default: ""
+# true enforces HTTPS even when bound to 127.0.0.0/8. false does not enforce
+# it there. HTTPS is always enforced off localhost.
+# enforce_https_on_localhost = false  # default: false
+# Terminal font stack for the web client, passed through as is.
+# client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"  # default
+# true blinks the web client cursor. false keeps it steady.
+# client_cursor_blink = true  # default: true
+# Web client cursor style. "block" fills the cell, "bar" is a thin vertical
+# line, and "underline" is a line under the cell. Allowed values: "block",
+# "bar", "underline".
+# client_cursor_style = "bar"  # default: "bar"
+# Web client cursor style while the terminal is inactive. "outline" draws a
+# hollow block; the other values are as above. Allowed values: "outline",
+# "block", "bar", "underline".
+# client_cursor_inactive_style = "outline"  # default: "outline"
+
+# Publish the web server through tailscale serve.
+# [data.zellij.web.tailscale]
+# true publishes the server through tailscale serve. It requires
+# data.zellij.web.bind to stay "127.0.0.1"; the ensure-zellij-web wrapper fails
+# otherwise. false skips the tailscale serve setup and does not remove an
+# existing route.
+# enabled = false  # default: false
+# Tailnet HTTPS port used for the published route.
+# https_port = 443  # default: 443
+
+# Autostart for the web server. One table per OS; apply only the table for the
+# OS you use.
+# [data.zellij.web.windows]
+# Windows: "onlogon" registers a per-user Scheduled Task. "disabled" (default)
+# removes that task if it exists.
+# autostart = "disabled"  # default; allowed: "disabled", "onlogon"
+# [data.zellij.web.linux]
+# Linux: "systemd-user" installs a user service. "disabled" (default) disables
+# and stops the user service if it exists.
+# autostart = "disabled"  # default; allowed: "disabled", "systemd-user"
+# [data.zellij.web.macos]
+# macOS: "launchagent" registers a LaunchAgent. "disabled" (default) unloads it
+# if it exists.
+# autostart = "disabled"  # default; allowed: "disabled", "launchagent"
