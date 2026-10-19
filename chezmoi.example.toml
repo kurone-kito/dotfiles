@@ -60,8 +60,10 @@
 
 # Secret manager backend.
 # [data.secret]
-# Secret backend: "bitwarden", "onepassword", "keepassxc", "local" or
-# "none". "none" is a safe starting value with no secret retrieval. Replace it
+# Secret backend, and the source chezmoi reads secrets from. "bitwarden" uses
+# the Bitwarden CLI (bw); "onepassword" uses the 1Password CLI (op); "keepassxc"
+# uses keepassxc-cli; "local" reads files from local_dir and needs no CLI.
+# "none" skips all secret retrieval, so it is a safe starting value. Replace it
 # with the backend you use when you need secrets.
 # manager = "none"  # required
 # Local secrets directory. It is used only when manager = "local".
@@ -191,7 +193,9 @@
 
 # Built-in Zellij web server.
 # [data.zellij.web]
-# true enables the built-in web server. false disables it.
+# true sets web_server in the generated Zellij configuration. false turns it
+# off. A local server can still be started by hand or by ensure-zellij-web, so
+# false does not block either.
 # server = true  # default: true
 # Session-sharing policy passed through to web_sharing.
 # sharing = "on"  # default: "on"
@@ -213,10 +217,13 @@
 # client_font = "'HackGen Console NF', 'Hack Nerd Font', monospace"  # default
 # true blinks the web client cursor. false keeps it steady.
 # client_cursor_blink = true  # default: true
-# Web client cursor style. Allowed values: "block", "bar", "underline".
+# Web client cursor style. "block" fills the cell, "bar" is a thin vertical
+# line, and "underline" is a line under the cell. Allowed values: "block",
+# "bar", "underline".
 # client_cursor_style = "bar"  # default: "bar"
-# Web client cursor style while the terminal is inactive. Allowed values:
-# "outline", "block", "bar", "underline".
+# Web client cursor style while the terminal is inactive. "outline" draws a
+# hollow block; the other values are as above. Allowed values: "outline",
+# "block", "bar", "underline".
 # client_cursor_inactive_style = "outline"  # default: "outline"
 
 # Publish the web server through tailscale serve.
