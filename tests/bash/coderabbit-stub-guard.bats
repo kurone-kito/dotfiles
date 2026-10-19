@@ -49,23 +49,21 @@ setup() {
 }
 
 @test "teardown_suite fails when the suite record holds a call" {
-  export CODERABBIT_SUITE_RECORD="$BATS_TEST_TMPDIR/suite-calls"
-  printf 'draft\n' > "$CODERABBIT_SUITE_RECORD"
+  local record="$BATS_TEST_TMPDIR/suite-calls"
+  printf 'draft\n' > "$record"
 
-  run -1 teardown_suite
+  run -1 teardown_suite "$record"
 
   assert_output --partial 'coderabbit was called during the suite'
 }
 
 @test "teardown_suite passes when the suite record is absent" {
-  export CODERABBIT_SUITE_RECORD="$BATS_TEST_TMPDIR/absent"
-
-  run -0 teardown_suite
+  run -0 teardown_suite "$BATS_TEST_TMPDIR/absent"
 }
 
 @test "teardown_suite passes when the suite record is empty" {
-  export CODERABBIT_SUITE_RECORD="$BATS_TEST_TMPDIR/empty"
-  : > "$CODERABBIT_SUITE_RECORD"
+  local record="$BATS_TEST_TMPDIR/empty"
+  : > "$record"
 
-  run -0 teardown_suite
+  run -0 teardown_suite "$record"
 }

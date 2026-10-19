@@ -3,9 +3,9 @@
 # coderabbit without its own stub reaches the recording stub, and
 # teardown_suite() fails the run when that happens.
 #
-# teardown_suite() runs in the suite process, so it never sees variables that
-# a test exports. CODERABBIT_SUITE_RECORD exists only so that the self-test can
-# point a direct teardown_suite call at a fixture file.
+# bats calls teardown_suite with no arguments, so the suite always checks the
+# fixed suite record. No environment variable can redirect that check. The
+# self-test passes its own fixture path as the argument.
 
 _CODERABBIT_STUB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/fixtures/coderabbit-stub" && pwd)"
 
@@ -14,7 +14,7 @@ setup_suite() {
 }
 
 teardown_suite() {
-  local record="${CODERABBIT_SUITE_RECORD:-$BATS_SUITE_TMPDIR/coderabbit-calls}"
+  local record="${1:-$BATS_SUITE_TMPDIR/coderabbit-calls}"
   if [ -s "$record" ]; then
     echo "coderabbit was called during the suite; calls recorded in $record:" >&2
     cat "$record" >&2
