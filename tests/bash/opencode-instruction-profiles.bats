@@ -44,6 +44,20 @@ _render_peer() {
     --source "$REPO_ROOT/home" --destination "$BATS_TEST_TMPDIR/home"
 }
 
+_extract_deployment_note() {
+  awk '
+    index($0, "In this setup `idd-activation` is deployed to `~/.local/bin`.") == 1 { on = 1 }
+    on {
+      print
+      if ($0 == "payload has no `scripts/` directory.") {
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
+
 # First shared span: from the commit rules heading up to, not including, the
 # SSH key discovery step. Steps 5 and 6 take per-agent parameters, so they stay
 # outside both spans. The end anchor is looked for only after the heading, and
@@ -230,6 +244,8 @@ REIMPORT_LINK='docs/idd-user-global-reimport.md'
   assert_output 1
   run grep -c 'If `active` is `true`, read' "$BATS_TEST_TMPDIR/compact.md"
   assert_output 1
+  run grep -c '^## IDD workflow$' "$BATS_TEST_TMPDIR/compact.md"
+  assert_output 1
   run grep -c -e '^## Commit rules$' -e '^# IDD entry (user-global)$' "$BATS_TEST_TMPDIR/compact.md"
   assert_output 0
 }
@@ -256,6 +272,32 @@ REIMPORT_LINK='docs/idd-user-global-reimport.md'
   _render_opencode | grep -qF "$REIMPORT_LINK" || fail 'the compact OpenCode render does not link the re-import procedure'
   _write_config '{"data":{"opencode":{"extendedInstructions":true}}}'
   _render_opencode | grep -qF "$REIMPORT_LINK" || fail 'the extended OpenCode render does not link the re-import procedure'
+}
+
+@test "all five deployment notes render byte-identically from the shared partial" {
+  local rel capture out note first_note=""
+  _write_config '{"data":{"opencode":{"extendedInstructions":true}}}'
+  for rel in \
+    dot_claude/CLAUDE.md.tmpl \
+    dot_codex/AGENTS.md.tmpl \
+    dot_copilot/copilot-instructions.md.tmpl \
+    dot_gemini/GEMINI.md.tmpl \
+    dot_config/opencode/AGENTS.md.tmpl; do
+    capture=${rel//\//-}
+    out="$BATS_TEST_TMPDIR/deployment-$capture.md"
+    note="$BATS_TEST_TMPDIR/deployment-note-$capture.md"
+    _render_peer "$rel" > "$out" || fail "$rel does not render"
+    run grep -cF 'is deployed to `~/.local/bin`' "$out"
+    assert_success
+    assert_output 1
+    _extract_deployment_note "$out" > "$note" || fail "$rel has no complete deployment note"
+    [ "$(wc -l < "$note")" -eq 4 ] || fail "$rel deployment note has an unexpected line count"
+    if [ -z "$first_note" ]; then
+      first_note="$note"
+    else
+      cmp -s "$first_note" "$note" || fail "$rel deployment note differs from the first peer"
+    fi
+  done
 }
 
 @test "flipping the OpenCode flag leaves the Claude, Codex, Copilot and Gemini renders byte-identical" {
