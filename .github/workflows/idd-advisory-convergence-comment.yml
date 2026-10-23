@@ -10,7 +10,7 @@ name: IDD advisory-convergence comment refresh
 # at c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2), after #459's
 # v0.12.0 pin. At that time the file matched upstream v0.12.2, so #473
 # changed only the invocation pin. The active CLI calls below follow
-# the v0.14.0 package pin in `.github/idd/config.json`. #384's adoption
+# the v0.17.0 package pin in `.github/idd/config.json`. #384's adoption
 # round remains the source of the simplified ephemeral-npx shape: its own root
 # `.github/workflows/idd-advisory-convergence-comment.yml` (the simpler
 # dogfooded original -- a single, non-branching `node scripts/*.mjs`
@@ -277,7 +277,7 @@ jobs:
           # content classification.
           COMMENT_BODY: ${{ github.event.review.body || github.event.comment.body }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
             idd-review-comment-origin
       - name: Check for newer qualifying event
         id: debounce
@@ -324,7 +324,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
             idd-advisory-comment-debounce --pr "$PR_NUMBER" --triggered-at "$TRIGGERED_AT"
       - name: Rerun required HEAD check
         # The explicit `success() &&` on the comment-family branch is
@@ -373,5 +373,5 @@ jobs:
           fi
           # shellcheck disable=SC2086 # REFRESH_FLAG is a single trusted
           # word ("--refresh-latest" or empty); see env: above.
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
             idd-rerun-advisory-convergence --pr "$PR_NUMBER" $REFRESH_FLAG --apply

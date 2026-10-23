@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
-# Regression guard for issue #566's requirement that every live IDD
-# workflow helper invocation uses the archive pin in .github/idd/config.json.
+# Regression guards for issues #566 and #678: every live IDD workflow
+# helper invocation uses the expected v0.17.0 archive pin, and the
+# verdict job has enough time for the pinned helper's bounded review poll.
 
 bats_require_minimum_version 1.5.0
 
@@ -21,7 +22,15 @@ import sys
 root = sys.argv[1]
 with open(os.path.join(root, ".github/idd/config.json"), encoding="utf-8") as f:
     config = json.load(f)
+expected_version = "0.17.0"
+expected_package_spec = "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b"
+assert config["iddVersion"] == expected_version, (
+    f"expected iddVersion {expected_version!r}, found {config['iddVersion']!r}"
+)
 expected_pin = config["helperRuntime"]["packageSpec"]
+assert expected_pin == expected_package_spec, (
+    f"expected v0.17.0 package pin, found {expected_pin!r}"
+)
 
 expected_counts = {
     ".github/workflows/post-merge-cleanup.yml": 1,
@@ -190,6 +199,27 @@ def workflow_run_scripts(workflow):
             index += 1
     return scripts
 
+def workflow_job_timeouts(workflow):
+    timeouts = {}
+    in_jobs = False
+    current_job = None
+    for line in workflow.splitlines():
+        if line == "jobs:":
+            in_jobs = True
+            continue
+        if not in_jobs:
+            continue
+        if line and not line.startswith(" "):
+            break
+        job_match = re.fullmatch(r"  ([A-Za-z0-9_-]+):", line)
+        if job_match:
+            current_job = job_match.group(1)
+            continue
+        timeout_match = re.fullmatch(r"    timeout-minutes:\s*(\d+)", line)
+        if current_job and timeout_match:
+            timeouts[current_job] = int(timeout_match.group(1))
+    return timeouts
+
 assert workflow_run_scripts(
     "steps:\n  - name: Example\n    run: |\n      echo npx --package=comment\n"
     "      npx --package=command\n  - name: Next\n    run: echo done\n"
@@ -224,11 +254,22 @@ for relative_path, expected_count in expected_counts.items():
     total += len(invocations)
 
 assert total == 6, f"expected six active helper invocations, found {total}"
+with open(os.path.join(root, ".github/workflows/idd-advisory-convergence.yml"), encoding="utf-8") as f:
+    workflow = f.read()
+expected_timeouts = {
+    "idd-advisory-convergence": 14,
+    "idd-advisory-convergence-self-waiver": 10,
+}
+actual_timeouts = workflow_job_timeouts(workflow)
+assert actual_timeouts == expected_timeouts, (
+    f"expected verdict/self-waiver timeouts {expected_timeouts!r}, "
+    f"found {actual_timeouts!r}"
+)
 print("all six active workflow helper URLs match the configured package pin")
 PY
 }
 
-@test "all six active IDD workflow helper URLs match the configured package pin" {
+@test "active helper pins and advisory job timeouts match the v0.17.0 contract" {
   run check_workflow_helper_pins
   assert_success
   assert_output "all six active workflow helper URLs match the configured package pin"
