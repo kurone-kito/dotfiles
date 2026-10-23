@@ -372,7 +372,7 @@ Describe 'link-idd-skill-xdg-data' {
     (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $previous
   }
 
-  It 'restores a managed symbolic link as a junction when replacement fails on Windows' -Skip:($IsWindows -eq $false) {
+  It 'restores a relative symbolic link as a junction on Windows' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
     $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
     $previous = Join-Path $deployedRoot '0.16.0'
@@ -381,11 +381,12 @@ Describe 'link-idd-skill-xdg-data' {
     Set-Content -LiteralPath $previousEntry -Value 'previous managed payload marker'
     $currentPointer = Join-Path $deployedRoot 'current'
     try {
-      $null = New-Item -ItemType SymbolicLink -Path $currentPointer -Target $previous -ErrorAction Stop
+      $null = New-Item -ItemType SymbolicLink -Path $currentPointer -Target '0.16.0' -ErrorAction Stop
     } catch {
       Set-ItResult -Skipped -Because 'symbolic-link creation needs Windows developer mode or elevation'
       return
     }
+    (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Be '0.16.0'
     $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
     $newTarget = Join-Path $deployedRoot $script:PayloadVersion
 

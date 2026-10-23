@@ -127,7 +127,8 @@ if ($onWindows) {
               Write-Host "idd-skill data: advanced the managed directory link $currentPointer from $previousVersion to $version"
             } catch {
               $advanceError = $_.Exception.Message
-              $previousTarget = [string]@($currentItem.Target)[0]
+              # Resolve Target before removing the link because it can be relative.
+              $previousTarget = $physCurrent
               try {
                 # Restore as a junction even when the old link was a symbolic
                 # link: this Windows hook must recover without symlink privilege.
