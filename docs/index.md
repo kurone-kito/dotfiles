@@ -78,6 +78,6 @@ the table below so this index still covers the full `docs/` bundle.
 | reference | [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md) | Documents every chezmoi.toml configuration path, with each field's type, default, and a link to its deployment guide. |
 | guide | [CodeRabbit critique delegate and review mode](coderabbit-deep-review.md) | Opt in to the CodeRabbit critique delegate, and to its lite or deep review mode, from the chezmoi configuration. |
 | reference | [IDD Policy Configuration](idd-policy.md) | Records this repository's confirmed IDD policy decisions alongside their machine-readable mirror in .github/idd/config.json. |
-| reference | [IDD User-Global Install Inventory](idd-user-global-inventory.md) | Records the paths the idd-skill v0.16.0 user-global installer writes, captured from one isolated installer run at commit e4d425ee, as the reference for the v0.16.0 payload vendoring and re-import tracks. |
+| reference | [IDD User-Global Install Inventory](idd-user-global-inventory.md) | Records the paths the idd-skill v0.17.0 user-global installer writes, captured from one isolated installer run at commit 77befdd4, as the reference for the v0.17.0 payload vendoring and re-import tracks. |
 | guide | [Re-importing the user-global IDD payload](idd-user-global-reimport.md) | Records how a re-import keeps this repository's chezmoi copy of the IDD user-global payload in step with a pinned idd-skill commit, and which local seams it must not overwrite. |
 <!-- dprint-ignore-end -->
