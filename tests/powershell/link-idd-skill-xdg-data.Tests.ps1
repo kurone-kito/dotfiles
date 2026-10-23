@@ -4,6 +4,9 @@
 BeforeAll {
   $script:Subject = Join-Path $PSScriptRoot `
     '../../home/run_after_83-link-idd-skill-xdg-data.ps1'
+  $versionSource = Join-Path $PSScriptRoot `
+    '../../home/dot_local/share/idd-skill/symlink_current'
+  $script:PayloadVersion = (Get-Content -LiteralPath $versionSource -Raw).Trim()
 
   # The directory link type this host can create: a symbolic link where the
   # privilege allows it, otherwise a junction. Probed once per Pester run.
@@ -27,8 +30,10 @@ BeforeAll {
   }
 
   function script:Write-DeployedPayload {
-    $dir = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'idd-skill' '0.16.0')))
-    $null = New-Item -ItemType Directory -Path $dir -Force
+    $dir = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'idd-skill' $script:PayloadVersion)))
+    $entry = Join-Path (Join-Path $dir 'user-global') 'entry.md'
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $entry) -Force
+    Set-Content -LiteralPath $entry -Value 'managed payload marker'
   }
 }
 
@@ -115,7 +120,7 @@ Describe 'link-idd-skill-xdg-data' {
 
   It 'no-ops when XDG_DATA_HOME is inside the deployed data root' {
     Write-DeployedPayload
-    $env:XDG_DATA_HOME = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'idd-skill' '0.16.0')))
+    $env:XDG_DATA_HOME = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' (Join-Path 'idd-skill' $script:PayloadVersion)))
 
     $warnings = & $script:Subject 3>&1
 
@@ -129,13 +134,13 @@ Describe 'link-idd-skill-xdg-data' {
     $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
     $alias = Join-Path $TestDrive 'alias-root'
     New-TestDirectoryLink $alias $deployedRoot
-    $env:XDG_DATA_HOME = Join-Path $alias '0.16.0'
+    $env:XDG_DATA_HOME = Join-Path $alias $script:PayloadVersion
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
-    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path $script:PayloadVersion 'idd-skill')) |
       Should -BeFalse
   }
 
@@ -158,13 +163,13 @@ Describe 'link-idd-skill-xdg-data' {
     $chain = Join-Path $TestDrive 'chain-root'
     New-TestDirectoryLink $hop $deployedRoot
     New-TestDirectoryLink $chain $hop
-    $env:XDG_DATA_HOME = Join-Path $chain '0.16.0'
+    $env:XDG_DATA_HOME = Join-Path $chain $script:PayloadVersion
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
-    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path $script:PayloadVersion 'idd-skill')) |
       Should -BeFalse
   }
 
@@ -174,13 +179,13 @@ Describe 'link-idd-skill-xdg-data' {
     $share = Join-Path $HOME (Join-Path '.local' 'share')
     $alias = Join-Path $TestDrive 'alias-share'
     New-TestDirectoryLink $alias $share
-    $env:XDG_DATA_HOME = Join-Path $alias (Join-Path 'idd-skill' '0.16.0')
+    $env:XDG_DATA_HOME = Join-Path $alias (Join-Path 'idd-skill' $script:PayloadVersion)
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
-    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path $script:PayloadVersion 'idd-skill')) |
       Should -BeFalse
   }
 
@@ -196,13 +201,13 @@ Describe 'link-idd-skill-xdg-data' {
     }
     $null = New-Item -ItemType SymbolicLink -Path $relative -ErrorAction Stop `
       -Target (Join-Path 'home' (Join-Path '.local' (Join-Path 'share' 'idd-skill')))
-    $env:XDG_DATA_HOME = Join-Path $relative '0.16.0'
+    $env:XDG_DATA_HOME = Join-Path $relative $script:PayloadVersion
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
-    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path '0.16.0' 'idd-skill')) |
+    Test-Path -LiteralPath (Join-Path $deployedRoot (Join-Path $script:PayloadVersion 'idd-skill')) |
       Should -BeFalse
   }
 
@@ -303,7 +308,7 @@ Describe 'link-idd-skill-xdg-data' {
 
     $current = Get-Item -LiteralPath (Join-Path $deployedRoot 'current') -Force
     $current.LinkType | Should -Be 'Junction'
-    $current.Target | Should -Contain (Join-Path $deployedRoot '0.16.0')
+    $current.Target | Should -Contain (Join-Path $deployedRoot $script:PayloadVersion)
   }
 
   It 'refuses the deployed root under its long name when HOME is given in 8.3 short form on Windows' -Skip:($IsWindows -eq $false) {
@@ -316,16 +321,89 @@ Describe 'link-idd-skill-xdg-data' {
     Set-Variable -Name HOME -Value $shortHome -Scope Global -Force
     Write-DeployedPayload
     $deployedLong = Join-Path $longHome (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
-    $env:XDG_DATA_HOME = Join-Path $deployedLong '0.16.0'
+    $env:XDG_DATA_HOME = Join-Path $deployedLong $script:PayloadVersion
 
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*resolves to the deployed payload*'
-    Test-Path -LiteralPath (Join-Path $deployedLong (Join-Path '0.16.0' 'idd-skill')) | Should -BeFalse
+    Test-Path -LiteralPath (Join-Path $deployedLong (Join-Path $script:PayloadVersion 'idd-skill')) | Should -BeFalse
   }
 
-  It 'keeps a current junction that points at another version on Windows' -Skip:($IsWindows -eq $false) {
+  It 'advances a current junction from a previous managed version on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $previous = Join-Path $deployedRoot '0.16.0'
+    $previousEntry = Join-Path (Join-Path $previous 'user-global') 'entry.md'
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $previousEntry) -Force
+    Set-Content -LiteralPath $previousEntry -Value 'previous managed payload marker'
+    $currentPointer = Join-Path $deployedRoot 'current'
+    $null = New-Item -ItemType Junction -Path $currentPointer -Target $previous
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+
+    $warnings = & $script:Subject 3>&1
+
+    @($warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }).Count |
+      Should -Be 0
+    (Get-Item -LiteralPath $currentPointer -Force).Target |
+      Should -Contain (Join-Path $deployedRoot $script:PayloadVersion)
+  }
+
+  It 'restores the previous current link when the replacement junction fails on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $previous = Join-Path $deployedRoot '0.16.0'
+    $previousEntry = Join-Path (Join-Path $previous 'user-global') 'entry.md'
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $previousEntry) -Force
+    Set-Content -LiteralPath $previousEntry -Value 'previous managed payload marker'
+    $currentPointer = Join-Path $deployedRoot 'current'
+    $null = New-Item -ItemType Junction -Path $currentPointer -Target $previous
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+    $newTarget = Join-Path $deployedRoot $script:PayloadVersion
+
+    Mock New-Item { throw 'simulated junction creation failure' } -ParameterFilter {
+      $ItemType -eq 'Junction' -and $Path -eq $currentPointer -and $Target -eq $newTarget
+    }
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*restored a junction to 0.16.0*'
+    (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $previous
+  }
+
+  It 'restores a relative symbolic link as a junction on Windows' -Skip:($IsWindows -eq $false) {
+    Write-DeployedPayload
+    $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
+    $previous = Join-Path $deployedRoot '0.16.0'
+    $previousEntry = Join-Path (Join-Path $previous 'user-global') 'entry.md'
+    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $previousEntry) -Force
+    Set-Content -LiteralPath $previousEntry -Value 'previous managed payload marker'
+    $currentPointer = Join-Path $deployedRoot 'current'
+    try {
+      $null = New-Item -ItemType SymbolicLink -Path $currentPointer -Target '0.16.0' -ErrorAction Stop
+    } catch {
+      Set-ItResult -Skipped -Because 'symbolic-link creation needs Windows developer mode or elevation'
+      return
+    }
+    (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Be '0.16.0'
+    $env:XDG_DATA_HOME = Join-Path $TestDrive 'custom-data'
+    $newTarget = Join-Path $deployedRoot $script:PayloadVersion
+
+    Mock New-Item { throw 'simulated junction creation failure' } -ParameterFilter {
+      $ItemType -eq 'Junction' -and $Path -eq $currentPointer -and $Target -eq $newTarget
+    }
+
+    $warnings = & $script:Subject 3>&1
+
+    $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
+      Select-Object -ExpandProperty Message | Should -BeLike '*restored a junction to 0.16.0*'
+    $restored = Get-Item -LiteralPath $currentPointer -Force
+    $restored.LinkType | Should -Be 'Junction'
+    $restored.Target | Should -Contain $previous
+  }
+
+  It 'keeps a current junction that points at an unrelated version on Windows' -Skip:($IsWindows -eq $false) {
     Write-DeployedPayload
     $deployedRoot = Join-Path $HOME (Join-Path '.local' (Join-Path 'share' 'idd-skill'))
     $other = Join-Path $deployedRoot '0.15.0'
@@ -337,7 +415,7 @@ Describe 'link-idd-skill-xdg-data' {
     $warnings = & $script:Subject 3>&1
 
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
-      Select-Object -ExpandProperty Message | Should -BeLike '*points at*not 0.16.0*'
+      Select-Object -ExpandProperty Message | Should -BeLike "*points at*not $script:PayloadVersion*"
     (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $other
   }
 

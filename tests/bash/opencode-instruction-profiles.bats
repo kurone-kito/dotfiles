@@ -44,12 +44,13 @@ _render_peer() {
     --source "$REPO_ROOT/home" --destination "$BATS_TEST_TMPDIR/home"
 }
 
+# Extract the dotfiles-specific deployment note from a rendered harness file.
 _extract_deployment_note() {
   awk '
-    index($0, "In this setup `idd-activation` is deployed to `~/.local/bin`.") == 1 { on = 1 }
+    index($0, "This setup deploys `idd-activation` to `~/.local/bin`.") == 1 { on = 1 }
     on {
       print
-      if ($0 == "payload has no `scripts/` directory.") {
+      if ($0 == "use the platform-specific command from the IDD entry above.") {
         found = 1
         exit
       }
@@ -287,11 +288,11 @@ REIMPORT_LINK='docs/idd-user-global-reimport.md'
     out="$BATS_TEST_TMPDIR/deployment-$capture.md"
     note="$BATS_TEST_TMPDIR/deployment-note-$capture.md"
     _render_peer "$rel" > "$out" || fail "$rel does not render"
-    run grep -cF 'is deployed to `~/.local/bin`' "$out"
+    run grep -cF 'This setup deploys `idd-activation` to `~/.local/bin`.' "$out"
     assert_success
     assert_output 1
     _extract_deployment_note "$out" > "$note" || fail "$rel has no complete deployment note"
-    [ "$(wc -l < "$note")" -eq 4 ] || fail "$rel deployment note has an unexpected line count"
+    [ "$(wc -l < "$note")" -eq 2 ] || fail "$rel deployment note has an unexpected line count"
     if [ -z "$first_note" ]; then
       first_note="$note"
     else

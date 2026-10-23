@@ -17,8 +17,8 @@
 # On Windows the template ignores the `current` symlink, because creating a
 # symbolic link needs privilege. This script creates `current` as a directory
 # junction instead, which needs none, so the entry path resolves there too. It
-# never replaces an existing `current`: a real directory is left alone, and a
-# link to another version is reported.
+# advances a junction or symlink that targets a previous managed payload
+# version. A real directory and links to unrelated targets are left alone.
 $ErrorActionPreference = 'Stop'
 
 $onWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
@@ -33,7 +33,7 @@ $ignoreCase = if ($onWindows) {
 }
 # The payload version the `current` pointer names. It must match the content of
 # home/dot_local/share/idd-skill/symlink_current; a Pester case checks that.
-$version = '0.16.0'
+$version = '0.17.0'
 
 # The physical form of a path, as the OS resolves it: each symbolic link or
 # junction on the way is followed, and the rest of the path is appended to its
@@ -108,8 +108,44 @@ if ($onWindows) {
       $physCurrent = Get-PhysicalPath $currentPointer
       $physVersion = Get-PhysicalPath $versionDir
       if (-not ($physCurrent -and $physVersion -and $physCurrent.Equals($physVersion, $ignoreCase))) {
-        $currentTarget = [string]@($currentItem.Target)[0]
-        Write-Warning "idd-skill data: $currentPointer points at $currentTarget, not $version; not overwriting."
+        $physRendered = Get-PhysicalPath $rendered
+        $physCurrentParent = if ($physCurrent) { [System.IO.Path]::GetDirectoryName($physCurrent) } else { $null }
+        $previousVersion = if ($physCurrent) { [System.IO.Path]::GetFileName($physCurrent) } else { '' }
+        $previousPayloadMarker = if ($physCurrent) {
+          Join-Path (Join-Path $physCurrent 'user-global') 'entry.md'
+        } else { '' }
+        $isPreviousManagedVersion = $physRendered -and
+          $physCurrentParent -and
+          $physCurrentParent.Equals($physRendered, $ignoreCase) -and
+          $previousVersion -match '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -and
+          (Test-Path -LiteralPath $previousPayloadMarker -PathType Leaf)
+        if ($isPreviousManagedVersion) {
+          try {
+            Remove-Item -LiteralPath $currentPointer -Force
+            try {
+              $null = New-Item -ItemType Junction -Path $currentPointer -Target $versionDir -ErrorAction Stop
+              Write-Host "idd-skill data: advanced the managed directory link $currentPointer from $previousVersion to $version"
+            } catch {
+              $advanceError = $_.Exception.Message
+              # Resolve Target before removing the link because it can be relative.
+              $previousTarget = $physCurrent
+              try {
+                # Restore as a junction even when the old link was a symbolic
+                # link: this Windows hook must recover without symlink privilege.
+                $null = New-Item -ItemType Junction -Path $currentPointer `
+                  -Target $previousTarget -ErrorAction Stop
+                Write-Warning "idd-skill data: could not advance ${currentPointer}; restored a junction to $previousVersion. $advanceError"
+              } catch {
+                Write-Warning "idd-skill data: could not advance ${currentPointer} or restore the link to $previousVersion. $advanceError Restore error: $($_.Exception.Message)"
+              }
+            }
+          } catch {
+            Write-Warning "idd-skill data: could not advance ${currentPointer}: $($_.Exception.Message)"
+          }
+        } else {
+          $currentTarget = [string]@($currentItem.Target)[0]
+          Write-Warning "idd-skill data: $currentPointer points at $currentTarget, not $version; not overwriting."
+        }
       }
     } else {
       Write-Warning "idd-skill data: $currentPointer is not a link; not overwriting."

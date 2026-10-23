@@ -127,8 +127,9 @@ evaluate:
 
 ```sh
 node scripts/audit-authored-issue.mjs --shape orphan \
-  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
-  --body-file draft.md
+  --marker-prefix <resolved-target-prefix> \
+  --config <target-checkout>/.github/idd/config.json \
+  --title "Drafted issue title" --body-file draft.md
 ```
 
 Before newly publishing a body into the `needs-decision` or
@@ -144,8 +145,9 @@ instead of a failure, since such a body is meant to be non-ready:
 
 ```sh
 node scripts/audit-authored-issue.mjs --shape orphan \
-  --marker-prefix <resolved-target-prefix> --title "Drafted issue title" \
-  --body-file draft.md \
+  --marker-prefix <resolved-target-prefix> \
+  --config <target-checkout>/.github/idd/config.json \
+  --title "Drafted issue title" --body-file draft.md \
   --expect-bucket needs-decision \
   --label status:authoring \
   --label status:needs-decision
@@ -314,7 +316,9 @@ with no observed incident is marked preventive:
 - `## Background` or `## Goal`
 - `## Proposed change`
 - `## Acceptance criteria`
-- optional `## Candidate files` — see
+- `## Candidate files` with at least one path when the effort footer is
+  `S` or `M` (optional for `L`, an absent effort footer, or a malformed
+  one) — see
   [contract.md's Candidate files format](contract.md#candidate-files-format)
   for the exact parse contract before populating it
 - an autopilot-suitability footer at the end of the body (visible

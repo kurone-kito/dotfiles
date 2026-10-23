@@ -871,17 +871,24 @@ The `## Candidate files` section is not free-form prose: the
 for the A4 Step 2 high-contention shared-file check (see
 [High-contention shared-file overlap](https://github.com/kurone-kito/idd-skill/blob/main/docs/policy-constants.md#high-contention-shared-files)).
 Populate it accurately rather than as a loose reading aid for humans.
-Optional for an orphan or roadmap issue; required for a
+Required for an orphan whose effort hint is `S` or `M`; optional for an
+orphan whose effort hint is `L`, absent, or malformed, and for a roadmap
+issue. Required for a
 [child issue under a roadmap](#child-issue-under-a-roadmap) (see
 [Required draft content](#required-draft-content) below). For a child,
 the section parsing to zero paths -- heading missing or present but
 empty -- disqualifies it from `ready`, unless it also carries an
 `authoring-bucket: needs-decision`/`blocked-by-human` marker or a
 suitability score of `1` (`audit-authored-issue`'s
-`candidate-files-not-empty` check). A child with an `S` or `M` effort
-hint must also stay within the
+`candidate-files-not-empty` check). A child or an orphan with an `S` or
+`M` effort hint must also stay within the
 [over-scope split threshold](#effort-hint)
-(`effort-candidate-file-limit`).
+(`effort-candidate-file-limit`). For an orphan with an `S` or `M` hint,
+a missing or zero-path section fails that check with no exemption: a
+`Split out of` line, a human-bucket marker, and a suitability score of
+`1` do not excuse it. The over-limit rule for orphans followed the
+overruns in issues `#4372` and `#4375`; the section requirement itself is
+preventive (no observed incident yet).
 
 - List each candidate file path inside backticks, one path (or one
   bullet) per line — for example `` - `src/scripts/idd-onboard.mts` ``.
@@ -902,6 +909,9 @@ hint must also stay within the
 - `## Background` or `## Goal`
 - `## Proposed change`
 - `## Acceptance criteria`
+- `## Candidate files` with at least one path when the effort footer is
+  `S` or `M`; optional for `L`, an absent effort footer, or a malformed
+  one (see [Candidate files format](#candidate-files-format))
 - an autopilot-suitability footer at the end of the body (visible
   line + `<!-- <marker-prefix>-autopilot-suitability: N -->` marker;
   see [Autopilot-suitability score](#autopilot-suitability-score))
@@ -1187,6 +1197,31 @@ interactive cases in Human-dependency isolation follows that section's
 interactive rule instead. Every other uncertain check still uses this
 sentence, and this sentence does not turn those other checks into an ask.
 
+## Factual-claims check
+
+Before the completed-draft adversarial review, verify material factual
+claims that justify a draft's scope or design against current sources.
+This includes repository behavior against current code and documentation,
+issue or pull-request status and prior decisions against live GitHub
+records, and runtime observations under
+[Live-observed claim citation](#live-observed-claim-citation).
+
+Correct, qualify, or remove any such claim the evidence does not support. Put
+supporting file references, GitHub permalinks, or read-only command
+evidence in the review packet's existing `evidence` array. If a claim
+remains unverified and materially affects the proposed scope or rationale,
+route it under [Human-dependency isolation](#human-dependency-isolation)
+and [A4.5 Suitability Gate Alignment](#a45-suitability-gate-alignment): use
+`needs-decision` for an unresolved product, policy, or design choice, and
+`blocked-by-human` when verification waits on a person, credential, asset,
+or outside system.
+This check adds no field to the review packet schema and does not change
+the completed-draft review itself. This responds to the factual-history
+error reported in [issue #4566](https://github.com/kurone-kito/idd-skill/issues/4566)
+for a draft carried in [issue #4479](https://github.com/kurone-kito/idd-skill/issues/4479),
+concerning [issue #3838](https://github.com/kurone-kito/idd-skill/issues/3838)
+and [issue #1019](https://github.com/kurone-kito/idd-skill/issues/1019).
+
 ## Completed-draft adversarial review
 
 This review is distinct from the Intake and Clarification critique.
@@ -1466,12 +1501,17 @@ still passes), the equivalent one-directional check for
 `needsDecisionLabelName` label, markerPrefix consistency across every
 authoring marker, the declared shape's required section headings, the
 roadmap-id/blocked-by dependency-marker rules, visible/hidden line
-agreement for the suitability and effort footers, and a child's
-candidate-file count against the
+agreement for the suitability and effort footers, and the
+candidate-file count of a child or an orphan against the
 [over-scope split threshold](#effort-hint) for its `S`/`M` effort hint
 (`effort-candidate-file-limit`) — so a weak model does
 not have to hold every rule in its head at once while drafting.
-It also checks every live defer-source comment against the shared
+With `autopilotSuitability.effortL: refuse`, `effort-l-ready` also refuses
+a `ready` orphan or child body whose coherent effort marker is `L`. Roadmaps,
+audits run with `--expect-bucket`, and bodies routed to a human bucket (a
+coherent `needs-decision` or `blocked-by-human` authoring-bucket marker, or a
+suitability score of `1`) are exempt.
+The linter also checks every live defer-source comment against the shared
 defined-value set and requires its single `Refs` origin. For
 `review-needs-decision`, pass `--origin-issue <number>` matching that
 `Refs` issue; the check also requires the configured authoring label and
@@ -1645,10 +1685,18 @@ confirm the reference is a mere breadcrumb.
 
 ```sh
 node scripts/audit-authored-issue.mjs --shape <orphan|roadmap|child|carrier> \
-  --marker-prefix <resolved-target-prefix> --title <drafted-title> \
-  --body-file <path-to-drafted-body> [--label <label>]... \
-  [--expect-bucket <needs-decision|blocked-by-human>]
+  --marker-prefix <resolved-target-prefix> \
+  --config <target-checkout>/.github/idd/config.json \
+  --title <drafted-title> --body-file <path-to-drafted-body> \
+  [--label <label>]... [--expect-bucket <needs-decision|blocked-by-human>]
 ```
+
+**Always pass `--config`** with the target repository's
+`.github/idd/config.json`, even when the audit runs from another checkout.
+The linter reads that file from the working directory by default. When the
+file is absent or unreadable, `effortL` falls back to `allow`, so
+`effort-l-ready` would not refuse an `L` body (preventive; no observed
+incident yet).
 
 Or, for npx/package-manager profiles, the equivalent
 `idd-audit-authored-issue` command. Pass `--stdin` instead of
@@ -1784,19 +1832,21 @@ likely bundles multiple intents. Return to
 [Decompose and Draft](#2-decompose-and-draft) and split at intent level
 instead of publishing one oversized issue labeled `L`.
 
-**Over-scope split threshold.** A child draft whose effort hint is `S`
-or `M` must not list more candidate files than its row below allows.
-Split an over-threshold draft into a held roadmap with children before
-publication, so no loop session claims an oversized issue. The count is
-the number of distinct paths the `## Candidate files` parser extracts
-(see [Candidate files format](#candidate-files-format)), so keep notes
-out of backticks. A body that is already the product of a split is
+**Over-scope split threshold.** An orphan or child draft whose effort
+hint is `S` or `M` must not list more candidate files than its row below
+allows. Split an over-threshold draft into a held roadmap with children
+before publication, so no loop session claims an oversized issue. The
+count is the number of distinct paths the `## Candidate files` parser
+extracts (see [Candidate files format](#candidate-files-format)), so keep
+notes out of backticks. A body that is already the product of a split is
 exempt when it carries a plain-text `Split out of #<n>` line (not inside
 backticks or an HTML comment). The exemption is self-asserted, so a
 reviewer confirms the referenced issue is the real parent. The rule
-checks only the child shape, and only when a coherent hidden effort
-marker is present (a draft with no effort footer is not checked); it
-also checks a human-bucket child audited without `--expect-bucket`.
+checks the child and orphan shapes, and only when a coherent hidden
+effort marker is present (a draft with no effort footer is not checked);
+it also checks a human-bucket child or orphan audited without
+`--expect-bucket`. An `S` or `M` orphan whose section has no path fails
+the rule outright, because a missing section hides the count.
 `audit-authored-issue`'s
 `effort-candidate-file-limit` check enforces this table, which is the
 single source of the values.
@@ -1806,6 +1856,19 @@ single source of the values.
 | `S`    | 3                       |
 | `M`    | 8                       |
 | `L`    | not checked             |
+
+When the target repository sets `autopilotSuitability.effortL` to
+`refuse` (the default is `allow`), an `L` child or orphan cannot be
+published as `ready`: split the work into `S` or `M` issues (a roadmap
+whose children are each `S` or `M` is also fine, since `effort-l-ready`
+does not check a roadmap), or publish it in the human bucket that matches
+the blocker: `needs-decision` for an open design decision, or
+`blocked-by-human` when a person, credential, asset, or outside system is
+needed.
+`audit-authored-issue`'s `effort-l-ready` check enforces this. Under
+`refuse`, autopilot Discover routes an `L` orphan candidate to humans;
+roadmaps and roadmap children are not routed by this policy. See the
+[2026-10-13 review-loop audit](https://github.com/kurone-kito/idd-skill/blob/main/docs/idd-design-rationale.md#review-loop-audit-2026-10-13).
 
 The hint is recorded as a **footer at the end of the issue body** — a
 visible line paired with a hidden, prefix-aware machine marker, beside
@@ -1829,14 +1892,20 @@ Binding rules:
 - **Authoring marker, not operational marker.** Like
   `autopilot-suitability`, it is body content and must never be added to
   `OPERATIONAL_MARKERS` or subjected to F4 minimization.
-- **Soft tie-breaker, never a gate.** Effort only reorders candidates
-  **within** a single suitability-score band, after the score and
-  optional desync rules and **before** the lowest-issue-number tie-break.
-  It never skips, gates, crosses a score band, or bypasses the A4.5/A5
-  gates, and a large (`L`) issue stays fully claimable when it is the only
-  ready work. This applies to Discover selection; the one publish-time
-  exception is the
-  [over-scope split threshold](#effort-hint) lint for `S`/`M` children.
+- **Soft tie-breaker, never a gate** (for Discover selection; see the
+  exception below). Effort only reorders candidates **within** a single
+  suitability-score band, after the score and optional desync rules and
+  **before** the lowest-issue-number tie-break. It never crosses a score
+  band or bypasses the A4.5/A5 gates. Effort never skips or gates, and a
+  large (`L`) issue stays fully claimable when it is the only ready work. The
+  one exception, which overrides the claims above, is an `L` orphan candidate
+  in an autopilot run under `autopilotSuitability.effortL: refuse`, which is
+  routed to humans instead of being selected, whatever its score. At publish
+  time, two lints refuse a body that fails them:
+  the [over-scope split threshold](#effort-hint) for `S`/`M` orphans and
+  children, and
+  `effort-l-ready` for `L` under `refuse`. Both run in attended and
+  autopilot sessions alike; neither is Discover selection.
 - **Fail-safe on absence.** A missing, non-`S|M|L`, or conflicting
   marker means "no effort hint": it sorts as the neutral middle, as-if
   `M`, per `idd-discover.instructions.md` A4 Step 2. Pre-existing issues

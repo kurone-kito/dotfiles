@@ -1,18 +1,18 @@
 ---
 type: reference
 title: IDD User-Global Install Inventory
-description: Records the paths the idd-skill v0.16.0 user-global installer writes, captured from one isolated installer run at commit e4d425ee, as the reference for the v0.16.0 payload vendoring and re-import tracks.
+description: Records the paths the idd-skill v0.17.0 user-global installer writes, captured from one isolated installer run at commit 77befdd4, as the reference for the v0.17.0 payload vendoring and re-import.
 tags: [user-global, install, inventory, idd]
 ---
 
 # IDD User-Global Install Inventory
 
-This page records what the upstream `idd-skill` v0.16.0 user-global
+This page records what the upstream `idd-skill` v0.17.0 user-global
 installer writes. The list below is the captured output of one installer run
-at commit `e4d425ee28b1893dd45c4996b2506619018c4b2b`, in a disposable HOME.
+at commit `77befdd4030757464bed7f31c7dfe6d0a404a18b`, in a disposable HOME.
 The [run record](#run-record) gives the conditions and the checks. The
-vendoring track (#648) and the re-import procedure (#647) use this page as
-their reference. It is not the chezmoi source, and it does not change any
+re-import issue (#675) uses this page as its reference. It is not the chezmoi
+source, and it does not change any
 chezmoi template under `home/`.
 
 ## Source
@@ -20,10 +20,10 @@ chezmoi template under `home/`.
 | Item                    | Value                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
 | Repository              | `kurone-kito/idd-skill`                                                                             |
-| Tag                     | `v0.16.0` (tag object `0506889e9a9cc9a58232e59397f2298351823fe4`)                                   |
-| Commit                  | `e4d425ee28b1893dd45c4996b2506619018c4b2b`                                                          |
-| Archive                 | `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/e4d425ee28b1893dd45c4996b2506619018c4b2b` |
-| Archive size and digest | 10,306,947 bytes; SHA-256 `9bdfb4448a2638ac90cc1d7cfb182e480c01501f7be22fad199ef190cc2d0062`       |
+| Tag                     | `v0.17.0` (annotated tag object `1f91a0d13397dbcbf94f44c8201a2b5618bb1060`)                           |
+| Commit                  | `77befdd4030757464bed7f31c7dfe6d0a404a18b`                                                          |
+| Archive                 | `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b` |
+| Archive size and digest | 10,945,249 bytes; SHA-256 `5c8b3d605ed812826df37cee79490d380f806b9e1735503a235c2bc3cff3c3f6`       |
 
 Sources read: `docs/user-global-install.md`;
 `scripts/user-global-install.mjs` (generated from
@@ -33,7 +33,7 @@ Sources read: `docs/user-global-install.md`;
 (`isQualifiedConfigRoot`); `scripts/idd-onboard.mjs`;
 `audit/sync-manifest.json` (block `idd-template-core-files`);
 `skills/issue-authoring/`; `skills/idd-spec-audit/`;
-`idd-template/user-global/entry.md`; and `package.json` (version `0.16.0`).
+`idd-template/user-global/entry.md`; and `package.json` (version `0.17.0`).
 
 ## Run record
 
@@ -81,23 +81,23 @@ with `mkdir -p`. The `mkdir -p` also created `<run-home>/.local`, the parent of
 `<run-home>/.local/share`. Nothing else was created before the run.
 
 Step 3, install. The same command exited 0 and wrote nothing to stderr. Its
-stdout had 110 lines beginning with `create`, one per receipt entry, with the
+stdout had 111 lines beginning with `create`, one per receipt entry, with the
 `current` link among them. It then printed the helper-install hints,
-`npm install -g @kurone-kito/idd-skill@0.16.0` and
-`pnpm add -g @kurone-kito/idd-skill@0.16.0`. The installer prints these hints
+`npm install -g @kurone-kito/idd-skill@0.17.0` and
+`pnpm add -g @kurone-kito/idd-skill@0.17.0`. The installer prints these hints
 but does not run them.
 
 Checks on the run:
 
 - The sorted relative paths under `<run-home>`, taken with the `find` command
   in [Checking a later run](#checking-a-later-run), are identical to the list
-  in this page: 111 lines, no difference.
-- The receipt is version 1 and has 110 entries: 27 directories, 82 files, and
+  in this page: 112 lines, no difference.
+- The receipt is version 1 and has 111 entries: 27 directories, 83 files, and
   one link. It does not list `receipt.json` itself. The three entry files are
   recorded as `file`.
 - `current` is a symbolic link whose target is the absolute path
-  `<run-home>/.local/share/idd-skill/0.16.0`.
-- The 79 payload and skill files (67 payload files, including
+  `<run-home>/.local/share/idd-skill/0.17.0`.
+- The 80 payload and skill files (68 payload files, including
   `user-global/entry.md`, and 12 skill files) are byte-identical, by SHA-256,
   to the upstream files they were copied from.
 - `.claude/CLAUDE.md` holds the managed block with the `@` import line.
@@ -160,7 +160,7 @@ OpenCode's entry is `opencode.json`, so the `AGENTS.md` that
   root and Codex CLI is selected, its parent must exist. This page assumes
   all three are unset, are not qualified roots, or are set to the default
   locations under `HOME`, as in the run. The upstream statement is in
-  [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md#preconditions).
+  [`docs/user-global-install.md`](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/docs/user-global-install.md#preconditions).
 
 The table below gives each root and harness directory that the run uses, and
 the parent directories above them. The other directories the run creates are
@@ -189,8 +189,8 @@ harness list (see [Assumptions](#assumptions)).
 | Item           | Location (relative to `$HOME`)                                                                             | Kind                                            |
 | -------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | Data root      | `.local/share/idd-skill/`                                                                                  | directory, created                              |
-| Payload        | `.local/share/idd-skill/0.16.0/` and the 67 files under it                                                 | directories and files, created                  |
-| Current link   | `.local/share/idd-skill/current`, a symbolic link to the absolute path `$HOME/.local/share/idd-skill/0.16.0` | symbolic link, created                          |
+| Payload        | `.local/share/idd-skill/0.17.0/` and the 68 files under it                                                 | directories and files, created                  |
+| Current link   | `.local/share/idd-skill/current`, a symbolic link to the absolute path `$HOME/.local/share/idd-skill/0.17.0` | symbolic link, created                          |
 | Receipt        | `.local/share/idd-skill/receipt.json`                                                                      | file, installer artifact                        |
 | Claude skills  | `.claude/skills/` with `issue-authoring/` and `idd-spec-audit/`                                            | directories and files, created                  |
 | Agent skills   | `.agents/skills/` with `issue-authoring/` and `idd-spec-audit/`                                            | directories and files, created                  |
@@ -206,9 +206,9 @@ harness list (see [Assumptions](#assumptions)).
 
 ## Payload
 
-The payload is the 66 paths of the `idd-template-core-files` block in
+The payload is the 67 paths of the `idd-template-core-files` block in
 `audit/sync-manifest.json`, with the `idd-template/` prefix removed, plus
-`user-global/entry.md`. That is 67 files.
+`user-global/entry.md`. That is 68 files.
 
 - It includes `.github/instructions/lite/` (11 files) and
   `user-global/entry.md`.
@@ -252,11 +252,11 @@ platform without them refuses with nothing written. Windows is such a
 platform, and `docs/user-global-install.md` says the installer refuses there
 before any write.
 
-## What the 111 entries are
+## What the 112 paths are
 
-- Payload: the 66 `paths` of the `idd-template-core-files` block in
+- Payload: the 67 `paths` of the `idd-template-core-files` block in
   `audit/sync-manifest.json`, with the `idd-template/` prefix removed, plus
-  `user-global/entry.md`. That is 67 files.
+  `user-global/entry.md`. That is 68 files.
 - Skill trees: every regular file under `skills/issue-authoring/` (4 files)
   and `skills/idd-spec-audit/` (2 files), for each of the two skill roots.
   That is 12 files.
@@ -264,14 +264,14 @@ before any write.
   directories, the `current` link, and `receipt.json` in the data root. That
   is 5 entries.
 - Directories: every directory the run creates. The data root and its
-  `0.16.0/` version directory, plus 13 payload subdirectories, make 15. Each
+  `0.17.0/` version directory, plus 13 payload subdirectories, make 15. Each
   skill root holds 5 (itself, two skill directories, and two `references/`
   directories), so both roots make 10. The harness directories `.codex/` and
   `.config/opencode/` make 2. That is 27 directories.
 
-Totals: 67 + 12 + 5 = 84 files and links, and 27 directories, so the list has
-111 entries. These counts match the run record: its receipt has 110 entries,
-and `receipt.json`, which the receipt does not list, makes 111. Sorting uses
+Totals: 68 + 12 + 5 = 85 files and links, and 27 directories, so the list has
+112 paths. These counts match the run record: its receipt has 111 entries,
+and `receipt.json`, which the receipt does not list, makes 112. Sorting uses
 `LC_ALL=C` (byte order), so `SKILL.md` sorts before `references/` (uppercase
 before lowercase). A locale sort such as `ja_JP.utf8` puts `references/` first.
 
@@ -311,87 +311,88 @@ the three entry files are regular files.
 .config/opencode/
 .config/opencode/opencode.json
 .local/share/idd-skill/
-.local/share/idd-skill/0.16.0/
-.local/share/idd-skill/0.16.0/.cspell.config.yml
-.local/share/idd-skill/0.16.0/.githooks/
-.local/share/idd-skill/0.16.0/.githooks/_idd-worktree-guard.sh
-.local/share/idd-skill/0.16.0/.githooks/pre-commit
-.local/share/idd-skill/0.16.0/.githooks/pre-push
-.local/share/idd-skill/0.16.0/.github/
-.local/share/idd-skill/0.16.0/.github/idd/
-.local/share/idd-skill/0.16.0/.github/idd/config.json
-.local/share/idd-skill/0.16.0/.github/instructions/
-.local/share/idd-skill/0.16.0/.github/instructions/idd-advisory-wait.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-ci.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-claim.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-discover.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-merge-handoff.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-merge.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-orchestrator.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-overview-appendix.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-overview-core.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-pr-submit.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-pre-merge.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-resume-stall.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-resume.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-review-fix.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-review-snapshot.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-review-triage.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-roadmap-audit.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-suitability.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/idd-work.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-advisory-wait-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-ci-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-claim-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-merge-handoff-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-pr-submit-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-pre-merge-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-resume-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-resume-stall-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-review-fix-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-review-snapshot-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/instructions/lite/idd-work-lite.instructions.md
-.local/share/idd-skill/0.16.0/.github/workflows/
-.local/share/idd-skill/0.16.0/.github/workflows/post-merge-cleanup.yml
-.local/share/idd-skill/0.16.0/.markdownlint-cli2.yaml
-.local/share/idd-skill/0.16.0/.markdownlint.yml
-.local/share/idd-skill/0.16.0/docs/
-.local/share/idd-skill/0.16.0/docs/concepts.md
-.local/share/idd-skill/0.16.0/docs/customization.md
-.local/share/idd-skill/0.16.0/docs/getting-started.md
-.local/share/idd-skill/0.16.0/docs/global-only-profile.md
-.local/share/idd-skill/0.16.0/docs/idd-advisory-wait-shell-fallback.md
-.local/share/idd-skill/0.16.0/docs/idd-autonomy-contract.md
-.local/share/idd-skill/0.16.0/docs/idd-comment-minimization.md
-.local/share/idd-skill/0.16.0/docs/idd-concept-ownership.md
-.local/share/idd-skill/0.16.0/docs/idd-design-rationale.md
-.local/share/idd-skill/0.16.0/docs/idd-helper-scripts.md
-.local/share/idd-skill/0.16.0/docs/idd-resume-detail.md
-.local/share/idd-skill/0.16.0/docs/idd-review-policy-profiles.md
-.local/share/idd-skill/0.16.0/docs/idd-workflow.md
-.local/share/idd-skill/0.16.0/docs/index.md
-.local/share/idd-skill/0.16.0/docs/onboarding/
-.local/share/idd-skill/0.16.0/docs/onboarding/agent-entry-and-verification.md
-.local/share/idd-skill/0.16.0/docs/onboarding/issue-mediated-bootstrap.md
-.local/share/idd-skill/0.16.0/docs/onboarding/optional-host-setup.md
-.local/share/idd-skill/0.16.0/docs/onboarding/placeholders.md
-.local/share/idd-skill/0.16.0/docs/onboarding/policy-decisions.md
-.local/share/idd-skill/0.16.0/docs/onboarding/project-tuning.md
-.local/share/idd-skill/0.16.0/docs/onboarding/template-distribution.md
-.local/share/idd-skill/0.16.0/docs/permissions.md
-.local/share/idd-skill/0.16.0/docs/policy-constants.md
-.local/share/idd-skill/0.16.0/docs/reference.md
-.local/share/idd-skill/0.16.0/profiles/
-.local/share/idd-skill/0.16.0/profiles/README.md
-.local/share/idd-skill/0.16.0/profiles/external-bot/
-.local/share/idd-skill/0.16.0/profiles/external-bot/README.md
-.local/share/idd-skill/0.16.0/profiles/human-required/
-.local/share/idd-skill/0.16.0/profiles/human-required/README.md
-.local/share/idd-skill/0.16.0/profiles/no-advisory/
-.local/share/idd-skill/0.16.0/profiles/no-advisory/README.md
-.local/share/idd-skill/0.16.0/user-global/
-.local/share/idd-skill/0.16.0/user-global/entry.md
+.local/share/idd-skill/0.17.0/
+.local/share/idd-skill/0.17.0/.cspell.config.yml
+.local/share/idd-skill/0.17.0/.githooks/
+.local/share/idd-skill/0.17.0/.githooks/_idd-worktree-guard.sh
+.local/share/idd-skill/0.17.0/.githooks/pre-commit
+.local/share/idd-skill/0.17.0/.githooks/pre-push
+.local/share/idd-skill/0.17.0/.github/
+.local/share/idd-skill/0.17.0/.github/idd/
+.local/share/idd-skill/0.17.0/.github/idd/config.example.jsonc
+.local/share/idd-skill/0.17.0/.github/idd/config.json
+.local/share/idd-skill/0.17.0/.github/instructions/
+.local/share/idd-skill/0.17.0/.github/instructions/idd-advisory-wait.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-ci.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-claim.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-discover.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-merge-handoff.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-merge.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-orchestrator.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-overview-appendix.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-overview-core.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-pr-submit.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-pre-merge.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-resume-stall.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-resume.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-review-fix.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-review-snapshot.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-review-triage.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-roadmap-audit.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-suitability.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/idd-work.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-advisory-wait-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-ci-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-claim-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-merge-handoff-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-pr-submit-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-pre-merge-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-resume-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-resume-stall-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-review-fix-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-review-snapshot-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/instructions/lite/idd-work-lite.instructions.md
+.local/share/idd-skill/0.17.0/.github/workflows/
+.local/share/idd-skill/0.17.0/.github/workflows/post-merge-cleanup.yml
+.local/share/idd-skill/0.17.0/.markdownlint-cli2.yaml
+.local/share/idd-skill/0.17.0/.markdownlint.yml
+.local/share/idd-skill/0.17.0/docs/
+.local/share/idd-skill/0.17.0/docs/concepts.md
+.local/share/idd-skill/0.17.0/docs/customization.md
+.local/share/idd-skill/0.17.0/docs/getting-started.md
+.local/share/idd-skill/0.17.0/docs/global-only-profile.md
+.local/share/idd-skill/0.17.0/docs/idd-advisory-wait-shell-fallback.md
+.local/share/idd-skill/0.17.0/docs/idd-autonomy-contract.md
+.local/share/idd-skill/0.17.0/docs/idd-comment-minimization.md
+.local/share/idd-skill/0.17.0/docs/idd-concept-ownership.md
+.local/share/idd-skill/0.17.0/docs/idd-design-rationale.md
+.local/share/idd-skill/0.17.0/docs/idd-helper-scripts.md
+.local/share/idd-skill/0.17.0/docs/idd-resume-detail.md
+.local/share/idd-skill/0.17.0/docs/idd-review-policy-profiles.md
+.local/share/idd-skill/0.17.0/docs/idd-workflow.md
+.local/share/idd-skill/0.17.0/docs/index.md
+.local/share/idd-skill/0.17.0/docs/onboarding/
+.local/share/idd-skill/0.17.0/docs/onboarding/agent-entry-and-verification.md
+.local/share/idd-skill/0.17.0/docs/onboarding/issue-mediated-bootstrap.md
+.local/share/idd-skill/0.17.0/docs/onboarding/optional-host-setup.md
+.local/share/idd-skill/0.17.0/docs/onboarding/placeholders.md
+.local/share/idd-skill/0.17.0/docs/onboarding/policy-decisions.md
+.local/share/idd-skill/0.17.0/docs/onboarding/project-tuning.md
+.local/share/idd-skill/0.17.0/docs/onboarding/template-distribution.md
+.local/share/idd-skill/0.17.0/docs/permissions.md
+.local/share/idd-skill/0.17.0/docs/policy-constants.md
+.local/share/idd-skill/0.17.0/docs/reference.md
+.local/share/idd-skill/0.17.0/profiles/
+.local/share/idd-skill/0.17.0/profiles/README.md
+.local/share/idd-skill/0.17.0/profiles/external-bot/
+.local/share/idd-skill/0.17.0/profiles/external-bot/README.md
+.local/share/idd-skill/0.17.0/profiles/human-required/
+.local/share/idd-skill/0.17.0/profiles/human-required/README.md
+.local/share/idd-skill/0.17.0/profiles/no-advisory/
+.local/share/idd-skill/0.17.0/profiles/no-advisory/README.md
+.local/share/idd-skill/0.17.0/user-global/
+.local/share/idd-skill/0.17.0/user-global/entry.md
 .local/share/idd-skill/current
 .local/share/idd-skill/receipt.json
 ```
