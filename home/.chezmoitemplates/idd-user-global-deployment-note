@@ -1,5 +1,3 @@
-In this setup `idd-activation` is deployed to `~/.local/bin`. If it is not on `PATH`,
-run `~/.local/bin/idd-activation` instead, or `~/.local/bin/idd-activation.cmd` on
-Windows. The `node` fallback in the entry text does not work here, because the
-payload has no `scripts/` directory.
+This setup deploys `idd-activation` to `~/.local/bin`. When it is not on `PATH`,
+use the platform-specific command from the IDD entry above.
 {{- /* Trim the source newline so wrapper renders keep their existing spacing. */ -}}

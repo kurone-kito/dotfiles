@@ -6,24 +6,25 @@ description: Records how a re-import keeps this repository's chezmoi copy of the
 
 # Re-importing the user-global IDD payload
 
-Once #648 lands, this repository vendors the IDD user-global payload and its
-two skill bundles (`issue-authoring` and `idd-spec-audit`) into the chezmoi
-source, so that other repositories can activate IDD from the home directory.
-This page records how a later re-import keeps that copy in step with upstream,
-and which local seams it must not overwrite.
+This repository vendors the IDD user-global payload and its two skill bundles
+(`issue-authoring` and `idd-spec-audit`) into the chezmoi source, so that other
+repositories can activate IDD from the home directory. This page records how a
+later re-import keeps that copy in step with upstream, and which local seams it
+must not overwrite.
 
 The page complements the upstream installation guides and does not restate
 their install steps. Read these at the pinned commit first:
 
-- [User-global installation](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/docs/user-global-install.md)
-- [IDD onboarding](https://github.com/kurone-kito/idd-skill/blob/e4d425ee28b1893dd45c4996b2506619018c4b2b/idd-template/ONBOARDING.md)
+- [User-global installation](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/docs/user-global-install.md)
+- [IDD onboarding](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/ONBOARDING.md)
 
 ## Pinned upstream commit
 
-The payload is pinned to idd-skill commit `e4d425ee28b1893dd45c4996b2506619018c4b2b`
-(tag `v0.16.0`, an annotated tag that dereferences to this commit). The package
-version at that commit is `0.16.0`, which is the `<version>` used below. A
-re-import changes that pin on purpose, and updates this page in the same change.
+The payload is pinned to idd-skill commit `77befdd4030757464bed7f31c7dfe6d0a404a18b`
+(tag `v0.17.0`, annotated tag object `1f91a0d13397dbcbf94f44c8201a2b5618bb1060`).
+The package version at that commit is `0.17.0`, which is the `<version>` used
+below. A re-import changes that pin on purpose, and updates this page in the
+same change.
 
 ## Re-import procedure
 
@@ -72,8 +73,8 @@ re-import changes that pin on purpose, and updates this page in the same change.
 
    The wiring that chezmoi adds to the first two is tracked by #649.
 
-   Until #648 lands, the chezmoi sources in the table do not exist. This page
-   describes the sources that it will create.
+   The table describes the deployed chezmoi sources; the XDG data-root bridge
+   and harness wiring are maintained separately from the upstream payload.
 3. Update the chezmoi source where payload or skill-tree bytes differ. If
    `user-global/entry.md` differs, also update each copy of it listed under
    Preserved seams, in the same change. A file that exists on one side only is
@@ -100,18 +101,19 @@ re-import changes that pin on purpose, and updates this page in the same change.
      `~/.local/share/idd-skill/current` when `chezmoi apply` runs it, whatever
      `XDG_DATA_HOME` is set to. The version that junction names is set in three
      places that must agree: the `$version` constant in that script, the content
-     of `home/dot_local/share/idd-skill/symlink_current`, and the version
-     literals in `tests/powershell/link-idd-skill-xdg-data.Tests.ps1`. Before
-     `chezmoi apply` deploys the new version, remove the old junction with a
-     non-recursive command, for example
-     `cmd /c --% rmdir "%USERPROFILE%\.local\share\idd-skill\current"`
-     in PowerShell. The
-     script never replaces an existing `current`: it reports a link to another
-     version and leaves it in place, so the old junction stays until it is
-     removed.
+     of `home/dot_local/share/idd-skill/symlink_current`, and the test's version
+     source in `tests/powershell/link-idd-skill-xdg-data.Tests.ps1`. During
+     `chezmoi apply`, the script advances an existing junction or symbolic link
+     only when it resolves to a previous version directory under the managed
+     data root and that directory contains `user-global/entry.md`. It leaves a
+     real `current` directory and links to unrelated targets in place. If
+     creating the replacement junction fails, the script tries to restore the
+     previous target as a junction and warns. The Pester tests cover the
+     managed-version advance, recovery from junction-creation failure and
+     protections for unrelated paths, so the prior junction does not need to
+     be removed manually.
 
-The tracking issue is the issue that tracks the re-import. Today that is
-roadmap #643.
+The tracking issue for this re-import is #675.
 
 ## Preserved seams
 
@@ -128,12 +130,17 @@ they are during a re-import:
   template imports the deployed file instead, and the compact OpenCode render
   carries no copy.
 - The deployment note after the link line in each of the five renders: the four
-  copies and the Claude import. The `node` fallback in the entry text needs
-  `$PAYLOAD/scripts/`, which this payload does not have, so the note tells the
-  agent to run `~/.local/bin/idd-activation` instead, or on Windows
-  `~/.local/bin/idd-activation.cmd`, which runs the PowerShell twin with the
-  execution policy bypassed. The note sits outside the managed block, so each
-  copy stays byte-identical to `entry.md`.
+  copies and the Claude import. It records that this setup deploys
+  `idd-activation` to `~/.local/bin` and directs readers to the upstream entry's
+  platform-specific fallback commands. The note sits outside the managed block,
+  so each copy stays byte-identical to `entry.md`.
+- `home/run_after_83-link-idd-skill-xdg-data.ps1` owns the Windows `current`
+  junction update. It advances only a link to a prior managed payload version
+  with an `entry.md` marker; a real directory or unrelated target is preserved.
+  If replacement fails, it tries to restore the previous target as a junction
+  so recovery does not require symbolic-link privilege. Keep this
+  repository-specific behavior and its Pester coverage outside the versioned
+  upstream payload during later re-imports.
 - `home/dot_config/idd-skill/config.json.tmpl` keeps only the CodeRabbit critique
   delegate and the telemetry hook. Upstream dogfood policy keys are not copied
   into it.
