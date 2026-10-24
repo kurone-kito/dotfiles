@@ -223,15 +223,17 @@ stale takeover becomes eligible.
 
 ## CI Wait Policy
 
-- **`ciWait.runningTimeout`**: `PT10M` (shortened from the `PT30M`
+- **`ciWait.runningTimeout`**: `PT16M` (shortened from the `PT30M`
   distributed default).
 - **`ciWait.generationTimeout`**: `PT10M` (distributed default).
 - **`ciWait.rerunPolicy`**: `rerun-once` (distributed default).
 
-Rationale: the longest CI job in this repo currently finishes in
-~1 minute, so a 10-minute running timeout is generous without
-stretching the loop wait. Keep the rerun policy on `rerun-once` to
-absorb the occasional transient failure without re-running indefinitely.
+Rationale: the advisory verdict job has a 14-minute timeout, so the
+16-minute running timeout leaves the CI waiter enough time to observe
+that job's configured result instead of treating it as stalled first.
+Keep the generation timeout at 10 minutes and the rerun policy on
+`rerun-once` to absorb the occasional transient failure without
+re-running indefinitely.
 
 ## Credential Scope
 
@@ -918,8 +920,9 @@ active Track A transition.
 Roadmap [#674](https://github.com/kurone-kito/dotfiles/issues/674)
 aligns the repository import with upstream `v0.17.0`. Config track
 [#678](https://github.com/kurone-kito/dotfiles/issues/678) updates the
-version and helper archive while preserving the repository's explicit
-policy choices and `ephemeral-npx` runtime.
+version and helper archive while retaining the `ephemeral-npx` runtime
+and other confirmed repository policy choices, except for the approved
+`ciWait.runningTimeout` increase to `PT16M`.
 
 | Key | Status | Notes |
 | --- | --- | --- |
@@ -932,8 +935,14 @@ the pinned v0.17.0 commit. The advisory-wait fixture's field-name list
 was retained after verifying that it exactly matches the pinned schema's
 `required` array. The advisory verdict job has a 14-minute timeout,
 matching the v0.17.0 upstream workflow to cover the helper's 10-minute
-Copilot review poll plus job setup; the separate self-waiver job remains
-at 10 minutes. The prior v0.14.0 decision record follows.
+Copilot review poll plus job setup. The `ciWait.runningTimeout` value
+is 16 minutes so the waiter can observe that job's configured result;
+`ciWait.generationTimeout` remains 10 minutes and `rerunPolicy` remains
+`rerun-once`. The separate self-waiver job remains at 10 minutes and
+grants only the approved read permissions `actions: read` and
+`checks: read` needed for the v0.17.0 helper's check-suite workflow-run
+metadata query in private repositories. The prior v0.14.0 decision
+record follows.
 
 ## New 0.14.0 Policy Alignment
 
