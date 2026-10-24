@@ -220,6 +220,44 @@ def workflow_job_timeouts(workflow):
             timeouts[current_job] = int(timeout_match.group(1))
     return timeouts
 
+def workflow_job_permissions(workflow, job_name):
+    lines = workflow.splitlines()
+    job_start = next(
+        (index for index, line in enumerate(lines) if line == f"  {job_name}:"),
+        None,
+    )
+    assert job_start is not None, f"workflow job {job_name!r} is missing"
+    job_end = next(
+        (
+            index
+            for index in range(job_start + 1, len(lines))
+            if re.fullmatch(r"  [A-Za-z0-9_-]+:", lines[index])
+        ),
+        len(lines),
+    )
+    permissions_start = next(
+        (
+            index
+            for index in range(job_start + 1, job_end)
+            if lines[index] == "    permissions:"
+        ),
+        None,
+    )
+    assert permissions_start is not None, (
+        f"workflow job {job_name!r} has no explicit permissions"
+    )
+    permissions = {}
+    for line in lines[permissions_start + 1:job_end]:
+        if not line.strip():
+            continue
+        indentation = len(line) - len(line.lstrip(" "))
+        if indentation <= 4:
+            break
+        match = re.fullmatch(r"      ([A-Za-z0-9-]+):\s+(read|write)", line)
+        assert match, f"unrecognized permission entry in {job_name!r}: {line!r}"
+        permissions[match.group(1)] = match.group(2)
+    return permissions
+
 assert workflow_run_scripts(
     "steps:\n  - name: Example\n    run: |\n      echo npx --package=comment\n"
     "      npx --package=command\n  - name: Next\n    run: echo done\n"
@@ -265,12 +303,29 @@ assert actual_timeouts == expected_timeouts, (
     f"expected verdict/self-waiver timeouts {expected_timeouts!r}, "
     f"found {actual_timeouts!r}"
 )
-print("all six active workflow helper URLs match the configured package pin")
+expected_verdict_permissions = {
+    "contents": "read",
+    "issues": "read",
+    "pull-requests": "read",
+    "actions": "read",
+    "checks": "read",
+}
+actual_verdict_permissions = workflow_job_permissions(
+    workflow, "idd-advisory-convergence"
+)
+assert actual_verdict_permissions == expected_verdict_permissions, (
+    f"expected verdict permissions {expected_verdict_permissions!r}, "
+    f"found {actual_verdict_permissions!r}"
+)
+print(
+    "all six active helper URLs, advisory timeouts, and verdict permissions "
+    "match the v0.17.0 contract"
+)
 PY
 }
 
-@test "active helper pins and advisory job timeouts match the v0.17.0 contract" {
+@test "active helper pins, advisory timeouts, and verdict permissions match the v0.17.0 contract" {
   run check_workflow_helper_pins
   assert_success
-  assert_output "all six active workflow helper URLs match the configured package pin"
+  assert_output "all six active helper URLs, advisory timeouts, and verdict permissions match the v0.17.0 contract"
 }
