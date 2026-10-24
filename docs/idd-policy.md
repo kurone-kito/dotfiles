@@ -14,27 +14,30 @@ onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), the
 0.5.0/0.6.0 re-import (roadmap #239), the 0.7.0 re-import
 (roadmap #292), the 0.9.0 re-import (roadmap #380), the 0.11.0
 re-import (roadmap #419), the 0.12.0 re-import
-(roadmap #446), the 0.12.2 re-import (roadmap #469), and the v0.14.0 re-import
-(roadmap #540, starting with #563). The
-machine-readable mirror lives at
+(roadmap #446), the 0.12.2 re-import (roadmap #469), the v0.14.0 re-import
+(roadmap #540, starting with #563), and the v0.17.0 re-import
+(roadmap #674, starting with issue #678). The machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/ae16f497434a5023dfaa28f965fc2af92ebf055d/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Current pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
-(tag `v0.14.0`), selected by roadmap #540's re-import, starting with
-Track A (#563). Sibling imports and final lockstep verification are
-sequenced by the same roadmap.
+**Current pinned upstream commit**: `77befdd4030757464bed7f31c7dfe6d0a404a18b`
+(tag `v0.17.0`), selected by roadmap #674's re-import, starting with
+issue #678. Sibling imports and final lockstep verification are sequenced by
+the same roadmap.
 
-**Previous pinned upstream commit**: `c11c3642319b3283293e4e681861bf7899c32ed3`
-(abbreviated `c11c364`; tag `v0.12.2`), confirmed at the time as the
-latest tag and audited by roadmap #469's final-verification track
+**Previous pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
+(abbreviated `ae16f49`; tag `v0.14.0`), selected by roadmap #540's
+re-import, starting with config track #563. Immediately before that,
+the `v0.12.2` pin (`c11c3642319b3283293e4e681861bf7899c32ed3`,
+abbreviated `c11c364`) was confirmed as the latest tag and audited by
+roadmap #469's final-verification track
 ([`#475`](https://github.com/kurone-kito/dotfiles/issues/475)), which
-supersedes the `v0.12.0`-round pin recorded by roadmap #446's
+superseded the `v0.12.0`-round pin recorded by roadmap #446's
 final-verification track (#452). Roadmap #469's five resync tracks
 (#470-#474) each brought their own file scope from `v0.12.0` to
 `v0.12.2` -- schema/config (#470, PR #478),
@@ -95,10 +98,11 @@ and `src/scripts/advisory-convergence.mts` computes the report's
 `review-clause.mts` alone computes.
 
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
-is now `0.14.0` — roadmap
+is currently `0.17.0` — roadmap #674's re-import baseline. During the
+v0.14.0 round, it read `0.14.0`, bumped by roadmap
 [`#540`](https://github.com/kurone-kito/dotfiles/issues/540), starting with
 config track [`#563`](https://github.com/kurone-kito/dotfiles/issues/563),
-bumped it from `0.12.2` (see [New 0.14.0 Policy
+from `0.12.2` (see [New 0.14.0 Policy
 Alignment](#new-0140-policy-alignment) below for this track's policy
 record). Before the 0.12.2 round, it read `0.12.0`, bumped by
 roadmap #446's schema/config-audit track
@@ -248,7 +252,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -350,7 +354,7 @@ _(We've since updated to the latest LTS version)_
 - **Missing-approval behavior**: explicit-target runs stop before claim;
   discovery may report the issue in its approval-needed fallback bucket.
 
-The pinned v0.14.0 claim helper has an upstream permission-outage
+The pinned v0.17.0 claim helper has an upstream permission-outage
 exception for issue-author self-authorization: if the collaborators
 permission lookup is unavailable, `OWNER` author association always
 self-authorizes, and `MEMBER` does so under either supported actor
@@ -908,6 +912,28 @@ window could not fail `additionalProperties` (no new keys). Issues
 Track D left out of scope was closed by
 [`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
 active Track A transition.
+
+## New 0.17.0 Policy Alignment
+
+Roadmap [#674](https://github.com/kurone-kito/dotfiles/issues/674)
+aligns the repository import with upstream `v0.17.0`. Config track
+[#678](https://github.com/kurone-kito/dotfiles/issues/678) updates the
+version and helper archive while preserving the repository's explicit
+policy choices and `ephemeral-npx` runtime.
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `iddVersion` | **explicit: `"0.17.0"`** (was `"0.14.0"`) | Roadmap #674's import baseline. |
+| `helperRuntime.packageSpec` | **explicit: v0.17.0 commit archive** | Pinned to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b`; `helperRuntime.profile` remains `ephemeral-npx`. |
+
+All other explicit policy values remain as confirmed. The updated
+configuration validates against the `policy.schema.json` shipped at
+the pinned v0.17.0 commit. The advisory-wait fixture's field-name list
+was retained after verifying that it exactly matches the pinned schema's
+`required` array. The advisory verdict job has a 14-minute timeout,
+matching the v0.17.0 upstream workflow to cover the helper's 10-minute
+Copilot review poll plus job setup; the separate self-waiver job remains
+at 10 minutes. The prior v0.14.0 decision record follows.
 
 ## New 0.14.0 Policy Alignment
 

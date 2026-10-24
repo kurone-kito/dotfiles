@@ -30,6 +30,9 @@
 #   severity-tiered critique deferral, and GitHub API read caching/load
 #   control (issue #563, roadmap #540): schema-aligned adoption while
 #   keeping the repository's established overlays.
+# - IDD v0.17.0 package pin and config version (issue #678, roadmap
+#   #674): schema-aligned helper and policy version update while keeping
+#   the repository's established overlays.
 # - issueAuthoring.journalIssue against docs/idd-policy.md (issue #638):
 #   requested by a Copilot review on PR #610. The config moved to a new
 #   journal while the doc row kept the former one, and nothing detected
@@ -82,7 +85,7 @@ assert delegate.get('mode') == 'combined', delegate
 " "$CONFIG_PATH"
 }
 
-@test ".github/idd/config.json declares the v0.14.0 iddVersion and its adopted schema keys" {
+@test ".github/idd/config.json declares the v0.17.0 iddVersion and its adopted schema keys" {
   assert_file_exists "$CONFIG_PATH"
 
   python3 -c "
@@ -91,7 +94,7 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 
-assert config.get('iddVersion') == '0.14.0', config.get('iddVersion')
+assert config.get('iddVersion') == '0.17.0', config.get('iddVersion')
 
 helper_runtime = config.get('helperRuntime', {})
 # helperRuntime.profile determines how packageSpec is actually consumed
@@ -102,7 +105,7 @@ assert helper_runtime.get('profile') == 'ephemeral-npx', helper_runtime
 package_spec = helper_runtime.get('packageSpec')
 assert package_spec == (
     'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
-    'ae16f497434a5023dfaa28f965fc2af92ebf055d'
+    '77befdd4030757464bed7f31c7dfe6d0a404a18b'
 ), package_spec
 
 claim_timing = config.get('claimTiming', {})
