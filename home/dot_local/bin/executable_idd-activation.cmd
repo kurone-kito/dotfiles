@@ -2,7 +2,9 @@
 setlocal
 set "ERRORLEVEL="
 REM Windows-resolvable launcher for the upstream idd-activation helper
-REM (dotfiles issue #646). PATHEXT has no .PS1, so a bare idd-activation
+REM (dotfiles issue #676; originally introduced by #646). Its PowerShell
+REM twin pins the v0.17.0 release commit 77befdd4030757464bed7f31c7dfe6d0a404a18b.
+REM PATHEXT has no .PS1, so a bare idd-activation
 REM resolves only through this file. It dispatches to the PowerShell twin
 REM idd-activation.ps1 in this same directory, preferring pwsh and falling
 REM back to powershell when pwsh is not on PATH. It forwards the arguments
