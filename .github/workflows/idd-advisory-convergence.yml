@@ -7,7 +7,7 @@ name: IDD advisory-convergence gate
 # pin: #473 moved this workflow from the v0.12.0 pin set by #450 to
 # c11c3642319b3283293e4e681861bf7899c32ed3 (v0.12.2), keeping it in sync
 # with the repository's ephemeral-npx invocations at that time. The live
-# helper calls below follow the v0.14.0 package pin in
+# helper calls below follow the v0.17.0 package pin in
 # `.github/idd/config.json`; see docs/idd-policy.md "Helper Runtime
 # Profile". The
 # maintainer-authorized waiver escape is already configured in
@@ -190,7 +190,7 @@ jobs:
   # update every consumer to the new literal context together.
   idd-advisory-convergence:
     runs-on: ${{ inputs.runner || vars.CI_RUNNER_LABEL || 'ubuntu-slim' }}
-    timeout-minutes: 10
+    timeout-minutes: 14
     # kurone-kito/idd-skill#2657: sequenced after the self-waiver job
     # below so an allowlisted PR's own bootstrap marker is guaranteed to
     # exist (posted or definitively not posted) before this job ever
@@ -210,21 +210,21 @@ jobs:
     needs: idd-advisory-convergence-self-waiver
     if: ${{ !cancelled() }}
     # Job-level override of the workflow-level `permissions:` block
-    # above, adding `actions: read`: the self-referential-bootstrap-auto
-    # trust verification calls `GET
-    # /repos/{owner}/{repo}/actions/runs/{id}`, which needs this scope
-    # explicitly (an unspecified GITHUB_TOKEN permission defaults to
-    # none, not inherited from the repository's own default). A
-    # job-level block replaces the workflow-level one entirely rather
-    # than adding to it, so every previously-granted scope is repeated
-    # here too. The self-waiver job below never calls this endpoint, so
-    # its own job-level permissions (unaffected by this one) do not need
-    # this scope.
+    # above. The self-referential-bootstrap-auto trust check calls
+    # `GET /repos/{owner}/{repo}/actions/runs/{id}`, requiring
+    # `actions: read`. The v0.17.0 GitHub provider reads
+    # `Commit.checkSuites` to resolve the observed head timestamp,
+    # requiring `checks: read` in private repositories. Unspecified
+    # GITHUB_TOKEN permissions default to none, and a job-level block
+    # replaces rather than extends the workflow-level map, so every
+    # existing scope is repeated here. The self-waiver job below declares
+    # the scopes required by its own helper path and marker writes.
     permissions:
       contents: read
       issues: read
       pull-requests: read
       actions: read
+      checks: read
     steps:
       # Pinned commit SHA (#424), not this repository's otherwise-usual
       # floating `@v7` tag: the read-only-permissions rationale that
@@ -276,7 +276,7 @@ jobs:
             echo "::error::PR_NUMBER is empty"
             exit 1
           fi
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
             idd-advisory-convergence --pr "$PR_NUMBER" --assert
 
   # kurone-kito/idd-skill#2657: optional companion job -- a PR that fixes
@@ -287,7 +287,7 @@ jobs:
   # `idd-external-check-waiver` marker for exactly that case. See
   # kurone-kito/idd-skill's `idd-template/docs/idd-helper-scripts.md`
   # "Automated self-referential-bootstrap-auto waiver" section (at this
-  # file's own v0.14.0 pin, ae16f497434a5023dfaa28f965fc2af92ebf055d) for the
+  # file's own v0.17.0 pin, 77befdd4030757464bed7f31c7dfe6d0a404a18b) for the
   # full trust model and the seven acceptance conditions -- this
   # repository's own docs/idd-helper-scripts.md does not carry that
   # section yet under the `ephemeral-npx` profile (no vendored `docs/`
@@ -338,10 +338,18 @@ jobs:
     # `--auto-bootstrap` path also reads `pr.statusCheckRollup`, which
     # needs both scopes explicitly -- see the source repository's own
     # copy of this file for the full investigation and evidence.
+    # `actions: read` (kurone-kito/idd-skill#3683): the same `gh pr view
+    # --json statusCheckRollup` request selects `checkSuite { workflowRun }`
+    # for each check-run context, which is an Actions resource. A private
+    # adopter repository saw `Resource not accessible by integration`
+    # (`checkSuite.workflowRun`) on allowlisted PRs without this scope.
+    # The cause is likely but not proven: no A/B probe was run and the
+    # public source repository cannot reproduce it.
     permissions:
       contents: read
       pull-requests: write
       issues: write
+      actions: read
       checks: read
       statuses: read
     steps:
@@ -430,7 +438,7 @@ jobs:
           GH_ENTERPRISE_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+          npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
             idd-external-check-waiver --pr "$PR_NUMBER" --check idd-advisory-convergence \
             --reason self-referential-bootstrap-auto --run-id "$GITHUB_RUN_ID" \
             --auto-bootstrap --apply --yes | tee /tmp/idd-waiver-report.json

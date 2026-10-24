@@ -1,6 +1,6 @@
 {
   "$schema": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
-  "iddVersion": "0.14.0",
+  "iddVersion": "0.17.0",
   "markerPrefix": "dotfiles",
   "developmentBranch": "master",
   "mergePolicy": "fully_autonomous_merge",
@@ -35,7 +35,7 @@
   },
   "helperRuntime": {
     "profile": "ephemeral-npx",
-    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d"
+    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b"
   },
   "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",
@@ -49,7 +49,7 @@
     "secondaryBotLogin": "coderabbitai[bot]"
   },
   "ciWait": {
-    "runningTimeout": "PT10M",
+    "runningTimeout": "PT16M",
     "generationTimeout": "PT10M",
     "rerunPolicy": "rerun-once"
   },

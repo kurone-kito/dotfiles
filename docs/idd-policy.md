@@ -14,27 +14,30 @@ onboarding flow (roadmap #95), the 0.4.0 re-import (roadmap #144), the
 0.5.0/0.6.0 re-import (roadmap #239), the 0.7.0 re-import
 (roadmap #292), the 0.9.0 re-import (roadmap #380), the 0.11.0
 re-import (roadmap #419), the 0.12.0 re-import
-(roadmap #446), the 0.12.2 re-import (roadmap #469), and the v0.14.0 re-import
-(roadmap #540, starting with #563). The
-machine-readable mirror lives at
+(roadmap #446), the 0.12.2 re-import (roadmap #469), the v0.14.0 re-import
+(roadmap #540, starting with #563), and the v0.17.0 re-import
+(roadmap #674, starting with issue #678). The machine-readable mirror lives at
 [`.github/idd/config.json`](../.github/idd/config.json); keep both in
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/ae16f497434a5023dfaa28f965fc2af92ebf055d/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Current pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
-(tag `v0.14.0`), selected by roadmap #540's re-import, starting with
-Track A (#563). Sibling imports and final lockstep verification are
-sequenced by the same roadmap.
+**Current pinned upstream commit**: `77befdd4030757464bed7f31c7dfe6d0a404a18b`
+(tag `v0.17.0`), selected by roadmap #674's re-import, starting with
+issue #678. Sibling imports and final lockstep verification are sequenced by
+the same roadmap.
 
-**Previous pinned upstream commit**: `c11c3642319b3283293e4e681861bf7899c32ed3`
-(abbreviated `c11c364`; tag `v0.12.2`), confirmed at the time as the
-latest tag and audited by roadmap #469's final-verification track
+**Previous pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
+(abbreviated `ae16f49`; tag `v0.14.0`), selected by roadmap #540's
+re-import, starting with config track #563. Immediately before that,
+the `v0.12.2` pin (`c11c3642319b3283293e4e681861bf7899c32ed3`,
+abbreviated `c11c364`) was confirmed as the latest tag and audited by
+roadmap #469's final-verification track
 ([`#475`](https://github.com/kurone-kito/dotfiles/issues/475)), which
-supersedes the `v0.12.0`-round pin recorded by roadmap #446's
+superseded the `v0.12.0`-round pin recorded by roadmap #446's
 final-verification track (#452). Roadmap #469's five resync tracks
 (#470-#474) each brought their own file scope from `v0.12.0` to
 `v0.12.2` -- schema/config (#470, PR #478),
@@ -95,10 +98,11 @@ and `src/scripts/advisory-convergence.mts` computes the report's
 `review-clause.mts` alone computes.
 
 `iddVersion` in [`.github/idd/config.json`](../.github/idd/config.json)
-is now `0.14.0` — roadmap
+is currently `0.17.0` — roadmap #674's re-import baseline. During the
+v0.14.0 round, it read `0.14.0`, bumped by roadmap
 [`#540`](https://github.com/kurone-kito/dotfiles/issues/540), starting with
 config track [`#563`](https://github.com/kurone-kito/dotfiles/issues/563),
-bumped it from `0.12.2` (see [New 0.14.0 Policy
+from `0.12.2` (see [New 0.14.0 Policy
 Alignment](#new-0140-policy-alignment) below for this track's policy
 record). Before the 0.12.2 round, it read `0.12.0`, bumped by
 roadmap #446's schema/config-audit track
@@ -219,15 +223,17 @@ stale takeover becomes eligible.
 
 ## CI Wait Policy
 
-- **`ciWait.runningTimeout`**: `PT10M` (shortened from the `PT30M`
+- **`ciWait.runningTimeout`**: `PT16M` (shortened from the `PT30M`
   distributed default).
 - **`ciWait.generationTimeout`**: `PT10M` (distributed default).
 - **`ciWait.rerunPolicy`**: `rerun-once` (distributed default).
 
-Rationale: the longest CI job in this repo currently finishes in
-~1 minute, so a 10-minute running timeout is generous without
-stretching the loop wait. Keep the rerun policy on `rerun-once` to
-absorb the occasional transient failure without re-running indefinitely.
+Rationale: the advisory verdict job has a 14-minute timeout, so the
+16-minute running timeout leaves the CI waiter enough time to observe
+that job's configured result instead of treating it as stalled first.
+Keep the generation timeout at 10 minutes and the rerun policy on
+`rerun-once` to absorb the occasional transient failure without
+re-running indefinitely.
 
 ## Credential Scope
 
@@ -248,7 +254,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/ae16f497434a5023dfaa28f965fc2af92ebf055d \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -350,7 +356,7 @@ _(We've since updated to the latest LTS version)_
 - **Missing-approval behavior**: explicit-target runs stop before claim;
   discovery may report the issue in its approval-needed fallback bucket.
 
-The pinned v0.14.0 claim helper has an upstream permission-outage
+The pinned v0.17.0 claim helper has an upstream permission-outage
 exception for issue-author self-authorization: if the collaborators
 permission lookup is unavailable, `OWNER` author association always
 self-authorizes, and `MEMBER` does so under either supported actor
@@ -909,6 +915,38 @@ Track D left out of scope was closed by
 [`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
 active Track A transition.
 
+## New 0.17.0 Policy Alignment
+
+Roadmap [#674](https://github.com/kurone-kito/dotfiles/issues/674)
+aligns the repository import with upstream `v0.17.0`. Config track
+[#678](https://github.com/kurone-kito/dotfiles/issues/678) updates the
+version and helper archive while retaining the `ephemeral-npx` runtime
+and other confirmed repository policy choices, except for the approved
+`ciWait.runningTimeout` increase to `PT16M`.
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `iddVersion` | **explicit: `"0.17.0"`** (was `"0.14.0"`) | Roadmap #674's import baseline. |
+| `helperRuntime.packageSpec` | **explicit: v0.17.0 commit archive** | Pinned to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b`; `helperRuntime.profile` remains `ephemeral-npx`. |
+
+All other explicit policy values remain as confirmed. The updated
+configuration validates against the `policy.schema.json` shipped at
+the pinned v0.17.0 commit. The advisory-wait fixture's field-name list
+was retained after verifying that it exactly matches the pinned schema's
+`required` array. The advisory verdict job has a 14-minute timeout,
+matching the v0.17.0 upstream workflow to cover the helper's 10-minute
+Copilot review poll plus job setup. The `ciWait.runningTimeout` value
+is 16 minutes so the waiter can observe that job's configured result;
+`ciWait.generationTimeout` remains 10 minutes and `rerunPolicy` remains
+`rerun-once`. The separate self-waiver job remains at 10 minutes with
+`contents: read`, `pull-requests: write`, `issues: write`,
+`actions: read`, `checks: read`, and `statuses: read`. The approved
+`actions: read` and `checks: read` additions support the v0.17.0
+helper's check-suite workflow-run metadata query in private
+repositories; the existing `pull-requests: write` and `issues: write`
+grants remain for posting the waiver marker. The prior v0.14.0 decision
+record follows.
+
 ## New 0.14.0 Policy Alignment
 
 Roadmap [#540](https://github.com/kurone-kito/dotfiles/issues/540)
@@ -1066,7 +1104,7 @@ Current slugs:
 
 | Slug                                 | What it marks                                                                                                                                                                                                                                                                                                                                                                                                           | Introduced by                                  |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `advisory-response-schema`            | Requires both full and lite advisory-wait procedures to reject helper output missing any of the 24 fields in the pinned v0.14.0 JSON schema's `required` array, including `protocolVersion`, `now`, `elapsedMinutes`, `sameHeadMarkerPresent`, `sameHeadRequestMarkerPresent`, `sameHeadMarkerCount`, and the four secondary-bot fields (`secondaryBotLogin`, `secondaryBotLogins`, `secondaryRequestLogins`, `secondaryRequestNeeded`), even when the optional secondary feature is unset; schema-valid empty/false values remain non-gating and prevent malformed output from silently skipping a configured secondary request. Re-check at each pin update: compare the required-field lists in the upstream template's full and lite advisory-wait files with the pinned schema, and remove this overlay only when every upstream list names every required field and the complete-list sentence has been checked against the schema. Refreshing the fixture `tests/bash/fixtures/advisory-wait-required.txt` to the new pin is part of each pin update; `tests/bash/advisory-wait-required-fields.bats` fails until it is refreshed. The `Advisory-wait required fields (bats)` CI job runs on every pull request but is not a required status check in the master ruleset, so a failure is reported without blocking merge until the operator adds it to the ruleset | #564, #579 |
+| `advisory-response-schema`            | Requires both full and lite advisory-wait procedures to reject helper output missing any of the 24 fields in the pinned v0.17.0 JSON schema's `required` array, including `protocolVersion`, `now`, `elapsedMinutes`, `sameHeadMarkerPresent`, `sameHeadRequestMarkerPresent`, `sameHeadMarkerCount`, and the four secondary-bot fields (`secondaryBotLogin`, `secondaryBotLogins`, `secondaryRequestLogins`, `secondaryRequestNeeded`), even when the optional secondary feature is unset; schema-valid empty/false values remain non-gating and prevent malformed output from silently skipping a configured secondary request. Re-check at each pin update: compare the required-field lists in the upstream template's full and lite advisory-wait files with the pinned schema, and remove this overlay only when every upstream list names every required field and the complete-list sentence has been checked against the schema. Refreshing the fixture `tests/bash/fixtures/advisory-wait-required.txt` to the new pin is part of each pin update; `tests/bash/advisory-wait-required-fields.bats` fails until it is refreshed. The `Advisory-wait required fields (bats)` CI job runs on every pull request but is not a required status check in the master ruleset, so a failure is reported without blocking merge until the operator adds it to the ruleset | #564, #579 |
 | `helper-profile-ephemeral-npx`       | This repository's `ephemeral-npx` helper profile, where docs describe a different upstream-default profile inline                                                                                                                                                                                                                                                                                                       | #196, #233, #295, #383, #424, #564             |
 | `installed-bundle-reference-routing` | The issue-authoring companion's reference routing, adapted for an installed-bundle (not source-repo) stance                                                                                                                                                                                                                                                                                                             | #147, #235, #297, #386, #423                   |
 | `local-docs-index`                   | The "Local pages" table `docs/index.md` appends below upstream's generated OKF table, covering this repository's own locally-authored, non-upstream `docs/` pages upstream's generator has no knowledge of. The row's original retirement trigger -- the synced pages gaining OKF frontmatter of their own -- held as of the `v0.7.0` baseline already; the `v0.9.0` round (#383) adopted the generated table itself, so this row now marks only the residual local-page extension, not a whole-file exclusion | #283, #383                                     |
