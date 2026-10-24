@@ -347,6 +347,7 @@ Describe 'link-idd-skill-xdg-data' {
       Should -Be 0
     (Get-Item -LiteralPath $currentPointer -Force).Target |
       Should -Contain (Join-Path $deployedRoot $script:PayloadVersion)
+    Test-Path -LiteralPath $previousEntry | Should -BeTrue
   }
 
   It 'restores the previous current link when the replacement junction fails on Windows' -Skip:($IsWindows -eq $false) {
@@ -370,6 +371,7 @@ Describe 'link-idd-skill-xdg-data' {
     $warnings | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } |
       Select-Object -ExpandProperty Message | Should -BeLike '*restored a junction to 0.16.0*'
     (Get-Item -LiteralPath $currentPointer -Force).Target | Should -Contain $previous
+    Test-Path -LiteralPath $previousEntry | Should -BeTrue
   }
 
   It 'restores a relative symbolic link as a junction on Windows' -Skip:($IsWindows -eq $false) {
