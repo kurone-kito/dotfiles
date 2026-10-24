@@ -217,8 +217,8 @@ jobs:
     # requiring `checks: read` in private repositories. Unspecified
     # GITHUB_TOKEN permissions default to none, and a job-level block
     # replaces rather than extends the workflow-level map, so every
-    # existing scope is repeated here. The self-waiver job below calls
-    # neither endpoint and does not need the added scopes.
+    # existing scope is repeated here. The self-waiver job below declares
+    # the scopes required by its own helper path and marker writes.
     permissions:
       contents: read
       issues: read
@@ -338,10 +338,18 @@ jobs:
     # `--auto-bootstrap` path also reads `pr.statusCheckRollup`, which
     # needs both scopes explicitly -- see the source repository's own
     # copy of this file for the full investigation and evidence.
+    # `actions: read` (kurone-kito/idd-skill#3683): the same `gh pr view
+    # --json statusCheckRollup` request selects `checkSuite { workflowRun }`
+    # for each check-run context, which is an Actions resource. A private
+    # adopter repository saw `Resource not accessible by integration`
+    # (`checkSuite.workflowRun`) on allowlisted PRs without this scope.
+    # The cause is likely but not proven: no A/B probe was run and the
+    # public source repository cannot reproduce it.
     permissions:
       contents: read
       pull-requests: write
       issues: write
+      actions: read
       checks: read
       statuses: read
     steps:

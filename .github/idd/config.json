@@ -49,7 +49,7 @@
     "secondaryBotLogin": "coderabbitai[bot]"
   },
   "ciWait": {
-    "runningTimeout": "PT10M",
+    "runningTimeout": "PT16M",
     "generationTimeout": "PT10M",
     "rerunPolicy": "rerun-once"
   },

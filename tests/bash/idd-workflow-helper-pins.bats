@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Regression guards for issues #566 and #678: every live IDD workflow
-# helper invocation uses the expected v0.17.0 archive pin, and the
-# verdict job has enough time for the pinned helper's bounded review poll.
+# helper invocation uses the expected v0.17.0 archive pin, and the CI
+# running timeout exceeds the verdict job's bounded review poll window.
 
 bats_require_minimum_version 1.5.0
 
@@ -303,6 +303,23 @@ assert actual_timeouts == expected_timeouts, (
     f"expected verdict/self-waiver timeouts {expected_timeouts!r}, "
     f"found {actual_timeouts!r}"
 )
+expected_ci_running_timeout = "PT16M"
+actual_ci_running_timeout = config["ciWait"]["runningTimeout"]
+assert actual_ci_running_timeout == expected_ci_running_timeout, (
+    f"expected ciWait.runningTimeout {expected_ci_running_timeout!r}, "
+    f"found {actual_ci_running_timeout!r}"
+)
+ci_wait_match = re.fullmatch(r"PT(\d+)M", actual_ci_running_timeout)
+assert ci_wait_match is not None, (
+    f"expected a whole-minute ciWait.runningTimeout, "
+    f"found {actual_ci_running_timeout!r}"
+)
+ci_wait_minutes = int(ci_wait_match.group(1))
+assert ci_wait_minutes > actual_timeouts["idd-advisory-convergence"], (
+    f"ciWait.runningTimeout must exceed the verdict job timeout; "
+    f"found {ci_wait_minutes} and "
+    f"{actual_timeouts['idd-advisory-convergence']} minutes"
+)
 expected_verdict_permissions = {
     "contents": "read",
     "issues": "read",
@@ -317,15 +334,30 @@ assert actual_verdict_permissions == expected_verdict_permissions, (
     f"expected verdict permissions {expected_verdict_permissions!r}, "
     f"found {actual_verdict_permissions!r}"
 )
+expected_self_waiver_permissions = {
+    "contents": "read",
+    "pull-requests": "write",
+    "issues": "write",
+    "actions": "read",
+    "checks": "read",
+    "statuses": "read",
+}
+actual_self_waiver_permissions = workflow_job_permissions(
+    workflow, "idd-advisory-convergence-self-waiver"
+)
+assert actual_self_waiver_permissions == expected_self_waiver_permissions, (
+    f"expected self-waiver permissions {expected_self_waiver_permissions!r}, "
+    f"found {actual_self_waiver_permissions!r}"
+)
 print(
-    "all six active helper URLs, advisory timeouts, and verdict permissions "
-    "match the v0.17.0 contract"
+    "all six active helper URLs, workflow timeouts, CI wait margin, and "
+    "job permissions match the v0.17.0 contract"
 )
 PY
 }
 
-@test "active helper pins, advisory timeouts, and verdict permissions match the v0.17.0 contract" {
+@test "active helper pins, workflow timeouts, CI wait margin, and job permissions match the v0.17.0 contract" {
   run check_workflow_helper_pins
   assert_success
-  assert_output "all six active helper URLs, advisory timeouts, and verdict permissions match the v0.17.0 contract"
+  assert_output "all six active helper URLs, workflow timeouts, CI wait margin, and job permissions match the v0.17.0 contract"
 }
