@@ -354,7 +354,7 @@ _(We've since updated to the latest LTS version)_
 - **Missing-approval behavior**: explicit-target runs stop before claim;
   discovery may report the issue in its approval-needed fallback bucket.
 
-The pinned v0.14.0 claim helper has an upstream permission-outage
+The pinned v0.17.0 claim helper has an upstream permission-outage
 exception for issue-author self-authorization: if the collaborators
 permission lookup is unavailable, `OWNER` author association always
 self-authorizes, and `MEMBER` does so under either supported actor
