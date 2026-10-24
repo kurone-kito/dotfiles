@@ -938,10 +938,13 @@ matching the v0.17.0 upstream workflow to cover the helper's 10-minute
 Copilot review poll plus job setup. The `ciWait.runningTimeout` value
 is 16 minutes so the waiter can observe that job's configured result;
 `ciWait.generationTimeout` remains 10 minutes and `rerunPolicy` remains
-`rerun-once`. The separate self-waiver job remains at 10 minutes and
-grants only the approved read permissions `actions: read` and
-`checks: read` needed for the v0.17.0 helper's check-suite workflow-run
-metadata query in private repositories. The prior v0.14.0 decision
+`rerun-once`. The separate self-waiver job remains at 10 minutes with
+`contents: read`, `pull-requests: write`, `issues: write`,
+`actions: read`, `checks: read`, and `statuses: read`. The approved
+`actions: read` and `checks: read` additions support the v0.17.0
+helper's check-suite workflow-run metadata query in private
+repositories; the existing `pull-requests: write` and `issues: write`
+grants remain for posting the waiver marker. The prior v0.14.0 decision
 record follows.
 
 ## New 0.14.0 Policy Alignment
