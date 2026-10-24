@@ -121,7 +121,11 @@ if ($onWindows) {
           (Test-Path -LiteralPath $previousPayloadMarker -PathType Leaf)
         if ($isPreviousManagedVersion) {
           try {
-            Remove-Item -LiteralPath $currentPointer -Force
+            # Delete only the directory link itself. The PowerShell 5.1
+            # filesystem provider can fail while removing a junction; the
+            # non-recursive .NET call detaches the reparse point without
+            # traversing its managed payload target.
+            [System.IO.Directory]::Delete($currentPointer, $false)
             try {
               $null = New-Item -ItemType Junction -Path $currentPointer -Target $versionDir -ErrorAction Stop
               Write-Host "idd-skill data: advanced the managed directory link $currentPointer from $previousVersion to $version"
