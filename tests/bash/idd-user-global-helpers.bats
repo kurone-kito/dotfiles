@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 #
 # Tests for the user-global IDD activation helper wrappers (dotfiles issue
-# #646, roadmap #643). Each wrapper runs upstream kurone-kito/idd-skill
-# commit e4d425ee28b1893dd45c4996b2506619018c4b2b (v0.16.0) through npx.
+# #676; originally introduced by #646 under roadmap #643). Each execution
+# wrapper runs upstream kurone-kito/idd-skill commit
+# 77befdd4030757464bed7f31c7dfe6d0a404a18b (v0.17.0) through npx.
 #
 # The runtime cases fetch that tarball on the first run, so they need
 # network access to codeload.github.com. They also need a Node.js that
@@ -12,7 +13,7 @@
 
 bats_require_minimum_version 1.5.0
 
-UPSTREAM_COMMIT='e4d425ee28b1893dd45c4996b2506619018c4b2b'
+UPSTREAM_COMMIT='77befdd4030757464bed7f31c7dfe6d0a404a18b'
 
 setup() {
   load 'helpers/bats-support/load'
@@ -103,19 +104,21 @@ NODE
   chmod +x "$1/node"
 }
 
-@test "executable_idd-activation pins upstream commit e4d425ee" {
-  assert_file_contains "$BIN_DIR/executable_idd-activation" "$UPSTREAM_COMMIT"
+@test "executable_idd-activation invokes the upstream v0.17.0 commit" {
+  run grep -F -- "exec npx --yes --package \"https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$UPSTREAM_COMMIT\" idd-activation \"\$@\"" "$BIN_DIR/executable_idd-activation"
+  assert_success
 }
 
-@test "executable_idd-activation.ps1 pins upstream commit e4d425ee" {
+@test "executable_idd-activation.ps1 pins upstream v0.17.0 commit" {
   assert_file_contains "$BIN_DIR/executable_idd-activation.ps1" "$UPSTREAM_COMMIT"
 }
 
-@test "executable_idd-effective-config pins upstream commit e4d425ee" {
-  assert_file_contains "$BIN_DIR/executable_idd-effective-config" "$UPSTREAM_COMMIT"
+@test "executable_idd-effective-config invokes the upstream v0.17.0 commit" {
+  run grep -F -- "exec npx --yes --package \"https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$UPSTREAM_COMMIT\" idd-effective-config \"\$@\"" "$BIN_DIR/executable_idd-effective-config"
+  assert_success
 }
 
-@test "executable_idd-effective-config.ps1 pins upstream commit e4d425ee" {
+@test "executable_idd-effective-config.ps1 pins upstream v0.17.0 commit" {
   assert_file_contains "$BIN_DIR/executable_idd-effective-config.ps1" "$UPSTREAM_COMMIT"
 }
 
@@ -178,6 +181,8 @@ NODE
 }
 
 @test "each helper has a .cmd launcher that dispatches to its .ps1 twin" {
+  assert_file_contains "$BIN_DIR/executable_idd-activation.cmd" "$UPSTREAM_COMMIT"
+  assert_file_contains "$BIN_DIR/executable_idd-effective-config.cmd" "$UPSTREAM_COMMIT"
   assert_file_contains "$BIN_DIR/executable_idd-activation.cmd" 'PS1_PATH=%SCRIPT_DIR%idd-activation\.ps1'
   assert_file_contains "$BIN_DIR/executable_idd-effective-config.cmd" 'PS1_PATH=%SCRIPT_DIR%idd-effective-config\.ps1'
   assert_file_contains "$BIN_DIR/executable_idd-activation.cmd" 'exit /b %ERRORLEVEL%'
