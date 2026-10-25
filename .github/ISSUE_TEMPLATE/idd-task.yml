@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for opening an IDD-ready task. Issues filed through this
         form follow the same schema the
-        [`issue-authoring` companion](../../.claude/skills/issue-authoring/SKILL.md)
+        [`issue-authoring` companion](../../home/dot_claude/skills/issue-authoring/SKILL.md)
         produces, so a fresh IDD discover run can claim and execute
         them without back-and-forth.
 

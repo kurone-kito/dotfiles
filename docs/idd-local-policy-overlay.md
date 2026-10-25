@@ -37,7 +37,8 @@ come from that tag's `audit/sync-manifest.json`. The `(exact)` and
 not whether the current local file's content matches the pinned source.
 Concrete replacements were applied before comparing content.
 
-The inventory contains **35 tracked files**. The issue-authoring report
+The inventory recorded **35 tracked files** before issue 680 removed
+them. The issue-authoring report
 template matches both materialized sources. The merge-handoff file
 matches v0.14.0; its v0.17.0 differences are recorded below. All other
 local changes are assigned to the divergence rows, including unmarked
