@@ -23,9 +23,9 @@ setup() {
 
   REPO_ROOT="$BATS_TEST_DIRNAME/../.."
   FIXTURE="$REPO_ROOT/tests/bash/fixtures/advisory-wait-required.txt"
-  FULL_FILE="$REPO_ROOT/.github/instructions/idd-advisory-wait.instructions.md"
+  FULL_FILE="$REPO_ROOT/home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-advisory-wait.instructions.md"
   FULL_LEAD='Required helper fields:'
-  LITE_FILE="$REPO_ROOT/.github/instructions/lite/idd-advisory-wait-lite.instructions.md"
+  LITE_FILE="$REPO_ROOT/home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/lite/idd-advisory-wait-lite.instructions.md"
   LITE_LEAD='Required fields (stop and ask if any are missing):'
 }
 

@@ -1133,7 +1133,7 @@ table_cell() {
       if (key == name) {
         cell = $3; gsub(/^[[:space:]]*`|`[[:space:]]*$/, "", cell); print cell; exit
       }
-    }' "$REPO_ROOT/.github/instructions/idd-overview-core.instructions.md"
+    }' "$REPO_ROOT/docs/idd-local-policy-overlay.md"
 }
 
 config_command() {
@@ -1164,7 +1164,7 @@ config_command() {
 }
 
 @test "commands: the table carries one queued-validation-commands marker with a register row" {
-  local overview="$REPO_ROOT/.github/instructions/idd-overview-core.instructions.md"
+  local overview="$REPO_ROOT/docs/idd-local-policy-overlay.md"
   run grep -c 'dotfiles-divergence: queued-validation-commands' "$overview"
   assert_output 1
   run grep -E '^\| `queued-validation-commands` ' "$REPO_ROOT/docs/idd-policy.md"
@@ -1177,10 +1177,9 @@ config_command() {
   assert_file_executable "$REPO_ROOT/scripts/run-fix-validate.sh"
 }
 
-@test "commands: only idd-overview-core mentions pueue under .github/instructions" {
-  run grep -ril 'pueue' "$REPO_ROOT/.github/instructions"
-  assert_success
-  assert_output "$REPO_ROOT/.github/instructions/idd-overview-core.instructions.md"
+@test "commands: the imported instruction and skill trees are removed" {
+  [ ! -e "$REPO_ROOT/.github/instructions" ]
+  [ ! -e "$REPO_ROOT/.claude/skills" ]
 }
 
 @test "commands: no command string names the tool that idd-doctor flagged as toolchain residue" {

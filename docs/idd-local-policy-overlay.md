@@ -14,6 +14,12 @@ overlay records repository policy and comparison results. A row marked
 upstream-equivalent relies on v0.17.0; a retained row remains a dotfiles
 rule until a separate reviewed change retires it.
 
+The local copies of the instruction and skill trees that earlier revisions
+kept under `.github/instructions/` and `.claude/skills/` were removed by issue
+680. The vendored payload they came from is
+`home/dot_local/share/idd-skill/0.17.0/`, and the active routing comes from
+the `idd-activation` result.
+
 ## Pinned comparison and inventory
 
 The local comparison pins upstream v0.14.0 at
@@ -201,3 +207,58 @@ local-import retirement. #679 leaves the linked imported files in place
 and does not remove or resync them. Re-evaluate a retained row only
 after a new source comparison and an explicit repository policy
 decision.
+
+## Project commands
+
+These repository-owned command rows moved here from the removed local
+overview (#680). `.github/idd/config.json` `commands` remains the
+machine-readable source; the table is the human-readable mirror.
+
+When a phase names a command set, run the corresponding commands.
+**Adapt this section for other projects.**
+
+If `.github/idd/config.json` exists and validates against the canonical
+schema at
+<https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json>, its `commands`
+object overrides the table below. Policy fields such as
+`skipIssueAuthorApprovalGate` and `maintainerApprovalActorPolicy` are
+the recorded machine-readable policy. Absent values keep the gate
+enabled and default approval actors to
+`owners-and-maintainers-only`.
+
+<!-- dotfiles-divergence: queued-validation-commands -->
+<!-- dprint-ignore-start -->
+| Name | Commands |
+| --- | --- |
+| **fix-validate** | `scripts/with-pueue.sh scripts/run-fix-validate.sh` |
+| **pre-push-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
+| **post-fix-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
+| **install-deps** | `git submodule update --init --recursive` |
+| **issue-scope** | `roadmap-first` |
+| **orphan-first-policy** | `none` |
+<!-- dprint-ignore-end -->
+
+Non-shell rows are settings, not commands.
+
+`pre-push-validate` omits auto-fix. If lint fails, run
+**fix-validate**, commit, then re-run **pre-push-validate**.
+
+If **fix-validate**/**post-fix-validate** changes files, stage and
+commit before any push, rebase, or step needing a clean tree.
+
+`install-deps` must be idempotent: re-running it in fresh, reused, or
+recreated worktrees must not need manual cleanup or leave unexpected
+tracked changes.
+
+Judge a command-set run by exit status; when piping, check
+`${PIPESTATUS[0]}` or `pipefail` because filters can't prove success
+(#3139).
+
+**Tool availability**: run commands only when tools exist. For Node.js,
+prefer project scripts. Resolve IDD helper commands through the selected
+helper-runtime profile in `docs/idd-helper-scripts.md`; never fall back to
+an unpinned `npx <tool>` invocation. For other Node.js tools, use a local
+lockfile-pinned dependency when available. If a required validator named
+in a command set (such as `markdownlint-cli2` or `cspell`) is unavailable,
+report validation as incomplete and stop for guidance; do not substitute
+`true`. For unrelated optional tools, use `true` when absent.
