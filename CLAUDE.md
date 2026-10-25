@@ -179,7 +179,12 @@ agents. Start with [docs/idd-workflow.md](docs/idd-workflow.md) for
 the cross-agent entry path and phase routing.
 
 Before starting IDD work, run the user-global `idd-activation` from
-the repository root and read its JSON output. When `active` is `true`,
+the repository root and read its JSON output. If it is not on `PATH`,
+run `~/.local/bin/idd-activation` on POSIX. In Windows PowerShell,
+run `& "$HOME\.local\bin\idd-activation.cmd"`; in Command Prompt,
+run `"%USERPROFILE%\.local\bin\idd-activation.cmd"`. If activation
+cannot run or produce valid JSON, stop without running IDD helpers or
+changing repository state. When `active` is `true`,
 open `.github/instructions/idd-overview-core.instructions.md` beneath
 the reported `instructionsRoot`, then open each routed phase file
 beneath that same root when the current step changes, and read the

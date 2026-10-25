@@ -38,7 +38,13 @@ you are reading this guide first, start at step 1.
 
 1. Read the entry file for your agent or surface (see table below).
 2. Run the user-global `idd-activation` from the repository root and
-   read its JSON output. If `active` is `false`, do no IDD-specific work.
+   read its JSON output. If it is not on `PATH`, run
+   `~/.local/bin/idd-activation` on POSIX. In Windows PowerShell, run
+   `& "$HOME\.local\bin\idd-activation.cmd"`; in Command Prompt, run
+   `"%USERPROFILE%\.local\bin\idd-activation.cmd"`. If activation
+   cannot run or produce valid JSON, stop without running IDD helpers or
+   changing repository state. If `active` is `false`, do no IDD-specific
+   work.
 3. If `active` is `true`, read the
    [repository-specific IDD policy overlay](idd-local-policy-overlay.md),
    then resolve all instruction paths below the reported
@@ -61,13 +67,13 @@ copy is the active instruction tree.
 
 | Agent / surface         | Read first                        | Automatically available IDD context                                                                                                                                                                                                                   | Open manually                                                                                                                                                                                                                       |
 | ----------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub Copilot surfaces | `.github/copilot-instructions.md` | Repository-local Copilot guidance; VS Code also loads matching package-scoped `.instructions.md` files. These local files are active IDD guidance only when `instructionsRoot` points to this checkout. | Run activation and open the overview and routed phase files under the active `instructionsRoot`; follow its scoped file when editing matching package paths. |
-| Codex CLI               | `AGENTS.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| OpenCode                | `AGENTS.md`                       | `AGENTS.md` itself — OpenCode's native rules mechanism auto-loads it; none from `.github/instructions/`                                                                                                                                               | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| Grok Build              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (same contract; Grok Build loads every matching filename, unlike OpenCode's first-match); none from `.github/instructions/`                                                                               | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`)                              |
-| Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`) before using `EnterWorktree` |
-| Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
+| GitHub Copilot surfaces | `.github/copilot-instructions.md` | Repository-local Copilot guidance; VS Code also loads matching package-scoped `.instructions.md` files. These local files are active IDD guidance only when `instructionsRoot` points to this checkout. | Run activation and open the overview and routed phase files beneath the reported `instructionsRoot`; follow its scoped file when editing matching package paths. |
+| Codex CLI               | `AGENTS.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| OpenCode                | `AGENTS.md`                       | `AGENTS.md` itself — OpenCode's native rules mechanism auto-loads it; none from `.github/instructions/`                                                                                                                                               | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| Grok Build              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (same contract; Grok Build loads every matching filename, unlike OpenCode's first-match); none from `.github/instructions/`                                                                               | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`). |
+| Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`) before using `EnterWorktree`. |
+| Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
 
 When the `issue-authoring` or `idd-spec-audit` companion bundle is
 installed under `.claude/skills/` in a target repository, OpenCode,
@@ -329,13 +335,15 @@ against that schema (for example with `idd-doctor` or an equivalent
 schema check), adding `instructionProfile` today fails that
 validation outright, because the schema's root object rejects unknown
 properties — it is not merely inert. Until the schema follow-up
-lands, point a lite-tier session at the right files with an explicit
-operator instruction, or have it open the phase files below manually.
+lands, point a lite-tier session at the right files under the reported
+`instructionsRoot` with an explicit operator instruction, or have it
+open the phase files below manually under that same root.
 
 **Phase → lite file mapping** — the "Lite file" column names the path
-a shipped file would use, not a guarantee that your repository has
-one: check your own `.github/instructions/lite/` directory before
-trusting this table to stay current. A template import may already
+a shipped file would use, not a guarantee that the active instruction
+tree has one: check `.github/instructions/lite/` under the reported
+`instructionsRoot` before trusting this table to stay current. A
+template import may already
 include some or all of these files (the upstream IDD repository
 dogfoods its own lite-execution-profile roadmap and this table
 mirrors its current state), or none, depending on when you imported
