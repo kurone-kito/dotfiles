@@ -22,7 +22,7 @@ name: Ruleset required-checks guard
 # Uses the "Get rules for a branch" effective-rules endpoint
 # (`repos/{owner}/{repo}/rules/branches/{branch}`) -- a lighter-weight
 # read than the `/rulesets` summary/detail endpoints
-# `.github/instructions/idd-ci.instructions.md`'s required-check
+# `home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-ci.instructions.md`'s required-check
 # discovery unions with classic branch protection: this endpoint does
 # not require the elevated `administration` permission those need, so
 # the default `GITHUB_TOKEN` with `contents: read` (plus `issues: write`
