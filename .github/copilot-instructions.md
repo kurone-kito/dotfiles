@@ -498,13 +498,19 @@ This project uses Issue-Driven Development (IDD) with parallel AI
 agents. Start with [`docs/idd-workflow.md`](../docs/idd-workflow.md)
 for the cross-agent entry path and phase routing.
 
-Before starting IDD work, open
-[`.github/instructions/idd-overview-core.instructions.md`](./instructions/idd-overview-core.instructions.md).
-Open the routed phase file manually when the current step changes.
+Before starting IDD work, run the user-global `idd-activation` from
+the repository root and read its JSON output. When `active` is `true`,
+open `.github/instructions/idd-overview-core.instructions.md` beneath
+the reported `instructionsRoot`, then open each routed phase file
+beneath that same root when the current step changes. Repository-local
+Copilot instructions are active IDD guidance only when `instructionsRoot`
+points to this checkout. Read the [repository-specific IDD policy overlay](../docs/idd-local-policy-overlay.md)
+for rules retained across import retirement. When `active` is `false`,
+do no IDD-specific work.
 The execution loop drives Discover → Claim → Work → PR Submit → CI
 Wait → Review Triage → Review Fix → Merge → Loop through GitHub
-Issues; each phase has its own dedicated instruction file under
-`.github/instructions/`.
+Issues; each phase has its own dedicated instruction file under the
+active `instructionsRoot`'s `.github/instructions/` directory.
 
 For the confirmed policy matrix (merge policy, review profile,
 review-thread resolution, critique-loop, claim timing, CI wait,

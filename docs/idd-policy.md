@@ -1095,6 +1095,12 @@ disjoint scope, even though both issues touch this same page.
 
 ## Divergence Register
 
+The source comparison and retirement disposition for each registered
+divergence lives in the
+[repository-specific IDD policy overlay](idd-local-policy-overlay.md).
+The register below remains the detailed record of each marker's
+behavior and introduction history.
+
 Every intentional deviation from the pinned upstream template carries
 a `dotfiles-divergence: <slug>` marker at its point of use -- an HTML
 comment (`<!-- ... -->`) in Markdown/YAML/instruction files, a line
