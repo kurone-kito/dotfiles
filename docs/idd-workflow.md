@@ -75,9 +75,14 @@ result and continue at step 3. Otherwise, start at step 1.
    then resolve all instruction paths below the reported
    `instructionsRoot`; read
    `.github/instructions/idd-overview-core.instructions.md` there.
-4. Read the phase file that matches your current state from that same
-   `instructionsRoot`.
-5. If you are editing package-specific code, also follow the matching
+4. If the operator explicitly selects an available `lite/` phase file
+   through the [lite instruction profile opt-in](#lite-instruction-profile-opt-in),
+   follow that file's declared context. Otherwise, read
+   `.github/instructions/idd-overview-appendix.instructions.md` from the
+   same `instructionsRoot` before the phase file.
+5. Read the selected phase file that matches your current state from
+   that same `instructionsRoot`.
+6. If you are editing package-specific code, also follow the matching
    scoped instruction file under that same root.
 
 The execution loop drives Discover → Claim → Work → PR Submit → CI
@@ -105,6 +110,11 @@ copy is the active instruction tree.
 | Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
 | Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`) before using `EnterWorktree`. |
 | Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+
+The "Open manually" column abbreviates steps 3–5 above: standard-tier
+phase files are preceded by the overview appendix. Select an available
+lite phase file only through the explicit operator/manual route in the
+lite-profile guidance below, then follow that file's declared context.
 
 When the `issue-authoring` or `idd-spec-audit` companion bundle is
 installed under `.claude/skills/` in a target repository, OpenCode,
