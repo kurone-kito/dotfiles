@@ -69,7 +69,11 @@ VERSION_PATH = re.compile(r'idd-skill/([0-9]+\.[0-9]+\.[0-9]+)/')
 PS_VERSION = re.compile(r"^\$version\s*=\s*'([^']*)'\s*$", re.MULTILINE)
 
 
-NPX_LAUNCH = re.compile(r'^\s*(?:exec\s+|&\s*)?npx\s')
+# An npx command in command position: at the start of a line, or after exec,
+# &, &&, |, ||, ;, then, do, else, or $(. Guards such as `command -v npx` and
+# `Get-Command npx` are not in command position.
+NPX_LAUNCH = re.compile(
+  r'(?:^\s*|exec\s+|&&?\s*|\|\|?\s*|;\s*|\bthen\s+|\bdo\s+|\belse\s+|\$\(\s*)npx\s')
 COMMENT_LINE = re.compile(r'^\s*(#|REM\b|::|//)', re.IGNORECASE)
 INLINE_COMMENT = re.compile(r'\s#')
 
@@ -103,7 +107,7 @@ def read_regular(root, rel, problems):
   current = root
   for part in rel.split('/'):
     current = os.path.join(current, part)
-    if os.path.islink(current):
+    if is_link(current):
       problems.add(rel, 'symbolic link is not allowed in the source tree')
       return None
   if not os.path.isfile(current):
@@ -199,12 +203,27 @@ def load_inventory(root, problems):
   return inventory
 
 
+REPARSE_POINT = 0x400
+
+
+def is_link(path):
+  """True for a symbolic link, a directory junction, or any reparse point."""
+  if os.path.islink(path):
+    return True
+  try:
+    info = os.lstat(path)
+  except OSError:
+    return False
+  # Windows junctions carry the reparse-point attribute, not a link flag.
+  return bool(getattr(info, 'st_file_attributes', 0) & REPARSE_POINT)
+
+
 def path_has_symlink(root, rel):
-  """True when any component of rel, below root, is a symbolic link."""
+  """True when any component of rel, below root, is a link or reparse point."""
   current = root
   for part in rel.split('/'):
     current = os.path.join(current, part)
-    if os.path.islink(current):
+    if is_link(current):
       return True
   return False
 
@@ -220,17 +239,26 @@ def walk_scope(root, source_root, problems):
     for name in dirs + files:
       full = os.path.join(current, name)
       rel = os.path.relpath(full, top).replace(os.sep, '/')
-      if os.path.islink(full):
+      if is_link(full):
         problems.add('%s/%s' % (source_root, rel), 'symbolic link is not allowed in a scope')
       elif os.path.isfile(full):
         found[rel] = full
+    # Do not descend into a link or junction: its target lies outside the scope.
+    dirs[:] = [name for name in dirs if not is_link(os.path.join(current, name))]
   return found
 
 
 def check_scope(root, scope, problems):
   source_root = scope['sourceRoot']
   # Inventory keys are installed paths; compare them in chezmoi source spelling.
-  listed = {chezmoi_name(rel): value for rel, value in scope['files'].items()}
+  listed = {}
+  for rel, value in scope['files'].items():
+    name = chezmoi_name(rel)
+    if name in listed:
+      problems.add('%s/%s' % (source_root, name),
+                   'two inventory paths map to this source path')
+      return 0
+    listed[name] = value
   actual = walk_scope(root, source_root, problems)
   if actual is None:
     return 0
@@ -296,14 +324,16 @@ def check_wrappers(root, commit, spec, problems):
     # Every npx launch must pass the exact spec as the --package argument of
     # the code before any inline comment, so neither a comment nor another
     # package can stand in for it. Guards such as `command -v npx` are skipped.
-    package_arg = re.compile(r'--package\s+["\']?%s["\']?(?=\s|$)' % re.escape(spec))
+    package_arg = re.compile(
+      r'(?:--package(?:\s+|=)|-p\s+)["\']?%s["\']?(?=\s|$)' % re.escape(spec))
     for line in text.splitlines():
-      if COMMENT_LINE.match(line) or not NPX_LAUNCH.match(line):
+      if COMMENT_LINE.match(line):
         continue
       code = INLINE_COMMENT.split(line, 1)[0]
-      if not package_arg.search(code):
-        problems.add(rel, 'npx launch does not pass the exact package spec %s to --package' % spec)
-        break
+      if not NPX_LAUNCH.search(code) or package_arg.search(code):
+        continue
+      problems.add(rel, 'npx launch does not pass the exact package spec %s to --package' % spec)
+      break
   return count
 
 

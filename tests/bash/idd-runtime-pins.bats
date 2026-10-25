@@ -230,6 +230,44 @@ PY
   assert_output --partial 'usage:'
 }
 
+@test "the short -p and the --package= forms of the exact spec are accepted" {
+  sed -i "s#--package \"https://#-p \"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_success
+  sed -i "s#-p \"https://#--package=\"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_success
+}
+
+@test "an npx launch after a shell separator is checked as well" {
+  printf 'if true; then npx --yes other-package; fi\n' >> "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch does not pass the exact package spec'
+}
+
+@test "two inventory paths that map to one source path are rejected" {
+  python3 -I - "$SRC/.github/idd/user-global-source.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding='utf-8'))
+files = data['scopes'][0]['files']
+files['dot_github/idd/config.json'] = files['.github/idd/config.json']
+json.dump(data, open(path, 'w', encoding='utf-8'), indent=2)
+PY
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial "FAIL $PAYLOAD/dot_github/idd/config.json: two inventory paths map to this source path"
+}
+
+@test "a symbolic link to a directory inside a scope is rejected and not descended" {
+  ln -s "$SRC/home/dot_agents/skills" "$SRC/home/dot_claude/skills/linked-dir"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_claude/skills/linked-dir: symbolic link is not allowed in a scope'
+  refute_output --partial 'home/dot_claude/skills/linked-dir/issue-authoring'
+}
+
 @test "a repository config that is not a JSON object is rejected" {
   printf '[]\n' > "$SRC/.github/idd/config.json"
   run python3 -I "$CHECKER" --source-root "$SRC"
