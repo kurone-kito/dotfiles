@@ -37,14 +37,14 @@ If you arrived here from your agent's entry file, pick up at step 2. If
 you are reading this guide first, start at step 1.
 
 1. Read the entry file for your agent or surface (see table below).
-2. Run the user-global `idd-activation` from the repository root and
-   read its JSON output. If it is not on `PATH`, run
-   `~/.local/bin/idd-activation` on POSIX. In Windows PowerShell, run
-   `& "$HOME\.local\bin\idd-activation.cmd"`; in Command Prompt, run
-   `"%USERPROFILE%\.local\bin\idd-activation.cmd"`. If activation
-   cannot run or produce valid JSON, stop without running IDD helpers or
-   changing repository state. If `active` is `false`, do no IDD-specific
-   work.
+2. From the repository root, invoke the user-global activation with an
+   explicit shell-specific path and read its JSON output:
+   - POSIX shell (including WSL): `~/.local/bin/idd-activation`
+   - Windows PowerShell: `& "$HOME\.local\bin\idd-activation.cmd"`
+   - Windows Command Prompt: `"%USERPROFILE%\.local\bin\idd-activation.cmd"`
+   If activation cannot run or produce valid JSON, stop without running
+   IDD helpers or changing repository state. If `active` is `false`, do
+   no IDD-specific work.
 3. If `active` is `true`, read the
    [repository-specific IDD policy overlay](idd-local-policy-overlay.md),
    then resolve all instruction paths below the reported

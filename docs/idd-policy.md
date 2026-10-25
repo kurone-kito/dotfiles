@@ -504,10 +504,11 @@ The first two logins were confirmed against live review events on
 carries review activity from both bots. `chatgpt-codex-connector[bot]`
 was confirmed on
 [PR #374](https://github.com/kurone-kito/dotfiles/pull/374), which
-received a Codex usage-limit notice from that login. Settle/wait
-([`idd-advisory-wait.instructions.md`](../.github/instructions/idd-advisory-wait.instructions.md))
-stays Copilot-only for its primary, gating check regardless of this
-list — **`advisoryWait.primaryBotLogin`** is left unset, so every
+received a Codex usage-limit notice from that login. Settle/wait follows
+the active `idd-advisory-wait.instructions.md` selected beneath the
+`instructionsRoot` reported by `idd-activation`; it stays Copilot-only
+for its primary, gating check regardless of this list —
+**`advisoryWait.primaryBotLogin`** is left unset, so every
 configured login here (including a non-review notice) is dispositioned
 on arrival but never gates the advisory-wait clock.
 **`advisoryWait.secondaryBotLogin`** is explicitly `coderabbitai[bot]`
