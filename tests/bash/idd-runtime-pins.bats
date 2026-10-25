@@ -39,6 +39,9 @@ setup() {
   cp "$REPO_ROOT/home/dot_claude/CLAUDE.md.tmpl" "$SRC/home/dot_claude/"
   cp "$REPO_ROOT/home/dot_codex/AGENTS.md.tmpl" "$SRC/home/dot_codex/"
   cp "$REPO_ROOT/home/dot_config/opencode/AGENTS.md.tmpl" "$SRC/home/dot_config/opencode/"
+  mkdir -p "$SRC/home/dot_copilot" "$SRC/home/dot_gemini"
+  cp "$REPO_ROOT/home/dot_copilot/copilot-instructions.md.tmpl" "$SRC/home/dot_copilot/"
+  cp "$REPO_ROOT/home/dot_gemini/GEMINI.md.tmpl" "$SRC/home/dot_gemini/"
   cp "$REPO_ROOT/home/run_after_83-link-idd-skill-xdg-data.ps1" "$SRC/home/"
 }
 
@@ -111,7 +114,7 @@ PY
     "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
-  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch line lacks the exact package spec'
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch does not pass the exact package spec'
 }
 
 @test "a repository helper pin for another commit is rejected even when versions agree" {
@@ -134,7 +137,97 @@ PY
     >> "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
-  assert_output --partial 'npx launch line lacks the exact package spec'
+  assert_output --partial 'npx launch does not pass the exact package spec'
+}
+
+@test "a package spec placed in an inline comment does not satisfy the launch rule" {
+  sed -i "s#^exec npx .*#exec npx --yes idd-activation \"\$@\" \# https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$COMMIT#" \
+    "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch does not pass the exact package spec'
+}
+
+@test "a launcher that runs another package with the spec only in a comment is rejected" {
+  sed -i "s#^exec npx .*#exec npx --yes other-package \"\$@\" \# $COMMIT#" \
+    "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch does not pass the exact package spec'
+}
+
+@test "a missing expected wrapper is diagnosed" {
+  rm "$SRC/home/dot_local/bin/executable_idd-effective-config.cmd"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-effective-config.cmd: expected wrapper is missing'
+}
+
+@test "an unlisted wrapper is rejected" {
+  printf 'echo extra\n' > "$SRC/home/dot_local/bin/executable_idd-extra"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-extra: unlisted wrapper'
+}
+
+@test "a payload scope that names another release is rejected even when files match" {
+  python3 -I - "$SRC/.github/idd/user-global-source.json" "$RELEASE" <<'PY'
+import json, sys
+path, release = sys.argv[1], sys.argv[2]
+data = json.load(open(path, encoding='utf-8'))
+data['scopes'][0]['sourceRoot'] = 'home/dot_local/share/idd-skill/0.0.1'
+json.dump(data, open(path, 'w', encoding='utf-8'), indent=2)
+PY
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL .github/idd/user-global-source.json: scope payload must name'
+}
+
+@test "an inventory whose tag does not match its release is rejected" {
+  python3 -I - "$SRC/.github/idd/user-global-source.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding='utf-8'))
+data['upstream']['tag'] = 'v0.0.1'
+json.dump(data, open(path, 'w', encoding='utf-8'), indent=2)
+PY
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL .github/idd/user-global-source.json: upstream.tag must be v'
+}
+
+@test "an inventory that omits a required scope is rejected" {
+  python3 -I - "$SRC/.github/idd/user-global-source.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding='utf-8'))
+data['scopes'] = [s for s in data['scopes'] if s['id'] != 'skills-agents']
+json.dump(data, open(path, 'w', encoding='utf-8'), indent=2)
+PY
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL .github/idd/user-global-source.json: inventory must carry exactly the scopes'
+}
+
+@test "a versioned harness template naming another release is rejected" {
+  sed -i "s#idd-skill/$RELEASE/#idd-skill/0.0.1/#" "$SRC/home/dot_gemini/GEMINI.md.tmpl"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_gemini/GEMINI.md.tmpl: harness entry names version 0.0.1'
+}
+
+@test "a symlinked ancestor of a scope root is rejected" {
+  rm -rf "$SRC/home/dot_agents"
+  ln -s dot_claude "$SRC/home/dot_agents"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_agents/skills: scope source root is missing or not a directory'
+}
+
+@test "help exits successfully" {
+  run python3 -I "$CHECKER" --help
+  assert_success
+  assert_output --partial 'usage:'
 }
 
 @test "a repository config that is not a JSON object is rejected" {

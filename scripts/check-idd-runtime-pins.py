@@ -42,7 +42,23 @@ HARNESS_ENTRIES = {
   'home/dot_claude/CLAUDE.md.tmpl': 'current',
   'home/dot_codex/AGENTS.md.tmpl': 'versioned',
   'home/dot_config/opencode/AGENTS.md.tmpl': 'versioned',
+  'home/dot_copilot/copilot-instructions.md.tmpl': 'versioned',
+  'home/dot_gemini/GEMINI.md.tmpl': 'versioned',
 }
+# The scopes the inventory must carry, each with the source and installed root
+# it must name. {release} is the inventory release.
+EXPECTED_SCOPES = {
+  'payload': ('home/dot_local/share/idd-skill/{release}',
+              '.local/share/idd-skill/{release}'),
+  'skills-claude': ('home/dot_claude/skills', '.claude/skills'),
+  'skills-agents': ('home/dot_agents/skills', '.agents/skills'),
+}
+# Every launcher this repository ships. A missing or extra wrapper fails.
+EXPECTED_WRAPPERS = frozenset(
+  WRAPPER_PREFIX + name + suffix
+  for name in ('activation', 'critique-telemetry', 'critique-telemetry-report',
+               'effective-config')
+  for suffix in ('', '.cmd', '.ps1'))
 
 SEMVER = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+$')
 SHA1_HEX = re.compile(r'^[0-9a-f]{40}$')
@@ -55,6 +71,7 @@ PS_VERSION = re.compile(r"^\$version\s*=\s*'([^']*)'\s*$", re.MULTILINE)
 
 NPX_LAUNCH = re.compile(r'^\s*(?:exec\s+|&\s*)?npx\s')
 COMMENT_LINE = re.compile(r'^\s*(#|REM\b|::|//)', re.IGNORECASE)
+INLINE_COMMENT = re.compile(r'\s#')
 
 
 class Problems:
@@ -127,6 +144,13 @@ def load_inventory(root, problems):
   archive = upstream.get('archiveSha256')
   if not isinstance(archive, str) or not SHA256_HEX.match(archive):
     problems.add(INVENTORY, 'upstream.archiveSha256 must be a SHA-256 hex digest')
+  if upstream.get('tag') != 'v' + release:
+    problems.add(INVENTORY, 'upstream.tag must be v%s' % release)
+    return None
+  tag_object = upstream.get('tagObject')
+  if not isinstance(tag_object, str) or not SHA1_HEX.match(tag_object):
+    problems.add(INVENTORY, 'upstream.tagObject must be a 40-character lowercase hex id')
+    return None
   expected_spec = 'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/' + commit
   if upstream.get('packageSpec') != expected_spec:
     problems.add(INVENTORY, 'upstream.packageSpec must be the codeload URL of upstream.commit')
@@ -144,6 +168,15 @@ def load_inventory(root, problems):
       problems.add(INVENTORY, 'duplicate scope id %s' % scope['id'])
       return None
     seen.add(scope['id'])
+    expected_roots = EXPECTED_SCOPES.get(scope['id'])
+    if expected_roots is None:
+      problems.add(INVENTORY, 'unexpected scope id %s' % scope['id'])
+      return None
+    wanted = [root.format(release=release) for root in expected_roots]
+    if [scope.get('sourceRoot'), scope.get('installedRoot')] != wanted:
+      problems.add(INVENTORY, 'scope %s must name %s and %s'
+                   % (scope['id'], wanted[0], wanted[1]))
+      return None
     for key in ('sourceRoot', 'installedRoot'):
       if not safe_rel(scope.get(key)):
         problems.add(INVENTORY, 'scope %s has an unsafe %s' % (scope['id'], key))
@@ -159,13 +192,27 @@ def load_inventory(root, problems):
       if not isinstance(value, str) or not SHA256_HEX.match(value):
         problems.add(INVENTORY, 'scope %s digest for %s is not SHA-256' % (scope['id'], rel))
         return None
+  if seen != set(EXPECTED_SCOPES):
+    problems.add(INVENTORY, 'inventory must carry exactly the scopes %s'
+                 % ', '.join(sorted(EXPECTED_SCOPES)))
+    return None
   return inventory
+
+
+def path_has_symlink(root, rel):
+  """True when any component of rel, below root, is a symbolic link."""
+  current = root
+  for part in rel.split('/'):
+    current = os.path.join(current, part)
+    if os.path.islink(current):
+      return True
+  return False
 
 
 def walk_scope(root, source_root, problems):
   """Return {relative path: absolute path} for regular files under a scope."""
   top = os.path.join(root, *source_root.split('/'))
-  if os.path.islink(top) or not os.path.isdir(top):
+  if path_has_symlink(root, source_root) or not os.path.isdir(top):
     problems.add(source_root, 'scope source root is missing or not a directory')
     return None
   found = {}
@@ -223,13 +270,17 @@ def check_windows_pointer(root, release, problems):
 
 def check_wrappers(root, commit, spec, problems):
   top = os.path.join(root, *WRAPPER_DIR.split('/'))
-  if os.path.islink(top) or not os.path.isdir(top):
+  if path_has_symlink(root, WRAPPER_DIR) or not os.path.isdir(top):
     problems.add(WRAPPER_DIR, 'wrapper directory is missing or not a directory')
     return 0
+  present = {name for name in os.listdir(top) if name.startswith(WRAPPER_PREFIX)}
+  for name in sorted(EXPECTED_WRAPPERS - present):
+    problems.add('%s/%s' % (WRAPPER_DIR, name), 'expected wrapper is missing')
+  for name in sorted(present - EXPECTED_WRAPPERS):
+    problems.add('%s/%s' % (WRAPPER_DIR, name),
+                 'unlisted wrapper: not an expected launcher')
   count = 0
-  for name in sorted(os.listdir(top)):
-    if not name.startswith(WRAPPER_PREFIX):
-      continue
+  for name in sorted(present):
     rel = '%s/%s' % (WRAPPER_DIR, name)
     data = read_regular(root, rel, problems)
     if data is None:
@@ -242,14 +293,16 @@ def check_wrappers(root, commit, spec, problems):
     for token in set(COMMIT_TOKEN.findall(text)):
       if token != commit:
         problems.add(rel, 'mentions commit %s, expected %s' % (token, commit))
-    # Every line that launches npx must carry the exact spec on that line, so
-    # a comment that quotes the spec cannot stand in for the launch itself.
-    # Guards such as `command -v npx` are not launches and are skipped.
+    # Every npx launch must pass the exact spec as the --package argument of
+    # the code before any inline comment, so neither a comment nor another
+    # package can stand in for it. Guards such as `command -v npx` are skipped.
+    package_arg = re.compile(r'--package\s+["\']?%s["\']?(?=\s|$)' % re.escape(spec))
     for line in text.splitlines():
       if COMMENT_LINE.match(line) or not NPX_LAUNCH.match(line):
         continue
-      if spec not in line:
-        problems.add(rel, 'npx launch line lacks the exact package spec %s' % spec)
+      code = INLINE_COMMENT.split(line, 1)[0]
+      if not package_arg.search(code):
+        problems.add(rel, 'npx launch does not pass the exact package spec %s to --package' % spec)
         break
   return count
 
@@ -323,10 +376,9 @@ def main(argv):
   default_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
   parser.add_argument('--source-root', default=default_root,
                       help='repository or fixture root to check (default: this checkout)')
-  try:
-    args = parser.parse_args(argv)
-  except SystemExit:
-    return 2
+  # argparse exits 0 for --help and 2 for a usage error, and that status is
+  # the one this process reports.
+  args = parser.parse_args(argv)
   root = os.path.abspath(args.source_root)
   if not os.path.isdir(root):
     sys.stderr.write('check-idd-runtime-pins: source root is not a directory: %s\n' % root)
