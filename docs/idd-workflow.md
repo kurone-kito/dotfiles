@@ -31,6 +31,14 @@ Repository-specific IDD rules that remain active across import
 retirement are summarized in the
 [local policy overlay](idd-local-policy-overlay.md).
 
+For the confirmed policy matrix (merge policy, review profile,
+review-thread resolution, critique-loop, claim timing, CI wait,
+credential scope, helper runtime, issue-author approval gate,
+maintainer-approval-actors policy, and the issue-authoring companion
+status), see [idd-policy.md](idd-policy.md). The machine-readable mirror
+lives at [`.github/idd/config.json`](../.github/idd/config.json); keep
+both in sync.
+
 ## Start sequence
 
 If you arrived here from your agent's entry file, pick up at step 2. If
@@ -40,15 +48,25 @@ you are reading this guide first, start at step 1.
    activation bootstrap (see table below). Treat the activation command
    and its `active` routing as the only pre-activation IDD instructions;
    do not apply any other IDD-specific entry-file instructions until
-   Step 2 returns valid JSON with `active: true`.
-2. From the repository root, invoke the user-global activation with an
-   explicit shell-specific path and read its JSON output:
+   Step 2 exits successfully and returns a JSON object whose boolean
+   `active` field is `true`.
+2. From the repository root, invoke the user-global activation through
+   the explicit user-local launcher for the current shell and read its
+   JSON output. Require exit status 0 and parse only stdout as one JSON
+   object with a boolean `active` field. Treat a nonzero exit, invalid
+   JSON, or missing or invalid required fields as a failure even if
+   stderr contains a JSON error envelope; stop without running IDD
+   helpers or changing repository state. If `active` is `true`, require
+   `instructionsRoot` to be a non-empty string before opening
+   instructions. When `active` is `false`, do no IDD-specific work.
+   Do not run bare `idd-activation` from the checkout,
+   because a local file can take precedence over `PATH` on Windows
+   Command Prompt:
    - POSIX shell (including WSL): `~/.local/bin/idd-activation`
    - Windows PowerShell: `& "$HOME\.local\bin\idd-activation.cmd"`
    - Windows Command Prompt: `"%USERPROFILE%\.local\bin\idd-activation.cmd"`
-   If activation cannot run or produce valid JSON, stop without running
-   IDD helpers or changing repository state. If `active` is `false`, do
-   no IDD-specific work.
+   The checks above apply before any IDD helper or repository-state
+   change.
 3. If `active` is `true`, read the
    [repository-specific IDD policy overlay](idd-local-policy-overlay.md),
    then resolve all instruction paths below the reported
@@ -59,12 +77,18 @@ you are reading this guide first, start at step 1.
 5. If you are editing package-specific code, also follow the matching
    scoped instruction file under that same root.
 
+The execution loop drives Discover → Claim → Work → PR Submit → CI
+Wait → Review Triage → Review Fix → Merge → Loop through GitHub issues;
+each phase has a dedicated instruction file under the active
+`instructionsRoot`'s `.github/instructions/` directory.
+
 Instruction-file and section references in this guide resolve against
 the active `instructionsRoot`. Bare `idd-*.instructions.md` references
 are shorthand for `.github/instructions/idd-*.instructions.md`, and
 `lite/...` references are shorthand for
 `.github/instructions/lite/...`; explicit `.github/instructions/...`
-paths are already complete. Do not assume that the repository-local
+paths are complete relative paths beneath `instructionsRoot`, not
+repository-relative paths. Do not assume that the repository-local
 copy is the active instruction tree.
 
 ## Entry points and auto-load expectations
@@ -1382,6 +1406,12 @@ execution surfaces can receive the IDD entry context automatically.
 However, it also sets `excludeAgent: "code-review"` so Copilot code
 review does not ingest the full operational workflow as reviewer-side
 context.
+
+GitHub Copilot Code Review acts as the advisory reviewer under the
+`copilot-advisory` profile, alongside the existing CodeRabbit
+configuration. The lightweight repository-wide
+`.github/copilot-instructions.md` remains available as reviewer-side
+project guidance.
 
 This is an intentional middle path between the evaluated alternatives:
 keeping review coupled to the full overview, narrowing `applyTo` and
