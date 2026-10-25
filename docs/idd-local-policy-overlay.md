@@ -70,10 +70,22 @@ follows:
 | .github/instructions/lite/idd-review-snapshot-lite.instructions.md | idd-template/.github/instructions/lite/idd-review-snapshot-lite.instructions.md (exact) | idd-template/.github/instructions/lite/idd-review-snapshot-lite.instructions.md (exact) | See **e1-stale-recovery-cap-route**, **lite-e1-advisory-outcome-deferral**, **local-pr-target-ci-provenance**, **reviewed-v014-safety-corrections** |
 | .github/instructions/lite/idd-work-lite.instructions.md | idd-template/.github/instructions/lite/idd-work-lite.instructions.md (exact) | idd-template/.github/instructions/lite/idd-work-lite.instructions.md (exact) | See **master-branch** |
 
-The v0.17.0 tree adds `claim-orchestrator.instructions.md` and
-`idd-orchestrator.instructions.md`, neither of which is in this local
-inventory. #679 does not import them. After activation routes to the
-installed v0.17.0 payload, its inventory supplies those files.
+The pinned v0.17.0 upstream tree contains
+`claim-orchestrator.instructions.md` and
+`idd-orchestrator.instructions.md`; neither belongs to this legacy
+repo-local inventory, and #679 imports neither. The dotfiles-tracked
+user-global v0.17.0 payload includes
+`idd-orchestrator.instructions.md` but omits
+`claim-orchestrator.instructions.md`, even though
+`home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md`
+references that companion. Do not treat this payload as supplying
+`claim-orchestrator` until the packaging omission is resolved. When a
+selected `instructionsRoot` has an `idd-claim.instructions.md` that
+requires this companion but the file is absent from that same root, stop
+before dispatching a worker; continue in the current session or stop
+and report the missing companion. Do not switch instruction roots
+manually. Fan-out can resume only after a new activation selects a root
+that contains the required file.
 
 ## Unmarked merge-handoff delta
 
@@ -97,6 +109,17 @@ from v0.17.0 at the pinned source path
   and `established`. They do not change the rule's behavior and need no
   separate policy to retain.
 
+## Unmarked advisory-wait outcome delta
+
+The repo-local full and lite advisory-wait files list five helper
+outcomes. The v0.17.0 instructions add `DISPOSITION_NEEDED` and route
+E14 back to E6 for cited-item dispositions or a review acknowledgement
+for an unreadable review. This is separate from the 24-field
+`advisory-response-schema` divergence below. Do not preserve the narrower
+local outcome list as repository policy; the active instruction root
+must resolve to the v0.17.0 payload before the legacy local instruction
+tree is retired.
+
 ## Divergence disposition crosswalk
 
 The register contains 25 distinct slugs. The [detailed Divergence
@@ -106,7 +129,7 @@ v0.17.0 supplies the behavior or dotfiles retains it.
 
 | Slug | v0.17.0 comparison | Retirement disposition |
 | --- | --- | --- |
-| advisory-response-schema | Full and lite advisory-wait instructions list all 24 required schema fields: [full](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/idd-advisory-wait.instructions.md) and [lite](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/lite/idd-advisory-wait-lite.instructions.md). | The runtime rule is upstream-equivalent. Keep the local fixture and Bats regression check as repository test coverage. |
+| advisory-response-schema | Full and lite advisory-wait instructions list all 24 required schema fields: [full](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/idd-advisory-wait.instructions.md) and [lite](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/lite/idd-advisory-wait-lite.instructions.md). | For this required-field rule, runtime behavior is upstream-equivalent. The separate outcome-enum delta is described above. Keep the local fixture and Bats regression check as repository test coverage. |
 | helper-profile-ephemeral-npx | v0.17.0 supports the profile family, but cannot supply this repository's chosen package spec, pin, and command resolution. | Retain the configured ephemeral-npx profile in [IDD config](../.github/idd/config.json) and its [helper command guide](idd-helper-scripts.md). |
 | installed-bundle-reference-routing | The upstream companion's source-repository links do not describe this repository's installed-bundle layout. | Retain guidance that resolves references from the installed .claude/skills/ bundle and target repository documentation. |
 | local-docs-index | No upstream counterpart for dotfiles-authored documentation pages. | Retain the local-page supplement in docs/index.md; it is repository navigation, not imported instruction content. |

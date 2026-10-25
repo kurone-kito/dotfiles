@@ -36,7 +36,11 @@ retirement are summarized in the
 If you arrived here from your agent's entry file, pick up at step 2. If
 you are reading this guide first, start at step 1.
 
-1. Read the entry file for your agent or surface (see table below).
+1. Read the entry file for your agent or surface only to locate its
+   activation bootstrap (see table below). Treat the activation command
+   and its `active` routing as the only pre-activation IDD instructions;
+   do not apply any other IDD-specific entry-file instructions until
+   Step 2 returns valid JSON with `active: true`.
 2. From the repository root, invoke the user-global activation with an
    explicit shell-specific path and read its JSON output:
    - POSIX shell (including WSL): `~/.local/bin/idd-activation`
@@ -1032,6 +1036,15 @@ context. Cross-issue bookkeeping (the claimed set, a concurrency budget,
 one desync token reused across the run) is also cheaper to keep in one
 orchestrating session than to reconstruct per invocation of a stateless
 external scheduler.
+
+Before dispatching a worker, check the selected `instructionsRoot` for
+`claim-orchestrator.instructions.md` whenever its
+`idd-claim.instructions.md` requires that companion. If it is absent,
+do not dispatch; continue the claimed issue in the current session or
+stop and report the missing companion. Do not switch instruction roots
+manually. Fan-out can resume only after a new activation selects a root
+that contains the required file. The repository-specific omission is
+recorded in the [local policy overlay](idd-local-policy-overlay.md).
 
 Running this variant safely requires:
 
