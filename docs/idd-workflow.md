@@ -41,16 +41,18 @@ both in sync.
 
 ## Start sequence
 
-If you arrived here from your agent's entry file, pick up at step 2. If
-you are reading this guide first, start at step 1.
+If your agent's entry file already ran activation and validated a JSON
+result with `active: true` and a non-empty `instructionsRoot`, reuse that
+result and continue at step 3. Otherwise, start at step 1.
 
-1. Read the entry file for your agent or surface only to locate its
-   activation bootstrap (see table below). Treat the activation command
-   and its `active` routing as the only pre-activation IDD instructions;
-   do not apply any other IDD-specific entry-file instructions until
-   Step 2 exits successfully and returns a JSON object whose boolean
-   `active` field is `true`.
-2. From the repository root, invoke the user-global activation through
+1. Read the entry file for your agent or surface only when you have not
+   already read it, to locate its activation bootstrap (see table
+   below). Treat the activation command and its `active` routing as the
+   only pre-activation IDD instructions. Do not apply other IDD-specific
+   entry-file instructions until a validated result with `active: true`
+   and a non-empty `instructionsRoot` is available.
+2. If the entry file did not already provide that validated result,
+   from the repository root invoke the user-global activation through
    the explicit user-local launcher for the current shell and read its
    JSON output. Require exit status 0 and parse only stdout as one JSON
    object with a boolean `active` field. Treat a nonzero exit, invalid
@@ -59,7 +61,8 @@ you are reading this guide first, start at step 1.
    helpers or changing repository state. If `active` is `true`, require
    `instructionsRoot` to be a non-empty string before opening
    instructions. When `active` is `false`, do no IDD-specific work.
-   Do not run bare `idd-activation` from the checkout,
+   Reuse a validated result from the entry file instead of invoking the
+   launcher again. Do not run bare `idd-activation` from the checkout,
    because a local file can take precedence over `PATH` on Windows
    Command Prompt:
    - POSIX shell (including WSL): `~/.local/bin/idd-activation`
