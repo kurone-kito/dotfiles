@@ -508,8 +508,12 @@ received a Codex usage-limit notice from that login. Settle/wait follows
 the profile-selected advisory-wait instructions beneath the
 `instructionsRoot` reported by `idd-activation`: the full
 `idd-advisory-wait.instructions.md` serves E14/F2/F3, while the lite
-`lite/idd-advisory-wait-lite.instructions.md` serves only the E14 caller
-subset ([profile mapping](idd-workflow.md#lite-instruction-profile-opt-in)).
+`lite/idd-advisory-wait-lite.instructions.md` serves the E1 Step 2
+precondition and E14. The lite profile also routes F1-F2 read-only
+helpers and the F2.5 handoff-stop through
+`lite/idd-pre-merge-lite.instructions.md` and
+`lite/idd-merge-handoff-lite.instructions.md`, respectively
+([profile mapping](idd-workflow.md#lite-instruction-profile-opt-in)).
 The primary, gating check stays Copilot-only regardless of this list —
 **`advisoryWait.primaryBotLogin`** is left unset, so every
 configured login here (including a non-review notice) is dispositioned
