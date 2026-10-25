@@ -20,8 +20,10 @@ The local comparison pins upstream v0.14.0 at
 `ae16f497434a5023dfaa28f965fc2af92ebf055d` and v0.17.0 at
 `77befdd4030757464bed7f31c7dfe6d0a404a18b`. For each tracked local
 instruction or skill file, the source path and materialization mode
-come from that tag's `audit/sync-manifest.json`. Concrete replacements
-were applied before comparing content.
+come from that tag's `audit/sync-manifest.json`. The `(exact)` and
+`(concreted)` labels below describe the manifest's materialization mode,
+not whether the current local file's content matches the pinned source.
+Concrete replacements were applied before comparing content.
 
 The inventory contains **35 tracked files**. The issue-authoring report
 template matches both materialized sources. The merge-handoff file
@@ -30,7 +32,7 @@ local changes are assigned to the divergence rows, including unmarked
 subordinate paragraphs in the same sections. The file-to-source map
 follows:
 
-| Local file | v0.14.0 source | v0.17.0 source | Local behavior disposition |
+| Local file | v0.14.0 source (manifest mode) | v0.17.0 source (manifest mode) | Local behavior disposition |
 | --- | --- | --- | --- |
 | .claude/skills/idd-spec-audit/SKILL.md | skills/idd-spec-audit/SKILL.md (exact) | skills/idd-spec-audit/SKILL.md (exact) | See **installed-bundle-reference-routing** |
 | .claude/skills/idd-spec-audit/references/report-template.md | skills/idd-spec-audit/references/report-template.md (exact) | skills/idd-spec-audit/references/report-template.md (exact) | Materialized content matches both pinned sources. |
@@ -42,7 +44,7 @@ follows:
 | .github/instructions/idd-ci.instructions.md | idd-template/.github/instructions/idd-ci.instructions.md (exact) | idd-template/.github/instructions/idd-ci.instructions.md (exact) | See **local-pr-target-ci-provenance**, **master-branch**, **reviewed-v014-safety-corrections** |
 | .github/instructions/idd-claim.instructions.md | idd-template/.github/instructions/idd-claim.instructions.md (exact) | idd-template/.github/instructions/idd-claim.instructions.md (exact) | See **helper-profile-ephemeral-npx**, **reviewed-v014-safety-corrections** |
 | .github/instructions/idd-discover.instructions.md | idd-template/.github/instructions/idd-discover.instructions.md (concreted) | idd-template/.github/instructions/idd-discover.instructions.md (concreted) | See **cross-roadmap-discovery**, **explicit-target-parked-check**, **helper-profile-ephemeral-npx**, **needs-triage-label**, **reviewed-v014-safety-corrections**, **session-offset-direct-index** |
-| .github/instructions/idd-merge-handoff.instructions.md | idd-template/.github/instructions/idd-merge-handoff.instructions.md (exact) | idd-template/.github/instructions/idd-merge-handoff.instructions.md (differs; see the [unmarked merge-handoff delta](#unmarked-merge-handoff-delta)) | See the [unmarked merge-handoff delta](#unmarked-merge-handoff-delta). |
+| .github/instructions/idd-merge-handoff.instructions.md | idd-template/.github/instructions/idd-merge-handoff.instructions.md (exact) | idd-template/.github/instructions/idd-merge-handoff.instructions.md (exact) | Local content differs from v0.17.0; see the [unmarked merge-handoff delta](#unmarked-merge-handoff-delta). |
 | .github/instructions/idd-merge.instructions.md | idd-template/.github/instructions/idd-merge.instructions.md (exact) | idd-template/.github/instructions/idd-merge.instructions.md (exact) | See **post-switch-ancestry-reset-guard** (F2 reset superseded; post-remediation F3 review-currency recheck retained), **reviewed-v014-safety-corrections** |
 | .github/instructions/idd-overview-appendix.instructions.md | idd-template/.github/instructions/idd-overview-appendix.instructions.md (concreted) | idd-template/.github/instructions/idd-overview-appendix.instructions.md (concreted) | See **master-branch**, **signing-ladder** |
 | .github/instructions/idd-overview-core.instructions.md | idd-template/.github/instructions/idd-overview-core.instructions.md (concreted) | idd-template/.github/instructions/idd-overview-core.instructions.md (concreted) | See **master-branch**, **queued-validation-commands** |
