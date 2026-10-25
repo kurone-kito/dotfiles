@@ -40,9 +40,9 @@ gates above, and by recording claims, review snapshots, decisions, and
 cleanup markers as the durable issue-comment state described throughout
 this page — so progress is auditable rather than assumed.
 
-See [Discover](../.github/instructions/idd-discover.instructions.md),
-[review triage](../.github/instructions/idd-review-triage.instructions.md),
-and [merge execution](../.github/instructions/idd-merge.instructions.md)
+See [Discover][idd-discover-instructions],
+[review triage][idd-review-triage-instructions],
+and [merge execution][idd-merge-instructions]
 for the phase files behind this table.
 
 ## Claims and Heartbeats
@@ -59,9 +59,9 @@ token before treating it as its own. Heartbeat comments refresh a live
 claim so long-running sessions do not look abandoned.
 
 Operational details live in
-[claim phase](../.github/instructions/idd-claim.instructions.md) and the
+[claim phase][idd-claim-instructions] and the
 shared definitions in
-[IDD overview](../.github/instructions/idd-overview-core.instructions.md).
+[IDD overview][idd-overview-core-instructions].
 
 ## Review Snapshots
 
@@ -75,7 +75,7 @@ it can compare the recorded snapshot with current PR activity instead of
 guessing which comments were already seen.
 
 See the
-[review snapshot phase](../.github/instructions/idd-review-snapshot.instructions.md)
+[review snapshot phase][idd-review-snapshot-instructions]
 for the exact marker format and collection rules.
 
 ## PATH A and PATH B
@@ -95,7 +95,7 @@ same way as human requested changes. When a source is ambiguous, IDD
 treats it as PATH A until a maintainer narrows it.
 
 See the
-[review triage phase](../.github/instructions/idd-review-triage.instructions.md)
+[review triage phase][idd-review-triage-instructions]
 for scoring, disposition, and marker requirements.
 
 ## Advisory Review Waits
@@ -110,7 +110,7 @@ model. Repositories that do not want the default Copilot advisory policy
 can choose another review profile and update the listed phase files.
 
 See [review policy profiles](idd-review-policy-profiles.md) and the
-[advisory wait protocol](../.github/instructions/idd-advisory-wait.instructions.md).
+[advisory wait protocol][idd-advisory-wait-instructions].
 
 ## Merge Freshness Gates
 
@@ -124,8 +124,8 @@ Many teams should let a worker agent prepare the PR, then let a human or
 separate merge-capable agent run the final gate.
 
 See [permissions and threat model](permissions.md),
-[pre-merge conditions](../.github/instructions/idd-pre-merge.instructions.md),
-and [merge execution](../.github/instructions/idd-merge.instructions.md).
+[pre-merge conditions][idd-pre-merge-instructions],
+and [merge execution][idd-merge-instructions].
 
 ## Cleanup Markers
 
@@ -151,3 +151,12 @@ status digest contract, cleanup policy, and helper notes.
   credentials.
 - [Review policy profiles](idd-review-policy-profiles.md) before
   changing PR review behavior.
+
+[idd-discover-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-discover.instructions.md
+[idd-review-triage-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-review-triage.instructions.md
+[idd-merge-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-merge.instructions.md
+[idd-claim-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md
+[idd-overview-core-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-overview-core.instructions.md
+[idd-review-snapshot-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-review-snapshot.instructions.md
+[idd-advisory-wait-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-advisory-wait.instructions.md
+[idd-pre-merge-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-pre-merge.instructions.md

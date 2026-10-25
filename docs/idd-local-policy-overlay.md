@@ -22,6 +22,12 @@ the `idd-activation` result.
 
 ## Pinned comparison and inventory
 
+The inventory below is historical. Its "Local file" paths were removed by
+
+issue 680 and no longer exist. The table records what was compared before that
+
+removal, so treat each path as a retired reference, not a current file.
+
 The local comparison pins upstream v0.14.0 at
 `ae16f497434a5023dfaa28f965fc2af92ebf055d` and v0.17.0 at
 `77befdd4030757464bed7f31c7dfe6d0a404a18b`. For each tracked local
@@ -203,9 +209,10 @@ companion.
 ## Scope boundary
 
 This overlay preserves non-equivalent IDD behavior for future
-local-import retirement. #679 leaves the linked imported files in place
-and does not remove or resync them. Re-evaluate a retained row only
-after a new source comparison and an explicit repository policy
+local-import retirement. #679 left the imported files in place. #680
+removed the duplicate copies, so each retained row is now compared with
+the vendored payload, not with a local file. Re-evaluate a retained row
+only after a new source comparison and an explicit repository policy
 decision.
 
 ## Project commands

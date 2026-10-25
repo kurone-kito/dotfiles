@@ -45,7 +45,7 @@ forced-handoff if:
   active claim or inheritable released branch/PR state — stop and report
   the mismatch; do not claim, push, or mutate review state.
 - The forced-handoff **authorization gate** does not hold. See
-  [`idd-claim.instructions.md` rule 7](../.github/instructions/idd-claim.instructions.md#claim-state-parsing)
+  [`idd-claim.instructions.md` rule 7](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md#claim-state-parsing)
   for the full criteria — apply it in addition to the checks above; it
   is not restated here.
 
@@ -243,7 +243,7 @@ caveat this document's §CSA section and `idd-pr-submit.instructions.md`'s
 D1 use for the same variable.
 
 **Sanctioned direct F4 entry.** The opening entry condition in
-[`idd-merge.instructions.md`](../.github/instructions/idd-merge.instructions.md)
+[`idd-merge.instructions.md`](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-merge.instructions.md)
 describes the common F3-first path, where merge-handoff's job is deciding
 whether _this_ session may execute the merge under the repository's
 recorded policy (`fully_autonomous_merge` / `human_merge` /
@@ -339,7 +339,7 @@ Anti-patterns (do not substitute these for the sequence above):
   worktree's HEAD to the issue branch and skips worktree creation.
 - `git checkout -b {branch} origin/{branch}` — equivalent failure.
 
-See [B1 Anti-patterns](../.github/instructions/idd-work.instructions.md#anti-patterns)
+See [B1 Anti-patterns](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-work.instructions.md#anti-patterns)
 for the full rule.
 
 ## §W2 — PR exists (1 match), rebase in progress
@@ -409,7 +409,7 @@ Anti-patterns (do not substitute these for steps 2–3): `git switch -c
 {branch} origin/{branch}` or `git checkout -b {branch}
 origin/{branch}` — both move the primary worktree's HEAD to the
 issue branch and skip worktree creation. See
-[B1 Anti-patterns](../.github/instructions/idd-work.instructions.md#anti-patterns)
+[B1 Anti-patterns](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-work.instructions.md#anti-patterns)
 for the full rule.
 
 ## §W8 — No PR, no remote branch, no worktree, local branch exists
@@ -442,7 +442,7 @@ not merely commits unpushed relative to `{branch}`'s own remote tip —
 same-branch unpushed-only diff is empty by construction there even
 though nothing on that branch has been through a PR yet.
 `{development-branch}` is the value resolved in
-[B1's Worktree creation](../.github/instructions/idd-work.instructions.md#worktree-creation)
+[B1's Worktree creation](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-work.instructions.md#worktree-creation)
 step — re-resolve it here if this file is entered directly (for
 example, on resume) without a fresh B1 pass, the same caveat
 `idd-pr-submit.instructions.md`'s D1 uses for the same variable. For

@@ -19,23 +19,23 @@ or [Core concepts](concepts.md) before using this reference.
 
 | Need                              | Phase  | Authoritative source                                                                        |
 | --------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
-| Shared definitions and commands   | All    | [IDD overview](../.github/instructions/idd-overview-core.instructions.md)                   |
-| Select the next issue             | A0-A4  | [Discover](../.github/instructions/idd-discover.instructions.md)                            |
-| Audit roadmap completion          | A1.5   | [Roadmap audit](../.github/instructions/idd-roadmap-audit.instructions.md)                  |
-| Evaluate issue suitability        | A4.5   | [Suitability triage](../.github/instructions/idd-suitability.instructions.md)               |
-| Claim an issue safely             | A5     | [Claim](../.github/instructions/idd-claim.instructions.md)                                  |
-| Create a worktree and self-review | B-C    | [Work and self-review](../.github/instructions/idd-work.instructions.md)                    |
-| Open or update the pull request   | D      | [PR submit](../.github/instructions/idd-pr-submit.instructions.md)                          |
-| Interpret CI while waiting        | D/E/F  | [CI polling](../.github/instructions/idd-ci.instructions.md)                                |
-| Snapshot review activity          | E1-E3  | [Review snapshot](../.github/instructions/idd-review-snapshot.instructions.md)              |
-| Triage review items               | E4-E8  | [Review triage](../.github/instructions/idd-review-triage.instructions.md)                  |
-| Fix accepted review feedback      | E9-E15 | [Review fix](../.github/instructions/idd-review-fix.instructions.md)                        |
-| Check pre-merge gates             | F1-F2  | [Pre-merge conditions](../.github/instructions/idd-pre-merge.instructions.md)               |
-| Resolve merge-policy handoff      | F2.5   | [Merge policy handoff](../.github/instructions/idd-merge-handoff.instructions.md)           |
-| Merge, clean up, and loop         | F3-F5  | [Merge execution](../.github/instructions/idd-merge.instructions.md)                        |
-| Resume after a crash or handoff   | Resume | [Resume](../.github/instructions/idd-resume.instructions.md)                                |
-| Recover from a stalled session    | Resume | [Resume stalled-session recovery](../.github/instructions/idd-resume-stall.instructions.md) |
-| Wait for Copilot advisory state   | E/F    | [Advisory wait](../.github/instructions/idd-advisory-wait.instructions.md)                  |
+| Shared definitions and commands   | All    | [IDD overview](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-overview-core.instructions.md)                   |
+| Select the next issue             | A0-A4  | [Discover](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-discover.instructions.md)                            |
+| Audit roadmap completion          | A1.5   | [Roadmap audit](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-roadmap-audit.instructions.md)                  |
+| Evaluate issue suitability        | A4.5   | [Suitability triage](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-suitability.instructions.md)               |
+| Claim an issue safely             | A5     | [Claim](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md)                                  |
+| Create a worktree and self-review | B-C    | [Work and self-review](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-work.instructions.md)                    |
+| Open or update the pull request   | D      | [PR submit](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-pr-submit.instructions.md)                          |
+| Interpret CI while waiting        | D/E/F  | [CI polling](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-ci.instructions.md)                                |
+| Snapshot review activity          | E1-E3  | [Review snapshot](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-review-snapshot.instructions.md)              |
+| Triage review items               | E4-E8  | [Review triage](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-review-triage.instructions.md)                  |
+| Fix accepted review feedback      | E9-E15 | [Review fix](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-review-fix.instructions.md)                        |
+| Check pre-merge gates             | F1-F2  | [Pre-merge conditions](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-pre-merge.instructions.md)               |
+| Resolve merge-policy handoff      | F2.5   | [Merge policy handoff](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-merge-handoff.instructions.md)           |
+| Merge, clean up, and loop         | F3-F5  | [Merge execution](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-merge.instructions.md)                        |
+| Resume after a crash or handoff   | Resume | [Resume](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-resume.instructions.md)                                |
+| Recover from a stalled session    | Resume | [Resume stalled-session recovery](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-resume-stall.instructions.md) |
+| Wait for Copilot advisory state   | E/F    | [Advisory wait](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-advisory-wait.instructions.md)                  |
 
 ## Policy and Support Pages
 

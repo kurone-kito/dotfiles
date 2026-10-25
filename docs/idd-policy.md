@@ -378,7 +378,7 @@ the maintainer.
 
 The companion drafts IDD-ready issues and roadmaps before the normal
 Discover loop starts. See its
-[bundled contract](../.claude/skills/issue-authoring/references/contract.md)
+[bundled contract](../home/dot_claude/skills/issue-authoring/references/contract.md)
 for the readiness buckets, output chooser, and approval boundary.
 
 ## Spec-Audit Companion
@@ -398,7 +398,7 @@ cover. It never edits a file or mutates an issue; findings
 route back through the normal issue-authoring flow (or this
 installation's manual issue-filing process when that companion is not
 installed). See its
-[SKILL.md](../.claude/skills/idd-spec-audit/SKILL.md) for the five rule
+[SKILL.md](../home/dot_claude/skills/idd-spec-audit/SKILL.md) for the five rule
 sets and execution model.
 
 ## Issue Scope
@@ -1324,7 +1324,7 @@ installed-bundle routing, onboarding-doc-trim pin links, vendored
 header, helper-profile facade notes, and the six still-ahead
 corrections filed upstream this round). One unmarked local hunk
 remains in Track B's
-[`.github/instructions/idd-claim.instructions.md`](../.github/instructions/idd-claim.instructions.md)
+[`.github/instructions/idd-claim.instructions.md`](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md)
 (PR #456): the forced-handoff adopt-verbatim path skips posting
 `claimed-by` (local lines 287-293). That delta is outside the 17
 registered slugs. This track records it here and does **not** add a

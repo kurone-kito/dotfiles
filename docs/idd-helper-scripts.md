@@ -1348,7 +1348,7 @@ default below is unchanged.
     milestone title, or `null` when it has no milestone, the milestone is closed,
     or the field is absent from the API response — the input to
     `discover.milestoneScope`'s A4 Step 2 tie-breaker (see
-    [Discover](../.github/instructions/idd-discover.instructions.md)); this
+    [Discover][idd-discover-instructions]); this
     same field is emitted by `discover-orphan-filter.mjs`'s `orphans` /
     `routed_to_human` candidates too, though that helper does not itself
     read `discover.milestoneScope`.
@@ -1590,7 +1590,7 @@ node scripts/discover-readiness-check.mjs --swarm-floor <N>
   — that decision stays with A1.5. A `--swarm-floor` caller must check
   each `eligible` entry's `isRoadmap` before treating it as directly
   claimable: route an entry with `isRoadmap: true` through
-  [A1.5](../.github/instructions/idd-roadmap-audit.instructions.md)'s
+  [A1.5][idd-roadmap-audit-instructions]'s
   roadmap-completion audit instead of a direct claim.
 - **Floor range**: `N` is the autopilot-suitability 1-5 band. A non-integer
   or out-of-range `N` is a **hard error**, not a silent coercion to the
@@ -3691,7 +3691,7 @@ still fails closed:
   discovery candidate, remove it from Candidates and continue the Decision
   Flow loop; an explicit-target caller follows A0-T's report-and-stop route.
   See the [A4.5 high-confidence coordination-close
-  path](../.github/instructions/idd-suitability.instructions.md#mutation-policy-and-coordination-rule)
+  path](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-suitability.instructions.md#mutation-policy-and-coordination-rule)
   for the evidence boundary and the helper-capable execution path.
 
 ### Claim approval evidence
@@ -3772,7 +3772,7 @@ still fails closed:
   ```
 
 - Same-machine fast path complementing the cross-machine claim check (see
-  the [worktree-local lock file](../.github/instructions/idd-claim.instructions.md#worktree-local-lock-file-same-machine-collision)
+  the [worktree-local lock file][idd-claim-instructions-worktree-local-lock-file-same-machine-collision]
   subsection of `idd-claim.instructions.md` for the full protocol)
 - Before removing an existing linked worktree, acquire/check its lock and
   resolve any collision through the current claim. A worktree must not be
@@ -3906,7 +3906,7 @@ still fails closed:
   generate the `{agent-id}`/`{claim-id}` it is about to trust, on disk,
   independent of possibly-compacted conversation memory." Referenced by
   the "Generated-tokens record" paragraph in
-  [`idd-claim.instructions.md`'s Worktree-local lock file section](../.github/instructions/idd-claim.instructions.md#worktree-local-lock-file-same-machine-collision).
+  [`idd-claim.instructions.md`'s Worktree-local lock file section][idd-claim-instructions-worktree-local-lock-file-same-machine-collision].
 - Source repo / vendored-node commands:
   `node scripts/claim-lock.mjs --record-tokens --worktree <path>
   --agent-id <id> --claim-id <id> [--nonce <nonce>]`,
@@ -6185,7 +6185,7 @@ whose HEAD and timing otherwise check out.
 
 The `review-ack:` marker matches `advisory-reroll:`'s field shape and
 posting path exactly (see
-[`idd-advisory-wait.instructions.md`](../.github/instructions/idd-advisory-wait.instructions.md)'s
+[`idd-advisory-wait.instructions.md`][idd-advisory-wait-instructions]'s
 `suppressedCount`-unvalidated note in its AW6 section):
 
 ```text
@@ -7228,3 +7228,8 @@ replace the written decision tables.
 [provider-outage-declaration-schema]: https://kurone-kito.github.io/idd-skill/schemas/provider-outage-declaration.schema.json
 [provider-outage-park-schema]: https://kurone-kito.github.io/idd-skill/schemas/provider-outage-park.schema.json
 [resolve-review-thread-schema]: https://kurone-kito.github.io/idd-skill/schemas/resolve-review-thread.schema.json
+
+[idd-discover-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-discover.instructions.md
+[idd-roadmap-audit-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-roadmap-audit.instructions.md
+[idd-claim-instructions-worktree-local-lock-file-same-machine-collision]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md#worktree-local-lock-file-same-machine-collision
+[idd-advisory-wait-instructions]: ../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-advisory-wait.instructions.md

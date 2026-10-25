@@ -560,7 +560,7 @@ until one of the revisit triggers above fires.
 ### Context-inheriting delegation residual risk
 
 kurone-kito/idd-skill#2624 adopted a documented positive-framed
-mitigation for the [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation)
+mitigation for the [Orchestrator delegation](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md#orchestrator-delegation)
 context-inheriting fallback: the delegation brief must state
 explicitly that the delegate is the sole worker for the named issue,
 with no peer workers to coordinate with or wait on. That issue was
