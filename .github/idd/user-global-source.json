@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "release": "0.17.0",
+  "upstream": {
+    "repository": "kurone-kito/idd-skill",
+    "tag": "v0.17.0",
+    "tagObject": "1f91a0d13397dbcbf94f44c8201a2b5618bb1060",
+    "commit": "77befdd4030757464bed7f31c7dfe6d0a404a18b",
+    "archiveSha256": "5c8b3d605ed812826df37cee79490d380f806b9e1735503a235c2bc3cff3c3f6",
+    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b"
+  },
+  "scopes": [
+    {
+      "id": "payload",
+      "sourceRoot": "home/dot_local/share/idd-skill/0.17.0",
+      "installedRoot": ".local/share/idd-skill/0.17.0",
+      "files": {
+        ".cspell.config.yml": "36765b0a51fc23d484dfde5b0ec2e09b281f2dcbc72afa8d749226b5e1b99ebf",
+        ".githooks/_idd-worktree-guard.sh": "4784448cda6215a1287ec8594b05cb2f7eb54068d8284ae5164b6422b535d726",
+        ".githooks/pre-commit": "9225f14d4314eb557a4cb5b9ca0616dbe750e007f79c38974afac785879ac480",
+        ".githooks/pre-push": "e01b710bfcde46ac932b4a4b41e054c05a780cc4f8344bed16b3275ff434ac98",
+        ".github/idd/config.example.jsonc": "34e9b180b7d2491a4919371432852947121fc3c9a563a51547ff8dc76b84ee0a",
+        ".github/idd/config.json": "515c493a4e2f2c4c98b5888535e8ca4ce743dd1ad6d9a9730309b5b408c2e913",
+        ".github/instructions/idd-advisory-wait.instructions.md": "674e05ac9257c3a7365d94d2f3514cd0a4448568c4dae628498cc1b3f7bb9ce9",
+        ".github/instructions/idd-ci.instructions.md": "155723f692202af1534df953f9c913766c6ab24a6041833f0c2d9f6849ab2b68",
+        ".github/instructions/idd-claim.instructions.md": "7070b3cfdaf1fcfb31ebcf200f91b5bfb1eae31e8f1b3de587e885442ed3e490",
+        ".github/instructions/idd-discover.instructions.md": "f07101d6df55bf222a72bd88e75d6cd1a8afffde5edaf6cf7bf48a87aa4b889f",
+        ".github/instructions/idd-merge-handoff.instructions.md": "3c9c36d394e2daae6241b52129f333dc9e79eb25722cd4442d1c122a95a95a75",
+        ".github/instructions/idd-merge.instructions.md": "cba34e613e0f0aa6b8137cee079254621de53f43fff051c62dba585b2eaf38e5",
+        ".github/instructions/idd-orchestrator.instructions.md": "a1083d16ff886cb5be4fb50929841af9c757911dfbc44baab65f6c3b1edc22f5",
+        ".github/instructions/idd-overview-appendix.instructions.md": "a693a27c472ff7ab67fd22cea3862d48cf0f300b8d54f5d921409104af582653",
+        ".github/instructions/idd-overview-core.instructions.md": "aef46b5bd7a9553bb5032953fed8b3174b45dfe58074a77d1bf5364022090e71",
+        ".github/instructions/idd-pr-submit.instructions.md": "fbe705d24e40aaf4d562d78fc3c217530210bfa6713f387acb5e178d4f097638",
+        ".github/instructions/idd-pre-merge.instructions.md": "1b1e685ff18f581390612c8739c86b2018236ea46c4ec44b31ce774233cf4742",
+        ".github/instructions/idd-resume-stall.instructions.md": "5a954a89bb5015d646157c3e7d69da728640a854d484d639f83f8eb5e38fe26f",
+        ".github/instructions/idd-resume.instructions.md": "d3f5f8d9d4454a88125267c77aba7e2aa2258f0a3008c0ba511a87d336c1e22d",
+        ".github/instructions/idd-review-fix.instructions.md": "ae661cb33193a9e1508e0c32f61ddf7452c9822a7504eab03969718c3cf1c6ce",
+        ".github/instructions/idd-review-snapshot.instructions.md": "bb874b8231bfca200645c95487a47f411103195337a9df71407dc7b0e8d065a0",
+        ".github/instructions/idd-review-triage.instructions.md": "46aec14f87a2b49512eaca4c76edcbd4cae2d309d02f4272d58fed3b0759a11f",
+        ".github/instructions/idd-roadmap-audit.instructions.md": "9f275baf63075cc93ea5664a3bbf7e86124d48cae20cb9ebe071d780a0065141",
+        ".github/instructions/idd-suitability.instructions.md": "f71b94aa7bb2ad497f54605906618d536ed18a825f3557dd41e8c8d21b92b831",
+        ".github/instructions/idd-work.instructions.md": "7aec397a41b6853e5fb421c437fe4ad388e9e01429da07b9c57c029ed7d29f0c",
+        ".github/instructions/lite/idd-advisory-wait-lite.instructions.md": "fa056a2f3eabe11cabc0d9d74b42ecfedeb293ed848945fbc5553d34b2232bdc",
+        ".github/instructions/lite/idd-ci-lite.instructions.md": "3684d1381c36579b7ce406a4c8ea3b680985b4f05ef8f37eb381dada4f2694c2",
+        ".github/instructions/lite/idd-claim-lite.instructions.md": "1264baf39bf840a590429ce0446c523d7706a17d15e8d382ac00fc98a7230290",
+        ".github/instructions/lite/idd-merge-handoff-lite.instructions.md": "1c541b48db8dda84fabec702dee8cabf4508b32a6ba51e1f2c77f699a1c5f0f5",
+        ".github/instructions/lite/idd-pr-submit-lite.instructions.md": "bcd225327c5eea9e58c26686652b732bf05945419f2f57cd2c3fba6132f19d89",
+        ".github/instructions/lite/idd-pre-merge-lite.instructions.md": "e4a22182dfc39ba530dc7d11a80541db9c23cfef29acc65ede9d28b699d7161f",
+        ".github/instructions/lite/idd-resume-lite.instructions.md": "8eb5d68cf617d16c46b4badda9c936f0f1c6a166218158985395d7ce5974a8dd",
+        ".github/instructions/lite/idd-resume-stall-lite.instructions.md": "72be730987919989c83913975ce24dcf31b330d1d30e9c8bb3e2ee81441898da",
+        ".github/instructions/lite/idd-review-fix-lite.instructions.md": "f0ae0c35036af47ba5200bbf9679042115159f4ac58fc6b574e602e3ade3d86e",
+        ".github/instructions/lite/idd-review-snapshot-lite.instructions.md": "132bc8697ae80f7f0f638e1d7be3b8501fda32b11663e0423441401d6eed146a",
+        ".github/instructions/lite/idd-work-lite.instructions.md": "47f5432e09a8f328144a5dba10e0dd81efbdc7ead7385b59ad9a79bd6979cc14",
+        ".github/workflows/post-merge-cleanup.yml": "1e1ba8875d2f93ec1c8a500f64b0a1fb07913e85bb354de008cfa35542f73af3",
+        ".markdownlint-cli2.yaml": "2dece4acf37085e1c852c4acca4be7ea0bdbf8c6d2a1d9467b85fb462ee60692",
+        ".markdownlint.yml": "8c4850f487d897ac03a4d8b33363a7451ae667c2e34cd8c0cca1a3a91cd3bdd7",
+        "docs/concepts.md": "8ee6a733f67374bf547c3a6b88bc0074d9dbeb350694eb3e15c030aa9c4fa1ed",
+        "docs/customization.md": "e0042f787975333eb372ca9eb3cfda5fa5cc4b5875280988bf21113a44243058",
+        "docs/getting-started.md": "e20734d3672042b607d9f6dc46e21276989cbcd17c87fd68a9b0bc81fa53c1de",
+        "docs/global-only-profile.md": "28085a72db36a22797549cee98cae449d03ac395e398dfe18ac98f621e655d4c",
+        "docs/idd-advisory-wait-shell-fallback.md": "6fc989541ee6e843bdbd2401769edc5303bd7a144647e283abf7b424b73bf0e8",
+        "docs/idd-autonomy-contract.md": "4435ad5ca209218d384b61d2170c2e95e6d0cb3538de76f30f40cfd659a2963f",
+        "docs/idd-comment-minimization.md": "db89884f1f321dd9a448162f36da54e163c2afaa8f2b1dfc6320d7c4f25c68be",
+        "docs/idd-concept-ownership.md": "9ce1cca3c132b9d8c55222fa408af2cd69e970418da7be91295b97f9b831a429",
+        "docs/idd-design-rationale.md": "ca8f3891a6e1b276196a6b887f9e9a638e53c3ebb67b3e624af8f3f6a292a39b",
+        "docs/idd-helper-scripts.md": "a4eed4786a589a33cb7b3bbfcbb94912e2196f314730dc77fc966be0dde54b57",
+        "docs/idd-resume-detail.md": "f6d7e5c2881766ea2a7795d39aaac97cae922161c8375cd6afb806a2ed4dcba4",
+        "docs/idd-review-policy-profiles.md": "1766fe55a3904dfa33fbbb22ed97b97f54323cd76ff59bfab4dab476fac4c97c",
+        "docs/idd-workflow.md": "dfe30adf866ef8aa30fd11a5e192e5376f81eaa68fd308e4b884adf0b7f9f0c3",
+        "docs/index.md": "e715bd8f6b375d646d52074a01e2c32f9619ba007c237df8c1d7341cf2f0c955",
+        "docs/onboarding/agent-entry-and-verification.md": "accf2dfb6d0d5ad469246ea1aa082d541eb7e4564533aa7d1a8bd2f094002655",
+        "docs/onboarding/issue-mediated-bootstrap.md": "36c5c695e83036aa32f867084b4b81f95f1ee3e29744dfe9858380c8d06473e3",
+        "docs/onboarding/optional-host-setup.md": "1d21936a820d993448aea0a5845eeee5f980983bfc3b0ae6cf35f87ea3ae7d63",
+        "docs/onboarding/placeholders.md": "3a29efe0fc2ba86a0dda71dc5e96f1ec4828f1af540aa32026901039747ef934",
+        "docs/onboarding/policy-decisions.md": "fea617fc86626d9c4ae517b1923126e0c679d9fa0acf8065a1af030228761b6b",
+        "docs/onboarding/project-tuning.md": "5fb4a882fe9795265e0e0147117f53b3e82f725c86833705526d890382d2fd82",
+        "docs/onboarding/template-distribution.md": "e62465ffc7fb0677b6da485b9a8f73ae1e2b04fae2f6b4f283e90140378f2e7d",
+        "docs/permissions.md": "18403c679e6a47d1910820251669980c492277327dee01282b0167a712a239b1",
+        "docs/policy-constants.md": "3022def23f81291d8f2ca723f96d6b60568eb7952639cb014cc1bc8cff8f34a7",
+        "docs/reference.md": "1dc1d309eb7bd4a2622c9cfa0a14c2a670dfa395b552610495c527123f921e4f",
+        "profiles/README.md": "54cfe6330442841c8dfa7812e9085d907e5d40a5e7312932edef358705177c96",
+        "profiles/external-bot/README.md": "5a586b4859953e6776491fcd00ad41d4863611fa9408dc89bcf77d01af789c6b",
+        "profiles/human-required/README.md": "6d657f530b6ae5c48ea0a0fe7b4d46a3bd94dbfb132dec87be38a8ead8cc5ffa",
+        "profiles/no-advisory/README.md": "19aed0f7f77de10906899f51f946ecbdd59ff2b45f09ecb486263ae8c49a1e22",
+        "user-global/entry.md": "b06eb4128beb86d65609ec6d7a77765260ff2df136c6af07e7a10d442d5e36f9"
+      }
+    },
+    {
+      "id": "skills-claude",
+      "sourceRoot": "home/dot_claude/skills",
+      "installedRoot": ".claude/skills",
+      "files": {
+        "idd-spec-audit/SKILL.md": "bb820aa57018e342f5272398fec2575b4461b7478a4ce2135a02ade401ec3a5b",
+        "idd-spec-audit/references/report-template.md": "21c6bad2feb1d59e88464ea83a63599c213c136f7ab6296b868867b31bc53f5e",
+        "issue-authoring/SKILL.md": "e13b4bc098883c23af4345c5c808d6e9dd70c1faab3a74938784f14b4c9528b1",
+        "issue-authoring/references/contract.md": "b48831b09a29d976604fdb6e16e82fdcdb085d624cc7dd97051905155e6ed699",
+        "issue-authoring/references/draft-patterns.md": "89f0b125a46c32d8d036ff44a88138f712e8d3183ead1b514390a1972eab784c",
+        "issue-authoring/references/workflow-boundary.md": "cb53651e655b0849ca105445f02bbc4717df01f5c2751baa5b7043b0fcd206b1"
+      }
+    },
+    {
+      "id": "skills-agents",
+      "sourceRoot": "home/dot_agents/skills",
+      "installedRoot": ".agents/skills",
+      "files": {
+        "idd-spec-audit/SKILL.md": "bb820aa57018e342f5272398fec2575b4461b7478a4ce2135a02ade401ec3a5b",
+        "idd-spec-audit/references/report-template.md": "21c6bad2feb1d59e88464ea83a63599c213c136f7ab6296b868867b31bc53f5e",
+        "issue-authoring/SKILL.md": "e13b4bc098883c23af4345c5c808d6e9dd70c1faab3a74938784f14b4c9528b1",
+        "issue-authoring/references/contract.md": "b48831b09a29d976604fdb6e16e82fdcdb085d624cc7dd97051905155e6ed699",
+        "issue-authoring/references/draft-patterns.md": "89f0b125a46c32d8d036ff44a88138f712e8d3183ead1b514390a1972eab784c",
+        "issue-authoring/references/workflow-boundary.md": "cb53651e655b0849ca105445f02bbc4717df01f5c2751baa5b7043b0fcd206b1"
+      }
+    }
+  ],
+  "hostSeams": [
+    {
+      "path": ".local/share/idd-skill/receipt.json",
+      "reason": "installer receipt; written per install, not part of the payload"
+    },
+    {
+      "path": ".local/share/idd-skill/current",
+      "reason": "selected-payload pointer; checked as home/dot_local/share/idd-skill/symlink_current"
+    },
+    {
+      "path": ".claude/CLAUDE.md",
+      "reason": "harness entry; rendered from home/dot_claude/CLAUDE.md.tmpl"
+    },
+    {
+      "path": ".codex/AGENTS.md",
+      "reason": "harness entry; rendered from home/dot_codex/AGENTS.md.tmpl"
+    },
+    {
+      "path": ".config/opencode/opencode.json",
+      "reason": "installer-written OpenCode entry; the dotfiles host renders .config/opencode/AGENTS.md from home/dot_config/opencode/AGENTS.md.tmpl instead, and that reference is checked by the harness-entry rule"
+    }
+  ]
+}
