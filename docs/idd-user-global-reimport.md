@@ -112,6 +112,35 @@ same change.
      managed-version advance, recovery from junction-creation failure and
      protections for unrelated paths, so the prior junction does not need to
      be removed manually.
+6. Pass the source consistency check before any live deployment. The
+   inventory `.github/idd/user-global-source.json` records the upstream commit,
+   tag, tag object and archive SHA-256, and the SHA-256 of every file in the
+   payload and in both skill trees, taken from the staging tree of step 1. Run
+   the checker against the candidate chezmoi source:
+
+   ```sh
+   python3 -I scripts/check-idd-runtime-pins.py --source-root <candidate-checkout>
+   ```
+
+   The check is read-only. It fails with `FAIL <path>: <reason>` lines when the
+   file sets or digests differ from the inventory, when the selected pointer
+   (`symlink_current`), the Windows `$version`, a wrapper pin, a versioned
+   harness-entry reference, `iddVersion`, or `helperRuntime.packageSpec` names a
+   different release or commit, or when the inventory itself is malformed or
+   names a path outside its source root. A retained older release directory
+   does not fail it. The Bats suite `tests/bash/idd-runtime-pins.bats` reads the
+   release and the commit from the inventory, so a re-import needs no edit there.
+
+   Regenerate the inventory from the staging tree, and update the pins, the
+   affected references and the copies listed under Preserved seams in the same
+   reviewed change. A failing candidate goes back to step 1 for preparation.
+   Do not apply it to the home directory.
+
+   This check establishes source consistency only. It does not make
+   `chezmoi apply` transactional, it does not show that a deployed home matches
+   the source, and it does not prove runtime compatibility. Those need the
+   deployment checks and the global-only lifecycle verification on a real pull
+   request.
 
 The tracking issue for this re-import is #675.
 
