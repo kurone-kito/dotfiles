@@ -27,28 +27,94 @@ foundation for future non-GitHub adapters; see
 capability-group model and staged rollout order. Nothing below assumes
 that boundary is exercised by a shipped adapter yet.
 
+Repository-specific IDD rules that remain active across import
+retirement are summarized in the
+[local policy overlay](idd-local-policy-overlay.md).
+
+For the confirmed policy matrix (merge policy, review profile,
+review-thread resolution, critique-loop, claim timing, CI wait,
+credential scope, helper runtime, issue-author approval gate,
+maintainer-approval-actors policy, and the issue-authoring companion
+status), see [idd-policy.md](idd-policy.md). The machine-readable mirror
+lives at [`.github/idd/config.json`](../.github/idd/config.json); keep
+both in sync.
+
 ## Start sequence
 
-If you arrived here from your agent's entry file, pick up at step 2. If
-you are reading this guide first, start at step 1.
+If your agent's entry file already ran activation and validated a JSON
+result with `active: true` and a non-empty `instructionsRoot`, reuse that
+result and continue at step 3. Otherwise, start at step 1.
 
-1. Read the entry file for your agent or surface (see table below).
-2. Read `.github/instructions/idd-overview-core.instructions.md`.
-3. Read the phase file that matches your current state.
-4. If you are editing package-specific code, also follow the matching
-   scoped instruction file in `.github/instructions/`.
+1. Read the entry file for your agent or surface only when you have not
+   already read it, to locate its activation bootstrap (see table
+   below). Treat the activation command and its `active` routing as the
+   only pre-activation IDD instructions. Do not apply other IDD-specific
+   entry-file instructions until a validated result with `active: true`
+   and a non-empty `instructionsRoot` is available.
+2. If the entry file did not already provide that validated result,
+   from the repository root invoke the user-global activation through
+   the explicit user-local launcher for the current shell and read its
+   JSON output. Require exit status 0 and parse only stdout as one JSON
+   object with a boolean `active` field. Treat a nonzero exit, invalid
+   JSON, or missing or invalid required fields as a failure even if
+   stderr contains a JSON error envelope; stop without running IDD
+   helpers or changing repository state. If `active` is `true`, require
+   `instructionsRoot` to be a non-empty string before opening
+   instructions. When `active` is `false`, do no IDD-specific work.
+   Reuse a validated result from the entry file instead of invoking the
+   launcher again. Do not run bare `idd-activation` from the checkout,
+   because a local file can take precedence over `PATH` on Windows
+   Command Prompt:
+   - POSIX shell (including WSL): `~/.local/bin/idd-activation`
+   - Windows PowerShell: `& "$HOME\.local\bin\idd-activation.cmd"`
+   - Windows Command Prompt: `"%USERPROFILE%\.local\bin\idd-activation.cmd"`
+   The checks above apply before any IDD helper or repository-state
+   change.
+3. If `active` is `true`, read the
+   [repository-specific IDD policy overlay](idd-local-policy-overlay.md),
+   then resolve all instruction paths below the reported
+   `instructionsRoot`; read
+   `.github/instructions/idd-overview-core.instructions.md` there.
+4. If the operator explicitly selects an available `lite/` phase file
+   through the [lite instruction profile opt-in](#lite-instruction-profile-opt-in),
+   follow that file's declared context. Otherwise, read
+   `.github/instructions/idd-overview-appendix.instructions.md` from the
+   same `instructionsRoot` before the phase file.
+5. Read the selected phase file that matches your current state from
+   that same `instructionsRoot`.
+6. If you are editing package-specific code, also follow the matching
+   scoped instruction file under that same root.
+
+The execution loop drives Discover → Claim → Work → PR Submit → CI
+Wait → Review Triage → Review Fix → Merge → Loop through GitHub issues;
+each phase has a dedicated instruction file under the active
+`instructionsRoot`'s `.github/instructions/` directory.
+
+Instruction-file and section references in this guide resolve against
+the active `instructionsRoot`. Bare `idd-*.instructions.md` references
+are shorthand for `.github/instructions/idd-*.instructions.md`, and
+`lite/...` references are shorthand for
+`.github/instructions/lite/...`; explicit `.github/instructions/...`
+paths are complete relative paths beneath `instructionsRoot`, not
+repository-relative paths. Do not assume that the repository-local
+copy is the active instruction tree.
 
 ## Entry points and auto-load expectations
 
 | Agent / surface         | Read first                        | Automatically available IDD context                                                                                                                                                                                                                   | Open manually                                                                                                                                                                                                                       |
 | ----------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub Copilot surfaces | `.github/copilot-instructions.md` | `.github/instructions/idd-overview-core.instructions.md` for execution surfaces; package-scoped `.instructions.md` files in VS Code Copilot when editing matching paths                                                                               | The routed phase file when the current step changes                                                                                                                                                                                 |
-| Codex CLI               | `AGENTS.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| OpenCode                | `AGENTS.md`                       | `AGENTS.md` itself — OpenCode's native rules mechanism auto-loads it; none from `.github/instructions/`                                                                                                                                               | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| Grok Build              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (same contract; Grok Build loads every matching filename, unlike OpenCode's first-match); none from `.github/instructions/`                                                                               | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see [B1's harness-native worktree tool caveat](../.github/instructions/idd-work.instructions.md#worktree-creation)                              |
-| Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
-| Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see [B1's harness-native worktree tool caveat](../.github/instructions/idd-work.instructions.md#worktree-creation) before using `EnterWorktree` |
-| Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md` and the routed phase file                                                                                                                                                  |
+| GitHub Copilot surfaces | `.github/copilot-instructions.md` | Repository-local Copilot guidance; VS Code also loads matching package-scoped `.instructions.md` files. These local files are active IDD guidance only when `instructionsRoot` points to this checkout. | Run activation and open the overview and routed phase files beneath the reported `instructionsRoot`; follow its scoped file when editing matching package paths. |
+| Codex CLI               | `AGENTS.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| OpenCode                | `AGENTS.md`                       | `AGENTS.md` itself — OpenCode's native rules mechanism auto-loads it; none from `.github/instructions/`                                                                                                                                               | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| Grok Build              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (same contract; Grok Build loads every matching filename, unlike OpenCode's first-match); none from `.github/instructions/`                                                                               | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`). |
+| Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+| Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file; see B1's harness-native worktree tool caveat (`idd-work.instructions.md#worktree-creation`) before using `EnterWorktree`. |
+| Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | Beneath the reported `instructionsRoot`, open `.github/instructions/idd-overview-core.instructions.md` and the routed phase file. |
+
+The "Open manually" column abbreviates steps 3–5 above: standard-tier
+phase files are preceded by the overview appendix. Select an available
+lite phase file only through the explicit operator/manual route in the
+lite-profile guidance below, then follow that file's declared context.
 
 When the `issue-authoring` or `idd-spec-audit` companion bundle is
 installed under `.claude/skills/` in a target repository, OpenCode,
@@ -310,13 +376,15 @@ against that schema (for example with `idd-doctor` or an equivalent
 schema check), adding `instructionProfile` today fails that
 validation outright, because the schema's root object rejects unknown
 properties — it is not merely inert. Until the schema follow-up
-lands, point a lite-tier session at the right files with an explicit
-operator instruction, or have it open the phase files below manually.
+lands, point a lite-tier session at the right files under the reported
+`instructionsRoot` with an explicit operator instruction, or have it
+open the phase files below manually under that same root.
 
 **Phase → lite file mapping** — the "Lite file" column names the path
-a shipped file would use, not a guarantee that your repository has
-one: check your own `.github/instructions/lite/` directory before
-trusting this table to stay current. A template import may already
+a shipped file would use, not a guarantee that the active instruction
+tree has one: check `.github/instructions/lite/` under the reported
+`instructionsRoot` before trusting this table to stay current. A
+template import may already
 include some or all of these files (the upstream IDD repository
 dogfoods its own lite-execution-profile roadmap and this table
 mirrors its current state), or none, depending on when you imported
@@ -352,11 +420,14 @@ instead — `lite/idd-ci-lite.instructions.md` and
 references one hop away (content principle 3), rather than restating
 every load-bearing rule from the full-size file inline, which is
 content principle 1's default for a lite file with no in-scope
-sibling to reference. The
-advisory-wait lite sibling covers only the **E14-caller subset**: F2's
-prose fallback and F3's merge-time call site stay excluded, matching
-the split-by-caller scoping for this file recorded in the upstream IDD
-repository's lite-profile roadmap/design note
+sibling to reference. The full advisory-wait protocol serves
+D4/E14/F2/F3. Its lite sibling
+covers E1 Step 2's precondition and E14; lite D4 calls the
+profile-selected helper directly and follows its D4-specific routing in
+`lite/idd-pr-submit-lite.instructions.md`. F2's prose fallback and
+F3's merge-time call site stay excluded from the lite protocol,
+matching the split-by-caller scoping for this file recorded in the
+upstream IDD repository's lite-profile roadmap/design note
 (`docs/weak-model-lite-profile-design.md`, "Phase scoping").
 
 **Explicit fallback.** Every phase without a row above falls back to
@@ -384,7 +455,7 @@ session would.
 | `.github/instructions/idd-work.instructions.md`              | B1-B3 + C1-C6: create worktree, plan, implement, and self-review                                                                                                                                |
 | `.github/instructions/idd-pr-submit.instructions.md`         | D1-D4: rebase, validate, push, open PR, and wait for CI                                                                                                                                         |
 | `.github/instructions/idd-ci.instructions.md`                | D4/E15 helper: shared CI polling helper used by later phases                                                                                                                                    |
-| `.github/instructions/idd-advisory-wait.instructions.md`     | AW1-AW5 helper: shared Copilot advisory-wait protocol (E14, F2, F3)                                                                                                                             |
+| `.github/instructions/idd-advisory-wait.instructions.md`     | AW1-AW5 helper: shared Copilot advisory-wait protocol (D4, E14, F2, F3)                                                                                                                        |
 | `.github/instructions/idd-review-snapshot.instructions.md`   | E1–E3: fetch activity snapshot, run critique, check if ReviewItems_snapshot is empty                                                                                                            |
 | `.github/instructions/idd-review-triage.instructions.md`     | E4–E8: classify items, score, record dispositions, and run E-phase branch-sync check before F-phase                                                                                             |
 | `.github/instructions/idd-review-fix.instructions.md`        | E9-E15: fix accepted review items and push follow-up commits (merge-from-`{development-branch}`, not rebase)                                                                                    |
@@ -636,7 +707,7 @@ including one lacking that specific integration.
 A sibling entry path exists for a signal whose _root cause_ lives in a
 different repository (the `idd-skill` distribution itself) rather than
 in this one: see
-[Upstream-candidate escalation](../.github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation)
+Upstream-candidate escalation (`idd-overview-appendix.instructions.md#upstream-candidate-escalation`)
 in the reference appendix for the qualifying criteria and the local
 marker/label convention it produces.
 
@@ -761,7 +832,7 @@ before Check 7 ever sees it. The next
 ordinary Discover pass then
 picks the issue up normally -- grooming itself never claims or works
 the issue (see
-[Mutation Policy and Coordination Rule](../.github/instructions/idd-suitability.instructions.md#mutation-policy-and-coordination-rule)).
+Mutation Policy and Coordination Rule (`idd-suitability.instructions.md#mutation-policy-and-coordination-rule`)).
 
 **Hold when a recorded resolution proves infeasible.** The feasibility
 check above reduces the risk of drafting an infeasible option, but does
@@ -917,12 +988,12 @@ section names.
 
 This boundary covers same-session continuation and orchestrator
 fan-out delegation, which already carries the active claim verbatim to
-the next worker (see [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation)).
+the next worker (see Orchestrator delegation (`idd-claim.instructions.md#orchestrator-delegation`)).
 It does not by itself authorize a genuine cross-session handoff: the
 claim stays active and owned until released, so an unrelated session
 that simply shows up hits `idd-resume.instructions.md`'s
 non-owned-active-claim stop path. A deliberate operator-driven handoff
-at this boundary uses [Operator-present release](../.github/instructions/idd-resume.instructions.md#operator-present-release)
+at this boundary uses Operator-present release (`idd-resume.instructions.md#operator-present-release`)
 instead of a new mechanism.
 
 Short sessions need cheap ramp-up, which the "facts live in docs and
@@ -1006,12 +1077,21 @@ one desync token reused across the run) is also cheaper to keep in one
 orchestrating session than to reconstruct per invocation of a stateless
 external scheduler.
 
+Before dispatching a worker, check the selected `instructionsRoot` for
+`claim-orchestrator.instructions.md` whenever its
+`idd-claim.instructions.md` requires that companion. If it is absent,
+do not dispatch; continue the claimed issue in the current session or
+stop and report the missing companion. Do not switch instruction roots
+manually. Fan-out can resume only after a new activation selects a root
+that contains the required file. The repository-specific omission is
+recorded in the [local policy overlay](idd-local-policy-overlay.md).
+
 Running this variant safely requires:
 
 - **A non-context-inheriting delegation mechanism for the full
   B-through-F4 worker role, whenever the calling tool offers one — a
   strong preference, not merely a suggestion, per
-  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).**
+  Orchestrator delegation (`idd-claim.instructions.md#orchestrator-delegation`).**
   A context-inheriting worker (one that receives the orchestrator's
   complete conversation, such as Claude Code's `fork` subagent) can let
   the orchestrator's own recent framing compete with, and sometimes
@@ -1024,7 +1104,7 @@ Running this variant safely requires:
   context-inheriting mechanism is a fallback only for when no
   non-context-inheriting alternative exists, and even careful brief
   wording (the explicit role-statement text in
-  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation))
+  Orchestrator delegation (`idd-claim.instructions.md#orchestrator-delegation`))
   does not reliably close its residual role-misread risk — a
   documented known limitation.
 - **A small concurrency cap**, sized against CI-minute cost,
@@ -1057,7 +1137,7 @@ Running this variant safely requires:
 - **A delegation brief that restates the background-wait topology
   warning and the worker's exit boundary.** Each worker's brief must
   carry the
-  [wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+  wake-up discipline (`idd-ci.instructions.md#wake-up-discipline`)
   topology-safety condition, so a worker never assumes an unconfirmed
   background wait resumes its own turn: the worker must wait
   synchronously or with a confirmed topology-safe wake for any
@@ -1098,7 +1178,7 @@ Running this variant safely requires:
   delegation as a second activation. Before each mutation, the worker
   recomputes the nonce winner and confirms it still matches the carried
   value, the same safety check a self-posting session performs. See
-  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).
+  Orchestrator delegation (`idd-claim.instructions.md#orchestrator-delegation`).
 - **Serialized worktree/clone lifecycle operations when workers share
   one clone.** Concurrent `git fetch` / `git worktree add` / `git
   worktree remove` / local `{development-branch}` updates from the
@@ -1220,7 +1300,7 @@ widening it to a broader mode this session never selected.
   cadence the first bullet rules out. Wait for the helper's own
   process exit before parsing its output — never a mid-run stdout
   read — per
-  [A2's helper read timing note](../.github/instructions/idd-discover.instructions.md#a2--enumerate-sub-issues).
+  A2's helper read timing note (`idd-discover.instructions.md#a2--enumerate-sub-issues`).
 - **On a caller-side tool timeout** during the Discover invocation —
   the orchestrator's own tool-invocation wrapper (for example a
   bounded Bash-tool or subprocess timeout) elapsing while the helper
@@ -1343,6 +1423,12 @@ However, it also sets `excludeAgent: "code-review"` so Copilot code
 review does not ingest the full operational workflow as reviewer-side
 context.
 
+GitHub Copilot Code Review acts as the advisory reviewer under the
+`copilot-advisory` profile, alongside the existing CodeRabbit
+configuration. The lightweight repository-wide
+`.github/copilot-instructions.md` remains available as reviewer-side
+project guidance.
+
 This is an intentional middle path between the evaluated alternatives:
 keeping review coupled to the full overview, narrowing `applyTo` and
 risking execution-agent discoverability, or splitting a separate
@@ -1450,7 +1536,7 @@ proof.
 
 A waiver posted before its own effectiveness precondition is met is
 valid but inert until then; see
-[`idd-pr-submit.instructions.md`'s D4](../.github/instructions/idd-pr-submit.instructions.md)
+`idd-pr-submit.instructions.md`'s D4 (`idd-pr-submit.instructions.md`)
 for the mechanical check.
 
 ## Optional helper scripts
@@ -1613,7 +1699,7 @@ Code session:
 
 1. Checks, before launching, that it can arm a wake-up with one of the
    mechanisms the
-   [wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+   wake-up discipline (`idd-ci.instructions.md#wake-up-discipline`)
    section names (that section also notes that a bare `sleep` may be
    refused) and that `TaskStop` is available (a tool listed only as
    deferred counts once it has been loaded, which must happen before the

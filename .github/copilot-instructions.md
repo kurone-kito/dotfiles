@@ -494,32 +494,28 @@ CI runs both suites on pushes to `master` and on pull requests
 
 ## IDD Workflow
 
-This project uses Issue-Driven Development (IDD) with parallel AI
-agents. Start with [`docs/idd-workflow.md`](../docs/idd-workflow.md)
-for the cross-agent entry path and phase routing.
+Before starting IDD work, invoke the user-global activation through the
+explicit user-local launcher for the current shell from the repository
+root, then read its JSON output. Do not run bare `idd-activation` from
+the checkout:
 
-Before starting IDD work, open
-[`.github/instructions/idd-overview-core.instructions.md`](./instructions/idd-overview-core.instructions.md).
-Open the routed phase file manually when the current step changes.
-The execution loop drives Discover → Claim → Work → PR Submit → CI
-Wait → Review Triage → Review Fix → Merge → Loop through GitHub
-Issues; each phase has its own dedicated instruction file under
-`.github/instructions/`.
+- POSIX shell (including WSL): `~/.local/bin/idd-activation`
+- Windows PowerShell: `& "$HOME\.local\bin\idd-activation.cmd"`
+- Windows Command Prompt: `"%USERPROFILE%\.local\bin\idd-activation.cmd"`
 
-For the confirmed policy matrix (merge policy, review profile,
-review-thread resolution, critique-loop, claim timing, CI wait,
-credential scope, helper runtime, issue-author approval gate,
-maintainer-approval-actors policy, and the issue-authoring companion
-status), see [`docs/idd-policy.md`](../docs/idd-policy.md). The
-machine-readable mirror lives at
-[`.github/idd/config.json`](./idd/config.json); keep both in sync.
-
-GitHub Copilot Code Review acts as the advisory reviewer under the
-chosen `copilot-advisory` profile, alongside the existing CodeRabbit
-configuration. `excludeAgent: "code-review"` in
-`idd-overview-core.instructions.md` keeps the heavy operational workflow
-out of Copilot reviewer context; this lightweight file remains the
-primary reviewer-side reference.
+Require the launcher to exit with status 0 and parse only stdout as one
+JSON object with a boolean `active` field. Treat a nonzero exit,
+invalid JSON, or missing or invalid required fields as a failure even
+if stderr contains a JSON error envelope; stop without running IDD
+helpers or changing repository state. When `active` is `false`, do no
+IDD-specific work. When `active` is `true`, require `instructionsRoot`
+to be a non-empty string, then read the cross-agent entry path and phase
+routing in [`docs/idd-workflow.md`](../docs/idd-workflow.md) and the
+[repository-specific IDD policy overlay](../docs/idd-local-policy-overlay.md).
+Resolve instruction paths beneath `instructionsRoot`, open the overview
+there, and open each routed phase file beneath the same root when the
+current step changes. Repository-local Copilot instructions are active
+IDD guidance only when `instructionsRoot` points to this checkout.
 
 ## Guardrails
 
