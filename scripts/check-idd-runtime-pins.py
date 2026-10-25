@@ -65,7 +65,7 @@ SHA1_HEX = re.compile(r'^[0-9a-f]{40}$')
 SHA256_HEX = re.compile(r'^[0-9a-f]{64}$')
 COMMIT_TOKEN = re.compile(r'(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])')
 SPEC_PIN = re.compile(r'kurone-kito/idd-skill/tar\.gz/([0-9A-Za-z]+)')
-VERSION_PATH = re.compile(r'idd-skill/([0-9]+\.[0-9]+\.[0-9]+)/')
+VERSION_PATH = re.compile(r'idd-skill/([0-9]+\.[0-9]+\.[0-9]+)(?![0-9]|\.[0-9])')
 PS_VERSION = re.compile(r"^\$version\s*=\s*'([^']*)'\s*$", re.MULTILINE)
 
 
@@ -148,6 +148,9 @@ def load_inventory(root, problems):
   archive = upstream.get('archiveSha256')
   if not isinstance(archive, str) or not SHA256_HEX.match(archive):
     problems.add(INVENTORY, 'upstream.archiveSha256 must be a SHA-256 hex digest')
+  if upstream.get('repository') != 'kurone-kito/idd-skill':
+    problems.add(INVENTORY, 'upstream.repository must be kurone-kito/idd-skill')
+    return None
   if upstream.get('tag') != 'v' + release:
     problems.add(INVENTORY, 'upstream.tag must be v%s' % release)
     return None

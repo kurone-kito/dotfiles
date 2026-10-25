@@ -46,9 +46,26 @@ setup() {
 }
 
 # Print a sorted digest listing of every regular file under a directory, so a
-# test can prove the tree was not written to.
+# test can prove the tree was not written to. Python hashes the files, because
+# sha256sum is not installed on every host.
 tree_digest() {
-  (cd "$1" && find . -type f -print | LC_ALL=C sort | xargs sha256sum)
+  python3 -I -c '
+import hashlib, os, sys
+root = sys.argv[1]
+lines = []
+for d, _, files in os.walk(root):
+  for f in files:
+    p = os.path.join(d, f)
+    with open(p, "rb") as h:
+      lines.append("%s  %s" % (hashlib.sha256(h.read()).hexdigest(), os.path.relpath(p, root)))
+print("\n".join(sorted(lines)))
+' "$1"
+}
+
+# In-place sed without -i, because BSD and GNU sed disagree about its suffix.
+# Usage: sed_in_place EXPRESSION FILE
+sed_in_place() {
+  sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"
 }
 
 # Rewrite the first payload file name in the copied inventory, or drop a
@@ -89,7 +106,7 @@ PY
 }
 
 @test "a Windows current-pointer version naming another release is rejected" {
-  sed -i "s/^\$version = '$RELEASE'/\$version = '$OTHER_RELEASE'/" \
+  sed_in_place "s/^\$version = '$RELEASE'/\$version = '$OTHER_RELEASE'/" \
     "$SRC/home/run_after_83-link-idd-skill-xdg-data.ps1"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
@@ -101,7 +118,7 @@ PY
   for wrapper in executable_idd-activation executable_idd-activation.ps1 \
     executable_idd-effective-config executable_idd-effective-config.ps1; do
     cp "$REPO_ROOT/home/dot_local/bin/$wrapper" "$SRC/home/dot_local/bin/$wrapper"
-    sed -i "s/$COMMIT/$OTHER_COMMIT/g" "$SRC/home/dot_local/bin/$wrapper"
+    sed_in_place "s/$COMMIT/$OTHER_COMMIT/g" "$SRC/home/dot_local/bin/$wrapper"
     run python3 -I "$CHECKER" --source-root "$SRC"
     assert_failure 1
     assert_output --partial "FAIL home/dot_local/bin/$wrapper: pins idd-skill commit $OTHER_COMMIT"
@@ -110,7 +127,7 @@ PY
 }
 
 @test "a launcher that drops its package spec is rejected" {
-  sed -i 's#^exec npx .*#exec npx --yes idd-activation "$@"#' \
+  sed_in_place 's#^exec npx .*#exec npx --yes idd-activation "$@"#' \
     "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
@@ -131,7 +148,7 @@ PY
 }
 
 @test "a package spec quoted only in a comment does not satisfy the launch rule" {
-  sed -i 's#^exec npx .*#exec npx --yes idd-activation "$@"#' \
+  sed_in_place 's#^exec npx .*#exec npx --yes idd-activation "$@"#' \
     "$SRC/home/dot_local/bin/executable_idd-activation"
   printf '# https://codeload.github.com/kurone-kito/idd-skill/tar.gz/%s\n' "$COMMIT" \
     >> "$SRC/home/dot_local/bin/executable_idd-activation"
@@ -141,7 +158,7 @@ PY
 }
 
 @test "a package spec placed in an inline comment does not satisfy the launch rule" {
-  sed -i "s#^exec npx .*#exec npx --yes idd-activation \"\$@\" \# https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$COMMIT#" \
+  sed_in_place "s#^exec npx .*#exec npx --yes idd-activation \"\$@\" \# https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$COMMIT#" \
     "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
@@ -149,7 +166,7 @@ PY
 }
 
 @test "a launcher that runs another package with the spec only in a comment is rejected" {
-  sed -i "s#^exec npx .*#exec npx --yes other-package \"\$@\" \# $COMMIT#" \
+  sed_in_place "s#^exec npx .*#exec npx --yes other-package \"\$@\" \# $COMMIT#" \
     "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
@@ -183,6 +200,19 @@ PY
   assert_output --partial 'FAIL .github/idd/user-global-source.json: scope payload must name'
 }
 
+@test "an inventory that names another upstream repository is rejected" {
+  python3 -I - "$SRC/.github/idd/user-global-source.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+data = json.load(open(path, encoding='utf-8'))
+data['upstream']['repository'] = 'example/other-distribution'
+json.dump(data, open(path, 'w', encoding='utf-8'), indent=2)
+PY
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL .github/idd/user-global-source.json: upstream.repository must be kurone-kito/idd-skill'
+}
+
 @test "an inventory whose tag does not match its release is rejected" {
   python3 -I - "$SRC/.github/idd/user-global-source.json" <<'PY'
 import json, sys
@@ -210,10 +240,17 @@ PY
 }
 
 @test "a versioned harness template naming another release is rejected" {
-  sed -i "s#idd-skill/$RELEASE/#idd-skill/0.0.1/#" "$SRC/home/dot_gemini/GEMINI.md.tmpl"
+  sed_in_place "s#idd-skill/$RELEASE/#idd-skill/0.0.1/#" "$SRC/home/dot_gemini/GEMINI.md.tmpl"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
   assert_output --partial 'FAIL home/dot_gemini/GEMINI.md.tmpl: harness entry names version 0.0.1'
+}
+
+@test "a versioned harness reference without a trailing slash is still checked" {
+  printf '%s\n' 'stale idd-skill/0.0.1"' >> "$SRC/home/dot_codex/AGENTS.md.tmpl"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_codex/AGENTS.md.tmpl: harness entry names version 0.0.1'
 }
 
 @test "a symlinked ancestor of a scope root is rejected" {
@@ -231,10 +268,10 @@ PY
 }
 
 @test "the short -p and the --package= forms of the exact spec are accepted" {
-  sed -i "s#--package \"https://#-p \"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
+  sed_in_place "s#--package \"https://#-p \"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_success
-  sed -i "s#-p \"https://#--package=\"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
+  sed_in_place "s#-p \"https://#--package=\"https://#" "$SRC/home/dot_local/bin/executable_idd-activation"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_success
 }
@@ -276,7 +313,7 @@ PY
 }
 
 @test "a repository iddVersion naming another release is rejected" {
-  sed -i "s/\"iddVersion\": \"$RELEASE\"/\"iddVersion\": \"$OTHER_RELEASE\"/" "$SRC/.github/idd/config.json"
+  sed_in_place "s/\"iddVersion\": \"$RELEASE\"/\"iddVersion\": \"$OTHER_RELEASE\"/" "$SRC/.github/idd/config.json"
   run python3 -I "$CHECKER" --source-root "$SRC"
   assert_failure 1
   assert_output --partial 'FAIL .github/idd/config.json: iddVersion is'
