@@ -76,6 +76,9 @@ NPX_LAUNCH = re.compile(
   r'(?:^\s*|exec\s+|&&?\s*|\|\|?\s*|;\s*|\bthen\s+|\bdo\s+|\belse\s+|\$\(\s*)npx\s')
 COMMENT_LINE = re.compile(r'^\s*(#|REM\b|::|//)', re.IGNORECASE)
 INLINE_COMMENT = re.compile(r'\s#')
+# Where one npx invocation ends: a shell or PowerShell separator or keyword.
+INVOCATION_END = re.compile(
+  r'\s*(?:;|&|\|\|?|\)|`|\bthen\b|\bdo\b|\bdone\b|\bfi\b|\belse\b)')
 
 
 class Problems:
@@ -333,10 +336,17 @@ def check_wrappers(root, commit, spec, problems):
       if COMMENT_LINE.match(line):
         continue
       code = INLINE_COMMENT.split(line, 1)[0]
-      if not NPX_LAUNCH.search(code) or package_arg.search(code):
-        continue
-      problems.add(rel, 'npx launch does not pass the exact package spec %s to --package' % spec)
-      break
+      # Each launch must carry the spec in its own invocation, so a later
+      # pinned launch on the same line cannot vouch for an earlier one.
+      unpinned = False
+      for launch in NPX_LAUNCH.finditer(code):
+        invocation = INVOCATION_END.split(code[launch.end():], 1)[0]
+        if not package_arg.search(invocation):
+          unpinned = True
+          break
+      if unpinned:
+        problems.add(rel, 'npx launch does not pass the exact package spec %s to --package' % spec)
+        break
   return count
 
 

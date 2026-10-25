@@ -305,6 +305,14 @@ PY
   refute_output --partial 'home/dot_claude/skills/linked-dir/issue-authoring'
 }
 
+@test "each npx launch on a line must carry the spec, not only a later one" {
+  sed_in_place "s#^exec npx .*#exec npx --yes other-package \"\$@\"; npx --yes --package \"https://codeload.github.com/kurone-kito/idd-skill/tar.gz/$COMMIT\" idd-activation \"\$@\"#" \
+    "$SRC/home/dot_local/bin/executable_idd-activation"
+  run python3 -I "$CHECKER" --source-root "$SRC"
+  assert_failure 1
+  assert_output --partial 'FAIL home/dot_local/bin/executable_idd-activation: npx launch does not pass the exact package spec'
+}
+
 @test "a repository config that is not a JSON object is rejected" {
   printf '[]\n' > "$SRC/.github/idd/config.json"
   run python3 -I "$CHECKER" --source-root "$SRC"
