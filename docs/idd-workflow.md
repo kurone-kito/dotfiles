@@ -420,11 +420,14 @@ instead — `lite/idd-ci-lite.instructions.md` and
 references one hop away (content principle 3), rather than restating
 every load-bearing rule from the full-size file inline, which is
 content principle 1's default for a lite file with no in-scope
-sibling to reference. The
-advisory-wait lite sibling covers only the **E14-caller subset**: F2's
-prose fallback and F3's merge-time call site stay excluded, matching
-the split-by-caller scoping for this file recorded in the upstream IDD
-repository's lite-profile roadmap/design note
+sibling to reference. The full advisory-wait protocol serves
+D4/E14/F2/F3. Its lite sibling
+covers E1 Step 2's precondition and E14; lite D4 calls the
+profile-selected helper directly and follows its D4-specific routing in
+`lite/idd-pr-submit-lite.instructions.md`. F2's prose fallback and
+F3's merge-time call site stay excluded from the lite protocol,
+matching the split-by-caller scoping for this file recorded in the
+upstream IDD repository's lite-profile roadmap/design note
 (`docs/weak-model-lite-profile-design.md`, "Phase scoping").
 
 **Explicit fallback.** Every phase without a row above falls back to
