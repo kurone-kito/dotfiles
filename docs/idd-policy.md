@@ -1322,14 +1322,17 @@ deltas are accounted for by the live slugs in the table (local-policy
 substitutions such as `master-branch` / `claim-timing`,
 installed-bundle routing, onboarding-doc-trim pin links, vendored
 header, helper-profile facade notes, and the six still-ahead
-corrections filed upstream this round). One unmarked local hunk
-remains in Track B's
-[`.github/instructions/idd-claim.instructions.md`](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md)
-(PR #456): the forced-handoff adopt-verbatim path skips posting
-`claimed-by` (local lines 287-293). That delta is outside the 17
-registered slugs. This track records it here and does **not** add a
-register row or point-of-use marker (that would expand this track's
-candidate-file list). A later instruction-resync can mark it.
+corrections filed upstream this round). Pre-removal evidence: one unmarked
+local hunk remained in Track B's `.github/instructions/idd-claim.instructions.md`
+(PR #456), at lines 287-293 of the local copy in master commit `8681c44`.
+The forced-handoff adopt-verbatim path skipped posting `claimed-by` there.
+Issue #680 removed that local copy. Its vendored counterpart is
+[`idd-claim.instructions.md`](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md),
+where the line numbers above do not apply; compare against `8681c44` for the
+archived text. That delta is outside the 17 registered slugs. This track
+records it here and does **not** add a register row or point-of-use marker
+(that would expand this track's candidate-file list). A later instruction
+resync can mark it.
 
 **Retired this round (upstream equivalence at `v0.12.0`)**:
 
