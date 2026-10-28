@@ -74,7 +74,7 @@ jobs:
       TRACKING_ISSUE_TITLE: 'ci: master ruleset required_status_checks drift detected'
     steps:
       - name: Check out repository
-        # SHA-pinned, not the mutable @v7 tag idd-advisory-convergence.yml
+        # SHA-pinned, not the mutable @v7 tag dotfiles-idd-advisory-convergence.yml
         # (read-only permissions) safely uses: this job holds
         # `issues: write`, the same risk tier as post-merge-cleanup.yml's
         # own write-capable checkout, which pins the same SHA below for
@@ -85,7 +85,7 @@ jobs:
         with:
           # Trusted default-branch checkout, not whatever ref triggered
           # the run, for any trigger type including workflow_dispatch --
-          # mirrors idd-advisory-convergence.yml's rationale: this job
+          # mirrors dotfiles-idd-advisory-convergence.yml's rationale: this job
           # runs scripts/*.sh with an `issues: write` token, so it must
           # never execute a branch's own copy of those scripts.
           # persist-credentials: false additionally keeps that token out

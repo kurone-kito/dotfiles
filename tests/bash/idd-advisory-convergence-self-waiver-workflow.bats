@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Structural assertions against
-# .github/workflows/idd-advisory-convergence.yml's
+# .github/workflows/dotfiles-idd-advisory-convergence.yml's
 # idd-advisory-convergence-self-waiver job and its trust-boundary wiring
 # with the idd-advisory-convergence verdict job (#424,
 # kurone-kito/idd-skill#2657). Both jobs are pull-request-family
@@ -32,7 +32,7 @@ setup() {
 
   command -v yq > /dev/null 2>&1 || skip "yq not available"
 
-  WORKFLOW="$BATS_TEST_DIRNAME/../../.github/workflows/idd-advisory-convergence.yml"
+  WORKFLOW="$BATS_TEST_DIRNAME/../../.github/workflows/dotfiles-idd-advisory-convergence.yml"
 }
 
 checkout_step() {
@@ -120,7 +120,7 @@ checkout_step() {
   run yq '.jobs["idd-advisory-convergence-self-waiver"].steps[] | select(.name == "Detect self-referential trigger-file allowlist touch") | .run' "$WORKFLOW"
   assert_success
   assert_output --partial '".github/idd/config.json"'
-  assert_output --partial '".github/workflows/idd-advisory-convergence.yml"'
+  assert_output --partial '".github/workflows/dotfiles-idd-advisory-convergence.yml"'
   assert_output --partial '".github/workflows/idd-advisory-convergence-comment.yml"'
   # POSIX [[:space:]], not GNU grep's `\s` extension: this suite is
   # documented to run on macOS too, where BSD grep does not interpret

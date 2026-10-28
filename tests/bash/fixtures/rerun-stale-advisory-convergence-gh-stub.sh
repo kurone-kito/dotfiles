@@ -39,7 +39,7 @@
 #     pre-/post-rerun attempt poll) share one stub response shape:
 #       - `path`: `$GH_STUB_WORKFLOW_PATH` when set, or this
 #         repository's real
-#         `.github/workflows/idd-advisory-convergence.yml` otherwise --
+#         `.github/workflows/dotfiles-idd-advisory-convergence.yml` otherwise --
 #         so every existing test that never sets this variable
 #         exercises the genuine-workflow path by default, and a test
 #         can override it to simulate a spoofed same-named run from a
@@ -177,7 +177,7 @@ if [ "${1:-}" = 'api' ]; then
       pull_requests='[]'
     fi
     printf '{"path": "%s", "event": "%s", "pull_requests": %s, "run_attempt": %d, "status": "%s", "conclusion": %s}\n' \
-      "${GH_STUB_WORKFLOW_PATH:-.github/workflows/idd-advisory-convergence.yml}" \
+      "${GH_STUB_WORKFLOW_PATH:-.github/workflows/dotfiles-idd-advisory-convergence.yml}" \
       "${GH_STUB_WORKFLOW_EVENT:-pull_request_target}" \
       "$pull_requests" "$run_attempt" "$status" "$conclusion"
     exit 0

@@ -33,8 +33,7 @@ assert expected_pin == expected_package_spec, (
 )
 
 expected_counts = {
-    ".github/workflows/post-merge-cleanup.yml": 1,
-    ".github/workflows/idd-advisory-convergence.yml": 2,
+    ".github/workflows/dotfiles-idd-advisory-convergence.yml": 2,
     ".github/workflows/idd-advisory-convergence-comment.yml": 3,
 }
 package_pattern = re.compile(
@@ -291,8 +290,8 @@ for relative_path, expected_count in expected_counts.items():
         )
     total += len(invocations)
 
-assert total == 6, f"expected six active helper invocations, found {total}"
-with open(os.path.join(root, ".github/workflows/idd-advisory-convergence.yml"), encoding="utf-8") as f:
+assert total == 5, f"expected five active helper invocations, found {total}"
+with open(os.path.join(root, ".github/workflows/dotfiles-idd-advisory-convergence.yml"), encoding="utf-8") as f:
     workflow = f.read()
 expected_timeouts = {
     "idd-advisory-convergence": 14,

@@ -1,5 +1,5 @@
 name: IDD advisory-convergence comment refresh
-# Non-required companion to idd-advisory-convergence.yml (upstream
+# Non-required companion to dotfiles-idd-advisory-convergence.yml (upstream
 # #2136, #2411). Human review-thread and regular-comment chatter must
 # not create or cancel the required `idd-advisory-convergence`
 # check-run, so this workflow has a different name, job id, and
@@ -46,14 +46,14 @@ name: IDD advisory-convergence comment refresh
 # actually post every marker/disposition type, since both use the
 # issues-comments API), both pre-existing; and `pull_request_review`
 # (review submissions, #424) -- moved here from
-# idd-advisory-convergence.yml's own trigger list (see that file's
+# dotfiles-idd-advisory-convergence.yml's own trigger list (see that file's
 # header for the CI-check-identity-spoofing rationale). NOT for
 # tamper-resistance: this workflow is just as PR-editable as the
 # required workflow's own former trigger was (there is no
 # `pull_request_review_target` -- GitHub's `_target` variant exists only
 # for `pull_request`), so a same-repository PR can still disable or
 # alter this step. What actually stays trusted is the push-triggered
-# gate itself, via `pull_request_target` on `idd-advisory-convergence.yml`;
+# gate itself, via `pull_request_target` on `dotfiles-idd-advisory-convergence.yml`;
 # this review-refresh path is deliberately best-effort on top of that,
 # not a second trusted surface -- a tampered copy can only delay a fresh
 # green, never force one, since the gate's own verdict is still computed
@@ -127,7 +127,7 @@ name: IDD advisory-convergence comment refresh
 # to `ubuntu-latest` when unset -- this workflow has no
 # `workflow_dispatch` trigger of its own, so there is no `runner` input
 # to check first. This no longer matches the required
-# idd-advisory-convergence.yml companion's own `ubuntu-slim` fallback
+# dotfiles-idd-advisory-convergence.yml companion's own `ubuntu-slim` fallback
 # (or the `idd-template/` copy's hardcoded `ubuntu-slim`, with no
 # override at all, at v0.9.0): #424 changed this job's own fallback to
 # `ubuntu-latest` specifically, since `ubuntu-slim` is a single-CPU
@@ -138,7 +138,7 @@ name: IDD advisory-convergence comment refresh
 # matches `idd-template/`'s v0.9.0 content; this copy additionally
 # applies the same guard to "Check for newer qualifying event", which
 # neither upstream copy does -- a small, repository-added hardening
-# consistent with how the sibling `idd-advisory-convergence.yml` /
+# consistent with how the sibling `dotfiles-idd-advisory-convergence.yml` /
 # `post-merge-cleanup.yml` files already guard every `PR_NUMBER` use.
 #
 # Debounce (upstream #1381, #2023, #2638): a burst of IDD-originated
@@ -189,7 +189,7 @@ defaults:
     # ubuntu-latest default (#424) as on the sibling files' ubuntu-slim
     # one below -- bash is already the default shell on any Ubuntu-based
     # GitHub-hosted runner, regardless of variant; imported for parity
-    # with the sibling idd-advisory-convergence.yml / post-merge-cleanup.yml
+    # with the sibling dotfiles-idd-advisory-convergence.yml / post-merge-cleanup.yml
     # files, both still ubuntu-slim by default.
     shell: bash
 jobs:
@@ -232,12 +232,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Trusted default-branch checkout, not the PR head -- same
-          # rationale as idd-advisory-convergence.yml's own checkout
+          # rationale as dotfiles-idd-advisory-convergence.yml's own checkout
           # step: the classification/debounce/rerun logic and its
           # config (.github/idd/config.json) must be the trusted copy,
           # not the PR's own. Pinned to a commit SHA rather than this
           # repository's usual floating `@v7` tag (see
-          # idd-advisory-convergence.yml) because this workflow, unlike
+          # dotfiles-idd-advisory-convergence.yml) because this workflow, unlike
           # that read-only required check, carries `actions: write` --
           # a genuinely more privileged, supply-chain-sensitive
           # permission -- so it gets the same pinned-SHA hardening
@@ -255,7 +255,7 @@ jobs:
       # preinstalled Node is already known-good, so they only assert
       # the version rather than provisioning one). This repository
       # instead provisions the exact `.nvmrc`-pinned version via
-      # `setup-node`, matching the sibling `idd-advisory-convergence.yml`
+      # `setup-node`, matching the sibling `dotfiles-idd-advisory-convergence.yml`
       # / `post-merge-cleanup.yml` files' own convention (this file also
       # needs `npx` itself, which the plain assertion does not provide).
       #
