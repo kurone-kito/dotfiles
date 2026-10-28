@@ -54,7 +54,7 @@
 #   1. Resolves the candidate's own workflow run
 #      (`gh api repos/{owner}/{repo}/actions/runs/{run-id}`) and
 #      requires its `path` equal
-#      `.github/workflows/idd-advisory-convergence.yml` exactly, its
+#      `.github/workflows/dotfiles-idd-advisory-convergence.yml` exactly, its
 #      `event` equal `pull_request_target`, *and* its `pull_requests[]`
 #      array include this exact PR number. The GitHub Actions app id
 #      alone is not proof of origin: every Actions-produced check run in
@@ -64,7 +64,7 @@
 #      literally named `idd-advisory-convergence` that fails and prints
 #      the exact stale-rollup reason string naming the PR's current
 #      head. The path check alone is not enough either: this
-#      repository's own idd-advisory-convergence.yml registered
+#      repository's own dotfiles-idd-advisory-convergence.yml registered
 #      `pull_request` alongside `pull_request_target` during a
 #      migration window that #501 closed, and `pull_request` resolves the
 #      workflow *definition* from the PR branch itself, so a
@@ -231,7 +231,7 @@ GITHUB_ACTIONS_APP_ID=15368
 # idd-advisory-convergence check runs from -- see
 # is_advisory_convergence_workflow_run below for why the app id alone
 # does not prove this.
-ADVISORY_CONVERGENCE_WORKFLOW_PATH='.github/workflows/idd-advisory-convergence.yml'
+ADVISORY_CONVERGENCE_WORKFLOW_PATH='.github/workflows/dotfiles-idd-advisory-convergence.yml'
 
 MAX_POLLS="${RERUN_STALE_ADVISORY_MAX_POLLS:-30}"
 POLL_INTERVAL="${RERUN_STALE_ADVISORY_POLL_INTERVAL:-5}"
@@ -397,7 +397,7 @@ current_head() {
 # stale-rollup reason string naming the PR's current head, and app-id
 # filtering alone would accept it as genuine. The workflow-path check
 # alone is *also* not sufficient: this repository's own
-# idd-advisory-convergence.yml registered `pull_request` alongside
+# dotfiles-idd-advisory-convergence.yml registered `pull_request` alongside
 # `pull_request_target` during a migration window that #501 closed (see that
 # file's own header comment), and `pull_request` resolves the workflow
 # *definition* from the PR branch itself, so a same-repository PR could

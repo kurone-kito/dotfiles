@@ -461,8 +461,13 @@ the guard for a single intentional commit or push with `--no-verify`.
 
 ## Post-Merge Cleanup Automation
 
-[`.github/workflows/post-merge-cleanup.yml`](../.github/workflows/post-merge-cleanup.yml)
-(#223) runs the F4 comment-cleanup step server-side on every merged PR,
+Removed by #681: `.github/workflows/post-merge-cleanup.yml` no longer exists,
+because the global-only profile of idd-skill v0.17.0 requires it to be absent
+from the trusted base and the PR head. The description below records the
+pre-removal behavior. The local F4 path now performs the cleanup.
+
+The removed `post-merge-cleanup.yml` (#223) ran the F4 comment-cleanup step
+server-side on every merged PR,
 via a `pull_request_target: closed` trigger filtered to
 `merged == true` (or an explicit `workflow_dispatch`, additionally
 re-verified against `gh pr view` before it runs `--apply`, since the
@@ -681,7 +686,7 @@ unchanged at `v0.6.0`:
   [`docs/idd-workflow.md`](./idd-workflow.md#lite-instruction-profile-opt-in)
   and [`docs/customization.md`](./customization.md)).
 - **`CI_RUNNER_LABEL`**: a repository Actions _variable_ consumed by
-  `idd-advisory-convergence.yml`, not a `.github/idd/config.json` /
+  `dotfiles-idd-advisory-convergence.yml`, not a `.github/idd/config.json` /
   `policy.schema.json` key. No entry needed in this schema-focused
   section; its actual adoption is deferred to #237 (the
   workflow-reconciliation track), which owns workflow YAML and

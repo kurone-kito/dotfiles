@@ -33,10 +33,18 @@ assert expected_pin == expected_package_spec, (
 )
 
 expected_counts = {
-    ".github/workflows/post-merge-cleanup.yml": 1,
-    ".github/workflows/idd-advisory-convergence.yml": 2,
+    ".github/workflows/dotfiles-idd-advisory-convergence.yml": 2,
     ".github/workflows/idd-advisory-convergence-comment.yml": 3,
 }
+# #681: the global-only profile needs both forbidden paths absent from the
+# trusted base and the PR head, so a restored file must fail this suite.
+for forbidden_path in (
+    ".github/workflows/idd-advisory-convergence.yml",
+    ".github/workflows/post-merge-cleanup.yml",
+):
+    assert not os.path.exists(os.path.join(root, forbidden_path)), (
+        f"{forbidden_path} must stay absent for the global-only profile"
+    )
 package_pattern = re.compile(
     r"(?:^|\s)(?:--package|-p)(?:\s+|=)"
     r"(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"
@@ -291,8 +299,8 @@ for relative_path, expected_count in expected_counts.items():
         )
     total += len(invocations)
 
-assert total == 6, f"expected six active helper invocations, found {total}"
-with open(os.path.join(root, ".github/workflows/idd-advisory-convergence.yml"), encoding="utf-8") as f:
+assert total == 5, f"expected five active helper invocations, found {total}"
+with open(os.path.join(root, ".github/workflows/dotfiles-idd-advisory-convergence.yml"), encoding="utf-8") as f:
     workflow = f.read()
 expected_timeouts = {
     "idd-advisory-convergence": 14,

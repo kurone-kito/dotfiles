@@ -24,7 +24,7 @@ name: IDD advisory-convergence gate
 # from the PR branch, not the script it runs. `pull_request` stayed
 # registered only while `pull_request_target` could not yet fire (it
 # cannot fire on the PR that first adds the trigger). That condition is
-# met: `gh run list --workflow=idd-advisory-convergence.yml --event
+# met: `gh run list --workflow=dotfiles-idd-advisory-convergence.yml --event
 # pull_request_target` includes successful runs 36166762668 and
 # 36169569391 (2026-09-25). #501 drops `pull_request`, so a
 # same-repository PR can no longer satisfy this required check from a
@@ -86,7 +86,7 @@ name: IDD advisory-convergence gate
 # is a documented, previously-investigated upstream incident:
 # kurone-kito/idd-skill#1381 (empirically reproduced on that
 # repository's own PR #1383; see that repository's identically-pinned
-# idd-advisory-convergence.yml header for the full writeup) -- ported
+# dotfiles-idd-advisory-convergence.yml header for the full writeup) -- ported
 # here after #226 hit the same friction without it.
 #
 # `cancel-in-progress: true` does not fully close the gap: a stale
@@ -94,7 +94,7 @@ name: IDD advisory-convergence gate
 # head SHA in the required-check rollup display. When that happens,
 # recover with `gh run rerun <run-id>` on the run(s) for the current
 # head SHA -- find them via `gh run list
-# --workflow=idd-advisory-convergence.yml --limit 50 --json
+# --workflow=dotfiles-idd-advisory-convergence.yml --limit 50 --json
 # databaseId,headSha,conclusion` filtered to that exact SHA (raise
 # `--limit` past its default of 20 on a busy PR). If more than one run
 # matches and it is unclear which one the rollup is stuck on, rerun all
@@ -390,7 +390,7 @@ jobs:
           # a rename away from an allowlisted path.
           ALLOWLIST=(
             ".github/idd/config.json"
-            ".github/workflows/idd-advisory-convergence.yml"
+            ".github/workflows/dotfiles-idd-advisory-convergence.yml"
             ".github/workflows/idd-advisory-convergence-comment.yml"
           )
           # kurone-kito/idd-skill#3104: this raw `gh api` call always

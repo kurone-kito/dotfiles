@@ -221,6 +221,28 @@ the vendored payload, not with a local file. Re-evaluate a retained row
 only after a new source comparison and an explicit repository policy
 decision.
 
+## Known residual: self-referential allowlist (#681)
+
+The required advisory producer moved from
+`.github/workflows/idd-advisory-convergence.yml` to
+`.github/workflows/dotfiles-idd-advisory-convergence.yml`, which the
+global-only profile needs. The pinned v0.17.0 helper still names the former
+path in two places, and a change to the renamed producer has both gaps:
+
+- Trigger-file list. `resolveSelfReferentialTriggerFiles` in the
+  `advisory-convergence` module lists the former path and not the new one.
+  The helper's stale-waiver computation therefore does not treat a change to
+  the new producer file as self-referential here. The local self-waiver job's
+  own allowlist does name the new path.
+- Run-path expectation. `ADVISORY_CONVERGENCE_WORKFLOW_PATH` in the same module
+  is the former path, and the auto-waiver validation compares a marker run's
+  workflow path with it. The renamed producer's runs therefore fail that
+  comparison closed. A self-referential auto-waiver cannot be validated in this
+  repository, so such a PR stays blocked until a maintainer resolves it.
+
+The gaps are upstream-owned, and this repository does not edit the vendored
+payload. Revisit both when a later idd-skill release updates the helper.
+
 ## Project commands
 
 These repository-owned command rows moved here from the removed local
