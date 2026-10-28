@@ -138,8 +138,8 @@ name: IDD advisory-convergence comment refresh
 # matches `idd-template/`'s v0.9.0 content; this copy additionally
 # applies the same guard to "Check for newer qualifying event", which
 # neither upstream copy does -- a small, repository-added hardening
-# consistent with how the sibling `dotfiles-idd-advisory-convergence.yml` /
-# `post-merge-cleanup.yml` files already guard every `PR_NUMBER` use.
+# consistent with how the sibling `dotfiles-idd-advisory-convergence.yml`
+# file already guards every `PR_NUMBER` use.
 #
 # Debounce (upstream #1381, #2023, #2638): a burst of IDD-originated
 # comments fired `idd-rerun-advisory-convergence --apply` once per
