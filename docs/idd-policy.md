@@ -372,7 +372,8 @@ the maintainer.
 
 ## Issue-Authoring Companion
 
-- **Status**: `installed` at `.claude/skills/issue-authoring/`.
+- **Status**: `vendored` at `home/dot_claude/skills/issue-authoring/`,
+  deployed to a user's `.claude/skills/` by chezmoi.
 - **`issueAuthoring.maxClarificationRounds`**: `3` (distributed
   default).
 
@@ -383,7 +384,8 @@ for the readiness buckets, output chooser, and approval boundary.
 
 ## Spec-Audit Companion
 
-- **Status**: `installed` at `.claude/skills/idd-spec-audit/`, adopted
+- **Status**: `vendored` at `home/dot_claude/skills/idd-spec-audit/`,
+  deployed to a user's `.claude/skills/` by chezmoi, adopted
   during the `v0.11.0` re-import (roadmap #419, track #423). Upstream
   graduated this companion the same way `issue-authoring` was
   distributed, in the `v0.10.0` round.
