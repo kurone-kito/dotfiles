@@ -420,8 +420,11 @@ the fact rather than narrowing the pre-write window. See
 for the literal re-check command both the agent F4 step and
 `post-merge-cleanup.yml` run.
 
-**In-flight cleanup-run wait (#2846).** Before the agent's F4 step
-decides whether to post its own evidence comment (the
+**In-flight cleanup-run wait (#2846).** On the global-only profile, where
+`post-merge-cleanup.yml` no longer exists (#681), there is no server-side
+run to wait for: skip this wait and use the local F4 path alone. On any
+other profile, before the agent's F4 step decides whether to post its own
+evidence comment (the
 duplicate-success-record rule above — only the agent can run this
 wait; the workflow itself cannot block on its own run without
 deadlocking), also check whether this PR's own
