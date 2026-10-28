@@ -36,6 +36,15 @@ expected_counts = {
     ".github/workflows/dotfiles-idd-advisory-convergence.yml": 2,
     ".github/workflows/idd-advisory-convergence-comment.yml": 3,
 }
+# #681: the global-only profile needs both forbidden paths absent from the
+# trusted base and the PR head, so a restored file must fail this suite.
+for forbidden_path in (
+    ".github/workflows/idd-advisory-convergence.yml",
+    ".github/workflows/post-merge-cleanup.yml",
+):
+    assert not os.path.exists(os.path.join(root, forbidden_path)), (
+        f"{forbidden_path} must stay absent for the global-only profile"
+    )
 package_pattern = re.compile(
     r"(?:^|\s)(?:--package|-p)(?:\s+|=)"
     r"(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))"

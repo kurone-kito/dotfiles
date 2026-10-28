@@ -189,8 +189,8 @@ defaults:
     # ubuntu-latest default (#424) as on the sibling files' ubuntu-slim
     # one below -- bash is already the default shell on any Ubuntu-based
     # GitHub-hosted runner, regardless of variant; imported for parity
-    # with the sibling dotfiles-idd-advisory-convergence.yml / post-merge-cleanup.yml
-    # files, both still ubuntu-slim by default.
+    # with the sibling dotfiles-idd-advisory-convergence.yml file, which is
+    # still ubuntu-slim by default.
     shell: bash
 jobs:
   refresh-if-idd-originated:
@@ -241,7 +241,7 @@ jobs:
           # that read-only required check, carries `actions: write` --
           # a genuinely more privileged, supply-chain-sensitive
           # permission -- so it gets the same pinned-SHA hardening
-          # post-merge-cleanup.yml already applies for its own elevated
+          # the producer already applies for its own elevated
           # permissions, matching upstream's own root dogfooded copy's
           # pin choice.
           # <!-- dotfiles-divergence: master-branch -->
@@ -256,7 +256,7 @@ jobs:
       # the version rather than provisioning one). This repository
       # instead provisions the exact `.nvmrc`-pinned version via
       # `setup-node`, matching the sibling `dotfiles-idd-advisory-convergence.yml`
-      # / `post-merge-cleanup.yml` files' own convention (this file also
+      # file's own convention (this file also
       # needs `npx` itself, which the plain assertion does not provide).
       #
       # This repository runs the ephemeral-npx helper profile (no
