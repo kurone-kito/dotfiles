@@ -372,18 +372,20 @@ the maintainer.
 
 ## Issue-Authoring Companion
 
-- **Status**: `installed` at `.claude/skills/issue-authoring/`.
+- **Status**: `vendored` at `home/dot_claude/skills/issue-authoring/`,
+  deployed to a user's `.claude/skills/` by chezmoi.
 - **`issueAuthoring.maxClarificationRounds`**: `3` (distributed
   default).
 
 The companion drafts IDD-ready issues and roadmaps before the normal
 Discover loop starts. See its
-[bundled contract](../.claude/skills/issue-authoring/references/contract.md)
+[bundled contract](../home/dot_claude/skills/issue-authoring/references/contract.md)
 for the readiness buckets, output chooser, and approval boundary.
 
 ## Spec-Audit Companion
 
-- **Status**: `installed` at `.claude/skills/idd-spec-audit/`, adopted
+- **Status**: `vendored` at `home/dot_claude/skills/idd-spec-audit/`,
+  deployed to a user's `.claude/skills/` by chezmoi, adopted
   during the `v0.11.0` re-import (roadmap #419, track #423). Upstream
   graduated this companion the same way `issue-authoring` was
   distributed, in the `v0.10.0` round.
@@ -398,7 +400,7 @@ cover. It never edits a file or mutates an issue; findings
 route back through the normal issue-authoring flow (or this
 installation's manual issue-filing process when that companion is not
 installed). See its
-[SKILL.md](../.claude/skills/idd-spec-audit/SKILL.md) for the five rule
+[SKILL.md](../home/dot_claude/skills/idd-spec-audit/SKILL.md) for the five rule
 sets and execution model.
 
 ## Issue Scope
@@ -1144,7 +1146,7 @@ Current slugs:
 | `session-offset-direct-index`        | Documents the `discover.selectionDesync: session-offset` contract the repository decided in #573: with more than one entry in the score tie band, the offset picks that entry directly, and the milestone-scope, effort, and shared-file preferences do not reorder it; they still apply when the setting is `off` or the band has one entry. Marks the clarifying sentences in `idd-discover.instructions.md`, the corrected milestone-scope sentence in `docs/idd-design-rationale.md`, the session-offset reference in `docs/idd-helper-scripts.md`, the milestone-scope row in `docs/policy-constants.md`, the qualified overlap note in `docs/idd-helper-scripts.md`, and the effort-order rule in the installed `issue-authoring` contract | #573 |
 | `instruction-size-limits-not-enforced` | Records that this repository does not enforce the upstream instruction size limits (per-file and bundle, including the 98% check) and accepts the overage measured at `b683a54`. Marks the introductory paragraph of the `Runtime Instruction Size and Bundle Budgets` section in `docs/policy-constants.md` | #601 |
 | `advisory-trigger-pull-request-target-only` | The trigger sentence in the `idd-advisory-convergence` Copilot-review poll section of `docs/policy-constants.md`, which keeps the `pull_request_target`-only wording. The pinned upstream sentence also names `pull_request`. In `.github/workflows/idd-advisory-convergence.yml`, `pull_request_target` is the only pull-request trigger; the file also declares `workflow_dispatch` and `workflow_call`. Commit `f36f0ae` made the change | #606 |
-| `queued-validation-commands` | The Project commands table in `.github/instructions/idd-overview-core.instructions.md`: its `fix-validate`, `pre-push-validate` and `post-fix-validate` cells are the wrapper invocations `scripts/with-pueue.sh scripts/run-fix-validate.sh` and `scripts/with-pueue.sh scripts/run-validate.sh`, equal to the same three strings in `.github/idd/config.json`, so concurrent sessions queue their heavy validation through pueue (see `docs/pueue-validation-queue.md`). A forced re-import (`idd-onboard --import`, then `--substitute`, checked with the pinned `v0.14.0` on a temporary copy) restores the three `commands` rows of the JSON from the pre-import file and `--substitute` fills the table cells from those rows, so the cells come back by themselves; the overwrite drops this marker comment, so a re-import must re-add it above the table and confirm that the cells still equal the JSON strings. No other file under `.github/instructions/` mentions pueue | #625 |
+| `queued-validation-commands` | The Project commands table in `docs/idd-local-policy-overlay.md`: its `fix-validate`, `pre-push-validate` and `post-fix-validate` cells are the wrapper invocations `scripts/with-pueue.sh scripts/run-fix-validate.sh` and `scripts/with-pueue.sh scripts/run-validate.sh`, equal to the same three strings in `.github/idd/config.json`, so concurrent sessions queue their heavy validation through pueue (see `docs/pueue-validation-queue.md`). A re-import does not touch this overlay, so maintainers compare the three wrapper cells with `.github/idd/config.json` and update them by hand; if a re-import drops the marker comment, re-add it above the table. The imported instruction tree is no longer tracked (#680), so no file under `.github/instructions/` can mention pueue | #625 |
 
 **Resolved this round**: `cleanup-evidence-untrusted-check-gap`
 (introduced by #233) tracked a caveat that
@@ -1322,14 +1324,17 @@ deltas are accounted for by the live slugs in the table (local-policy
 substitutions such as `master-branch` / `claim-timing`,
 installed-bundle routing, onboarding-doc-trim pin links, vendored
 header, helper-profile facade notes, and the six still-ahead
-corrections filed upstream this round). One unmarked local hunk
-remains in Track B's
-[`.github/instructions/idd-claim.instructions.md`](../.github/instructions/idd-claim.instructions.md)
-(PR #456): the forced-handoff adopt-verbatim path skips posting
-`claimed-by` (local lines 287-293). That delta is outside the 17
-registered slugs. This track records it here and does **not** add a
-register row or point-of-use marker (that would expand this track's
-candidate-file list). A later instruction-resync can mark it.
+corrections filed upstream this round). Pre-removal evidence: one unmarked
+local hunk remained in Track B's `.github/instructions/idd-claim.instructions.md`
+(PR #456), at lines 287-293 of the local copy in master commit `8681c44`.
+The forced-handoff adopt-verbatim path skipped posting `claimed-by` there.
+Issue #680 removed that local copy. Its vendored counterpart is
+[`idd-claim.instructions.md`](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-claim.instructions.md),
+where the line numbers above do not apply; compare against `8681c44` for the
+archived text. That delta is outside the 17 registered slugs. This track
+records it here and does **not** add a register row or point-of-use marker
+(that would expand this track's candidate-file list). A later instruction
+resync can mark it.
 
 **Retired this round (upstream equivalence at `v0.12.0`)**:
 

@@ -14,7 +14,24 @@ overlay records repository policy and comparison results. A row marked
 upstream-equivalent relies on v0.17.0; a retained row remains a dotfiles
 rule until a separate reviewed change retires it.
 
+Retained rows bind every IDD run in this repository, even though the
+vendored v0.17.0 payload does not enforce them. Apply each retained row as
+written here. The root `CLAUDE.md` and [docs/idd-workflow.md](idd-workflow.md)
+route IDD work to this overlay.
+
+The local copies of the instruction and skill trees that earlier revisions
+kept under `.github/instructions/` and `.claude/skills/` were removed by issue
+680. The vendored payload they came from is
+`home/dot_local/share/idd-skill/0.17.0/`, and the active routing comes from
+the `idd-activation` result.
+
 ## Pinned comparison and inventory
+
+The inventory below is historical. Its "Local file" paths were removed by
+
+issue 680 and no longer exist. The table records what was compared before that
+
+removal, so treat each path as a retired reference, not a current file.
 
 The local comparison pins upstream v0.14.0 at
 `ae16f497434a5023dfaa28f965fc2af92ebf055d` and v0.17.0 at
@@ -25,7 +42,8 @@ come from that tag's `audit/sync-manifest.json`. The `(exact)` and
 not whether the current local file's content matches the pinned source.
 Concrete replacements were applied before comparing content.
 
-The inventory contains **35 tracked files**. The issue-authoring report
+The inventory recorded **35 tracked files** before issue 680 removed
+them. The issue-authoring report
 template matches both materialized sources. The merge-handoff file
 matches v0.14.0; its v0.17.0 differences are recorded below. All other
 local changes are assigned to the divergence rows, including unmarked
@@ -137,11 +155,11 @@ v0.17.0 supplies the behavior or dotfiles retains it.
 | cross-roadmap-discovery | v0.17.0 implements --all-roadmaps, legacy roots, and union-of-leaves traversal in [Discover](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/idd-discover.instructions.md). | Upstream-equivalent; no overlay behavior needs to be copied. |
 | lite-e1-advisory-outcome-deferral | v0.17.0 routes incomplete E1 through E14/E15 and returns through E1 in [lite review snapshot](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/lite/idd-review-snapshot-lite.instructions.md), with the outcome table in [lite advisory wait](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/lite/idd-advisory-wait-lite.instructions.md). | Upstream-equivalent. |
 | reviewed-v014-safety-corrections | This is a compound set: v0.17.0 supplies many corrections, but not every stricter dotfiles gate. See the clause-by-clause table below. | Retain only the residual local safeguards listed below; rely on cited v0.17.0 clauses for adopted behavior. |
-| explicit-target-parked-check | v0.17.0 A0-T checks target labels and readiness but does not apply --parked-issues membership to a direct non-roadmap target. | Retain the fail-closed direct-target parked check; do not widen the candidate set on a failed or incomplete read. |
+| explicit-target-parked-check | v0.17.0 A0-T checks target labels and readiness but does not apply --parked-issues membership to a direct non-roadmap target. | Retain the fail-closed direct-target parked check. For a non-roadmap explicit target, read the parked-issue list (`idd-provider-outage-park --parked-issues`) before claiming; a target listed in `parkedIssues` stops without claiming. A failed or malformed read, or `parkedIssuesComplete: false`, is a terminal stop for that target, and the candidate set is never widened on such a result. v0.17.0 skips only listed issues when `parkedIssuesComplete: false`, so an unlisted parked issue can still be picked there. |
 | e1-stale-recovery-cap-route | v0.17.0 full and lite E1 preconditions both honor capExhaustedRoute: [full](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/idd-review-snapshot.instructions.md) and [lite](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/.github/instructions/lite/idd-review-snapshot-lite.instructions.md). | Upstream-equivalent. |
 | explicit-human-release | v0.17.0 retains a narrow review-fix-loop-cutoff auto-release exception and hardens hidden-marker enumeration in the authoring helper. | Retain dotfiles' stricter rule: every held set still requires an explicit human release request. The helper improvement does not itself change this repository policy. |
 | master-branch | Upstream uses a configurable development/default-branch placeholder. | Retain master as this repository's configured integration branch; do not replace it with the upstream default. |
-| needs-triage-label | No v0.17.0 equivalent for this repository's status:needs-triage Discover exclusion. | Retain the A3 intake-label filter so human reports that have not been rewritten are not claimed as ready work. |
+| needs-triage-label | No v0.17.0 equivalent for this repository's status:needs-triage Discover exclusion. | Retain the exclusion: an open issue labeled `status:needs-triage` is not ready work. A0-O, A0-T, and A3 must treat it as not startable and must not claim it, so human reports that have not been rewritten are not claimed. The label appears nowhere in the vendored payload, so this row is the only rule that enforces it. |
 | onboarding-doc-trim | The two placeholder/policy pages remain upstream documentation; the local copies are intentionally excluded because substitution corrupts them. | Retain the exclusion and link to the pinned upstream pages; do not restore self-corrupt local copies during import retirement. |
 | signing-ladder | No v0.17.0 equivalent for dotfiles' configured GPG → SSH → unsigned commit fallback policy. | Retain the signing ladder in the root and Copilot guidance, including project-blessed SSH aliases and bounded attempts. |
 | vendored-file-header | The upstream script body is equivalent, but the source header describes an absent local build step. | Retain the repository-correct header on scripts/minimize-superseded-markers.mjs; it is outside the imported instruction tree. |
@@ -197,7 +215,63 @@ companion.
 ## Scope boundary
 
 This overlay preserves non-equivalent IDD behavior for future
-local-import retirement. #679 leaves the linked imported files in place
-and does not remove or resync them. Re-evaluate a retained row only
-after a new source comparison and an explicit repository policy
+local-import retirement. #679 left the imported files in place. #680
+removed the duplicate copies, so each retained row is now compared with
+the vendored payload, not with a local file. Re-evaluate a retained row
+only after a new source comparison and an explicit repository policy
 decision.
+
+## Project commands
+
+These repository-owned command rows moved here from the removed local
+overview (#680). `.github/idd/config.json` `commands` remains the
+machine-readable source; the table is the human-readable mirror.
+
+When a phase names a command set, run the corresponding commands.
+**Adapt this section for other projects.**
+
+If `.github/idd/config.json` exists and validates against the canonical
+schema at
+<https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json>, its `commands`
+object overrides the table below. Policy fields such as
+`skipIssueAuthorApprovalGate` and `maintainerApprovalActorPolicy` are
+the recorded machine-readable policy. Absent values keep the gate
+enabled and default approval actors to
+`owners-and-maintainers-only`.
+
+<!-- dotfiles-divergence: queued-validation-commands -->
+<!-- dprint-ignore-start -->
+| Name | Commands |
+| --- | --- |
+| **fix-validate** | `scripts/with-pueue.sh scripts/run-fix-validate.sh` |
+| **pre-push-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
+| **post-fix-validate** | `scripts/with-pueue.sh scripts/run-validate.sh` |
+| **install-deps** | `git submodule update --init --recursive` |
+| **issue-scope** | `roadmap-first` |
+| **orphan-first-policy** | `none` |
+<!-- dprint-ignore-end -->
+
+Non-shell rows are settings, not commands.
+
+`pre-push-validate` omits auto-fix. If lint fails, run
+**fix-validate**, commit, then re-run **pre-push-validate**.
+
+If **fix-validate**/**post-fix-validate** changes files, stage and
+commit before any push, rebase, or step needing a clean tree.
+
+`install-deps` must be idempotent: re-running it in fresh, reused, or
+recreated worktrees must not need manual cleanup or leave unexpected
+tracked changes.
+
+Judge a command-set run by exit status; when piping, check
+`${PIPESTATUS[0]}` or `pipefail` because filters can't prove success
+(#3139).
+
+**Tool availability**: run commands only when tools exist. For Node.js,
+prefer project scripts. Resolve IDD helper commands through the selected
+helper-runtime profile in `docs/idd-helper-scripts.md`; never fall back to
+an unpinned `npx <tool>` invocation. For other Node.js tools, use a local
+lockfile-pinned dependency when available. If a required validator named
+in a command set (such as `markdownlint-cli2` or `cspell`) is unavailable,
+report validation as incomplete and stop for guidance; do not substitute
+`true`. For unrelated optional tools, use `true` when absent.

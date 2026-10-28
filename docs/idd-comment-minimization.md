@@ -416,7 +416,7 @@ helper. See the
 [waiver helper](idd-helper-scripts.md#external-check-waiver-helper),
 which tolerates a duplicate write and reconciles by re-reading after
 the fact rather than narrowing the pre-write window. See
-[idd-merge.instructions.md's F4](../.github/instructions/idd-merge.instructions.md#f4--cleanup)
+[idd-merge.instructions.md's F4](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-merge.instructions.md#f4--cleanup)
 for the literal re-check command both the agent F4 step and
 `post-merge-cleanup.yml` run.
 

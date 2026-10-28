@@ -8,9 +8,9 @@ tags: [advisory-wait, shell-fallback]
 # IDD — Advisory-Wait Shell Fallback (AW1 / AW2 / AW3-R / AW3-S / AW3-H / F2 detail)
 
 This document contains the verbatim commands used by the shell
-fallback for [advisory-wait](../.github/instructions/idd-advisory-wait.instructions.md)
+fallback for [advisory-wait](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-advisory-wait.instructions.md)
 and for F2's **Advisory convergence** bullet in
-[pre-merge](../.github/instructions/idd-pre-merge.instructions.md):
+[pre-merge](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-pre-merge.instructions.md):
 `gh`/`gh api`/`jq` for AW1/AW2 evidence collection and the F2
 convergence / `dispositionEvidence` assertion, and a mix of
 `gh`/`gh api`/`curl`/`node scripts/...` for the AW3-R/AW3-S/AW3-H
@@ -619,7 +619,7 @@ node scripts/minimize-superseded-markers.mjs \
 ## F2
 
 F2's **Advisory convergence** bullet (see
-[pre-merge](../.github/instructions/idd-pre-merge.instructions.md))
+[pre-merge](../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-pre-merge.instructions.md))
 has two halves. Helper-first stays first: when a helper runtime
 exists, run `advisory-convergence.mjs --assert` (or the
 profile-selected command) and read

@@ -115,7 +115,7 @@ _IDD_WTG_EOF_
           "$action" "$branch" "$repo_root" >&2
         printf 'worktreeGuard.refuseBaseBranchCommits is enabled: implementation work must go\n' >&2
         printf 'through B1 (create a sibling worktree on an implementation branch) first.\n' >&2
-        printf 'See B1 in .github/instructions/idd-work.instructions.md.\n' >&2
+        printf 'See B1 in idd-work.instructions.md of the installed IDD payload.\n' >&2
         printf '(To bypass intentionally, re-run the git command with --no-verify.)\n' >&2
         return 1
       fi
@@ -155,7 +155,7 @@ _IDD_WTG_EOF_
   printf 'B1 requires implementation branches to live in a sibling worktree, not the primary worktree.\n' >&2
   printf 'Create one, e.g.:  git worktree add ../<repo>.%s %s\n' \
     "$(printf '%s' "$branch" | tr '/' '-')" "$branch" >&2
-  printf 'See B1 in .github/instructions/idd-work.instructions.md.\n' >&2
+  printf 'See B1 in idd-work.instructions.md of the installed IDD payload.\n' >&2
   printf '(To bypass intentionally, re-run the git command with --no-verify.)\n' >&2
   return 1
 }

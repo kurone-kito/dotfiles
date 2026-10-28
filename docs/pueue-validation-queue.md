@@ -16,7 +16,7 @@ only a few of them run at a time while the others wait their turn.
 
 The three command strings live in `.github/idd/config.json` and in the
 Project commands table of
-`.github/instructions/idd-overview-core.instructions.md`. Each is one
+`docs/idd-local-policy-overlay.md`. Each is one
 call of `scripts/with-pueue.sh`:
 
 | Command | String |

@@ -664,4 +664,4 @@ Disposition:
   this bootstrap issue or the welcome/next-steps issue instead of
   silently patching the vendored copy.
 
-[upstream-candidate]: ../../.github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation
+[upstream-candidate]: ../../home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation
