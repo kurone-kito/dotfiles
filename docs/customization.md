@@ -268,12 +268,12 @@ Choose a stricter profile when review culture requires it:
 - `strict-reviewer-resolve`: agents never resolve human review threads;
   the reviewer or maintainer owns conversation resolution.
 
-For either non-default profile, update
-`.github/instructions/idd-review-snapshot.instructions.md`,
-`.github/instructions/idd-review-triage.instructions.md`,
-`.github/instructions/idd-review-fix.instructions.md`,
-`.github/instructions/idd-pre-merge.instructions.md`, and
-`.github/instructions/idd-merge.instructions.md` so E1 does not hide
+For either non-default profile, record the local rule in
+`docs/idd-local-policy-overlay.md`. The matching phase rules are vendored
+upstream under `home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/`
+(`idd-review-snapshot`, `idd-review-triage`, `idd-review-fix`,
+`idd-pre-merge`, and `idd-merge`); do not edit those copies locally. The
+local rule keeps E1 from hiding
 human threads that need acknowledgement, E7 verifies the stricter
 resolution rule, and F2/F3 do not treat agent-handled human threads as
 merge-ready before the selected acknowledgement appears. Branch
@@ -341,10 +341,10 @@ stale checks and heartbeat guidance stay consistent.
 
 For CI wait behavior, keep `.github/idd/config.json`
 `ciWait.runningTimeout`, `ciWait.generationTimeout`, and
-`ciWait.rerunPolicy` aligned with
-`.github/instructions/idd-ci.instructions.md`,
-`.github/instructions/idd-review-fix.instructions.md`, and
-`.github/instructions/idd-pre-merge.instructions.md`. The distributed
+`ciWait.rerunPolicy` aligned with the `idd-ci`, `idd-review-fix`, and
+`idd-pre-merge` phase rules in the vendored payload under
+`home/dot_local/share/idd-skill/0.17.0/dot_github/instructions/`, and record
+any local deviation in `docs/idd-local-policy-overlay.md`. The distributed
 default `rerun-once` preserves the current one-rerun recovery path;
 `hold` disables automatic reruns and turns the first eligible infra or
 stalled CI route into a hold.
