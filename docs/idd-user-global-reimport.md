@@ -212,8 +212,10 @@ global-only profile is not recorded as verified.
   `scripts/check-idd-runtime-pins.py` reports the source as consistent.
   `chezmoi status` was not used, because it prompts for a secret-manager
   unlock.
-- Isolation: the primary-checkout run used the deployed home, as the acceptance
-  criteria name it. The isolated data root run is recorded below.
+- Isolation: the primary-checkout run used the deployed home. Issue #682 names
+  the primary checkout for `idd-activation`, but it does not name the deployed
+  home. The isolated data root run is recorded below, as the issue's proposed
+  change requires.
 
 ## Activation and policy
 
