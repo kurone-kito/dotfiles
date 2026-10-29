@@ -191,3 +191,54 @@ they are during a re-import:
   removal, when a listed file or link no longer matches its receipt entry. A
   live-home run would therefore leave state that chezmoi cannot manage.
 - Deploying `receipt.json`.
+
+## Global-only lifecycle verification (#682)
+
+This section records the first repository lifecycle that ran on the deployed
+v0.17.0 user-global payload. It is the evidence that the global-only profile
+works end to end, for roadmap #674.
+
+- Run date: 2026-10-29 (UTC).
+- Issue: #682. The pull request that carries this section is recorded
+  below.
+- Payload version: 0.17.0, pinned to commit
+  `77befdd4030757464bed7f31c7dfe6d0a404a18b`. The home directory was updated
+  by `chezmoi apply` from this source, not by the upstream installer.
+- Deployed copy: `~/.local/share/idd-skill/current` resolves to
+  `~/.local/share/idd-skill/0.17.0`. All 80 scoped files (68 payload files
+  and 12 skill files under `~/.claude/skills/` and `~/.agents/skills/`) match
+  the SHA-256 inventory in `.github/idd/user-global-source.json`.
+  `scripts/check-idd-runtime-pins.py` reports the source as consistent.
+  `chezmoi status` was not used, because it prompts for a secret-manager
+  unlock.
+- Isolation: the issue body asked for an isolated data root. This run used
+  the deployed home instead, because the acceptance criteria name the primary
+  checkout.
+
+## Activation and policy
+
+`~/.local/bin/idd-activation` on the primary checkout returned:
+
+- `active`: `true`
+- `tier`: `repository-local`
+- `reason`: `repository-policy-minimal-import`
+- `instructionsRoot`: `~/.local/share/idd-skill/current`, which resolves to
+  the 0.17.0 payload above.
+
+`idd-effective-config` reports these repository-local values:
+
+- `mergePolicy`: `fully_autonomous_merge`
+- `autopilotSuitability.floor`: `3`
+- `issueScope`: `roadmap-first`
+- `orphanFirstPolicy`: `none`
+- `helperRuntime.profile`: `ephemeral-npx`
+- `helperRuntime.packageSpec`: the codeload archive of commit
+  `77befdd4030757464bed7f31c7dfe6d0a404a18b`
+
+## Required checks
+
+The `main` ruleset requires five contexts: `lint`, `Lua syntax check`,
+`Bash tests (bats)`, `PowerShell tests (Pester)`, and
+`idd-advisory-convergence`. With `--global-only`, `pre-merge-readiness` leaves
+out only `idd-advisory-convergence` and keeps the four CI contexts. The ruleset
+was not changed.
