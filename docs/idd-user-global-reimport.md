@@ -212,9 +212,8 @@ global-only profile is not recorded as verified.
   `scripts/check-idd-runtime-pins.py` reports the source as consistent.
   `chezmoi status` was not used, because it prompts for a secret-manager
   unlock.
-- Isolation: the issue body asked for an isolated data root. This run used
-  the deployed home instead, because the acceptance criteria name the primary
-  checkout.
+- Isolation: the primary-checkout run used the deployed home, as the acceptance
+  criteria name it. The isolated data root run is recorded below.
 
 ## Activation and policy
 
@@ -243,3 +242,46 @@ The `main` ruleset requires five contexts: `lint`, `Lua syntax check`,
 `idd-advisory-convergence`. With `--global-only`, `pre-merge-readiness` leaves
 out only `idd-advisory-convergence` and keeps the four CI contexts. The ruleset
 was not changed.
+
+## Isolated data root run
+
+The issue's proposed change asks for the v0.17.0 verification commands in an
+isolated data root. The run copied the deployed payload into a temporary
+`XDG_DATA_HOME` root, checked its 68 files against the inventory (no mismatch),
+and ran the commands with that root:
+
+- `idd-activation`: `active` is `true`, `tier` is `repository-local`, `reason`
+  is `repository-policy-minimal-import`, and `instructionsRoot` is under the
+  isolated `idd-skill/current`, which resolves to the copied 0.17.0 payload.
+- `idd-effective-config`: the same six repository-local values as above.
+
+The copy came from the deployed home. The upstream installer was not run for
+this record.
+
+## Readiness and advisory check
+
+Observed on pull request #693 at head `3938597b691528837332d17cc9a0bb9b0cdc38e9`:
+
+- `pre-merge-readiness --global-only`: the CI and advisory-wait gates pass. The
+  helper's required list holds the four CI contexts (`lint`, `Lua syntax
+  check`, `Bash tests (bats)`, and `PowerShell tests (Pester)`), and
+  `idd-advisory-convergence` is not in it. Disposition evidence is complete, no
+  review thread is unresolved, no comment is unreplied, the closing set is #682,
+  the branch is clean, and the claim matches.
+- Still open at that head: the review watermark (`review-currency`) and the
+  60-minute secondary quiet window after the last activity. Readiness therefore
+  had not passed at this head. The merge gate is the readiness result on the
+  final head, not this record.
+- `idd-advisory-convergence`: `pass` on head `3938597`. The first run failed
+  before the Copilot dispositions were posted. The check does not re-run on
+  comments, so the failed job was rerun once.
+
+## F4 outcome
+
+The local F4 cleanup runs after the merge, so its outcome cannot be in this
+pre-merge record. The F4 result for issue #682 is recorded on the issue after
+the merge. Pull request #692 (issue #681) already completed its local F4 on the
+global-only base, without waiting for a cleanup run.
+
+Until the readiness on the final head passes and the F4 result is recorded,
+this record does not state that the global-only profile is verified.
