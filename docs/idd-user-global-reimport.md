@@ -194,13 +194,14 @@ they are during a re-import:
 
 ## Global-only lifecycle verification (#682)
 
-This section records the first repository lifecycle that ran on the deployed
-v0.17.0 user-global payload. It is the evidence that the global-only profile
-works end to end, for roadmap #674.
+This section records the deployment and activation evidence for the first
+repository lifecycle that runs on the deployed v0.17.0 user-global payload, for
+roadmap #674. The readiness, advisory-check, and F4 results are recorded in
+this section only as they are observed. Until they are recorded, the
+global-only profile is not recorded as verified.
 
 - Run date: 2026-10-29 (UTC).
-- Issue: #682. The pull request that carries this section is recorded
-  below.
+- Issue: #682. Pull request: #693.
 - Payload version: 0.17.0, pinned to commit
   `77befdd4030757464bed7f31c7dfe6d0a404a18b`. The home directory was updated
   by `chezmoi apply` from this source, not by the upstream installer.
