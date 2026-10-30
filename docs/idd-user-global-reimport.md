@@ -265,7 +265,7 @@ this record.
 ## Readiness and advisory check
 
 Interim observation on pull request #693 at head
-`3938597b691528837332d17cc9a0bb9b0cdc38e9`. That is not the merged head, so
+`3938597b691528837332d17cc9a0bb9b0cdc38e9`. That is not the final PR head, so
 it is not the final readiness result. The interim values are:
 
 - `pre-merge-readiness --global-only`: the CI and advisory-wait gates pass. The
@@ -284,7 +284,7 @@ it is not the final readiness result. The interim values are:
 
 ## Final-head readiness
 
-This section records the readiness result on the merged head
+This section records the readiness result on the final PR head
 `2cf45647b6ef2de880e9003880540f1387bcd8db`. The run was made on 2026-10-30
 (UTC), after the merge. It used the helper package pinned in
 `helperRuntime.packageSpec`:
@@ -320,7 +320,7 @@ omitted:
 }
 ```
 
-The `prHeadSha` value equals the merged head named above. The
+The `prHeadSha` value equals the final PR head named above. The
 `claim-ownership` blocker is reported while the issue #682 live-status digest
 reads `Claim` `none`. The `unclaimed-by` comment 6497895642
 (2026-10-29T13:24:14Z) released that claim. This record adds no interpretation
