@@ -197,11 +197,13 @@ they are during a re-import:
 This section records the deployment and activation evidence for the first
 repository lifecycle that runs on the deployed v0.17.0 user-global payload, for
 roadmap #674. The readiness, advisory-check, and F4 results are recorded in
-this section only as they are observed. Until they are recorded, the
+the sections that follow, only as they are observed. Until they are recorded, the
 global-only profile is not recorded as verified.
 
 - Run date: 2026-10-29 (UTC).
 - Issue: #682. Pull request: #693.
+- Pull request head: `2cf45647b6ef2de880e9003880540f1387bcd8db`. Merge
+  commit: `b7afcdf145c336e2c66c67e3f51ee17d3a1c9c88`.
 - Payload version: 0.17.0, pinned to commit
   `77befdd4030757464bed7f31c7dfe6d0a404a18b`. The home directory was updated
   by `chezmoi apply` from this source, not by the upstream installer.
@@ -262,7 +264,9 @@ this record.
 
 ## Readiness and advisory check
 
-Observed on pull request #693 at head `3938597b691528837332d17cc9a0bb9b0cdc38e9`:
+Interim observation on pull request #693 at head
+`3938597b691528837332d17cc9a0bb9b0cdc38e9`. That is not the final PR head, so
+it is not the final readiness result. The interim values are:
 
 - `pre-merge-readiness --global-only`: the CI and advisory-wait gates pass. The
   helper's required list holds the four CI contexts (`lint`, `Lua syntax
@@ -272,18 +276,82 @@ Observed on pull request #693 at head `3938597b691528837332d17cc9a0bb9b0cdc38e9`
   the branch is clean, and the claim matches.
 - Still open at that head: the review watermark (`review-currency`) and the
   60-minute secondary quiet window after the last activity. Readiness therefore
-  had not passed at this head. The merge gate is the readiness result on the
-  final head, not this record.
+  had not passed at this head. The merge gate is not this interim observation.
+  The final-head result is recorded below.
 - `idd-advisory-convergence`: `pass` on head `3938597`. The first run failed
   before the Copilot dispositions were posted. The check does not re-run on
   comments, so the failed job was rerun once.
 
+## Final-head readiness
+
+This section records the readiness result on the final PR head
+`2cf45647b6ef2de880e9003880540f1387bcd8db`. The run was made on 2026-10-30
+(UTC), after the merge. It used the helper package pinned in
+`helperRuntime.packageSpec`:
+
+```sh
+npx --yes \
+  --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
+  idd-pre-merge-readiness --pr 693 --claim-issue 682 --global-only
+```
+
+The run exited with status 0 and made one run only. Its stdout holds the
+fields below. Their values are quoted verbatim, and the other fields are
+omitted:
+
+```json
+{
+  "ready": false,
+  "prHeadSha": "2cf45647b6ef2de880e9003880540f1387bcd8db",
+  "blockers": [
+    {
+      "gate": "review-currency",
+      "detail": "comparisonRoute is \"return-to-e1\" (expected \"proceed\"): newer-activity"
+    },
+    {
+      "gate": "claim-ownership",
+      "detail": "claim ownership does not match (reason=\"missing-active-claim\")"
+    },
+    {
+      "gate": "disposition-evidence",
+      "detail": "dispositionEvidence.route is \"return-to-e1\" (expected \"proceed\"), blockingCount=1 (expected 0)"
+    }
+  ]
+}
+```
+
+The `prHeadSha` value equals the final PR head named above. The
+`claim-ownership` blocker is reported while the issue #682 live-status digest
+reads `Claim` `none`. The `unclaimed-by` comment 6497895642
+(2026-10-29T13:24:14Z) released that claim. This record adds no interpretation
+of the three blockers.
+
+The check-run conclusions, the merge, and the F4 comments are not this
+readiness result. The run did not use `--claimless`.
+
 ## F4 outcome
 
-The local F4 cleanup runs after the merge, so its outcome cannot be in this
-pre-merge record. The F4 result for issue #682 is recorded on the issue after
-the merge. Pull request #692 (issue #681) already completed its local F4 on the
-global-only base, without waiting for a cleanup run.
+The F4 result for issue #682 is recorded on that issue, after the merge:
 
-Until the readiness on the final head passes and the F4 result is recorded,
-this record does not state that the global-only profile is verified.
+- The `idd-f4-head-proof` marker (version 2, comment 6497814928) names pull
+  request 693, claim `0c9aa02f-63cd-47bf-8aed-992efde83814`, branch
+  `issue/682-test-idd-verify-real-global-only-idd`, head and branch tip
+  `2cf45647b6ef2de880e9003880540f1387bcd8db`, and merge commit
+  `b7afcdf145c336e2c66c67e3f51ee17d3a1c9c88`.
+- The live-status digest (comment 6497886505) reads `Phase` `F4 complete`,
+  `Claim` `none`, `Branch` `none`, `Open blockers` `none`, and
+  `Authoritative by` merge `b7afcdf145c336e2c66c67e3f51ee17d3a1c9c88`.
+
+Neither comment states that a server-side cleanup workflow ran, so this record
+does not state that.
+
+## Verification status
+
+The global-only profile is verified only when the quoted readiness result has
+`ready` true and the F4 outcome is present. The final-head readiness result has
+`ready` false, so the profile is not verified. The failing evidence is the
+three blockers quoted above. The F4 outcome is present, but it does not change
+the readiness result.
+
+The interim observation above is not the final-head result. This record does
+not state that roadmap #674 is complete.
