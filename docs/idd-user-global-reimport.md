@@ -204,6 +204,8 @@ global-only profile is not recorded as verified.
 - Issue: #682. Pull request: #693.
 - Pull request head: `2cf45647b6ef2de880e9003880540f1387bcd8db`. Merge
   commit: `b7afcdf145c336e2c66c67e3f51ee17d3a1c9c88`.
+- Post-transition verification of PR #695 (issue #694): see
+  [Post-transition verification (PR #695)](#post-transition-verification-pr-695).
 - Payload version: 0.17.0, pinned to commit
   `77befdd4030757464bed7f31c7dfe6d0a404a18b`. The home directory was updated
   by `chezmoi apply` from this source, not by the upstream installer.
@@ -355,3 +357,186 @@ the readiness result.
 
 The interim observation above is not the final-head result. This record does
 not state that roadmap #674 is complete.
+
+## Post-transition verification (PR #695)
+
+This section records the post-transition verification of pull request #695
+(issue #694) at head `8d60ac4854320d127a25da7d1d52039548da2d07`, merge commit
+`aa6646506fc445fe79931aae8f1ae0da117da275`. The verification status is the one
+stated at the end of this section. The interim observation and the final-head
+readiness of PR #693 stay as recorded above.
+
+### 1. Readiness before cleanup (the readiness condition)
+
+Captured on 2026-10-30. The command is the dry run of the merge gate that wraps
+`pre-merge-readiness --global-only`, without `--apply`:
+`npx --yes --package <packageSpec> idd-merge-execute --pr 695 --claim-issue 694
+--claim-id <claim-id> --agent-id <agent-id> --nonce <nonce> --global-only`, where
+`<packageSpec>` is the archive pinned in `helperRuntime.packageSpec`. Captured
+stdout, all fields:
+
+```json
+{
+  "protocolVersion": "1",
+  "decisionAuthority": "instructions",
+  "mode": "dry-run",
+  "prNumber": 695,
+  "prHeadSha": "8d60ac4854320d127a25da7d1d52039548da2d07",
+  "ready": true,
+  "blockers": [],
+  "mergeCommand": "gh pr merge 695 --merge --match-head-commit 8d60ac4854320d127a25da7d1d52039548da2d07",
+  "merged": false,
+  "mergeResult": "",
+  "adminFallbackUsed": false,
+  "localHeadDrift": null
+}
+```
+
+### 2. Merge execution
+
+Captured on 2026-10-30, the same command with `--apply`. Captured stdout, all fields:
+
+```json
+{
+  "protocolVersion": "1",
+  "decisionAuthority": "instructions",
+  "mode": "apply",
+  "prNumber": 695,
+  "prHeadSha": "8d60ac4854320d127a25da7d1d52039548da2d07",
+  "ready": true,
+  "blockers": [],
+  "mergeCommand": "gh pr merge 695 --merge --match-head-commit 8d60ac4854320d127a25da7d1d52039548da2d07",
+  "merged": true,
+  "mergeResult": "merge command completed",
+  "adminFallbackUsed": false,
+  "localHeadDrift": null
+}
+```
+
+### 3. Post-release readiness check (not part of the rule)
+
+Captured on 2026-10-31 by running `npx --yes --package <packageSpec>
+idd-pre-merge-readiness --pr 695 --claim-issue 694 --global-only` after the claim
+on issue #694 was released. Its two blocker details are:
+
+- `review-currency`: `comparisonRoute is "return-to-e1" (expected "proceed"):
+  newer-activity`. Its newest activity is the update of resolved review comment
+  `4420407860` at 05:44:46Z, during the F4 comment cleanup.
+- `claim-ownership`: `claim ownership does not match (reason="missing-active-claim")`.
+
+Both blockers in this run followed the F4 cleanup activity described in item
+8, so this run is not the readiness condition. The readiness condition is the
+run in item 1.
+
+### 4. Required check producer
+
+The `main` ruleset requires `idd-advisory-convergence` together with four CI
+contexts. `--global-only` readiness leaves that one context out of its required
+list. On head `8d60ac4...`, the job `idd-advisory-convergence` concluded `success`
+in run `41003257742`, as listed on 2026-10-30. The same head's
+`idd-advisory-convergence-self-waiver` job also succeeded. The readiness output
+captured on 2026-10-31 (the post-release readiness capture) has
+`waiverEvidence.valid` set to `[]`, so no
+waiver was used.
+
+### 5. `idd-activation`
+
+Captured on 2026-10-31 by running `~/.local/bin/idd-activation` from the repository
+root. The exit status was 0, and the stdout, captured alone, parses as one JSON
+object with a boolean `active`. The output was:
+
+```json
+{"active":true,"tier":"repository-local","instructionsRoot":"/home/kurone-kito/.local/share/idd-skill/current","reason":"repository-policy-minimal-import"}
+```
+
+`instructionsRoot` resolves to the installed 0.17.0 payload.
+
+### 6. Effective policy
+
+Captured on 2026-10-31 with `~/.local/bin/idd-effective-config --key <key>`, and
+matching `.github/idd/config.json`:
+
+- `helperRuntime.profile`: `ephemeral-npx`
+- `helperRuntime.packageSpec`: `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b`
+- `mergePolicy`: `fully_autonomous_merge`
+- `issueScope`: `roadmap-first`
+- `orphanFirstPolicy`: `none`
+- `autopilotSuitability.floor`: `3`
+
+### 7. F4 comments
+
+- Issue #694, comment `6515926454` (2026-10-30 05:44:23Z): the F4 head-proof
+  marker, version 2. Its marker line, verbatim:
+
+  ```text
+  <!-- idd-f4-head-proof: v2 pr=695 claim=bd3e7605-2c58-4c05-ac06-5d8db5638c05 branch=issue/694-docs-idd-record-final-global-only f2=8d60ac4854320d127a25da7d1d52039548da2d07 branch-tip=8d60ac4854320d127a25da7d1d52039548da2d07 merge=aa6646506fc445fe79931aae8f1ae0da117da275 head=8d60ac4854320d127a25da7d1d52039548da2d07 -->
+  ```
+
+- Issue #694, comment `6515964437` (05:47:22Z): the live-status digest with phase
+  `F4 complete`, which was posted after the manual steps in item 8 and before the
+  claim release. Its fields are `Claim` `none`, `Branch` `none`, `Open blockers`
+  `none`, `Next action` `none`, and `Authoritative by` `merge
+  aa6646506fc445fe79931aae8f1ae0da117da275`. It records the end state, and it is
+  not a helper pass.
+- PR #695, comment `6515937954` (05:45:17Z): the cleanup evidence of PR comment
+  minimization (`idd-audit-pr-cleanup`). Its marker line, verbatim, records
+  three items applied and three skipped:
+
+  ```text
+  <!-- idd-cleanup-evidence: applied applied:3 failed:0 skipped:3 viewer-cannot-minimize:0 retry-attempts:1 retry-bound-exhausted:false -->
+  ```
+
+  It is not the local worktree cleanup.
+
+None of these comments describes a server-side cleanup workflow.
+
+### 8. Local F4 cleanup (the helper did not complete)
+
+The helper `idd-f4-worktree-branch-cleanup --issue 694` and the manual steps were
+interleaved. In order, with each observed result:
+
+1. The dry runs held first at `dirty-worktree` (an ignored `node_modules/` cache),
+   then at `submodule-worktree`. The cache was moved out of the worktree to a scratch
+   directory. No failure.
+2. Each populated submodule was checked clean, with no stash and no commit outside
+   its remote. All passed.
+3. `git submodule deinit --all` was run with the worktree still registered. It
+   unregistered the four submodules and exited 0.
+4. A dry run reported step 5 as `would-run`. The helper apply then ended with the
+   selected fields below. `protocolVersion`, `mode`, `issueNumber`, and `steps`
+   are omitted:
+
+   ```json
+   {
+     "status": "failed",
+     "reason": "worktree-remove-refused",
+     "failedStep": "step-5",
+     "nextAction": "Failed. git worktree remove refused after the checks passed, so the worktree may be partly changed. The operator inspects it. A rerun reads the proof again and posts nothing.",
+     "notRunSteps": [
+       "claim-check (before-step-6)",
+       "step-6"
+     ]
+   }
+   ```
+
+   At step 5 the detail was `git worktree remove refused: fatal: working trees
+   containing submodules cannot be moved or removed`. `path-check`, `claim-check`,
+   and `proof-check` (`reusable`) passed, and `step-4` was `done`.
+5. `git worktree remove --force` removed the empty worktree and exited 0, after
+   the branch tip was confirmed to be an ancestor of `origin/master`.
+6. `git branch -d` deleted the local branch and exited 0. GitHub had already deleted
+   the remote branch on merge.
+
+This is recorded as a manual fallback, not as a helper pass. The populated-submodule
+F4 path is tracked in follow-up #696.
+
+### Verification status
+
+Status: `partially verified`. The F4 helper did not complete (item 8), so this
+section does not state `verified`. Follow-up #696 tracks the
+populated-submodule F4 path.
+
+The status reads `verified` only when all three of these hold: the readiness at
+the final head is `ready: true` before cleanup (item 1), the F4 outcome is present
+(item 7), and the F4 helper completes (item 8). Item 3 does not count toward this
+rule.
