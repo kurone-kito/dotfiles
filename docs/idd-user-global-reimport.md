@@ -442,7 +442,8 @@ waiver was used.
 ### 5. `idd-activation`
 
 Captured on 2026-10-31 by running `~/.local/bin/idd-activation` from the repository
-root:
+root. The exit status was 0, and the stdout, captured alone, parses as one JSON
+object with a boolean `active`. The output was:
 
 ```json
 {"active":true,"tier":"repository-local","instructionsRoot":"/home/kurone-kito/.local/share/idd-skill/current","reason":"repository-policy-minimal-import"}
