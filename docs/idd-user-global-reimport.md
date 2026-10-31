@@ -479,8 +479,14 @@ matching `.github/idd/config.json`:
   aa6646506fc445fe79931aae8f1ae0da117da275`. It records the end state, and it is
   not a helper pass.
 - PR #695, comment `6515937954` (05:45:17Z): the cleanup evidence of PR comment
-  minimization (`idd-audit-pr-cleanup`), status `applied`. It is not the local
-  worktree cleanup.
+  minimization (`idd-audit-pr-cleanup`). Its marker line, verbatim, records
+  three items applied and three skipped:
+
+  ```text
+  <!-- idd-cleanup-evidence: applied applied:3 failed:0 skipped:3 viewer-cannot-minimize:0 retry-attempts:1 retry-bound-exhausted:false -->
+  ```
+
+  It is not the local worktree cleanup.
 
 None of these comments describes a server-side cleanup workflow.
 
