@@ -488,29 +488,28 @@ interleaved. In order, with each observed result:
 3. `git submodule deinit --all` was run with the worktree still registered. It
    unregistered the four submodules and exited 0.
 4. A dry run reported step 5 as `would-run`. The helper apply then ended with the
-   selected fields below. `protocolVersion`, `mode`, `issueNumber`, and
-   `steps` are omitted.
+   selected fields below. `protocolVersion`, `mode`, `issueNumber`, and `steps`
+   are omitted:
 
-```json
-{
-  "status": "failed",
-  "reason": "worktree-remove-refused",
-  "failedStep": "step-5",
-  "nextAction": "Failed. git worktree remove refused after the checks passed, so the worktree may be partly changed. The operator inspects it. A rerun reads the proof again and posts nothing.",
-  "notRunSteps": [
-    "claim-check (before-step-6)",
-    "step-6"
-  ]
-}
-```
+   ```json
+   {
+     "status": "failed",
+     "reason": "worktree-remove-refused",
+     "failedStep": "step-5",
+     "nextAction": "Failed. git worktree remove refused after the checks passed, so the worktree may be partly changed. The operator inspects it. A rerun reads the proof again and posts nothing.",
+     "notRunSteps": [
+       "claim-check (before-step-6)",
+       "step-6"
+     ]
+   }
+   ```
 
-At step 5 the detail was `git worktree remove refused: fatal: working trees
-containing submodules cannot be moved or removed`. `path-check`, `claim-check`,
-and `proof-check` (`reusable`) passed, and `step-4` was `done`.
-
-1. `git worktree remove --force` removed the empty worktree and exited 0, after
+   At step 5 the detail was `git worktree remove refused: fatal: working trees
+   containing submodules cannot be moved or removed`. `path-check`, `claim-check`,
+   and `proof-check` (`reusable`) passed, and `step-4` was `done`.
+5. `git worktree remove --force` removed the empty worktree and exited 0, after
    the branch tip was confirmed to be an ancestor of `origin/master`.
-2. `git branch -d` deleted the local branch and exited 0. GitHub had already deleted
+6. `git branch -d` deleted the local branch and exited 0. GitHub had already deleted
    the remote branch on merge.
 
 This is recorded as a manual fallback, not as a helper pass. The populated-submodule
