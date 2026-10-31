@@ -466,10 +466,18 @@ matching `.github/idd/config.json`:
 ### 7. F4 comments
 
 - Issue #694, comment `6515926454` (2026-10-30 05:44:23Z): the F4 head-proof
-  marker, version 2.
+  marker, version 2. Its marker line, verbatim:
+
+  ```text
+  <!-- idd-f4-head-proof: v2 pr=695 claim=bd3e7605-2c58-4c05-ac06-5d8db5638c05 branch=issue/694-docs-idd-record-final-global-only f2=8d60ac4854320d127a25da7d1d52039548da2d07 branch-tip=8d60ac4854320d127a25da7d1d52039548da2d07 merge=aa6646506fc445fe79931aae8f1ae0da117da275 head=8d60ac4854320d127a25da7d1d52039548da2d07 -->
+  ```
+
 - Issue #694, comment `6515964437` (05:47:22Z): the live-status digest with phase
-  `F4 complete`. It was posted after the manual steps in item 8 and before the claim
-  release. It records the end state, and it is not a helper pass.
+  `F4 complete`, which was posted after the manual steps in item 8 and before the
+  claim release. Its fields are `Claim` `none`, `Branch` `none`, `Open blockers`
+  `none`, `Next action` `none`, and `Authoritative by` `merge
+  aa6646506fc445fe79931aae8f1ae0da117da275`. It records the end state, and it is
+  not a helper pass.
 - PR #695, comment `6515937954` (05:45:17Z): the cleanup evidence of PR comment
   minimization (`idd-audit-pr-cleanup`), status `applied`. It is not the local
   worktree cleanup.
