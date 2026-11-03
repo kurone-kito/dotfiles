@@ -406,10 +406,15 @@ belong to this session. On failure, do not touch the worktree; stop and report.
 Before the first preservation or cleanup mutation, acquire the profile-selected
 clone-scoped lock and keep it through (h); if it cannot be acquired, stop.
 Repeat the claim and lock checks immediately before every mutation in (d),
-(e), (f), any later authorized (g), and (h). After worktree removal, run the
-claim route again from the primary worktree; proceed to (h) only if the active
-claim and lock are still verifiably this session's. If any check fails or its
-result is uncertain, stop and report without making that mutation.
+(e), (f), and any later authorized (g), while the issue worktree still exists.
+A successful (f) or (g) removes the worktree-local lock with the worktree's
+administrative directory; do not expect or try to read that removed lock.
+Keep the clone-scoped lock held through (h). Before (h), run the claim route
+again from the primary worktree with the same issue, claim ID, nonce, and
+worktree path. The helper's absent-path route must report `already_owned` and
+`keep` from the still-active claim ID and nonce; the still-held clone-scoped
+lock is the lock evidence for this post-removal step. If either cannot be
+verified, stop before deleting the local branch and report.
 
 (b) Inspect the worktree and submodules without changing them:
 
@@ -440,14 +445,29 @@ git rev-parse --verify refs/heads/<branch>
 On mismatch or failure, hold, report both values, and change nothing. Repeat
 this branch-tip comparison immediately before (f) or a later authorized (g).
 
-(d) Preserve the items reported by (b) outside the repository by hand. Save
-tracked edits from the worktree and affected submodules as a patch outside the
-repository, verify the patch, then restore only those tracked paths to `HEAD`.
-Move untracked and ignored files to a verified location outside the repository;
-do not commit them, and never commit or push secrets such as `.env`. Include
-submodule content reported by the recursive inspection. Verify every saved or
-moved item before continuing. If preservation fails, stop, report what was
-preserved, leave it outside the worktree, and do not run (e).
+(d) Preserve the items reported by (b) outside the repository by hand. For the
+superproject and each affected initialized submodule, save tracked changes,
+including staged and unstaged edits, in a separate patch outside the
+repository. The superproject patch does not contain submodule file edits:
+
+```sh
+git -C <repo-path> diff --binary HEAD -- <tracked-paths> > <outside>/<label>.patch
+git -C <repo-path> apply --check --reverse <outside>/<label>.patch
+```
+
+Verify each patch before restoring the corresponding tracked paths in that
+same repository:
+
+```sh
+git -C <repo-path> restore --source=HEAD --staged --worktree -- <tracked-paths>
+```
+
+Move untracked and ignored files, including non-reproducible submodule
+leftovers, to a verified location outside the repository; move rather than
+copy them. Do not commit them, and never commit or push secrets such as `.env`.
+Verify every saved or moved item before continuing. If preservation or restore
+fails, stop, report what was preserved, leave it outside the worktree, and do
+not run (e).
 
 (e) With the worktree still registered, and after the repeated clean-state
 checks in (b), deinitialize its submodules:
@@ -480,9 +500,10 @@ git worktree remove --force <path>
 
 On failure, stop and inspect the worktree. On success, continue to (h).
 
-(h) After (f) or an authorized (g) removes the worktree, revalidate the claim
-and lock as described in (a), confirm the primary worktree remains at the
-development branch state left by F4 step 4 (for this default-branch case,
+(h) After (f) or an authorized (g) removes the worktree, use the post-removal
+claim route and still-held clone-scoped lock described after (a); do not look
+for the removed worktree-local lock. Confirm the primary worktree remains at
+the development branch state left by F4 step 4 (for this default-branch case,
 `origin/master`), and compare the local branch tip with the F4 head-proof value
 again. Then delete the local branch:
 
