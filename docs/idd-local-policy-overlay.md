@@ -297,3 +297,224 @@ lockfile-pinned dependency when available. If a required validator named
 in a command set (such as `markdownlint-cli2` or `cspell`) is unavailable,
 report validation as incomplete and stop for guidance; do not substitute
 `true`. For unrelated optional tools, use `true` when absent.
+
+## F4 removal of worktrees with populated submodules
+
+### Upstream texts and scope of the conflict
+
+The pinned v0.17.0 helper documentation describes the populated-submodule
+hold in `docs/idd-helper-scripts.md`, section **F4 worktree and branch cleanup
+(steps 4 to 6)**, `submodule-worktree` row:
+
+> Hold. The worktree holds a populated submodule. Nothing was removed. The F4
+> session preserves that content outside the worktree by hand. The operator
+> then runs `git -C <issue-worktree-path> submodule deinit --all` with the
+> worktree still registered, and the helper is rerun.
+
+In `docs/idd-helper-scripts.md`, section **F4 branch-failure routes**,
+**Submodule removal (step 5, issue #2016)**, it says:
+
+> `git worktree remove --force` is a manual operator action only, outside F4,
+> and it unregisters the path, so the helper cannot finish afterward
+> (`idd-merge.instructions.md`).
+
+The generic recovery route in `docs/idd-helper-scripts.md`, section **Local
+worktree recovery**, says:
+
+> Then `git worktree remove` (retrying `--force` only after a submodule-removal
+> failure or a dirty removal failure with a freshly verified unmerged fallback)
+
+The F4-specific `docs/idd-resume-detail.md`, section **F4 Head Proof**, says:
+
+> A forced removal is not an F4 route: it unregisters the path, so the proof
+> dry run and this helper cannot finish afterward. The F4 session never runs
+> `git worktree remove --force`.
+
+The active `.github/instructions/idd-merge.instructions.md`, section **F4 —
+Cleanup**, step 5, further says:
+
+> The helper never passes `--force`, and the F4 session never runs `git
+> worktree remove --force`.
+
+The F4-specific texts (the second and fourth quotes and `idd-merge` step 5)
+say that the F4 session itself never forces worktree removal; the second quote
+describes force as a manual operator action outside F4. The generic Local
+worktree recovery text separately allows an operator retry after specified
+failures and a freshly verified unmerged fallback. These texts do not conflict
+on that actor boundary. The unresolved applicability question is whether that
+generic recovery route may be used after F4 step 5 refuses a populated
+submodule. The populated-submodule hold directs deinitialization and a helper
+rerun but does not address that separate route. This record does not decide
+whether it applies here.
+
+### Prior observations and git-only reproduction
+
+On PR #695 (issue #694), a local F4 run held at `submodule-worktree`, then the
+helper's step 5 refused removal with `worktree-remove-refused` after
+deinitialization. Git reported:
+
+```text
+fatal: working trees containing submodules cannot be moved or removed
+```
+
+The helper did not retry with `--force`. This local output was not recorded on
+GitHub; the F4 comment and digest on issue #694 record only the end state. The
+populated submodules were the four bats helpers under `tests/bash/helpers/`.
+The same refusal was seen on issue #682 (PR #693) on 2026-10-29 and was not
+recorded in a repository document.
+
+A git-only reproduction was run from the primary worktree, without a claim or
+pull request. After `git fetch origin`, the disposable worktree was created
+from `origin/master`, its submodules were initialized, and
+`git submodule deinit --all` completed while it remained registered. The last
+two command outputs were:
+
+```text
+$ git worktree remove ../dotfiles.repro-f4-submodule
+fatal: working trees containing submodules cannot be moved or removed
+
+$ git -C ../dotfiles.repro-f4-submodule ls-files -s | grep '^160000'
+160000 dc1aa63fbca9f51f63caf5a80258fc9fd41b581a 0 tests/bash/helpers/bats-assert
+160000 eb7f42f8d608ac693d7a4b67474f6714ea68cfc5 0 tests/bash/helpers/bats-core
+160000 6bee58bec7c2f4aed1a7425ccd4bdc42b4a84599 0 tests/bash/helpers/bats-file
+160000 cb5385c2eefd45c4f2121fe4800f27252e3a2ec6 0 tests/bash/helpers/bats-support
+```
+
+The expected refusal was reproduced. The disposable worktree was then removed
+with `git worktree remove --force`, and `git branch -d repro/f4-submodule`
+deleted its branch (Git reported `Deleted branch repro/f4-submodule (was
+cfa4d3c).`). Neither cleanup command failed. This forced removal applied
+only to the disposable reproduction, not to an IDD issue worktree.
+
+### Manual fallback for an F4 step 5 hold
+
+For an issue worktree whose F4 helper stopped at step 5, run these steps in
+order from the primary worktree. F4 step 4 has already completed in this
+scenario; verify its resulting primary-branch state and do not repeat it. Do
+not proceed past a failure outcome.
+
+(a) Revalidate the claim with the profile-selected equivalent of the command in
+`idd-merge.instructions.md`, F4 step 5:
+
+```sh
+node scripts/resume-claim-routing.mjs --issue <issue-number> \
+  --claim-id <claim-id> --nonce <nonce> --worktree <issue-worktree-path>
+```
+
+The command must report `keep` or `already_owned`, and the worktree lock must
+belong to this session. On failure, do not touch the worktree; stop and report.
+Before the first preservation or cleanup mutation, acquire the profile-selected
+clone-scoped lock and keep it through (h); if it cannot be acquired, stop.
+Repeat the claim and lock checks immediately before every mutation in (d),
+(e), (f), any later authorized (g), and (h). After worktree removal, run the
+claim route again from the primary worktree; proceed to (h) only if the active
+claim and lock are still verifiably this session's. If any check fails or its
+result is uncertain, stop and report without making that mutation.
+
+(b) Inspect the worktree and submodules without changing them:
+
+```sh
+git -C <path> status --porcelain --ignored --untracked-files=normal
+git -C <path> submodule status --recursive
+git -C <path> submodule foreach --recursive 'git status --porcelain --ignored --untracked-files=normal && git stash list && git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes && { git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count; }'
+```
+
+The probe prints `Entering` lines. Treat status output from the worktree and
+each initialized submodule as the preservation inventory for (d). Ordinary
+tracked edits, untracked files, and ignored files can proceed to preservation
+only when their contents can be safely saved as described in (d). Hold and
+change nothing if any command fails or its output is incomplete, if the probe
+reports stash entries or nonzero counts, if a submodule has an unexpected
+commit or unresolved state, or if any content cannot be preserved. After (d),
+repeat these inspections; proceed to (e) only when the worktree status is
+empty, the probe prints no status or stash lines, every printed count is `0`,
+and the submodule state is understood. Otherwise hold and change nothing.
+
+(c) Compare the local branch tip with the `branch-tip=` value in the F4
+head-proof comment on the claimed issue:
+
+```sh
+git rev-parse --verify refs/heads/<branch>
+```
+
+On mismatch or failure, hold, report both values, and change nothing. Repeat
+this branch-tip comparison immediately before (f) or a later authorized (g).
+
+(d) Preserve the items reported by (b) outside the repository by hand. Save
+tracked edits from the worktree and affected submodules as a patch outside the
+repository, verify the patch, then restore only those tracked paths to `HEAD`.
+Move untracked and ignored files to a verified location outside the repository;
+do not commit them, and never commit or push secrets such as `.env`. Include
+submodule content reported by the recursive inspection. Verify every saved or
+moved item before continuing. If preservation fails, stop, report what was
+preserved, leave it outside the worktree, and do not run (e).
+
+(e) With the worktree still registered, and after the repeated clean-state
+checks in (b), deinitialize its submodules:
+
+```sh
+git -C <path> submodule deinit --all
+```
+
+On failure, stop and report it. Any content moved in (d) stays moved.
+
+(f) Try non-forced removal:
+
+```sh
+git worktree remove <path>
+```
+
+On success, continue to (h). If Git reports `fatal: working trees containing
+submodules cannot be moved or removed`, the worktree may be partly changed:
+inspect it and stop. On any other failure, stop and report it.
+
+(g) The F4 session never runs forced removal. Do not perform it while the
+options below remain unresolved. Only after the project's maintainers record a
+choice that permits a manual operator action outside F4, and after restarting
+at (a) to repeat the live claim, lock, preservation, and branch-tip checks, may
+the authorized operator run:
+
+```sh
+git worktree remove --force <path>
+```
+
+On failure, stop and inspect the worktree. On success, continue to (h).
+
+(h) After (f) or an authorized (g) removes the worktree, revalidate the claim
+and lock as described in (a), confirm the primary worktree remains at the
+development branch state left by F4 step 4 (for this default-branch case,
+`origin/master`), and compare the local branch tip with the F4 head-proof value
+again. Then delete the local branch:
+
+```sh
+git branch -d -- <branch>
+```
+
+This succeeds when the branch is merged into `HEAD`. On failure, stop and
+report it. Never use `-D`.
+
+Record F4 steps 4 to 6 as completed by the helper, completed by hand, or
+skipped, with evidence. Step 4 was already completed by the helper before its
+step 5 hold; verify that state and do not repeat its switch or fast-forward.
+Steps (f) or an authorized (g), followed by (h), complete the worktree and
+local-branch parts of step 5; do not repeat either removal. For step 6, read
+GitHub's `delete_branch_on_merge` setting. When it is true, record that remote
+branch deletion was skipped. When false, use the profile-selected
+`delete-remote-branch` helper with the verified PR head SHA; if it did not
+complete, an authorized operator may finish it with that helper. Stop and
+report on an unreadable setting, helper refusal, SHA mismatch, or inconclusive
+deletion. For the git-only reproduction above, no F4 helper steps were run.
+
+### Unresolved project options
+
+The project has not chosen between these options:
+
+1. Escalate the observed mismatch upstream to `kurone-kito/idd-skill`.
+2. Change the worktree layout so IDD worktrees do not hold populated
+   submodules.
+
+Neither option is chosen by this record, and choosing between them is outside
+this issue's scope. Their outcome may clarify whether the generic Local
+worktree recovery route applies after an F4 step 5 refusal. Until maintainers
+record a choice that permits it, do not perform step (g); an F4 session never
+uses forced removal.
