@@ -517,13 +517,23 @@ The superproject patches do not contain submodule file edits. Create both
 patches successfully and verify reverse applicability before restoring any
 tracked path:
 
-For each affected repository, set `REPO_PATH` to its absolute path, set
-`OUTSIDE_DIR` to a verified absolute directory outside every affected
-repository, and set `LABEL` to `superproject` or that submodule's name:
+Initialize the repository list once before iterating:
+
+```sh
+REPO_PATHS=()
+```
+
+For the superproject and every affected initialized submodule, set `REPO_PATH`
+to its absolute path, append it to `REPO_PATHS`, set `OUTSIDE_DIR` to a
+verified absolute directory outside every affected repository, and set `LABEL`
+to `superproject` or that submodule's name. Complete patch creation and both
+reverse checks for every affected repository before restoring any tracked
+path:
 
 ```sh
 INDEX_PATCH="$OUTSIDE_DIR/$LABEL-index.patch"
 WORKTREE_PATCH="$OUTSIDE_DIR/$LABEL-worktree.patch"
+REPO_PATHS+=("$REPO_PATH")
 if ! git -C "$REPO_PATH" diff --cached --binary -- . > "$INDEX_PATCH"; then
   echo "Index patch creation failed; stop without restoring tracked paths."
   exit 1
@@ -543,11 +553,17 @@ fi
 ```
 
 If either patch command fails, either patch file is missing, or either reverse
-check fails, stop and do not restore any tracked path. After both patches are
-verified, restore tracked paths in that same repository:
+check fails for any affected repository, stop and do not restore tracked paths
+in any repository. Only after every repository's two patches pass, restore
+tracked paths in each recorded repository:
 
 ```sh
-git -C "$REPO_PATH" restore --source=HEAD --staged --worktree -- .
+for REPO_PATH in "${REPO_PATHS[@]}"; do
+  if ! git -C "$REPO_PATH" restore --source=HEAD --staged --worktree -- .; then
+    echo "Tracked-path restore failed; stop and keep the external preservation files."
+    exit 1
+  fi
+done
 ```
 
 Move untracked and ignored files, including non-reproducible submodule
