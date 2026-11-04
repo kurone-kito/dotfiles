@@ -330,8 +330,8 @@ The F4-specific `docs/idd-resume-detail.md`, section **F4 Head Proof**, says:
 > dry run and this helper cannot finish afterward. The F4 session never runs
 > `git worktree remove --force`.
 
-The active `.github/instructions/idd-merge.instructions.md`, section **F4 —
-Cleanup**, step 5, further says:
+The pinned v0.17.0 `.github/instructions/idd-merge.instructions.md`, section
+**F4 — Cleanup**, step 5, further says:
 
 > The helper never passes `--force`, and the F4 session never runs `git
 > worktree remove --force`.
@@ -388,40 +388,84 @@ only to the disposable reproduction, not to an IDD issue worktree.
 
 ### Manual fallback for an F4 step 5 hold
 
-For an issue worktree whose F4 helper stopped at step 5, run these steps in
-order from the primary worktree. F4 step 4 has already completed in this
+For an issue worktree whose F4 helper stopped at step 5, run steps (a) to (h)
+in order from the primary worktree. F4 step 4 has already completed in this
 scenario; verify its resulting primary-branch state and do not repeat it. Do
 not proceed past a failure outcome.
 
-(a) Revalidate the claim with the profile-selected equivalent of the command in
-`idd-merge.instructions.md`, F4 step 5:
+Run the entire sequence inside one profile-selected `clone-lock --exec`
+invocation. For this repository's `ephemeral-npx` helper profile, the wrapper
+starts a shell in the primary worktree and holds the clone-scoped lock until
+that shell exits:
 
 ```sh
-node scripts/resume-claim-routing.mjs --issue <issue-number> \
-  --claim-id <claim-id> --nonce <nonce> --worktree <issue-worktree-path>
+npx --yes --package "<helper-package-spec>" \
+  idd-clone-lock --exec --agent-id "<agent-id>" \
+  --repo "<primary-worktree-path>" -- \
+  bash --noprofile --norc -i
 ```
 
-The command must report `keep` or `already_owned`, and the worktree lock must
-belong to this session. On failure, do not touch the worktree; stop and report.
-Before the first preservation or cleanup mutation, acquire the profile-selected
-clone-scoped lock and keep it through (h); if it cannot be acquired, stop.
-Repeat the claim and lock checks immediately before every mutation in (d),
-(e), (f), and any later authorized (g), while the issue worktree still exists.
+Keep that shell open and run every command in (a) to (h) from it. If the lock
+cannot be acquired, the wrapped shell does not run; stop. Exit only after (h)
+completes or after stopping at a documented failure. If an interactive shell
+is unavailable, put the complete (a) to (h) command sequence and its stop
+checks in one `bash -se` script passed after `--`; do not run any step outside
+the wrapper.
+
+(a) From inside the locked shell, revalidate the claim with the
+profile-selected `resume-claim-routing` command and `--assert`. For this
+repository's `ephemeral-npx` profile, use:
+
+```sh
+if ! VERIFIED_CLAIM_JSON=$(npx --yes --package "<helper-package-spec>" \
+  idd-resume-claim-routing --assert --issue "<issue-number>" \
+  --claim-id "<claim-id>" --nonce "<nonce>" \
+  --worktree "<issue-worktree-path>"); then
+  echo "Claim validation failed; stop."
+  exit 1
+fi
+if ! printf '%s' "$VERIFIED_CLAIM_JSON" | jq -e \
+  '.state == "already_owned" and .action == "keep" and .reason == "claim-id-match"' \
+  >/dev/null; then
+  echo "Claim route is not already_owned/keep; stop."
+  exit 1
+fi
+if ! CLAIM_LOCK_JSON=$(npx --yes --package "<helper-package-spec>" \
+  idd-claim-lock --check --worktree "<issue-worktree-path>"); then
+  echo "Worktree lock check failed; stop."
+  exit 1
+fi
+if ! printf '%s' "$CLAIM_LOCK_JSON" | jq -e \
+  --arg agent_id "<agent-id>" --arg claim_id "<claim-id>" \
+  '.present == true and .holder.agentId == $agent_id and .holder.claimId == $claim_id' \
+  >/dev/null; then
+  echo "Worktree lock holder does not match the active claim; stop."
+  exit 1
+fi
+```
+
+This block gates both checks. A successful claim route alone does not prove
+lock ownership. If either check fails, do not touch the worktree; stop and
+report. Repeat the block immediately before every mutation in (d), (e), (f),
+and any later authorized (g), while the issue worktree still exists.
+
 A successful (f) or (g) removes the worktree-local lock with the worktree's
-administrative directory; do not expect or try to read that removed lock.
-Keep the clone-scoped lock held through (h). Before (h), run the claim route
-again from the primary worktree with the same issue, claim ID, nonce, and
-worktree path. The helper's absent-path route must report `already_owned` and
-`keep` from the still-active claim ID and nonce; the still-held clone-scoped
-lock is the lock evidence for this post-removal step. If either cannot be
-verified, stop before deleting the local branch and report.
+administrative directory; do not expect or try to read that removed lock. Keep
+the clone-scoped lock held through (h). Before (h), run the claim route again
+from the primary worktree with the same issue, claim ID, nonce, and worktree
+path. Its absent-path route must report `state: already_owned`, `action: keep`,
+and `reason: claim-id-match`. Also run the profile-selected clone lock check and
+require `present: true` with `holder.agentId` equal to this session's agent ID.
+The active claim route and the still-held clone-scoped lock together provide
+the post-removal evidence; do not check the removed worktree-local lock. If
+either check fails, stop before deleting the local branch and report.
 
 (b) Inspect the worktree and submodules without changing them:
 
 ```sh
-git -C <path> status --porcelain --ignored --untracked-files=normal
-git -C <path> submodule status --recursive
-git -C <path> submodule foreach --recursive 'git status --porcelain --ignored --untracked-files=normal && git stash list && git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes && { git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count; }'
+git -C "<issue-worktree-path>" status --porcelain --ignored --untracked-files=normal
+git -C "<issue-worktree-path>" submodule status --recursive
+git -C "<issue-worktree-path>" submodule foreach --recursive 'git status --porcelain --ignored --untracked-files=normal && git stash list && git rev-list --exclude=refs/tags/\* --glob=refs/\* --count --not --remotes && { git symbolic-ref -q HEAD >/dev/null || git rev-list HEAD --not --remotes --tags --count; }'
 ```
 
 The probe prints `Entering` lines. Treat status output from the worktree and
@@ -435,31 +479,75 @@ repeat these inspections; proceed to (e) only when the worktree status is
 empty, the probe prints no status or stash lines, every printed count is `0`,
 and the submodule state is understood. Otherwise hold and change nothing.
 
-(c) Compare the local branch tip with the `branch-tip=` value in the F4
-head-proof comment on the claimed issue:
+(c) Read the F4 head-proof comment for this active claim. Verify the comment is
+by a trusted marker actor, is unedited, and has no malformed or conflicting
+proof for this claim. Require its `claim=` value to match the active claim ID.
+Require a reusable proof to match the active claim ID, the PR matched to the
+claimed issue, the active branch, and all four SHA values (`f2`, `branch-tip`,
+`merge`, and `head`). Apply the pinned v0.17.0 `docs/idd-resume-detail.md`
+section **F4 Head Proof** rules for trusted author, claim activation time,
+`created_at`/`updated_at`, duplicates, malformed fields, and conflicts. Set
+`PR_NUMBER`, `PROOF_MERGE_SHA`, and `PROOF_HEAD_SHA` from that validated proof;
+do not treat those proof values as a live PR read. Treat its `branch-tip=`
+value only as the expected local SHA. Take the branch name from the JSON
+returned by the successful `resume-claim-routing --assert` in (a), and require
+it to match the proof's `branch=` value. Never paste a proof-derived branch
+name into shell source. Extract and validate the branch as data, then quote
+every argument that uses it:
 
 ```sh
-git rev-parse --verify refs/heads/<branch>
+BRANCH_NAME=$(printf '%s' "$VERIFIED_CLAIM_JSON" | jq -er '.active_claim.branch')
+if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
+  # Hold and stop.
+  exit 1
+fi
+LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME")
 ```
 
-On mismatch or failure, hold, report both values, and change nothing. Repeat
-this branch-tip comparison immediately before (f) or a later authorized (g).
+Compare `LOCAL_BRANCH_TIP` with the proof's `branch-tip=` SHA. On mismatch or
+failure, hold, report both values, and change nothing. Repeat the claim, lock,
+and branch-tip checks immediately before (f) or a later authorized (g), using
+the latest successful claim JSON. Repeat the branch-tip comparison again in
+(h) before deleting the local branch.
 
 (d) Preserve the items reported by (b) outside the repository by hand. For the
-superproject and each affected initialized submodule, save tracked changes,
-including staged and unstaged edits, in a separate patch outside the
-repository. The superproject patch does not contain submodule file edits:
+superproject and each affected initialized submodule, save staged index changes
+and unstaged worktree changes in separate patch files outside the repository.
+The superproject patches do not contain submodule file edits. Create both
+patches successfully and verify reverse applicability before restoring any
+tracked path:
+
+For each affected repository, set `REPO_PATH` to its absolute path, set
+`OUTSIDE_DIR` to a verified absolute directory outside every affected
+repository, and set `LABEL` to `superproject` or that submodule's name:
 
 ```sh
-git -C <repo-path> diff --binary HEAD -- <tracked-paths> > <outside>/<label>.patch
-git -C <repo-path> apply --check --reverse <outside>/<label>.patch
+INDEX_PATCH="$OUTSIDE_DIR/$LABEL-index.patch"
+WORKTREE_PATCH="$OUTSIDE_DIR/$LABEL-worktree.patch"
+if ! git -C "$REPO_PATH" diff --cached --binary -- . > "$INDEX_PATCH"; then
+  echo "Index patch creation failed; stop without restoring tracked paths."
+  exit 1
+fi
+if ! git -C "$REPO_PATH" diff --binary -- . > "$WORKTREE_PATCH"; then
+  echo "Worktree patch creation failed; stop without restoring tracked paths."
+  exit 1
+fi
+if ! git -C "$REPO_PATH" apply --cached --check --reverse "$INDEX_PATCH"; then
+  echo "Index patch verification failed; stop without restoring tracked paths."
+  exit 1
+fi
+if ! git -C "$REPO_PATH" apply --check --reverse "$WORKTREE_PATCH"; then
+  echo "Worktree patch verification failed; stop without restoring tracked paths."
+  exit 1
+fi
 ```
 
-Verify each patch before restoring the corresponding tracked paths in that
-same repository:
+If either patch command fails, either patch file is missing, or either reverse
+check fails, stop and do not restore any tracked path. After both patches are
+verified, restore tracked paths in that same repository:
 
 ```sh
-git -C <repo-path> restore --source=HEAD --staged --worktree -- <tracked-paths>
+git -C "$REPO_PATH" restore --source=HEAD --staged --worktree -- .
 ```
 
 Move untracked and ignored files, including non-reproducible submodule
@@ -473,7 +561,7 @@ not run (e).
 checks in (b), deinitialize its submodules:
 
 ```sh
-git -C <path> submodule deinit --all
+git -C "<issue-worktree-path>" submodule deinit --all
 ```
 
 On failure, stop and report it. Any content moved in (d) stays moved.
@@ -481,7 +569,7 @@ On failure, stop and report it. Any content moved in (d) stays moved.
 (f) Try non-forced removal:
 
 ```sh
-git worktree remove <path>
+git worktree remove "<issue-worktree-path>"
 ```
 
 On success, continue to (h). If Git reports `fatal: working trees containing
@@ -495,20 +583,60 @@ at (a) to repeat the live claim, lock, preservation, and branch-tip checks, may
 the authorized operator run:
 
 ```sh
-git worktree remove --force <path>
+git worktree remove --force "<issue-worktree-path>"
 ```
 
 On failure, stop and inspect the worktree. On success, continue to (h).
 
-(h) After (f) or an authorized (g) removes the worktree, use the post-removal
-claim route and still-held clone-scoped lock described after (a); do not look
-for the removed worktree-local lock. Confirm the primary worktree remains at
-the development branch state left by F4 step 4 (for this default-branch case,
-`origin/master`), and compare the local branch tip with the F4 head-proof value
-again. Then delete the local branch:
+(h) After (f) or an authorized (g) removes the worktree, refresh
+`VERIFIED_CLAIM_JSON` with the post-removal claim route from (a), using the same
+issue, claim ID, nonce, and worktree path. Require its absent-path route to
+report `state: already_owned`, `action: keep`, and `reason: claim-id-match`.
+Then run the profile-selected clone-lock check from the locked shell:
 
 ```sh
-git branch -d -- <branch>
+if ! VERIFIED_CLAIM_JSON=$(npx --yes --package "<helper-package-spec>" \
+  idd-resume-claim-routing --assert --issue "<issue-number>" \
+  --claim-id "<claim-id>" --nonce "<nonce>" \
+  --worktree "<issue-worktree-path>"); then
+  echo "Post-removal claim validation failed; stop."
+  exit 1
+fi
+if ! printf '%s' "$VERIFIED_CLAIM_JSON" | jq -e \
+  '.state == "already_owned" and .action == "keep" and .reason == "claim-id-match"' \
+  >/dev/null; then
+  echo "Post-removal claim route is not already_owned/keep; stop."
+  exit 1
+fi
+if ! CLONE_LOCK_JSON=$(npx --yes --package "<helper-package-spec>" \
+  idd-clone-lock --check --repo "<primary-worktree-path>"); then
+  echo "Clone lock check failed; stop."
+  exit 1
+fi
+if ! printf '%s' "$CLONE_LOCK_JSON" | jq -e \
+  --arg agent_id "<agent-id>" \
+  '.present == true and .holder.agentId == $agent_id' >/dev/null; then
+  echo "Clone lock is not held by this session; stop."
+  exit 1
+fi
+BRANCH_NAME=$(printf '%s' "$VERIFIED_CLAIM_JSON" | jq -er '.active_claim.branch')
+if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
+  echo "Verified claim branch is not a valid ref; stop."
+  exit 1
+fi
+LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME")
+```
+
+Require the proof's `branch=` to match `BRANCH_NAME` and `LOCAL_BRANCH_TIP` to
+match its `branch-tip=` SHA. Do not look for the removed worktree-local lock.
+If either post-removal check fails, stop before deleting the local branch and
+report. Confirm the primary worktree remains at the development branch state
+left by F4 step 4 (for this default-branch case, `origin/master`). The branch
+tip check above is immediately before deleting the branch name from the
+verified active-claim JSON:
+
+```sh
+git branch -d -- "$BRANCH_NAME"
 ```
 
 This succeeds when the branch is merged into `HEAD`. On failure, stop and
@@ -518,10 +646,20 @@ Record F4 steps 4 to 6 as completed by the helper, completed by hand, or
 skipped, with evidence. Step 4 was already completed by the helper before its
 step 5 hold; verify that state and do not repeat its switch or fast-forward.
 Steps (f) or an authorized (g), followed by (h), complete the worktree and
-local-branch parts of step 5; do not repeat either removal. For step 6, read
+local-branch parts of step 5; do not repeat either removal. For step 6, after
+cleanup, re-read the matched PR and its merge commit through GitHub's REST API.
+Require the live PR number, branch, closed/merged state, merge commit SHA, and
+derived merged head SHA to match the reusable proof's `pr`, `branch`, `merge`,
+and `head` fields. Apply the pinned v0.17.0 **F4 Head Proof** post-cleanup
+validation: stop on any failed or inconclusive read, invalid SHA, wrong PR
+state, commit-object shape failure, or mismatch. For a two-parent merge, derive
+`PR_HEAD_SHA_F3` from parent 2 and require it to equal the live PR head; for a
+one-parent merge, use the live PR head. In both cases require the derived head
+and merge SHA to equal the proof's `head` and `merge` values. Then read
 GitHub's `delete_branch_on_merge` setting. When it is true, record that remote
 branch deletion was skipped. When false, use the profile-selected
-`delete-remote-branch` helper with the verified PR head SHA; if it did not
+`delete-remote-branch` helper with the verified `PR_HEAD_SHA_F3`; its
+expected-SHA lease must compare against that merged PR head. If it did not
 complete, an authorized operator may finish it with that helper. Stop and
 report on an unreadable setting, helper refusal, SHA mismatch, or inconclusive
 deletion. For the git-only reproduction above, no F4 helper steps were run.
