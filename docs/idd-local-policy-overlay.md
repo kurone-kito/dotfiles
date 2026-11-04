@@ -517,23 +517,33 @@ The superproject patches do not contain submodule file edits. Create both
 patches successfully and verify reverse applicability before restoring any
 tracked path:
 
-Initialize the repository list once before iterating:
+Set `OUTSIDE_DIR` to a verified absolute directory outside every affected
+repository. Initialize the repository list once and create a new, unique
+directory for this preservation run before iterating:
 
 ```sh
 REPO_PATHS=()
+PATCH_ROOT=$(mktemp -d "$OUTSIDE_DIR/idd-f4-preserve.XXXXXX") || {
+  echo "Could not create a new preservation directory; stop before changing tracked paths."
+  exit 1
+}
 ```
 
 For the superproject and every affected initialized submodule, set `REPO_PATH`
-to its absolute path, append it to `REPO_PATHS`, set `OUTSIDE_DIR` to a
-verified absolute directory outside every affected repository, and set `LABEL`
-to `superproject` or that submodule's name. Complete patch creation and both
-reverse checks for every affected repository before restoring any tracked
-path:
+to its absolute path, append it to `REPO_PATHS`, and set `LABEL` to a unique,
+filename-safe identifier (for example, `superproject` or `submodule-1`).
+Complete patch creation and both reverse checks for every affected repository
+before restoring any tracked path:
 
 ```sh
-INDEX_PATCH="$OUTSIDE_DIR/$LABEL-index.patch"
-WORKTREE_PATCH="$OUTSIDE_DIR/$LABEL-worktree.patch"
+INDEX_PATCH="$PATCH_ROOT/$LABEL-index.patch"
+WORKTREE_PATCH="$PATCH_ROOT/$LABEL-worktree.patch"
 REPO_PATHS+=("$REPO_PATH")
+if [ -e "$INDEX_PATCH" ] || [ -L "$INDEX_PATCH" ] ||
+   [ -e "$WORKTREE_PATCH" ] || [ -L "$WORKTREE_PATCH" ]; then
+  echo "A preservation patch destination already exists; stop without overwriting it."
+  exit 1
+fi
 if ! git -C "$REPO_PATH" diff --cached --binary -- . > "$INDEX_PATCH"; then
   echo "Index patch creation failed; stop without restoring tracked paths."
   exit 1
