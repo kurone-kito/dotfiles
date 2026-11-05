@@ -567,8 +567,19 @@ fi
 
 If either patch command fails, either patch file is missing, or either reverse
 check fails for any affected repository, stop and do not restore tracked paths
-in any repository. Only after every repository's two patches pass, restore
-tracked paths in each recorded repository:
+in any repository. Only after every repository's two patches pass, move
+untracked and ignored files, including non-reproducible submodule leftovers, to
+a verified location outside the repository; move rather than copy them. Do
+this before restoring tracked paths, because a tracked path recreated with
+untracked contents could otherwise be overwritten by the restore. Do not
+commit them, and never commit or push secrets such as `.env`. Verify every
+saved or moved item before continuing. If preservation, moving, or verification
+fails, stop, report what was preserved, leave it outside the worktree, and do
+not run (e).
+
+Only after every repository's two patches pass and every untracked or ignored
+item has been moved and verified, restore tracked paths in each recorded
+repository:
 
 ```sh
 for REPO_PATH in "${REPO_PATHS[@]}"; do
@@ -579,12 +590,8 @@ for REPO_PATH in "${REPO_PATHS[@]}"; do
 done
 ```
 
-Move untracked and ignored files, including non-reproducible submodule
-leftovers, to a verified location outside the repository; move rather than
-copy them. Do not commit them, and never commit or push secrets such as `.env`.
-Verify every saved or moved item before continuing. If preservation or restore
-fails, stop, report what was preserved, leave it outside the worktree, and do
-not run (e).
+If tracked-path restore fails, stop, report what was preserved, keep the
+external preservation files, and do not run (e).
 
 (e) With the worktree still registered, and after the repeated clean-state
 checks in (b), deinitialize its submodules:
