@@ -501,7 +501,10 @@ if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
   # Hold and stop.
   exit 1
 fi
-LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME")
+if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
+  echo "Branch-tip verification failed; hold and stop."
+  exit 1
+fi
 ```
 
 Compare `LOCAL_BRANCH_TIP` with the proof's `branch-tip=` SHA. On mismatch or
@@ -552,11 +555,11 @@ if ! git -C "$REPO_PATH" diff --binary -- . > "$WORKTREE_PATCH"; then
   echo "Worktree patch creation failed; stop without restoring tracked paths."
   exit 1
 fi
-if ! git -C "$REPO_PATH" apply --cached --check --reverse "$INDEX_PATCH"; then
+if ! git -C "$REPO_PATH" apply --allow-empty --cached --check --reverse "$INDEX_PATCH"; then
   echo "Index patch verification failed; stop without restoring tracked paths."
   exit 1
 fi
-if ! git -C "$REPO_PATH" apply --check --reverse "$WORKTREE_PATCH"; then
+if ! git -C "$REPO_PATH" apply --allow-empty --check --reverse "$WORKTREE_PATCH"; then
   echo "Worktree patch verification failed; stop without restoring tracked paths."
   exit 1
 fi
@@ -650,7 +653,10 @@ if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
   echo "Verified claim branch is not a valid ref; stop."
   exit 1
 fi
-LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME")
+if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
+  echo "Post-removal branch-tip verification failed; stop before deleting the local branch."
+  exit 1
+fi
 ```
 
 Require the proof's `branch=` to match `BRANCH_NAME` and `LOCAL_BRANCH_TIP` to
