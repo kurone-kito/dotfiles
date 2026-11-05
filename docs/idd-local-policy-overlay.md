@@ -486,10 +486,12 @@ Require a reusable proof to match the active claim ID, the PR matched to the
 claimed issue, the active branch, and all four SHA values (`f2`, `branch-tip`,
 `merge`, and `head`). Apply the pinned v0.17.0 `docs/idd-resume-detail.md`
 section **F4 Head Proof** rules for trusted author, claim activation time,
-`created_at`/`updated_at`, duplicates, malformed fields, and conflicts. Set
-`PR_NUMBER`, `PROOF_MERGE_SHA`, and `PROOF_HEAD_SHA` from that validated proof;
-do not treat those proof values as a live PR read. Treat its `branch-tip=`
-value only as the expected local SHA. Take the branch name from the JSON
+`created_at`/`updated_at`, duplicates, malformed fields, and conflicts. Parse
+its `branch=` and `branch-tip=` fields into `PROOF_BRANCH` and
+`PROOF_BRANCH_TIP`, respectively. Set `PR_NUMBER`, `PROOF_MERGE_SHA`, and
+`PROOF_HEAD_SHA` from that validated proof; do not treat those proof values as
+a live PR read. Treat `PROOF_BRANCH_TIP` only as the expected local SHA. Take
+the branch name from the JSON
 returned by the successful `resume-claim-routing --assert` in (a), and require
 it to match the proof's `branch=` value. Never paste a proof-derived branch
 name into shell source. Extract and validate the branch as data, then quote
@@ -503,6 +505,11 @@ if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
 fi
 if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
   echo "Branch-tip verification failed; hold and stop."
+  exit 1
+fi
+if [ "$BRANCH_NAME" != "$PROOF_BRANCH" ] ||
+   [ "$LOCAL_BRANCH_TIP" != "$PROOF_BRANCH_TIP" ]; then
+  echo "Branch or branch tip does not match the validated proof; hold and stop."
   exit 1
 fi
 ```
@@ -662,6 +669,11 @@ if ! git check-ref-format "refs/heads/$BRANCH_NAME"; then
 fi
 if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
   echo "Post-removal branch-tip verification failed; stop before deleting the local branch."
+  exit 1
+fi
+if [ "$BRANCH_NAME" != "$PROOF_BRANCH" ] ||
+   [ "$LOCAL_BRANCH_TIP" != "$PROOF_BRANCH_TIP" ]; then
+  echo "Post-removal branch or tip does not match the validated proof; stop before deleting the local branch."
   exit 1
 fi
 ```
