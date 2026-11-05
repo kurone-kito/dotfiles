@@ -509,7 +509,11 @@ if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
 fi
 if [ "$BRANCH_NAME" != "$PROOF_BRANCH" ] ||
    [ "$LOCAL_BRANCH_TIP" != "$PROOF_BRANCH_TIP" ]; then
-  echo "Branch or branch tip does not match the validated proof; hold and stop."
+  printf 'Branch values: actual=%s expected=%s\n' \
+    "$BRANCH_NAME" "$PROOF_BRANCH"
+  printf 'Branch-tip values: actual=%s expected=%s\n' \
+    "$LOCAL_BRANCH_TIP" "$PROOF_BRANCH_TIP"
+  echo "Hold and stop."
   exit 1
 fi
 ```
@@ -673,7 +677,11 @@ if ! LOCAL_BRANCH_TIP=$(git rev-parse --verify "refs/heads/$BRANCH_NAME"); then
 fi
 if [ "$BRANCH_NAME" != "$PROOF_BRANCH" ] ||
    [ "$LOCAL_BRANCH_TIP" != "$PROOF_BRANCH_TIP" ]; then
-  echo "Post-removal branch or tip does not match the validated proof; stop before deleting the local branch."
+  printf 'Post-removal branch values: actual=%s expected=%s\n' \
+    "$BRANCH_NAME" "$PROOF_BRANCH"
+  printf 'Post-removal branch-tip values: actual=%s expected=%s\n' \
+    "$LOCAL_BRANCH_TIP" "$PROOF_BRANCH_TIP"
+  echo "Stop before deleting the local branch."
   exit 1
 fi
 ```
