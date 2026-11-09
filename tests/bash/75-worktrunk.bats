@@ -50,6 +50,10 @@ MOCK
   chmod +x "$BATS_TEST_TMPDIR/bin/$1"
 }
 
+require_zsh() {
+  command -v zsh > /dev/null 2>&1 || skip "zsh not available"
+}
+
 # ---------------------------------------------------------------------------
 # Static validation — patterns must satisfy worktrunk's detection
 # ---------------------------------------------------------------------------
@@ -200,6 +204,7 @@ MOCK
 }
 
 @test "zsh initializes git-wt then wt shell init when both are available" {
+  require_zsh
   make_worktrunk_mock git-wt zsh git-wt
   make_worktrunk_mock wt zsh wt
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
@@ -210,6 +215,7 @@ MOCK
 }
 
 @test "zsh skips wt shell init when git-wt is present and wt resolves to Windows Terminal" {
+  require_zsh
   make_worktrunk_mock git-wt zsh git-wt
   make_worktrunk_mock WindowsApps/wt zsh wt
   make_worktrunk_mock wt zsh wt
@@ -221,6 +227,7 @@ MOCK
 }
 
 @test "zsh skips wt shell init when Windows Terminal wt precedes a worktrunk wt and git-wt is absent" {
+  require_zsh
   make_worktrunk_mock WindowsApps/wt zsh wt
   make_worktrunk_mock wt zsh wt
   export PATH="$BATS_TEST_TMPDIR/bin/WindowsApps:$BATS_TEST_TMPDIR/bin:$PATH"
