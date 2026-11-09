@@ -20,12 +20,15 @@ for f in "${ZDOTDIR:-$HOME/.config/zsh}/conf.d/"*.zsh(N); do
 done
 
 # Worktrunk shell integration — must be in .zshrc for detection
-# Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
+# Each name gets its own init: git-wt, then wt. A wt that is Windows Terminal
+# (whence -p returns the first PATH match) is never wrapped, so no wt function
+# shadows it.
 __wt_path=
 if whence -p git-wt >/dev/null 2>&1; then
   __wt_init="$(command git-wt config shell init zsh 2>/dev/null)" && eval "$__wt_init"
   unset __wt_init
-elif whence -p wt >/dev/null 2>&1; then
+fi
+if whence -p wt >/dev/null 2>&1; then
   __wt_path="$(whence -p wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
   case "$__wt_path" in
     *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
