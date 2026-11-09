@@ -13,7 +13,7 @@ BeforeAll {
     (Join-Path (Join-Path $repoRoot 'tests') 'powershell\fixtures')
   ) '35-register-path.ps1'
 
-  # Shared manifest for the winget listing Its: twpayne.chezmoi is
+  # Shared manifest for the winget listing tests: twpayne.chezmoi is
   # declared first, so declared order differs from the alphabetical
   # listing order; GitHub.cli has no enabled property and two matching
   # directories; SQLite.SQLite is disabled although its bin exists; and
@@ -23,7 +23,7 @@ BeforeAll {
     '{"label":"sqlite","id":"SQLite.SQLite","bin":"bin","enabled":false},' +
     '{"label":"ngrok","id":"Ngrok.Ngrok","bin":"bin"}]'
 
-  # Default Get-ChildItem mock body for the listing Its. It returns the
+  # Default Get-ChildItem mock body for the listing tests. It returns the
   # listing the cmdlet would return and never forwards to the real
   # cmdlet (a forwarding call recurses under Pester 6). It also serves
   # the wildcard-bin probes and the AfterEach cleanup, if they run
