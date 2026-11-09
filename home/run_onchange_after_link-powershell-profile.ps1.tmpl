@@ -93,6 +93,10 @@ foreach ($root in $roots) {
         $existing = $null
       }
       if ($null -ne $existing) {
+        # Move-Item would move the temporary file inside a directory, so refuse first.
+        if ($existing.PSIsContainer) {
+          throw 'refusing to replace a directory'
+        }
         if ($existing.LinkType -eq 'SymbolicLink' -or $existing.LinkType -eq 'Junction') {
           throw "refusing to write through a $($existing.LinkType)"
         }
