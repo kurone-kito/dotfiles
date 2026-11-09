@@ -37,6 +37,7 @@ Describe '45-worktrunk' {
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
     $script:WorktrunkCalls = @()
+    $script:SavedWorktrunkBin = $env:WORKTRUNK_BIN
 
     Mock Get-Command { $null } -ParameterFilter { $Name -in @('git-wt', 'wt') }
   }
@@ -51,6 +52,12 @@ Describe '45-worktrunk' {
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCalls -Scope Script -ErrorAction SilentlyContinue
+    # Restore the caller's WORKTRUNK_BIN, since tests here set and remove it.
+    if ($null -eq $script:SavedWorktrunkBin) {
+      Remove-Item Env:WORKTRUNK_BIN -ErrorAction SilentlyContinue
+    } else {
+      $env:WORKTRUNK_BIN = $script:SavedWorktrunkBin
+    }
     if ($script:MockBin -and (Test-Path $script:MockBin)) {
       Remove-Item $script:MockBin -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -243,15 +250,16 @@ Describe '45-worktrunk' {
 
     . $script:Subject
 
-    # Unscoped on purpose: the dot-sourced subject defines these in this It's
-    # scope, so a -Scope Script lookup would never see a leaked variable.
+    # Local scope on purpose: the dot-sourced subject defines these in this It's
+    # scope, so a -Scope Script lookup would never see a leaked variable, and an
+    # unscoped lookup would also match a same-named parent or global variable.
     foreach ($name in @(
         '__wtCmd', '__wtInit', '__wtPath', '__wtCandidate', '__candidatePath',
         '__isWindowsTerminal', '__wtFirst', '__wtFirstIsWindowsTerminal',
         '__gitWtInfo', '__gitWtPresent', '__gitWtCmd', '__wtSubjects', '__wtSubject',
         '__wtExitOk', '__wtSetBin', '__psi', '__proc', '__stderrTask'
       )) {
-      Get-Variable -Name $name -ErrorAction SilentlyContinue |
+      Get-Variable -Name $name -Scope Local -ErrorAction SilentlyContinue |
         Should -BeNullOrEmpty
     }
   }
@@ -361,9 +369,9 @@ Describe '45-worktrunk' {
 
       . $script:Subject
 
-      Get-Variable -Name __wtResolved -ErrorAction SilentlyContinue |
+      Get-Variable -Name __wtResolved -Scope Local -ErrorAction SilentlyContinue |
         Should -BeNullOrEmpty
-      Get-Variable -Name __wtSetBin -ErrorAction SilentlyContinue |
+      Get-Variable -Name __wtSetBin -Scope Local -ErrorAction SilentlyContinue |
         Should -BeNullOrEmpty
     }
   }
