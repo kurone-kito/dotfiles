@@ -245,6 +245,7 @@ Describe 'link-powershell-profile linker body (Windows)' -Skip:($IsWindows -eq $
     Read-Trimmed (Join-Path $a 'profile.ps1') | Should -Be $script:ExpectedAll
     Test-Path -LiteralPath (Join-Path $a 'Microsoft.VSCode_profile.ps1') | Should -BeTrue
     Read-Trimmed (Join-Path $a 'extra.ps1') | Should -Be 'sibling'
+    @(Get-ChildItem -LiteralPath $a -Filter '*.tmp-*' -Force).Count | Should -Be 0
   }
 
   It 'refuses a symbolic link, leaves its target alone, and still writes the other names and roots' {
