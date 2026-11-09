@@ -28,7 +28,12 @@ setup() {
   mkdir -p "$EMPTY_BIN" "$XSEL_BIN" "$WIN_BIN" "$WORK_DIR"
   : > "$XSEL_PIDFILE"
   : > "$PIDS_FILE"
+  # Each PATH holds only the tools a case needs, so nothing under /usr/bin
+  # (for example a real xclip, which Neovim tries first) can change the probe.
+  link_core_tools "$EMPTY_BIN"
+  link_core_tools "$XSEL_BIN"
   write_blocking_xsel "$XSEL_BIN/xsel"
+  link_core_tools "$WIN_BIN"
   write_blocking_xsel "$WIN_BIN/xsel"
   write_fake_win32yank "$WIN_BIN/win32yank.exe"
   write_headless_probe
@@ -74,6 +79,17 @@ SH
 write_fake_win32yank() {
   printf '%s\n' '#!/bin/sh' 'exit 0' > "$1"
   chmod +x "$1"
+}
+
+# link_core_tools <dir>: give a test PATH the shell and sleep the probe needs.
+link_core_tools() {
+  ln -s "$(command -v sh)" "$1/sh"
+  ln -s "$(command -v sleep)" "$1/sleep"
+}
+
+# win32yank_on_path <path>: succeed only when win32yank.exe resolves on <path>.
+win32yank_on_path() {
+  bash -c 'export PATH="$1"; command -v win32yank.exe > /dev/null 2>&1' _ "$1"
 }
 
 # Headless probe: forces vim.fn.has('wsl') to NVIM_TEST_WSL, then loads
@@ -132,12 +148,14 @@ LUA
 # nvim. An empty <display> leaves DISPLAY unset. Result lines go to
 # $RESULT_FILE.
 run_headless_options() {
-  local wsl="$1" path="$2" display="$3" display_arg=()
+  local wsl="$1" path="$2" display="$3" display_arg=() timeout_cmd
+  timeout_cmd="$(command -v timeout || command -v gtimeout || true)"
+  [ -n "$timeout_cmd" ] || skip "timeout or gtimeout is unavailable"
   RESULT_FILE="$BATS_TEST_TMPDIR/result-$wsl-$RANDOM.txt"
   if [ -n "$display" ]; then
     display_arg=("DISPLAY=$display")
   fi
-  run timeout 15 env -u WAYLAND_DISPLAY -u TMUX -u DISPLAY "${display_arg[@]}" \
+  run "$timeout_cmd" 15 env -u WAYLAND_DISPLAY -u TMUX -u DISPLAY "${display_arg[@]}" \
     PATH="$path" NVIM_TEST_WSL="$wsl" NVIM_TEST_OPTIONS="$OPTIONS_LUA" \
     NVIM_TEST_OUT="$RESULT_FILE" \
     "$NVIM_BIN" --headless -n -i NONE -u NONE -c "luafile $PROBE_LUA" -c 'qa!'
@@ -202,6 +220,22 @@ probe_pids() {
   done
 }
 
+# assert_no_probe_window <root>: sample the tree of <root> at 0.1 s steps for
+# 2 seconds and fail on the first sample that shows the xsel probe. A single
+# sample could miss a probe that starts shortly after the marker.
+assert_no_probe_window() {
+  local i=0 found
+  while [ "$i" -le 20 ]; do
+    found="$(probe_pids "$1")"
+    if [ -n "$found" ]; then
+      echo "xsel probe present in the process tree at sample $i: $found" >&2
+      return 1
+    fi
+    sleep 0.1
+    i=$((i + 1))
+  done
+}
+
 # stop_recorded_pids: SIGTERM, then SIGKILL, for PIDs this test recorded.
 stop_recorded_pids() {
   local file pid
@@ -230,8 +264,8 @@ stop_recorded_pids() {
 
 @test "WSL selects win32yank before enabling unnamedplus" {
   require_nvim
-  local path="$WIN_BIN:/usr/bin:/bin"
-  run env PATH="$path" bash -c 'command -v win32yank.exe'
+  local path="$WIN_BIN"
+  run win32yank_on_path "$path"
   assert_success
   run_headless_options 1 "$path" ':0'
   assert_success
@@ -243,8 +277,8 @@ stop_recorded_pids() {
 
 @test "WSL selects win32yank without win32yank.exe on PATH" {
   require_nvim
-  local path="$XSEL_BIN:/usr/bin:/bin"
-  run env PATH="$path" bash -c 'command -v win32yank.exe'
+  local path="$XSEL_BIN"
+  run win32yank_on_path "$path"
   assert_failure
   run_headless_options 1 "$path" ':0'
   assert_success
@@ -270,31 +304,29 @@ stop_recorded_pids() {
 
 @test "WSL startup runs no xsel probe within 2 seconds" {
   require_tui
-  local path="$WIN_BIN:/usr/bin:/bin"
-  run env PATH="$path" bash -c 'command -v win32yank.exe'
+  local path="$WIN_BIN"
+  run win32yank_on_path "$path"
   assert_success
   start_tui "$path" -n -i NONE -u "$INIT_LUA"
   wait_for_file "$STARTED_FILE" 20
   [ -e "$STARTED_FILE" ]
-  run probe_pids "$TMUX_PANE_PID"
-  assert_output ''
+  assert_no_probe_window "$TMUX_PANE_PID"
 }
 
 @test "WSL startup runs no xsel probe without win32yank.exe on PATH" {
   require_tui
-  local path="$XSEL_BIN:/usr/bin:/bin"
-  run env PATH="$path" bash -c 'command -v win32yank.exe'
+  local path="$XSEL_BIN"
+  run win32yank_on_path "$path"
   assert_failure
   start_tui "$path" -n -i NONE -u "$INIT_LUA"
   wait_for_file "$STARTED_FILE" 20
   [ -e "$STARTED_FILE" ]
-  run probe_pids "$TMUX_PANE_PID"
-  assert_output ''
+  assert_no_probe_window "$TMUX_PANE_PID"
 }
 
 @test "detector control: plain clipboard=unnamedplus starts the xsel probe" {
   require_tui
-  local path="$XSEL_BIN:/usr/bin:/bin" found="" tries=0
+  local path="$XSEL_BIN" found="" tries=0
   start_tui "$path" -n -i NONE -u NONE -c 'set clipboard=unnamedplus'
   while [ -z "$found" ] && [ "$tries" -lt 50 ]; do
     found="$(probe_pids "$TMUX_PANE_PID")"
