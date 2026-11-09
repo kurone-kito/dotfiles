@@ -6,6 +6,63 @@ BeforeAll {
   $script:Subject = Join-Path (
     (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\conf.d')
   ) '01-path.ps1'
+  $script:Library = Join-Path (
+    (Join-Path (Join-Path (Join-Path $repoRoot 'home') 'dot_config') 'powershell\lib')
+  ) 'managed-paths.ps1'
+  $script:RegisterFixture = Join-Path (
+    (Join-Path (Join-Path $repoRoot 'tests') 'powershell\fixtures')
+  ) '35-register-path.ps1'
+
+  # Shared manifest for the winget listing tests: twpayne.chezmoi is
+  # declared first, so declared order differs from the alphabetical
+  # listing order; GitHub.cli has no enabled property and two matching
+  # directories; SQLite.SQLite is disabled although its bin exists; and
+  # Ngrok.Ngrok's package directory has no bin subdirectory.
+  $script:ListingManifest = '[{"label":"chezmoi","id":"twpayne.chezmoi","bin":"","enabled":true},' +
+    '{"label":"gh","id":"GitHub.cli","bin":"bin"},' +
+    '{"label":"sqlite","id":"SQLite.SQLite","bin":"bin","enabled":false},' +
+    '{"label":"ngrok","id":"Ngrok.Ngrok","bin":"bin"}]'
+
+  # Default Get-ChildItem mock body for the listing tests. It returns the
+  # listing the cmdlet would return and never forwards to the real
+  # cmdlet (a forwarding call recurses under Pester 6). It also serves
+  # the wildcard-bin probes and the AfterEach cleanup, if they run
+  # while it is active. A missing path yields nothing, as the cmdlet
+  # does with -ErrorAction SilentlyContinue; any other error still
+  # fails the test. $script:ListingReversed makes it return the
+  # listing in reverse name order.
+  $script:ListingReversed = $false
+  $script:ListingMock = {
+    $dir = [System.IO.DirectoryInfo]::new([string]$LiteralPath)
+    if (-not $dir.Exists) {
+      return @()
+    }
+    # Read $Filter directly: $PSBoundParameters does not carry the
+    # mocked call's arguments inside a -MockWith body (Pester 6).
+    if ([string]::IsNullOrEmpty($Filter)) {
+      $children = $dir.GetDirectories()
+    } else {
+      $children = $dir.GetDirectories($Filter)
+    }
+    if ($script:ListingReversed) {
+      $children = @($children | Sort-Object -Property Name -Descending)
+    }
+    return @($children | ForEach-Object { Get-Item -LiteralPath $_.FullName -Force })
+  }
+
+  function New-WingetListingTree {
+    param([Parameter(Mandatory)][string]$PackagesRoot)
+
+    foreach ($dir in @(
+      (Join-Path $PackagesRoot 'GitHub.cli_Microsoft.Winget.Source_a\bin')
+      (Join-Path $PackagesRoot 'GitHub.cli_Microsoft.Winget.Source_b\bin')
+      (Join-Path $PackagesRoot 'twpayne.chezmoi_Microsoft.Winget.Source_x')
+      (Join-Path $PackagesRoot 'SQLite.SQLite_Microsoft.Winget.Source_y\bin')
+      (Join-Path $PackagesRoot 'Ngrok.Ngrok_Microsoft.Winget.Source_z')
+    )) {
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+  }
 
   function New-ManagedPathLayout {
     $paths = [ordered]@{}
@@ -336,6 +393,8 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
     }
 
     AfterEach {
+      $script:ListingReversed = $false
+
       # TestDrive: persists across It blocks within this run, so any
       # GitHub.cli_* directory a test creates must be removed here —
       # otherwise it leaks into later tests (e.g. "contributes
@@ -345,7 +404,7 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       # partially-failed BeforeEach can never point this cleanup at
       # a real %LOCALAPPDATA%.
       if (-not [string]::IsNullOrEmpty($script:TestWingetPackagesRoot)) {
-        foreach ($filter in @('GitHub.cli_*', 'Gyan.FFmpeg_*')) {
+        foreach ($filter in @('GitHub.cli_*', 'Gyan.FFmpeg_*', 'twpayne.chezmoi_*', 'SQLite.SQLite_*', 'Ngrok.Ngrok_*')) {
           Get-ChildItem -LiteralPath $script:TestWingetPackagesRoot -Directory -Filter $filter -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -582,6 +641,83 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
         $script:Paths.HomeLocalBin
         $script:Paths.HomeCargoBin
       ) -join ';')
+    }
+
+    It 'returns declared-package bin directories in declared order, every match, skipping disabled and missing bins' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value $script:ListingManifest
+
+      . $script:Library
+      $paths = @(Get-WingetUserPathManagedPaths)
+
+      $paths.Count | Should -Be 3
+      $paths[0] | Should -Be (Join-Path $packagesRoot 'twpayne.chezmoi_Microsoft.Winget.Source_x')
+      $paths[1] | Should -Be (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_a\bin')
+      $paths[2] | Should -Be (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_b\bin')
+    }
+
+    It 'orders each id by FullName even when the root listing arrives in reverse' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value $script:ListingManifest
+      $script:ListingReversed = $true
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:Library
+      $paths = @(Get-WingetUserPathManagedPaths)
+
+      $paths.Count | Should -Be 3
+      $paths[0] | Should -Be (Join-Path $packagesRoot 'twpayne.chezmoi_Microsoft.Winget.Source_x')
+      $paths[1] | Should -Be (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_a\bin')
+      $paths[2] | Should -Be (Join-Path $packagesRoot 'GitHub.cli_Microsoft.Winget.Source_b\bin')
+    }
+
+    It 'lists the Packages root once for one calculation of the session PATH script' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value $script:ListingManifest
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:Subject
+
+      Should -Invoke Get-ChildItem -Exactly -Times 1 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
+    }
+
+    It 'lists the Packages root once for one calculation of the registry-writer copy' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value $script:ListingManifest
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:RegisterFixture 6>&1 | Out-Null
+
+      Should -Invoke Get-ChildItem -Exactly -Times 1 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
+    }
+
+    It 'returns no paths and lists nothing when the WinGet Packages root is missing' {
+      Remove-Item -LiteralPath $script:TestWingetPackagesRoot -Recurse -Force
+      Set-Content -Path $script:WingetManifestPath -Value $script:ListingManifest
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:Library
+      $paths = @(Get-WingetUserPathManagedPaths)
+
+      $paths.Count | Should -Be 0
+      Should -Invoke Get-ChildItem -Exactly -Times 0 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
+    }
+
+    It 'lists nothing when no declared package is enabled' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"sqlite","id":"SQLite.SQLite","bin":"bin","enabled":false}]'
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:Library
+      $paths = @(Get-WingetUserPathManagedPaths)
+
+      $paths.Count | Should -Be 0
+      Should -Invoke Get-ChildItem -Exactly -Times 0 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
     }
 
     It 'is a no-op when no packages are declared (empty manifest)' {

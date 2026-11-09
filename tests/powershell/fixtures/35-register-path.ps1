@@ -6,7 +6,7 @@
 # sync with home/dot_config/powershell/lib/managed-paths.ps1 by hand;
 # the managed-paths-parity Pester test fails if this copy drifts.
 #
-# hash: ae7bacf10ef20f21f4c9c7992c5fd51a9aa9620333b77b480b2121200dcd23e0
+# hash: 5193236f9b09641595f4f94b062cf4eccdc701b1fe3cc5cd7b7b857addf6bc65
 # winget user path packages hash: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
 
 # Reconcile the repo-managed subset of User PATH. Both surfaces
@@ -223,18 +223,31 @@ function Get-WingetUserPathManagedPaths {
     return @()
   }
 
-  $paths = @()
-  foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
-    # A missing 'enabled' property (older manifests, hand-built test
-    # fixtures) defaults to enabled; only an explicit $false disables.
-    if ($null -ne $declared.enabled -and $declared.enabled -eq $false) {
-      continue
-    }
+  # Keep only the enabled declarations, so a call with nothing enabled
+  # never lists the root. A missing 'enabled' property (older manifests,
+  # hand-built test fixtures) defaults to enabled; only an explicit $false
+  # disables.
+  $enabledDeclared = @(
+    Get-WingetUserPathDeclaredPackages |
+      Where-Object { -not ($null -ne $_.enabled -and $_.enabled -eq $false) }
+  )
+  if ($enabledDeclared.Count -eq 0) {
+    return @()
+  }
 
+  # List the Packages root once per call, then filter that one listing
+  # for each declared id. Listing it per declared package rescans a
+  # root that can hold far more directories than the manifest declares.
+  $packageDirs = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+      Sort-Object -Property FullName
+  )
+
+  $paths = @()
+  foreach ($declared in $enabledDeclared) {
     foreach ($packageDir in @(
-      Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) } |
-        Sort-Object -Property FullName
+      $packageDirs |
+        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) }
     )) {
       $dir = Resolve-WingetUserPathBinDirectory -PackageDirFullName $packageDir.FullName -Bin $declared.bin
 

@@ -207,18 +207,31 @@ function Get-WingetUserPathManagedPaths {
     return @()
   }
 
-  $paths = @()
-  foreach ($declared in @(Get-WingetUserPathDeclaredPackages)) {
-    # A missing 'enabled' property (older manifests, hand-built test
-    # fixtures) defaults to enabled; only an explicit $false disables.
-    if ($null -ne $declared.enabled -and $declared.enabled -eq $false) {
-      continue
-    }
+  # Keep only the enabled declarations, so a call with nothing enabled
+  # never lists the root. A missing 'enabled' property (older manifests,
+  # hand-built test fixtures) defaults to enabled; only an explicit $false
+  # disables.
+  $enabledDeclared = @(
+    Get-WingetUserPathDeclaredPackages |
+      Where-Object { -not ($null -ne $_.enabled -and $_.enabled -eq $false) }
+  )
+  if ($enabledDeclared.Count -eq 0) {
+    return @()
+  }
 
+  # List the Packages root once per call, then filter that one listing
+  # for each declared id. Listing it per declared package rescans a
+  # root that can hold far more directories than the manifest declares.
+  $packageDirs = @(
+    Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
+      Sort-Object -Property FullName
+  )
+
+  $paths = @()
+  foreach ($declared in $enabledDeclared) {
     foreach ($packageDir in @(
-      Get-ChildItem -LiteralPath $packagesRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) } |
-        Sort-Object -Property FullName
+      $packageDirs |
+        Where-Object { $_.Name.StartsWith("$($declared.id)_", [StringComparison]::OrdinalIgnoreCase) }
     )) {
       $dir = Resolve-WingetUserPathBinDirectory -PackageDirFullName $packageDir.FullName -Bin $declared.bin
 
