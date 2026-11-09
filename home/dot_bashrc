@@ -23,12 +23,15 @@ for f in "$HOME/.config/bash/conf.d/"*.bash; do
 done
 
 # Worktrunk shell integration — must be in .bashrc for detection
-# Prefer git-wt on Windows; only fall back to wt when it is not Windows Terminal.
+# Each name gets its own init: git-wt, then wt. A wt that is Windows Terminal
+# (type -P returns the first PATH match) is never wrapped, so no wt function
+# shadows it.
 __wt_path=
 if type -P git-wt >/dev/null 2>&1; then
   __wt_init="$(command git-wt config shell init bash 2>/dev/null)" && eval "$__wt_init"
   unset __wt_init
-elif type -P wt >/dev/null 2>&1; then
+fi
+if type -P wt >/dev/null 2>&1; then
   __wt_path="$(type -P wt 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
   case "$__wt_path" in
     *windowsapps*/wt|*windowsapps*/wt.exe|*windowsapps*\\wt|*windowsapps*\\wt.exe|\
