@@ -274,7 +274,9 @@ Describe '45-worktrunk' {
       $env:WORKTRUNK_BIN | Should -Be $userValue
     }
 
-    It 'keeps an explicitly empty WORKTRUNK_BIN that the user set' {
+    # Windows removes an environment variable that is assigned an empty string,
+    # so an explicitly empty value can exist only off Windows.
+    It 'keeps an explicitly empty WORKTRUNK_BIN that the user set' -Skip:($IsWindows -ne $false) {
       $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
         '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN'
       )
