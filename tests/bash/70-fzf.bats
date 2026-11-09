@@ -779,3 +779,14 @@ run_walk() {
   assert_line 'ctrl-t:[]'
   assert_line 'unbound'
 }
+
+@test "WSL walk commands treat a filesystem root mnt override as containing every path" {
+  write_modern_mock
+  write_walk_fixture
+  mkdir -p "$WALK/a/x/y"
+
+  run_walk FZF_CTRL_T_COMMAND "$WALK/a" "/"
+  assert_success
+  assert_line 'x'
+  refute_line 'x/y'
+}

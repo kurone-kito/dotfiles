@@ -123,16 +123,20 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
   # directory, because -samefile aborts on a missing target.
   _dotfiles_fzf_walk_command() {
     local _dotfiles_fzf_root="$1" _dotfiles_fzf_test="" _dotfiles_fzf_mnt_clause=""
+    local _dotfiles_fzf_subtree="$_dotfiles_fzf_root/*"
     local _dotfiles_fzf_skip="\\( -name .git -o -name .hg -o -name .svn -o -name node_modules \\) -prune -o "
     if [ "$2" = dirs ]; then
       _dotfiles_fzf_test="-type d"
     else
       _dotfiles_fzf_test="\\( -type f -o -type d -o -type l \\)"
     fi
+    if [ "$_dotfiles_fzf_mnt_root" = / ]; then
+      _dotfiles_fzf_subtree="'/'*"
+    fi
     if [ -d "$_dotfiles_fzf_mnt_root" ]; then
       _dotfiles_fzf_mnt_clause="\\( -samefile $_dotfiles_fzf_root $_dotfiles_fzf_test -print -prune \\) -o "
     fi
-    printf '%s\n' "case \"\$(pwd -P)\" in $_dotfiles_fzf_root|$_dotfiles_fzf_root/*) command find -P . -mindepth 1 -maxdepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_test -print ;; *) command find -P . -mindepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_mnt_clause$_dotfiles_fzf_test -print ;; esac 2>/dev/null | sed 's@^\\./@@'"
+    printf '%s\n' "case \"\$(pwd -P)\" in $_dotfiles_fzf_root|$_dotfiles_fzf_subtree) command find -P . -mindepth 1 -maxdepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_test -print ;; *) command find -P . -mindepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_mnt_clause$_dotfiles_fzf_test -print ;; esac 2>/dev/null | sed 's@^\\./@@'"
   }
 
   # $1 is the directory, $2 the walk string, $3 "base" to echo $1 first.
