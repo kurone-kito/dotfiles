@@ -105,9 +105,18 @@ foreach ($root in $roots) {
         }
       }
       # Write the whole text beside the target first, so a failed write never
-      # truncates an existing shim; then move it over the target in one step.
+      # truncates an existing shim. An existing shim is swapped by File.Replace,
+      # which keeps the target if the swap fails; a missing name is moved in
+      # without -Force, so a file that appears meanwhile is never overwritten.
       Set-Content -LiteralPath $tempPath -Value $loaderTexts[$name] -Encoding ascii -ErrorAction Stop
-      Move-Item -LiteralPath $tempPath -Destination $profilePath -Force -ErrorAction Stop
+      if (Test-Path -LiteralPath $profilePath) {
+        # A backup path keeps the swap portable; this run removes that backup after success.
+        $backupPath = $tempPath + '.bak'
+        [System.IO.File]::Replace($tempPath, $profilePath, $backupPath)
+        Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+      } else {
+        Move-Item -LiteralPath $tempPath -Destination $profilePath -ErrorAction Stop
+      }
       Write-Host "Profile loader created: $profilePath"
     } catch {
       Write-Warning "Profile loader not written: $profilePath ($($_.Exception.Message))"
