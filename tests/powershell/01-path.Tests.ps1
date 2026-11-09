@@ -707,6 +707,19 @@ Describe '01-path' -Skip:($IsWindows -eq $false) {
       Should -Invoke Get-ChildItem -Exactly -Times 0 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
     }
 
+    It 'lists nothing when no declared package is enabled' {
+      $packagesRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+      New-WingetListingTree -PackagesRoot $packagesRoot
+      Set-Content -Path $script:WingetManifestPath -Value '[{"label":"sqlite","id":"SQLite.SQLite","bin":"bin","enabled":false}]'
+      Mock Get-ChildItem -MockWith $script:ListingMock
+
+      . $script:Library
+      $paths = @(Get-WingetUserPathManagedPaths)
+
+      $paths.Count | Should -Be 0
+      Should -Invoke Get-ChildItem -Exactly -Times 0 -ParameterFilter { $LiteralPath -eq $script:TestWingetPackagesRoot }
+    }
+
     It 'is a no-op when no packages are declared (empty manifest)' {
       # See the comment above: reset $env:PATH without the mise
       # StaleMiseBin seed, since an empty manifest declares no mise
