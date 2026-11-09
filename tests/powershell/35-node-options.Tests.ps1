@@ -206,6 +206,57 @@ Describe '35-node-options' {
     }
   }
 
+  Context 'the resolved node' {
+    BeforeEach {
+      $script:ResolvedDir = (New-Item -ItemType Directory -Path (Join-Path $TestDrive 'mise-bin') -Force).FullName
+      $script:ResolvedLog = Join-Path $TestDrive 'resolved-node-mock.log'
+      New-Item -ItemType File -Path $script:ResolvedLog -Force | Out-Null
+      $script:ResolvedNodePath = New-NodeMock -Dir $script:ResolvedDir -Log $script:ResolvedLog -ExitCode 0
+    }
+
+    It 'probes the node that mise resolved, not the node on PATH' {
+      $__miseExecutables = @{ node = $script:ResolvedNodePath }
+
+      . $script:Loader
+
+      $env:NODE_OPTIONS | Should -BeExactly $script:Default
+      Get-Content -LiteralPath $script:ResolvedLog |
+        Should -BeExactly "argv=-e 0 NODE_OPTIONS=$($script:Default) MISE_AUTO_INSTALL=0 MISE_EXEC_AUTO_INSTALL=0 MISE_OFFLINE=1"
+      Get-Content -LiteralPath $script:Log | Should -BeNullOrEmpty
+      Should -Invoke Get-Command -Times 0 -ParameterFilter { $Name -eq 'node' }
+    }
+
+    It 'does not launch the resolved node when NODE_OPTIONS already names the option' {
+      $__miseExecutables = @{ node = $script:ResolvedNodePath }
+      $env:NODE_OPTIONS = "$($script:Option)=5000"
+
+      . $script:Loader
+
+      Get-Content -LiteralPath $script:ResolvedLog | Should -BeNullOrEmpty
+      $env:NODE_OPTIONS | Should -BeExactly "$($script:Option)=5000"
+    }
+
+    It 'falls back to the node on PATH when mise resolved none' {
+      $__miseExecutables = @{}
+
+      . $script:Loader
+
+      $env:NODE_OPTIONS | Should -BeExactly $script:Default
+      Get-Content -LiteralPath $script:Log | Should -Match '^argv=-e 0 '
+      Get-Content -LiteralPath $script:ResolvedLog | Should -BeNullOrEmpty
+    }
+
+    It 'leaves the environment untouched, without probing the PATH node, when the resolved node rejects the option' {
+      New-NodeMock -Dir $script:ResolvedDir -Log $script:ResolvedLog -ExitCode 9 | Out-Null
+      $__miseExecutables = @{ node = $script:ResolvedNodePath }
+
+      . $script:Loader
+
+      [Environment]::GetEnvironmentVariable('NODE_OPTIONS') | Should -BeNullOrEmpty
+      Get-Content -LiteralPath $script:Log | Should -BeNullOrEmpty
+    }
+  }
+
   Context 'the node it probes' {
     It 'leaves the environment untouched when no node is on PATH' {
       Mock Get-Command { $null } -ParameterFilter { $Name -eq 'node' }

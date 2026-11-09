@@ -213,4 +213,116 @@ Describe '45-worktrunk' {
     Get-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue |
       Should -BeNullOrEmpty
   }
+
+  Context 'the git-wt that mise resolved' {
+
+    BeforeEach {
+      Remove-Item Env:WORKTRUNK_BIN -ErrorAction SilentlyContinue
+    }
+
+    AfterEach {
+      Remove-Item Env:WORKTRUNK_BIN -ErrorAction SilentlyContinue
+    }
+
+    It 'runs the init from the resolved git-wt rather than the PATH command' {
+      $pathGitWt = New-MockNativeCommand $script:MockBin 'git-wt' @(
+        '$script:WorktrunkCommand = "path"'
+      )
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:WorktrunkInitialized = $true',
+        '$script:WorktrunkCommand = "resolved"'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $pathGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+
+      . $script:Subject
+
+      $script:WorktrunkCommand | Should -Be 'resolved'
+    }
+
+    It 'sets WORKTRUNK_BIN to the resolved git-wt only while the init is evaluated' {
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+
+      . $script:Subject
+
+      $script:SeenWorktrunkBin | Should -Be $resolvedGitWt
+      $env:WORKTRUNK_BIN | Should -BeNullOrEmpty
+    }
+
+    It 'keeps a WORKTRUNK_BIN value that the user set' {
+      $userValue = Join-Path $script:MockBin 'user-git-wt.exe'
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+      $env:WORKTRUNK_BIN = $userValue
+
+      . $script:Subject
+
+      $script:SeenWorktrunkBin | Should -Be $userValue
+      $env:WORKTRUNK_BIN | Should -Be $userValue
+    }
+
+    # Windows removes an environment variable that is assigned an empty string,
+    # so an explicitly empty value can exist only off Windows.
+    It 'keeps an explicitly empty WORKTRUNK_BIN that the user set' -Skip:($IsWindows -ne $false) {
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+      $env:WORKTRUNK_BIN = ''
+
+      . $script:Subject
+
+      $script:SeenWorktrunkBin | Should -BeNullOrEmpty
+    }
+
+    It 'leaves WORKTRUNK_BIN unset and uses the PATH command when mise resolved no git-wt' {
+      $pathGitWt = New-MockNativeCommand $script:MockBin 'git-wt' @(
+        '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN',
+        '$script:WorktrunkCommand = "path"'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $pathGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{}
+
+      . $script:Subject
+
+      $script:WorktrunkCommand | Should -Be 'path'
+      $script:SeenWorktrunkBin | Should -BeNullOrEmpty
+      $env:WORKTRUNK_BIN | Should -BeNullOrEmpty
+    }
+
+    It 'removes the resolution variables after the init' {
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:WorktrunkInitialized = $true'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+
+      . $script:Subject
+
+      Get-Variable __wtResolved -Scope Script -ErrorAction SilentlyContinue |
+        Should -BeNullOrEmpty
+      Get-Variable __wtSetBin -Scope Script -ErrorAction SilentlyContinue |
+        Should -BeNullOrEmpty
+    }
+  }
 }

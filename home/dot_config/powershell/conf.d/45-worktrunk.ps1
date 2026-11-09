@@ -13,14 +13,23 @@ foreach ($__wtCandidate in @(Get-Command wt -CommandType Application -ErrorActio
   }
 }
 
+# The git-wt that 31-mise-executables.ps1 resolved, when mise reported one, is
+# used in place of the lookup. A miss keeps the lookup below.
+$__wtResolved = $null
+if ($null -ne $__miseExecutables -and $__miseExecutables.ContainsKey('git-wt')) {
+  $__wtResolved = $__miseExecutables['git-wt']
+}
+
 $__gitWtInfo = Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-$__wtCmd = if ($__gitWtInfo) {
+$__wtCmd = if ($__wtResolved) {
+  $__wtResolved
+} elseif ($__gitWtInfo) {
   if ($__gitWtInfo.Path) { $__gitWtInfo.Path } else { $__gitWtInfo.Source }
 } elseif ($__wtPath) {
   $__wtPath
 } else { $null }
 if (-not $__wtCmd) {
-  Remove-Variable __wtCmd, __gitWtInfo, __wtPath, __wtCandidate, __candidatePath -ErrorAction SilentlyContinue
+  Remove-Variable __wtCmd, __wtResolved, __gitWtInfo, __wtPath, __wtCandidate, __candidatePath -ErrorAction SilentlyContinue
   return
 }
 
@@ -55,6 +64,24 @@ try {
 }
 if ($__wtExitOk -and $__wtInit) {
   $__wtInit = $__wtInit -replace '(?s)(\r?\n)0\s*$|^0\s*$', ''
-  if ($__wtInit.Trim()) { Invoke-Expression $__wtInit }
+  if ($__wtInit.Trim()) {
+    # worktrunk's init reads WORKTRUNK_BIN for its wrapper and for the
+    # completion launch that runs during this evaluation. When the variable
+    # is unset and git-wt was resolved, point it at that executable for this
+    # evaluation only, and restore the unset state afterwards so later git-wt
+    # calls are not pinned to it. A value the user set is left as it is.
+    $__wtSetBin = $false
+    if ($null -ne $__wtResolved -and $null -eq $env:WORKTRUNK_BIN) {
+      $env:WORKTRUNK_BIN = $__wtResolved
+      $__wtSetBin = $true
+    }
+    try {
+      Invoke-Expression $__wtInit
+    } finally {
+      if ($__wtSetBin) {
+        Remove-Item -LiteralPath Env:WORKTRUNK_BIN -ErrorAction SilentlyContinue
+      }
+    }
+  }
 }
-Remove-Variable __wtCmd, __gitWtInfo, __wtInit, __wtPath, __wtCandidate, __candidatePath, __wtExitOk, __psi, __proc, __stderrTask -ErrorAction SilentlyContinue
+Remove-Variable __wtCmd, __wtResolved, __wtSetBin, __gitWtInfo, __wtInit, __wtPath, __wtCandidate, __candidatePath, __wtExitOk, __psi, __proc, __stderrTask -ErrorAction SilentlyContinue
