@@ -9,7 +9,8 @@
 # appended after it. Anything unexpected (no node, a node that rejects the
 # option, a malformed value) leaves the environment untouched and quiet.
 #
-# Runs after 30-mise.ps1 so the probe sees the node that mise puts on PATH.
+# Runs after 31-mise-executables.ps1, so the probe uses the node that mise
+# resolved. Without a resolution it uses the node on PATH.
 # The whole script runs in a child scope so nothing but NODE_OPTIONS leaks
 # into the profile. It is PowerShell 5.1 and 7 compatible: no ternary, no
 # null-coalescing, no pipeline chain operators.
@@ -80,14 +81,21 @@
     return ($name.Replace('_', '-') -ceq $optionName)
   }
 
-  # Application only, like 45-worktrunk.ps1: a function or alias named node
-  # must never be run by this script.
-  $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  if ($null -eq $nodeCommand) {
-    return
+  # The node that 31-mise-executables.ps1 resolved, when mise reported one.
+  # Otherwise the PATH lookup, which is Application only, like 45-worktrunk.ps1:
+  # a function or alias named node must never be run by this script.
+  $nodePath = $null
+  if ($null -ne $__miseExecutables -and $__miseExecutables.ContainsKey('node')) {
+    $nodePath = $__miseExecutables['node']
   }
-  $nodePath = if ($nodeCommand.Path) { $nodeCommand.Path } else { $nodeCommand.Source }
+  if ([string]::IsNullOrEmpty($nodePath)) {
+    $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
+      Select-Object -First 1
+    if ($null -eq $nodeCommand) {
+      return
+    }
+    $nodePath = if ($nodeCommand.Path) { $nodeCommand.Path } else { $nodeCommand.Source }
+  }
   if ([string]::IsNullOrEmpty($nodePath)) {
     return
   }
