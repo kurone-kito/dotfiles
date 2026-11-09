@@ -36,6 +36,7 @@ Describe '45-worktrunk' {
     Remove-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
+    $script:WorktrunkCalls = @()
 
     Mock Get-Command { $null } -ParameterFilter { $Name -in @('git-wt', 'wt') }
   }
@@ -49,6 +50,7 @@ Describe '45-worktrunk' {
     Remove-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkInitialized -Scope Script -ErrorAction SilentlyContinue
     Remove-Variable WorktrunkCommand -Scope Script -ErrorAction SilentlyContinue
+    Remove-Variable WorktrunkCalls -Scope Script -ErrorAction SilentlyContinue
     if ($script:MockBin -and (Test-Path $script:MockBin)) {
       Remove-Item $script:MockBin -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -135,14 +137,12 @@ Describe '45-worktrunk' {
     $script:WorktrunkCommand | Should -Be 'wt'
   }
 
-  It 'prefers git-wt when both git-wt and wt are available' {
+  It 'initializes git-wt then wt when both are worktrunk binaries' {
     $gitWtPath = New-MockNativeCommand $script:MockBin 'git-wt' @(
-      '$script:WorktrunkInitialized = $true',
-      '$script:WorktrunkCommand = "git-wt"'
+      '$script:WorktrunkCalls += "git-wt"'
     )
     $wtPath = New-MockNativeCommand $script:MockBin 'wt' @(
-      '$script:WorktrunkInitialized = $true',
-      '$script:WorktrunkCommand = "wt"'
+      '$script:WorktrunkCalls += "wt"'
     )
     Mock Get-Command {
       [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $gitWtPath }
@@ -153,8 +153,59 @@ Describe '45-worktrunk' {
 
     . $script:Subject
 
-    $script:WorktrunkInitialized | Should -BeTrue
-    $script:WorktrunkCommand | Should -Be 'git-wt'
+    ($script:WorktrunkCalls -join ',') | Should -Be 'git-wt,wt'
+  }
+
+  It 'initializes only git-wt when git-wt is present and the first wt is Windows Terminal' {
+    $gitWtPath = New-MockNativeCommand $script:MockBin 'git-wt' @(
+      '$script:WorktrunkCalls += "git-wt"'
+    )
+    $wtPath = New-MockNativeCommand $script:MockBin 'wt' @(
+      '$script:WorktrunkCalls += "wt"'
+    )
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $gitWtPath }
+    } -ParameterFilter { $Name -eq 'git-wt' }
+    Mock Get-Command {
+      @(
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = 'C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe'
+        },
+        [pscustomobject]@{
+          Name = 'wt'; CommandType = 'Application'
+          Path = $wtPath
+        }
+      )
+    } -ParameterFilter { $Name -eq 'wt' }
+
+    . $script:Subject
+
+    ($script:WorktrunkCalls -join ',') | Should -Be 'git-wt'
+  }
+
+  It 'does not pin WORKTRUNK_BIN to the resolved git-wt while the wt init is evaluated' {
+    Remove-Item Env:WORKTRUNK_BIN -ErrorAction SilentlyContinue
+    $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+      '$script:WorktrunkCalls += "git-wt"'
+    )
+    $wtPath = New-MockNativeCommand $script:MockBin 'wt' @(
+      '$script:WorktrunkCalls += "wt"',
+      '$script:SeenWtBin = $env:WORKTRUNK_BIN'
+    )
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+    } -ParameterFilter { $Name -eq 'git-wt' }
+    Mock Get-Command {
+      [pscustomobject]@{ Name = 'wt'; CommandType = 'Application'; Path = $wtPath }
+    } -ParameterFilter { $Name -eq 'wt' }
+    $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+    $script:SeenWtBin = 'not-run'
+
+    . $script:Subject
+
+    ($script:WorktrunkCalls -join ',') | Should -Be 'git-wt,wt'
+    $script:SeenWtBin | Should -BeNullOrEmpty
   }
 
   It 'strips trailing zero lines from init output before evaluation' {
@@ -192,26 +243,17 @@ Describe '45-worktrunk' {
 
     . $script:Subject
 
-    Get-Variable __wtCmd -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __wtInit -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __wtPath -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __wtCandidate -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __candidatePath -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __gitWtInfo -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __wtExitOk -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __psi -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __proc -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
-    Get-Variable __stderrTask -Scope Script -ErrorAction SilentlyContinue |
-      Should -BeNullOrEmpty
+    # Unscoped on purpose: the dot-sourced subject defines these in this It's
+    # scope, so a -Scope Script lookup would never see a leaked variable.
+    foreach ($name in @(
+        '__wtCmd', '__wtInit', '__wtPath', '__wtCandidate', '__candidatePath',
+        '__isWindowsTerminal', '__wtFirst', '__wtFirstIsWindowsTerminal',
+        '__gitWtInfo', '__gitWtPresent', '__gitWtCmd', '__wtSubjects', '__wtSubject',
+        '__wtExitOk', '__wtSetBin', '__psi', '__proc', '__stderrTask'
+      )) {
+      Get-Variable -Name $name -ErrorAction SilentlyContinue |
+        Should -BeNullOrEmpty
+    }
   }
 
   Context 'the git-wt that mise resolved' {
@@ -319,9 +361,9 @@ Describe '45-worktrunk' {
 
       . $script:Subject
 
-      Get-Variable __wtResolved -Scope Script -ErrorAction SilentlyContinue |
+      Get-Variable -Name __wtResolved -ErrorAction SilentlyContinue |
         Should -BeNullOrEmpty
-      Get-Variable __wtSetBin -Scope Script -ErrorAction SilentlyContinue |
+      Get-Variable -Name __wtSetBin -ErrorAction SilentlyContinue |
         Should -BeNullOrEmpty
     }
   }
