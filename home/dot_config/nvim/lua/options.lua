@@ -27,6 +27,12 @@ opt.smartcase = true
 
 -- Editing
 opt.backspace = { "indent", "eol", "start" }
+-- On WSL, select the win32yank provider before enabling unnamedplus. Without
+-- it, Neovim probes `xsel -o -b` at startup when DISPLAY is set, and that
+-- probe can block on WSL. Keep this assignment above the clipboard option.
+if vim.fn.has("wsl") == 1 then
+  vim.g.clipboard = "win32yank"
+end
 opt.clipboard = "unnamedplus"
 opt.showmatch = true
 opt.modeline = true
