@@ -15,7 +15,11 @@ VS Code-specific optimizations.
 The chezmoi profile linker (`run_onchange_after_link-powershell-profile`)
 creates `Microsoft.VSCode_profile.ps1` shims at all standard PowerShell
 profile locations. These shims source the main profile at
-`~/.config/powershell/profile.ps1`.
+`~/.config/powershell/profile.ps1` once per startup. The all-hosts
+`profile.ps1` shim loads it first and then sets a PowerShell global
+marker, so the VS Code shim skips it when that already happened in the
+same process. To reload the profile in an open terminal, run
+`. $PROFILE.CurrentUserAllHosts`.
 
 ### VS Code-aware behavior
 
