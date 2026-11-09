@@ -250,9 +250,9 @@ Describe '45-worktrunk' {
 
     . $script:Subject
 
-    # Local scope on purpose: the dot-sourced subject defines these in this It's
-    # scope, so a -Scope Script lookup would never see a leaked variable, and an
-    # unscoped lookup would also match a same-named parent or global variable.
+    # Local scope on purpose: the dot-sourced subject defines these in the scope
+    # of this It block. A -Scope Script lookup would never see a leaked variable,
+    # and an unscoped lookup would also match a same-named parent or global one.
     foreach ($name in @(
         '__wtCmd', '__wtInit', '__wtPath', '__wtCandidate', '__candidatePath',
         '__isWindowsTerminal', '__wtFirst', '__wtFirstIsWindowsTerminal',
