@@ -70,6 +70,7 @@ words:
   - desync
   - desynced
   - dimsu
+  - dofile
   - dofork
   - dorny
   - ESRP
@@ -164,6 +165,7 @@ words:
   - WORKFPR
   - xclip
   - xlong
+  - xsel
   - zcompdump
   - zdharma
   - zdiff3
