@@ -24,7 +24,7 @@ BeforeAll {
     try {
       $env:HOME = $HomeDir
       $env:USERPROFILE = $HomeDir
-      & $script:Pwsh -NoProfile -NonInteractive -File $ScriptPath | Out-Null
+      & $script:Pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ScriptPath | Out-Null
     } finally {
       $env:HOME = $savedHome
       $env:USERPROFILE = $savedUserProfile
@@ -197,7 +197,7 @@ Describe 'link-powershell-profile linker body (Windows)' -Skip:($IsWindows -eq $
       $bodyLiteral = $script:BodyPath.Replace("'", "''")
       $command = "& '$bodyLiteral' -ProfileRoot @($($quoted -join ',')); " +
         'exit $(if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 })'
-      & $script:Pwsh -NoProfile -NonInteractive -Command $command | Out-Null
+      & $script:Pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $command | Out-Null
       return $LASTEXITCODE
     }
 
