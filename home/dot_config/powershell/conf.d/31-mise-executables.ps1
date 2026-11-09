@@ -14,9 +14,29 @@
 # tools keep their resolved paths. Nothing is written to the environment, so
 # no child process inherits these paths. mise is looked up as an application
 # only, so a function or alias named mise is never run.
+#
+# Resolution runs only when a mise shims directory is on PATH, which is the
+# case that costs a shim launch per tool. In activation mode (the non-Windows
+# path of 30-mise.ps1) PATH already holds the real tool directories, so the
+# three `mise which` calls would only add startup cost, and nothing is run.
 
 $__miseExecutables = & {
   $resolved = @{}
+
+  $shimsOnPath = $false
+  foreach ($pathEntry in @($env:PATH -split [IO.Path]::PathSeparator)) {
+    if ([string]::IsNullOrWhiteSpace($pathEntry)) {
+      continue
+    }
+    if ($pathEntry -match '[\\/]mise[\\/]shims[\\/]?$' -and
+        (Test-Path -LiteralPath $pathEntry -PathType Container)) {
+      $shimsOnPath = $true
+      break
+    }
+  }
+  if (-not $shimsOnPath) {
+    return , $resolved
+  }
 
   $miseExe = $null
   $miseCommand = Get-Command mise -CommandType Application -ErrorAction SilentlyContinue |

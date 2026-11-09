@@ -62,6 +62,13 @@ Describe '31-mise-executables' {
     $script:CallLog = Join-Path $script:Dir 'calls.log'
     New-Item -ItemType File -Path $script:CallLog -Force | Out-Null
 
+    # Resolution runs only when a mise shims directory is on PATH, so the
+    # fixture puts one there. AfterEach restores PATH.
+    $script:ShimsDir = Join-Path (Join-Path $script:Dir 'mise') 'shims'
+    New-Item -ItemType Directory -Path $script:ShimsDir -Force | Out-Null
+    $script:SavedPath = $env:PATH
+    $env:PATH = $script:ShimsDir + [IO.Path]::PathSeparator + $env:PATH
+
     $script:StarshipExe = New-ToolStandIn $script:Dir 'starship' $script:CallLog
     $script:GitWtExe = New-ToolStandIn $script:Dir 'git-wt' $script:CallLog
     $script:NodeExe = New-ToolStandIn $script:Dir 'node' $script:CallLog
@@ -85,6 +92,7 @@ Describe '31-mise-executables' {
 
   AfterEach {
     Remove-Variable __miseExecutables -Scope Global -ErrorAction SilentlyContinue
+    $env:PATH = $script:SavedPath
   }
 
   It 'publishes the path that mise reports for each of the three tools' {
@@ -142,6 +150,15 @@ Describe '31-mise-executables' {
 
     $after = @(Get-ChildItem Env: | ForEach-Object { $_.Name } | Sort-Object)
     $after | Should -Be $before
+  }
+
+  It 'resolves nothing and launches nothing when no mise shims directory is on PATH' {
+    $env:PATH = $script:Dir
+
+    . $script:Subject
+
+    $__miseExecutables.Count | Should -Be 0
+    Get-Content -LiteralPath $script:CallLog | Should -BeNullOrEmpty
   }
 
   It 'publishes nothing and launches nothing when mise is not on the command path' -Skip:($IsWindows -ne $false) {
