@@ -274,6 +274,21 @@ Describe '45-worktrunk' {
       $env:WORKTRUNK_BIN | Should -Be $userValue
     }
 
+    It 'keeps an explicitly empty WORKTRUNK_BIN that the user set' {
+      $resolvedGitWt = New-MockNativeCommand $script:MockBin 'resolved-git-wt' @(
+        '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN'
+      )
+      Mock Get-Command {
+        [pscustomobject]@{ Name = 'git-wt'; CommandType = 'Application'; Path = $resolvedGitWt }
+      } -ParameterFilter { $Name -eq 'git-wt' }
+      $__miseExecutables = @{ 'git-wt' = $resolvedGitWt }
+      $env:WORKTRUNK_BIN = ''
+
+      . $script:Subject
+
+      $script:SeenWorktrunkBin | Should -BeNullOrEmpty
+    }
+
     It 'leaves WORKTRUNK_BIN unset and uses the PATH command when mise resolved no git-wt' {
       $pathGitWt = New-MockNativeCommand $script:MockBin 'git-wt' @(
         '$script:SeenWorktrunkBin = $env:WORKTRUNK_BIN',

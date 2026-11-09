@@ -71,7 +71,7 @@ if ($__wtExitOk -and $__wtInit) {
     # evaluation only, and restore the unset state afterwards so later git-wt
     # calls are not pinned to it. A value the user set is left as it is.
     $__wtSetBin = $false
-    if ($null -ne $__wtResolved -and [string]::IsNullOrEmpty($env:WORKTRUNK_BIN)) {
+    if ($null -ne $__wtResolved -and $null -eq $env:WORKTRUNK_BIN) {
       $env:WORKTRUNK_BIN = $__wtResolved
       $__wtSetBin = $true
     }
