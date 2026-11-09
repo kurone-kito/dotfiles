@@ -10,7 +10,14 @@ if (Test-Path $confDir) {
 }
 
 # Prompt
-if (Get-Command starship -ErrorAction SilentlyContinue) {
+# When 31-mise-executables.ps1 resolved starship, launch that executable
+# directly: its init module comes from one launch, and the transient hook
+# does not start the mise shim. Without a resolution, PATH lookup is used.
+$starshipExe = $null
+if ($null -ne $__miseExecutables -and $__miseExecutables.ContainsKey('starship')) {
+  $starshipExe = $__miseExecutables['starship']
+}
+if ($starshipExe -or (Get-Command starship -ErrorAction SilentlyContinue)) {
   # Probe whether PSReadLine is fully initialized (not just loaded).
   # In psmux, VS Code background terminals, and other non-standard hosts,
   # PSReadLine may be present but its internal state is null, causing
@@ -31,12 +38,20 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
   # define it only when PSReadLine is confirmed working.
   if ($psReadLineReady) {
     function Invoke-Starship-TransientFunction {
-      &starship module character
+      if ($starshipExe) {
+        & $starshipExe module character
+      } else {
+        &starship module character
+      }
     }
   }
 
   try {
-    Invoke-Expression (&starship init powershell)
+    if ($starshipExe) {
+      Invoke-Expression ((& $starshipExe init powershell --print-full-init) | Out-String)
+    } else {
+      Invoke-Expression (&starship init powershell)
+    }
   } catch {
     # Starship init may call Set-PSReadLineOption; suppress on failure
   }
