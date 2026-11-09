@@ -76,6 +76,9 @@ $__miseExecutables = & {
     return , $resolved
   }
 
+  # The probes below clear $global:LASTEXITCODE, so the caller's value is kept
+  # here and put back before the function returns.
+  $savedExitCode = $global:LASTEXITCODE
   foreach ($tool in @('starship', 'git-wt', 'node')) {
     # `which` must not install a missing tool version, so auto-install is off
     # for this one call. Both variables are restored to their prior state.
@@ -110,5 +113,6 @@ $__miseExecutables = & {
     $resolved[$tool] = $toolPath
   }
 
+  $global:LASTEXITCODE = $savedExitCode
   return , $resolved
 }

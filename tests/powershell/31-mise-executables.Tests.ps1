@@ -152,6 +152,18 @@ Describe '31-mise-executables' {
     $after | Should -Be $before
   }
 
+  It 'keeps the caller''s $LASTEXITCODE' {
+    $global:LASTEXITCODE = 42
+
+    try {
+      . $script:Subject
+
+      $global:LASTEXITCODE | Should -Be 42
+    } finally {
+      $global:LASTEXITCODE = $null
+    }
+  }
+
   It 'resolves nothing and launches nothing when no mise shims directory is on PATH' {
     $env:PATH = $script:Dir
 
