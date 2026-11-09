@@ -2,13 +2,13 @@
 # Windows Terminal is never wrapped, so no wt function shadows it.
 # Restrict to Application to match bash/zsh type -P / whence -p semantics
 # and prevent function/alias injection into Invoke-Expression.
-# Iterate all wt matches so a later worktrunk wt is found even when
+# Iterate all wt matches (-All) so a later worktrunk wt is found even when
 # Windows Terminal's wt.exe appears first in PATH. That later match is used
 # only when git-wt is absent; see the wt subject below.
 $__wtPath = $null
 $__wtFirstIsWindowsTerminal = $false
 $__wtFirst = $true
-foreach ($__wtCandidate in @(Get-Command wt -CommandType Application -ErrorAction SilentlyContinue)) {
+foreach ($__wtCandidate in @(Get-Command wt -CommandType Application -All -ErrorAction SilentlyContinue)) {
   $__candidatePath = if ($__wtCandidate.Path) { $__wtCandidate.Path } else { $__wtCandidate.Source }
   $__isWindowsTerminal = ($__candidatePath -match '[/\\]WindowsApps[/\\]wt(?:\.exe)?$' -or
       $__candidatePath -match '[/\\]Microsoft\.WindowsTerminal[^/\\]*[/\\]wt(?:\.exe)?$')
