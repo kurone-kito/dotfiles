@@ -57,6 +57,9 @@ _fzf_replacement() {
   return 124
 }
 complete -F _fzf_replacement fzf-replaced-command
+if [ -n "${FZF_MOCK_UPSTREAM_HOOK-}" ]; then
+  _fzf_compgen_path() { printf 'upstream-path:%s\n' "$1"; }
+fi
 if [ "${FZF_CTRL_T_COMMAND-x}" != "" ]; then
   bind -m emacs-standard -x '"\C-t": fzf-file-widget'
 fi
@@ -434,4 +437,345 @@ write_legacy_mock() {
   assert_output --partial 'original-tab:zsh-tab-input'
   run grep -c -- '--zsh' "$FZF_LOG"
   assert_output '1'
+}
+
+write_walk_fixture() {
+  WALK="$BATS_TEST_TMPDIR/walk"
+  mkdir -p "$WALK/a" "$WALK/mnt/c/d" "$BATS_TEST_TMPDIR/outside"
+  : > "$WALK/a/b.txt"
+  : > "$WALK/mnt/c/d/e.txt"
+  : > "$BATS_TEST_TMPDIR/outside/leaked.txt"
+  ln -s ../outside "$WALK/link"
+  export WALK
+}
+
+run_walk() {
+  # $1: widget variable, $2: directory to run it from, $3: mnt root (optional)
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="${3:-$WALK/mnt}" WIDGET="$1" WALK_DIR="$2" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      cd "$WALK_DIR" && sh -c "${!WIDGET}"
+    '
+}
+
+@test "WSL walk guard defines compgen hooks and widget commands without running fzf" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      printf "path:%s\n" "$(type -t _fzf_compgen_path)"
+      printf "dir:%s\n" "$(type -t _fzf_compgen_dir)"
+      printf "ctrl-t:%s\n" "${FZF_CTRL_T_COMMAND:+set}"
+      printf "alt-c:%s\n" "${FZF_ALT_C_COMMAND:+set}"
+    '
+  assert_success
+  assert_line 'path:function'
+  assert_line 'dir:function'
+  assert_line 'ctrl-t:set'
+  assert_line 'alt-c:set'
+  test ! -s "$FZF_LOG"
+}
+
+@test "WSL compgen path skips symlink targets and the mnt tree when outside mnt" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      _fzf_compgen_path "$WALK"
+    '
+  assert_success
+  assert_line "$WALK"
+  assert_line "$WALK/a/b.txt"
+  assert_line "$WALK/link"
+  assert_line "$WALK/mnt"
+  refute_output --partial 'leaked.txt'
+  refute_output --partial "$WALK/mnt/c"
+}
+
+@test "WSL compgen hooks list one level when the walk root is inside mnt" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      _fzf_compgen_path "$WALK/mnt/c"
+      _fzf_compgen_dir "$WALK/mnt/c"
+    '
+  assert_success
+  assert_line "$WALK/mnt/c"
+  assert_line "$WALK/mnt/c/d"
+  refute_output --partial 'e.txt'
+}
+
+@test "WSL Ctrl-T walk command runs as plain sh without following symlinks outside mnt" {
+  write_modern_mock
+  write_walk_fixture
+
+  run_walk FZF_CTRL_T_COMMAND "$WALK"
+  assert_success
+  assert_line 'a/b.txt'
+  assert_line 'link'
+  assert_line 'mnt'
+  refute_line 'mnt/c'
+  refute_output --partial 'leaked.txt'
+  refute_output --partial 'link/'
+}
+
+@test "WSL Alt-C walk command lists directories only outside mnt" {
+  write_modern_mock
+  write_walk_fixture
+
+  run_walk FZF_ALT_C_COMMAND "$WALK"
+  assert_success
+  assert_line 'a'
+  assert_line 'mnt'
+  refute_line 'link'
+  refute_output --partial 'b.txt'
+  refute_line 'mnt/c'
+}
+
+@test "WSL walk commands list one level when run from inside mnt" {
+  write_modern_mock
+  write_walk_fixture
+
+  run_walk FZF_CTRL_T_COMMAND "$WALK/mnt/c"
+  assert_success
+  assert_line 'd'
+  refute_output --partial 'e.txt'
+
+  run_walk FZF_ALT_C_COMMAND "$WALK/mnt/c"
+  assert_success
+  assert_line 'd'
+  refute_output --partial 'e.txt'
+}
+
+@test "WSL key bindings stay bound with the walk widgets installed" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      bind -m emacs-standard -X
+    '
+  assert_success
+  assert_output --partial '_dotfiles_fzf_file_widget'
+  assert_output --partial '_dotfiles_fzf_cd_widget'
+}
+
+@test "non-WSL shells install neither compgen hooks nor walk widget commands" {
+  write_modern_mock
+  printf '%s\n' 'Linux version 6.6.0-generic' > "$FZF_PROC_VERSION"
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      printf "path:%s\n" "$(type -t _fzf_compgen_path)"
+      printf "dir:%s\n" "$(type -t _fzf_compgen_dir)"
+      printf "ctrl-t:%s\n" "${FZF_CTRL_T_COMMAND+set}"
+      printf "alt-c:%s\n" "${FZF_ALT_C_COMMAND+set}"
+    '
+  assert_success
+  assert_line 'path:'
+  assert_line 'dir:'
+  assert_line 'ctrl-t:'
+  assert_line 'alt-c:'
+}
+
+@test "WSL walk guard leaves a predefined hook and widget command as they are" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      _fzf_compgen_path() { printf "custom-path:%s\n" "$1"; }
+      FZF_ALT_C_COMMAND="echo custom-c"
+      . "$SCRIPT_PATH"
+      _fzf_compgen_path "$WALK"
+      printf "alt-c:%s\n" "$FZF_ALT_C_COMMAND"
+      printf "dir-owned:%s\n" "$(type -t _fzf_compgen_dir)"
+    '
+  assert_success
+  assert_line "custom-path:$WALK"
+  assert_line 'alt-c:echo custom-c'
+  assert_line 'dir-owned:function'
+}
+
+@test "WSL lazy setup keeps the walk hook over an upstream definition" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" FZF_MOCK_UPSTREAM_HOOK=1 \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      READLINE_LINE="x"
+      READLINE_POINT=1
+      _dotfiles_fzf_file_widget
+      _fzf_compgen_path "$WALK/mnt/c"
+    '
+  assert_success
+  assert_line "$WALK/mnt/c/d"
+  refute_output --partial 'upstream-path'
+}
+
+@test "WSL walk hooks still list when the mnt root does not exist" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/absent" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      _fzf_compgen_path "$WALK/a"
+    '
+  assert_success
+  assert_line "$WALK/a/b.txt"
+}
+
+@test "WSL walk commands quote an mnt root that contains an apostrophe" {
+  write_modern_mock
+  write_walk_fixture
+  local quoted_mnt="$BATS_TEST_TMPDIR/it's/mnt"
+  mkdir -p "$quoted_mnt/c/d"
+  : > "$quoted_mnt/c/d/e.txt"
+
+  run_walk FZF_CTRL_T_COMMAND "$quoted_mnt/c" "$quoted_mnt"
+  assert_success
+  assert_line 'd'
+  refute_output --partial 'e.txt'
+}
+
+@test "WSL compgen path enters a symlinked root that the user typed" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      _fzf_compgen_path "$WALK/link"
+    '
+  assert_success
+  assert_line "$WALK/link/leaked.txt"
+}
+
+@test "zsh WSL installs the same compgen hooks and widget commands" {
+  require_zsh
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" WALK="$WALK" \
+    zsh -f -i -c '
+      . "$SCRIPT_PATH"
+      whence -w _fzf_compgen_path
+      whence -w _fzf_compgen_dir
+      print -r -- "ctrl-t:${FZF_CTRL_T_COMMAND+set}"
+      print -r -- "alt-c:${FZF_ALT_C_COMMAND+set}"
+      (cd "$WALK" && sh -c "$FZF_ALT_C_COMMAND")
+    '
+  assert_success
+  assert_line '_fzf_compgen_path: function'
+  assert_line '_fzf_compgen_dir: function'
+  assert_line 'ctrl-t:set'
+  assert_line 'alt-c:set'
+  assert_line 'a'
+  refute_line 'link'
+}
+
+@test "zsh non-WSL installs neither compgen hook nor walk widget commands" {
+  require_zsh
+  write_modern_mock
+  printf '%s\n' 'Linux version 6.6.0-generic' > "$FZF_PROC_VERSION"
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    zsh -f -i -c '
+      . "$SCRIPT_PATH"
+      whence -w _fzf_compgen_path
+      print -r -- "ctrl-t:${FZF_CTRL_T_COMMAND+set}"
+      print -r -- "alt-c:${FZF_ALT_C_COMMAND+set}"
+    '
+  assert_success
+  refute_output --partial '_fzf_compgen_path: function'
+  assert_line 'ctrl-t:'
+  assert_line 'alt-c:'
+}
+
+@test "WSL lazy setup restores a user-defined hook over an upstream definition" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" FZF_MOCK_UPSTREAM_HOOK=1 WALK="$WALK" \
+    bash --noprofile --norc -i -c '
+      _fzf_compgen_path() { printf "custom-path:%s\n" "$1"; }
+      . "$SCRIPT_PATH"
+      READLINE_LINE="x"
+      READLINE_POINT=1
+      _dotfiles_fzf_file_widget
+      _fzf_compgen_path "$WALK"
+    '
+  assert_success
+  assert_line "custom-path:$WALK"
+  refute_output --partial 'upstream-path'
+}
+
+@test "WSL walk commands run from beside an apostrophe mnt root skip its contents" {
+  write_modern_mock
+  write_walk_fixture
+  local quoted_mnt="$BATS_TEST_TMPDIR/it's/mnt"
+  mkdir -p "$quoted_mnt/c/d"
+  : > "$quoted_mnt/c/d/e.txt"
+
+  run_walk FZF_CTRL_T_COMMAND "$BATS_TEST_TMPDIR/it's" "$quoted_mnt"
+  assert_success
+  assert_line 'mnt'
+  refute_line 'mnt/c'
+  refute_output --partial 'e.txt'
+}
+
+@test "WSL Ctrl-T stays unbound with an empty FZF_CTRL_T_COMMAND while the walk is installed" {
+  write_modern_mock
+  write_walk_fixture
+
+  run env PATH="$PATH" SCRIPT_PATH="$SCRIPT_PATH" \
+    DOTFILES_FZF_PROC_VERSION="$FZF_PROC_VERSION" FZF_LOG="$FZF_LOG" \
+    DOTFILES_FZF_MNT_ROOT="$WALK/mnt" FZF_CTRL_T_COMMAND='' \
+    bash --noprofile --norc -i -c '
+      . "$SCRIPT_PATH"
+      printf "ctrl-t:[%s]\n" "$FZF_CTRL_T_COMMAND"
+      if bind -m emacs-standard -X | grep -q _dotfiles_fzf_file_widget; then
+        echo bound
+      else
+        echo unbound
+      fi
+    '
+  assert_success
+  assert_line 'ctrl-t:[]'
+  assert_line 'unbound'
 }

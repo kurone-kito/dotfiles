@@ -70,6 +70,7 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
       fzf_default_completion="$_dotfiles_fzf_zsh_original_tab"
     fi
     _dotfiles_fzf_setup
+    _dotfiles_fzf_define_compgen_hooks
     # fzf's own integration replaces complete -D. Restore the bridge after
     # every trigger, including key bindings, which never re-enter completion.
     if [ -n "${BASH_VERSION:-}" ] \
@@ -78,6 +79,120 @@ if [ "$_dotfiles_fzf_is_wsl" = true ]; then
       _dotfiles_fzf_restore_default_completion
     fi
   }
+
+  # Keep fzf's path walks off symlink targets and out of the Windows drive
+  # root (mnt). Widget commands run in a child sh, so their walks are strings
+  # built here; the compgen hooks run the same strings from the target
+  # directory, so the walk root is always canonical (pwd -P) before any test.
+  _dotfiles_fzf_canonical_dir() {
+    local _dotfiles_fzf_resolved
+    _dotfiles_fzf_resolved="$(unset CDPATH; cd -- "$1" 2>/dev/null && pwd -P)" \
+      && [ -n "$_dotfiles_fzf_resolved" ] \
+      && printf '%s\n' "$_dotfiles_fzf_resolved" \
+      || printf '%s\n' "$1"
+  }
+
+  _dotfiles_fzf_sh_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | command sed "s/'/'\\\\''/g")"
+  }
+
+  _dotfiles_fzf_has_function() {
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      [ "$(whence -w "$1" 2>/dev/null)" = "$1: function" ]
+    else
+      [ "$(type -t "$1" 2>/dev/null)" = function ]
+    fi
+  }
+
+  # Print the definition of function $1 so it can be re-evaluated later.
+  _dotfiles_fzf_function_definition() {
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      functions "$1" 2>/dev/null
+    else
+      declare -f "$1" 2>/dev/null
+    fi
+  }
+
+  # Build the walk as a POSIX sh string. $1 is the single-quoted mnt root and
+  # $2 is "all" or "dirs". Symlinks below the walk root are never followed
+  # (the root itself is entered by cd, as the user typed it). node_modules
+  # (fzf's default walker skip) and the VCS directories that upstream's
+  # documented example prunes are not descended, and a walk whose directory is
+  # inside mnt lists one level only. Outside mnt, the mnt entry itself is listed but
+  # not descended, and the prune clause is emitted only when mnt is a
+  # directory, because -samefile aborts on a missing target.
+  _dotfiles_fzf_walk_command() {
+    local _dotfiles_fzf_root="$1" _dotfiles_fzf_test="" _dotfiles_fzf_mnt_clause=""
+    local _dotfiles_fzf_skip="\\( -name .git -o -name .hg -o -name .svn -o -name node_modules \\) -prune -o "
+    if [ "$2" = dirs ]; then
+      _dotfiles_fzf_test="-type d"
+    else
+      _dotfiles_fzf_test="\\( -type f -o -type d -o -type l \\)"
+    fi
+    if [ -d "$_dotfiles_fzf_mnt_root" ]; then
+      _dotfiles_fzf_mnt_clause="\\( -samefile $_dotfiles_fzf_root $_dotfiles_fzf_test -print -prune \\) -o "
+    fi
+    printf '%s\n' "case \"\$(pwd -P)\" in $_dotfiles_fzf_root|$_dotfiles_fzf_root/*) command find -P . -mindepth 1 -maxdepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_test -print ;; *) command find -P . -mindepth 1 $_dotfiles_fzf_skip$_dotfiles_fzf_mnt_clause$_dotfiles_fzf_test -print ;; esac 2>/dev/null | sed 's@^\\./@@'"
+  }
+
+  # $1 is the directory, $2 the walk string, $3 "base" to echo $1 first.
+  _dotfiles_fzf_compgen() {
+    local _dotfiles_fzf_prefix="$1/" _dotfiles_fzf_name
+    case "$1" in
+      .) _dotfiles_fzf_prefix= ;;
+      /) _dotfiles_fzf_prefix=/ ;;
+      */) _dotfiles_fzf_prefix="${1%/}/" ;;
+    esac
+    if [ "${3-}" = base ]; then
+      printf '%s\n' "$1"
+    fi
+    (unset CDPATH; cd -- "$1" 2>/dev/null && sh -c "$2") | while IFS= read -r _dotfiles_fzf_name; do
+      printf '%s%s\n' "$_dotfiles_fzf_prefix" "$_dotfiles_fzf_name"
+    done
+  }
+
+  _dotfiles_fzf_define_compgen_hooks() {
+    if [ "$_dotfiles_fzf_owns_compgen_path" = 1 ]; then
+      _fzf_compgen_path() {
+        _dotfiles_fzf_compgen "$1" "$_dotfiles_fzf_walk_all" base
+      }
+    elif [ -n "$_dotfiles_fzf_user_compgen_path" ]; then
+      eval "$_dotfiles_fzf_user_compgen_path"
+    fi
+    if [ "$_dotfiles_fzf_owns_compgen_dir" = 1 ]; then
+      _fzf_compgen_dir() {
+        _dotfiles_fzf_compgen "$1" "$_dotfiles_fzf_walk_dirs"
+      }
+    elif [ -n "$_dotfiles_fzf_user_compgen_dir" ]; then
+      eval "$_dotfiles_fzf_user_compgen_dir"
+    fi
+  }
+
+  _dotfiles_fzf_mnt_root="$(_dotfiles_fzf_canonical_dir "${DOTFILES_FZF_MNT_ROOT:-/mnt}")"
+  _dotfiles_fzf_mnt_quoted="$(_dotfiles_fzf_sh_quote "$_dotfiles_fzf_mnt_root")"
+  _dotfiles_fzf_walk_all="$(_dotfiles_fzf_walk_command "$_dotfiles_fzf_mnt_quoted" all)"
+  _dotfiles_fzf_walk_dirs="$(_dotfiles_fzf_walk_command "$_dotfiles_fzf_mnt_quoted" dirs)"
+  _dotfiles_fzf_owns_compgen_path=0
+  _dotfiles_fzf_owns_compgen_dir=0
+  _dotfiles_fzf_user_compgen_path=
+  _dotfiles_fzf_user_compgen_dir=
+  if _dotfiles_fzf_has_function _fzf_compgen_path; then
+    _dotfiles_fzf_user_compgen_path="$(_dotfiles_fzf_function_definition _fzf_compgen_path)"
+  else
+    _dotfiles_fzf_owns_compgen_path=1
+  fi
+  if _dotfiles_fzf_has_function _fzf_compgen_dir; then
+    _dotfiles_fzf_user_compgen_dir="$(_dotfiles_fzf_function_definition _fzf_compgen_dir)"
+  else
+    _dotfiles_fzf_owns_compgen_dir=1
+  fi
+  _dotfiles_fzf_define_compgen_hooks
+  if [ -z "${FZF_CTRL_T_COMMAND+x}" ]; then
+    FZF_CTRL_T_COMMAND="$_dotfiles_fzf_walk_all"
+  fi
+  if [ -z "${FZF_ALT_C_COMMAND+x}" ]; then
+    FZF_ALT_C_COMMAND="$_dotfiles_fzf_walk_dirs"
+  fi
 
   if [ -n "${BASH_VERSION:-}" ]; then
     if [ "${BASH_VERSION%%.*}" -lt 4 ] 2>/dev/null; then
