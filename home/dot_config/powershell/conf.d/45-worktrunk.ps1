@@ -30,7 +30,7 @@ if ($null -ne $__miseExecutables -and $__miseExecutables.ContainsKey('git-wt')) 
 }
 
 $__gitWtInfo = Get-Command git-wt -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-$__gitWtPresent = ($null -ne $__wtResolved) -or ($null -ne $__gitWtInfo)
+$__gitWtPresent = [bool]$__wtResolved -or ($null -ne $__gitWtInfo)
 $__gitWtCmd = if ($__wtResolved) {
   $__wtResolved
 } elseif ($__gitWtInfo) {
