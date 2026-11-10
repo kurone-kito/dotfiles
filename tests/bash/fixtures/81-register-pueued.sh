@@ -2,9 +2,9 @@
 # Pre-rendered test fixture for run_onchange_after_81-register-pueued.sh.tmpl.
 #
 # The body from `set -euo pipefail` onward mirrors the rendered template byte
-# for byte. The only difference is the linux_autostart line, which reads
-# PUEUE_LINUX_AUTOSTART so every mode can be exercised. The bats drift guard
-# fails if the two bodies diverge.
+# for byte. The only differences are the two mode lines, which read
+# PUEUE_LINUX_AUTOSTART and PUEUE_MACOS_AUTOSTART so every mode can be
+# exercised. The bats drift guard fails if the bodies diverge.
 #
 # This script is intentionally NOT a chezmoi template.
 set -euo pipefail
@@ -13,6 +13,7 @@ set -euo pipefail
 exec </dev/null
 
 linux_autostart="${PUEUE_LINUX_AUTOSTART:-systemd-user}"
+macos_autostart="${PUEUE_MACOS_AUTOSTART:-launchagent}"
 
 dotfiles_user_systemd_available() {
   command -v systemctl >/dev/null 2>&1 \
@@ -101,12 +102,70 @@ register_linux_service() {
   esac
 }
 
+register_macos_agent() {
+  # Validate the mode before any launchctl call, the same as on Linux.
+  case "$macos_autostart" in
+    launchagent|disabled) ;;
+    *)
+      echo "Unsupported data.pueue.macos.autostart mode: $macos_autostart" >&2
+      return 1
+      ;;
+  esac
+
+  if ! command -v launchctl >/dev/null 2>&1; then
+    echo "launchctl not found; pueued LaunchAgent not registered."
+    return 0
+  fi
+
+  label="com.kurone-kito.pueued"
+  plist="$HOME/Library/LaunchAgents/$label.plist"
+  domain="gui/$(id -u)"
+
+  case "$macos_autostart" in
+    launchagent)
+      # A missing plist is a failure, not a skip: chezmoi writes the plist
+      # before this script runs. Each launchctl call stays plain, so set -e
+      # stops at the first failure and the later steps do not run.
+      if [ ! -f "$plist" ]; then
+        echo "LaunchAgent plist not found: $plist" >&2
+        return 1
+      fi
+      launchctl enable "$domain/$label"
+      if launchctl print "$domain/$label" >/dev/null 2>&1; then
+        launchctl bootout "$domain/$label"
+      fi
+      launchctl bootstrap "$domain" "$plist"
+      echo "pueued LaunchAgent loaded."
+      ;;
+    disabled)
+      # Both steps run even when disable fails, so a failed disable still
+      # unloads the session. A bootout failure counts only while the label is
+      # still loaded: a label that is not loaded counts as success.
+      disable_status=0
+      bootout_failed=0
+      launchctl disable "$domain/$label" || disable_status=$?
+      if ! launchctl bootout "$domain/$label"; then
+        if launchctl print "$domain/$label" >/dev/null 2>&1; then
+          bootout_failed=1
+        fi
+      fi
+      if [ "$disable_status" -ne 0 ] || [ "$bootout_failed" -ne 0 ]; then
+        echo "pueued LaunchAgent disable did not complete; rerun the register script." >&2
+        return 1
+      fi
+      echo "pueued LaunchAgent disabled."
+      ;;
+  esac
+}
+
 case "$(uname -s)" in
   Linux)
     register_linux_service
     ;;
+  Darwin)
+    register_macos_agent
+    ;;
   *)
-    # The macOS LaunchAgent branches are added by the launchd child (#723).
     echo "pueued registration is not managed on this platform."
     ;;
 esac

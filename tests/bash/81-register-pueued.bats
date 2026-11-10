@@ -79,7 +79,22 @@ case "${UNMANAGED_PUEUED:-0}" in
 esac
 EOF
 
-  chmod +x "$STUB_BIN/uname" "$STUB_BIN/systemctl" "$STUB_BIN/loginctl" "$STUB_BIN/pgrep"
+  # launchctl logs every call, including print. Each failure knob fails one
+  # subcommand. LAUNCHCTL_LOADED=1 makes print report the label as loaded.
+  cat > "$STUB_BIN/launchctl" <<'EOF'
+#!/bin/sh
+echo "launchctl $*" >> "$TRACE"
+case "$1" in
+  enable) [ "${FAIL_ENABLE:-0}" = 1 ] && exit 1; exit 0 ;;
+  disable) [ "${FAIL_DISABLE:-0}" = 1 ] && exit 1; exit 0 ;;
+  bootout) [ "${FAIL_BOOTOUT:-0}" = 1 ] && exit 1; exit 0 ;;
+  bootstrap) [ "${FAIL_BOOTSTRAP:-0}" = 1 ] && exit 1; exit 0 ;;
+  print) [ "${LAUNCHCTL_LOADED:-0}" = 1 ] && exit 0; exit 1 ;;
+  *) exit 0 ;;
+esac
+EOF
+
+  chmod +x "$STUB_BIN/uname" "$STUB_BIN/systemctl" "$STUB_BIN/loginctl" "$STUB_BIN/pgrep" "$STUB_BIN/launchctl"
 
   export PUEUE_LINUX_AUTOSTART=systemd-user
   export DOTFILES_TEST_USER_SYSTEMD=1
@@ -88,6 +103,12 @@ EOF
   export FAIL_VERB=
   export UNMANAGED_PUEUED=0
   export UNIT_ACTIVE=0
+  export PUEUE_MACOS_AUTOSTART=launchagent
+  export LAUNCHCTL_LOADED=0
+  export FAIL_ENABLE=0
+  export FAIL_DISABLE=0
+  export FAIL_BOOTOUT=0
+  export FAIL_BOOTSTRAP=0
 }
 
 # Runs the fixture with only the stub directory on PATH.
@@ -191,8 +212,8 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   assert_equal "$(cat "$TRACE")" ''
 }
 
-@test "a non-Linux uname reports not managed, exits 0, and makes no service call" {
-  export UNAME_VALUE=Darwin
+@test "a non-Linux, non-Darwin uname reports not managed, exits 0, and makes no service call" {
+  export UNAME_VALUE=FreeBSD
   _run_fixture
 
   assert_success
@@ -266,6 +287,185 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"$'\n'"systemctl --user daemon-reload"$'\n'"systemctl --user enable pueued.service"$'\n'"systemctl --user restart pueued.service"$'\n'"loginctl show-user testuser -p Linger --value"
 }
 
+# Darwin helpers. The plist path and the launchctl domain follow the template.
+_darwin_plist() {
+  mkdir -p "$HOME/Library/LaunchAgents"
+  : > "$HOME/Library/LaunchAgents/com.kurone-kito.pueued.plist"
+}
+
+@test "launchagent with the plist present enables, checks, and bootstraps a label that is not loaded" {
+  export UNAME_VALUE=Darwin
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootstrap $d $HOME/Library/LaunchAgents/$l.plist"
+}
+
+@test "launchagent with the label loaded boots it out before bootstrap" {
+  export UNAME_VALUE=Darwin
+  export LAUNCHCTL_LOADED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl bootstrap $d $HOME/Library/LaunchAgents/$l.plist"
+}
+
+@test "launchagent with no plist fails and makes no launchctl call" {
+  export UNAME_VALUE=Darwin
+  _run_fixture
+
+  assert_failure
+  assert_stderr --partial 'LaunchAgent plist not found'
+  assert_equal "$(cat "$TRACE")" ''
+}
+
+@test "launchagent when enable fails exits non-zero before bootout or bootstrap" {
+  export UNAME_VALUE=Darwin
+  export FAIL_ENABLE=1
+  export LAUNCHCTL_LOADED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  refute_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"
+}
+
+@test "launchagent when bootout fails after enable exits non-zero before bootstrap" {
+  export UNAME_VALUE=Darwin
+  export FAIL_BOOTOUT=1
+  export LAUNCHCTL_LOADED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  refute_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootout $d/$l"
+}
+
+@test "launchagent when bootstrap fails after a bootout exits non-zero and leaves the label unloaded" {
+  export UNAME_VALUE=Darwin
+  export FAIL_BOOTSTRAP=1
+  export LAUNCHCTL_LOADED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl bootstrap $d $HOME/Library/LaunchAgents/$l.plist"
+}
+
+@test "launchagent without launchctl skips and exits 0" {
+  export UNAME_VALUE=Darwin
+  _darwin_plist
+  rm "$STUB_BIN/launchctl"
+  _run_fixture
+
+  assert_success
+  assert_output --partial 'launchctl not found'
+  assert_equal "$(cat "$TRACE")" ''
+}
+
+@test "disabled disables and boots out the label, and needs no plist" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_output --partial 'pueued LaunchAgent disabled.'
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"
+}
+
+@test "disabled when disable fails and bootout succeeds exits non-zero" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  export FAIL_DISABLE=1
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  assert_stderr --partial 'disable did not complete'
+  refute_output --partial 'pueued LaunchAgent disabled.'
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"
+}
+
+@test "disabled when disable succeeds and bootout of a loaded label fails exits non-zero" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  export FAIL_BOOTOUT=1
+  export LAUNCHCTL_LOADED=1
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl print $d/$l"
+}
+
+@test "disabled when both disable and bootout of a loaded label fail exits non-zero" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  export FAIL_DISABLE=1
+  export FAIL_BOOTOUT=1
+  export LAUNCHCTL_LOADED=1
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl print $d/$l"
+}
+
+@test "disabled when bootout fails for a label that is not loaded counts as success" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  export FAIL_BOOTOUT=1
+  export LAUNCHCTL_LOADED=0
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_output --partial 'pueued LaunchAgent disabled.'
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl print $d/$l"
+}
+
+@test "disabled without launchctl skips and exits 0" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  rm "$STUB_BIN/launchctl"
+  _run_fixture
+
+  assert_success
+  assert_output --partial 'launchctl not found'
+  assert_equal "$(cat "$TRACE")" ''
+}
+
+@test "an unknown macOS mode fails at run time and names the field, with no launchctl call" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=system-launchagent
+  _run_fixture
+
+  assert_failure
+  assert_stderr --partial 'data.pueue.macos.autostart'
+  assert_equal "$(cat "$TRACE")" ''
+}
+
+@test "an unknown macOS mode fails the render and names the field" {
+  local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+  printf '%s\n' '{ "data": { "pueue": { "macos": { "autostart": "system-launchagent" } } } }' > "$config"
+  run chezmoi execute-template --file "$TEMPLATE" \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination"
+  assert_failure
+  assert_output --partial 'data.pueue.macos.autostart'
+}
+
 @test "the rendered template body matches the fixture apart from the mode line" {
   local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
   local rendered="$BATS_TEST_TMPDIR/rendered.sh"
@@ -277,7 +477,7 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   # Compare from the strict-mode line onward, so the whole shared body is
   # guarded. Dropping the mode line on both sides leaves only the shared logic,
   # so any drift fails this test.
-  body_of() { sed -n '/^set -euo pipefail$/,$p' "$1" | grep -v '^linux_autostart='; }
+  body_of() { sed -n '/^set -euo pipefail$/,$p' "$1" | grep -v '^linux_autostart=\|^macos_autostart='; }
   body_of "$rendered" > "$BATS_TEST_TMPDIR/rendered-body.sh"
   body_of "$FIXTURE" > "$BATS_TEST_TMPDIR/fixture-body.sh"
 
