@@ -205,6 +205,9 @@ PY
   chmod +x "$TMP_HOME/.local/share/mise/shims/pueued"
 
   run env HOME="$TMP_HOME" LC_ALL=C systemd-analyze verify --user "$RENDERED"
+  # An invocation or parser failure can print no pueued.service text, so the
+  # exit status is checked as well as the output.
+  assert_success
   # A parser diagnostic for this unit carries file:line.
   refute_output --regexp 'pueued\.service:[0-9]+: '
   # Any other message about this unit, such as a dependency or executable
