@@ -224,11 +224,11 @@ See
 
 ## pueue validation queue (`data.pueue.parallelism`)
 
-| Field             | Type    | Required | Default          | Purpose                                                                                                                                 |
-| ----------------- | ------- | -------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `parallelism`     | integer | no       | `2`              | How many tasks the `dotfiles` pueue group runs at once. A positive whole number.                                                        |
-| `linux.autostart` | string  | no       | `"systemd-user"` | How `pueued` starts on Linux: `"systemd-user"` (the default) or `"disabled"`. Any other value fails the render and names this key.     |
-| `macos.autostart` | string  | no       | `"launchagent"`  | How `pueued` starts on macOS: `"launchagent"` (the default) or `"disabled"`. Any other value fails the render and names this key.     |
+| Field             | Type    | Required | Default          | Purpose                                                                                                                                                                                               |
+| ----------------- | ------- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parallelism`     | integer | no       | `2`              | How many tasks the `dotfiles` pueue group runs at once. A positive whole number.                                                                                                                      |
+| `linux.autostart` | string  | no       | `"systemd-user"` | How `pueued` starts on Linux: `"systemd-user"` (the default) or `"disabled"`. The supervisor children that follow read it; nothing reads it yet. Any other value fails the render and names this key. |
+| `macos.autostart` | string  | no       | `"launchagent"`  | How `pueued` starts on macOS: `"launchagent"` (the default) or `"disabled"`. The supervisor children that follow read it; nothing reads it yet. Any other value fails the render and names this key.  |
 
 The autostart settings live under `[data.pueue.linux]` and
 `[data.pueue.macos]`. Only an explicit `"disabled"` is re-emitted, so a
