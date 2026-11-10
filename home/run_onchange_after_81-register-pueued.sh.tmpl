@@ -18,8 +18,20 @@ dotfiles_user_systemd_available() {
     && systemctl --user show-environment >/dev/null 2>&1
 }
 
-pueued_running_unmanaged() {
-  command -v pgrep >/dev/null 2>&1 && pgrep -u "$(id -u)" -x pueued >/dev/null 2>&1
+pueued_probe() {
+  # Prints running, none, or unknown. Unknown means the check could not run,
+  # and the caller fails closed on it.
+  if ! command -v pgrep >/dev/null 2>&1; then
+    echo unknown
+    return 0
+  fi
+  local status=0
+  pgrep -u "$(id -u)" -x pueued >/dev/null 2>&1 || status=$?
+  case "$status" in
+    0) echo running ;;
+    1) echo none ;;
+    *) echo unknown ;;
+  esac
 }
 
 register_linux_service() {
@@ -61,12 +73,18 @@ register_linux_service() {
       fi
       # An unmanaged pueued (started by the validation wrapper) may already
       # hold the queue socket. An enabled unit cannot bind it and would
-      # restart-loop, so stop here and name the handover. Never stop a running
-      # daemon from this script.
-      if pueued_running_unmanaged && ! systemctl --user is-active --quiet pueued.service; then
-        echo "warn: an unmanaged pueued is running; pueued user service not registered. To hand over, run: pueue shutdown, then: systemctl --user enable --now pueued.service" >&2
-        return 0
-      fi
+      # restart-loop, so stop here and name the handover. A check that cannot
+      # run is unknown, and unknown fails closed the same way. Never stop a
+      # running daemon from this script.
+      case "$(pueued_probe)" in
+        none) ;;
+        *)
+          if ! systemctl --user is-active --quiet pueued.service; then
+            echo "warn: an unmanaged pueued may be running, or the check could not run; pueued user service not registered. To hand over, run: pueue shutdown, then: systemctl --user enable --now pueued.service" >&2
+            return 0
+          fi
+          ;;
+      esac
       systemctl --user daemon-reload
       systemctl --user enable pueued.service >/dev/null
       systemctl --user restart pueued.service

@@ -68,10 +68,15 @@ echo "loginctl $*" >> "$TRACE"
 echo "${DOTFILES_TEST_LINGER:-yes}"
 EOF
 
-  # pgrep reports an unmanaged pueued only when the test asks for one.
+  # pgrep finds a pueued only when the test asks for one (1), reports a probe
+  # error (2), and otherwise finds nothing (default, exit 1).
   cat > "$STUB_BIN/pgrep" <<'EOF'
 #!/bin/sh
-[ "${UNMANAGED_PUEUED:-0}" = 1 ]
+case "${UNMANAGED_PUEUED:-0}" in
+  1) exit 0 ;;
+  2) exit 2 ;;
+  *) exit 1 ;;
+esac
 EOF
 
   chmod +x "$STUB_BIN/uname" "$STUB_BIN/systemctl" "$STUB_BIN/loginctl" "$STUB_BIN/pgrep"
@@ -226,9 +231,28 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   _run_fixture
 
   assert_success
-  assert_stderr --partial 'an unmanaged pueued is running'
+  assert_stderr --partial 'an unmanaged pueued may be running'
   assert_stderr --partial 'pueue shutdown'
   refute_output --partial 'pueued user service enabled.'
+  assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"
+}
+
+@test "a process probe that cannot run fails closed when the unit is inactive" {
+  export UNMANAGED_PUEUED=2
+  _run_fixture
+
+  assert_success
+  assert_stderr --partial 'the check could not run'
+  refute_output --partial 'pueued user service enabled.'
+  assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"
+}
+
+@test "a missing pgrep fails closed when the unit is inactive" {
+  rm "$STUB_BIN/pgrep"
+  _run_fixture
+
+  assert_success
+  assert_stderr --partial 'the check could not run'
   assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"
 }
 
