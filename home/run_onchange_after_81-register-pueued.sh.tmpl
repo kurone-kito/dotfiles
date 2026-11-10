@@ -134,6 +134,20 @@ register_macos_agent() {
         echo "LaunchAgent plist not found: $plist" >&2
         return 1
       fi
+      # The same guard as on Linux. An unmanaged pueued may already hold the
+      # queue socket, and a loaded KeepAlive job would then restart-loop. A
+      # label that is already loaded is ours, so it proceeds. Otherwise an
+      # unmanaged or unknown probe skips the registration and names the
+      # handover. The script never stops a running daemon.
+      case "$(pueued_probe)" in
+        none) ;;
+        *)
+          if ! launchctl print "$domain/$label" >/dev/null 2>&1; then
+            echo "warn: an unmanaged pueued may be running, or the check could not run; pueued LaunchAgent not registered. To hand over, run: pueue shutdown, then: launchctl bootstrap $domain $plist" >&2
+            return 0
+          fi
+          ;;
+      esac
       launchctl enable "$domain/$label"
       if launchctl print "$domain/$label" >/dev/null 2>&1; then
         launchctl bootout "$domain/$label"

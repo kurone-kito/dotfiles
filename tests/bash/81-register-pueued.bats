@@ -315,6 +315,45 @@ _darwin_plist() {
   assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl bootstrap $d $HOME/Library/LaunchAgents/$l.plist"
 }
 
+@test "launchagent with an unmanaged pueued and a label not loaded skips the registration" {
+  export UNAME_VALUE=Darwin
+  export UNMANAGED_PUEUED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_stderr --partial 'an unmanaged pueued may be running'
+  assert_stderr --partial 'launchctl bootstrap'
+  refute_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl print $d/$l"
+}
+
+@test "launchagent with an unmanaged pueued but the label loaded proceeds" {
+  export UNAME_VALUE=Darwin
+  export UNMANAGED_PUEUED=1
+  export LAUNCHCTL_LOADED=1
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl print $d/$l"$'\n'"launchctl enable $d/$l"$'\n'"launchctl print $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl bootstrap $d $HOME/Library/LaunchAgents/$l.plist"
+}
+
+@test "launchagent with a probe that cannot run and a label not loaded skips the registration" {
+  export UNAME_VALUE=Darwin
+  export UNMANAGED_PUEUED=2
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_success
+  assert_stderr --partial 'the check could not run'
+  assert_equal "$(cat "$TRACE")" "launchctl print $d/$l"
+}
+
 @test "launchagent with no plist fails and makes no launchctl call" {
   export UNAME_VALUE=Darwin
   _run_fixture
