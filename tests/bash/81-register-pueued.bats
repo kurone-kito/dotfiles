@@ -89,7 +89,10 @@ case "$1" in
   disable) [ "${FAIL_DISABLE:-0}" = 1 ] && exit 1; exit 0 ;;
   bootout) [ "${FAIL_BOOTOUT:-0}" = 1 ] && exit 1; exit 0 ;;
   bootstrap) [ "${FAIL_BOOTSTRAP:-0}" = 1 ] && exit 1; exit 0 ;;
-  print) [ "${LAUNCHCTL_LOADED:-0}" = 1 ] && exit 0; exit 1 ;;
+  print)
+    if [ -n "${LAUNCHCTL_PRINT_STATUS:-}" ]; then exit "$LAUNCHCTL_PRINT_STATUS"; fi
+    [ "${LAUNCHCTL_LOADED:-0}" = 1 ] && exit 0
+    exit 113 ;;
   *) exit 0 ;;
 esac
 EOF
@@ -352,6 +355,32 @@ _darwin_plist() {
   assert_success
   assert_stderr --partial 'the check could not run'
   assert_equal "$(cat "$TRACE")" "launchctl print $d/$l"
+}
+
+@test "launchagent with a label state that cannot be read fails before bootstrap" {
+  export UNAME_VALUE=Darwin
+  export LAUNCHCTL_PRINT_STATUS=5
+  _darwin_plist
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  assert_stderr --partial 'could not read the LaunchAgent state'
+  refute_output --partial 'pueued LaunchAgent loaded.'
+  assert_equal "$(cat "$TRACE")" "launchctl enable $d/$l"$'\n'"launchctl print $d/$l"
+}
+
+@test "disabled when bootout fails and the label state cannot be read exits non-zero" {
+  export UNAME_VALUE=Darwin
+  export PUEUE_MACOS_AUTOSTART=disabled
+  export FAIL_BOOTOUT=1
+  export LAUNCHCTL_PRINT_STATUS=5
+  _run_fixture
+
+  local d="gui/$(id -u)" l="com.kurone-kito.pueued"
+  assert_failure
+  refute_output --partial 'pueued LaunchAgent disabled.'
+  assert_equal "$(cat "$TRACE")" "launchctl disable $d/$l"$'\n'"launchctl bootout $d/$l"$'\n'"launchctl print $d/$l"
 }
 
 @test "launchagent with no plist fails and makes no launchctl call" {

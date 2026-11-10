@@ -106,6 +106,19 @@ register_linux_service() {
   esac
 }
 
+pueued_label_state() {
+  # Prints loaded, absent, or unknown for a launchd label. Only status 113
+  # (not found) means absent. Any other failure is unknown, so the caller
+  # fails closed instead of reading a failed query as "not loaded".
+  local status=0
+  launchctl print "$1" >/dev/null 2>&1 || status=$?
+  case "$status" in
+    0) echo loaded ;;
+    113) echo absent ;;
+    *) echo unknown ;;
+  esac
+}
+
 register_macos_agent() {
   # Validate the mode before any launchctl call, the same as on Linux.
   case "$macos_autostart" in
@@ -142,30 +155,36 @@ register_macos_agent() {
       case "$(pueued_probe)" in
         none) ;;
         *)
-          if ! launchctl print "$domain/$label" >/dev/null 2>&1; then
+          if [ "$(pueued_label_state "$domain/$label")" != loaded ]; then
             echo "warn: an unmanaged pueued may be running, or the check could not run; pueued LaunchAgent not registered. To hand over, run: pueue shutdown, then: launchctl bootstrap $domain $plist" >&2
             return 0
           fi
           ;;
       esac
       launchctl enable "$domain/$label"
-      if launchctl print "$domain/$label" >/dev/null 2>&1; then
-        launchctl bootout "$domain/$label"
-      fi
+      case "$(pueued_label_state "$domain/$label")" in
+        loaded) launchctl bootout "$domain/$label" ;;
+        absent) ;;
+        *)
+          echo "could not read the LaunchAgent state; pueued LaunchAgent not registered." >&2
+          return 1
+          ;;
+      esac
       launchctl bootstrap "$domain" "$plist"
       echo "pueued LaunchAgent loaded."
       ;;
     disabled)
       # Both steps run even when disable fails, so a failed disable still
-      # unloads the session. A bootout failure counts only while the label is
-      # still loaded: a label that is not loaded counts as success.
+      # unloads the session. A failed bootout counts as success only when the
+      # label is confirmed absent. A loaded or unknown label fails the step.
       disable_status=0
       bootout_failed=0
       launchctl disable "$domain/$label" || disable_status=$?
       if ! launchctl bootout "$domain/$label"; then
-        if launchctl print "$domain/$label" >/dev/null 2>&1; then
-          bootout_failed=1
-        fi
+        case "$(pueued_label_state "$domain/$label")" in
+          absent) ;;
+          *) bootout_failed=1 ;;
+        esac
       fi
       if [ "$disable_status" -ne 0 ] || [ "$bootout_failed" -ne 0 ]; then
         echo "pueued LaunchAgent disable did not complete; rerun the register script." >&2
