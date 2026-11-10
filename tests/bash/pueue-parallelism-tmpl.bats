@@ -2,9 +2,12 @@
 # Tests for data.pueue.parallelism: the rendered one-line file
 # home/dot_config/dotfiles/pueue-parallelism.tmpl and the re-emit in
 # .chezmoi.toml.tmpl. Both carry the same inline validation, so one case
-# table drives both. Every render passes an explicit --config, so the
-# maintainer's own chezmoi data can never leak into a test.
-# cspell:words pueue tomllib
+# table drives both. The data.pueue.linux.autostart and
+# data.pueue.macos.autostart settings render only in .chezmoi.toml.tmpl,
+# and their tests follow the parallelism ones. Every render passes an
+# explicit --config, so the maintainer's own chezmoi data can never leak
+# into a test.
+# cspell:words pueue tomllib pueued launchagent systemd
 
 bats_require_minimum_version 1.5.0
 
@@ -226,6 +229,105 @@ ROWS
   fi
   assert_success
   assert_output "6"
+}
+
+# data.pueue.linux.autostart and data.pueue.macos.autostart. The defaults
+# (systemd-user and launchagent) are not re-emitted, an explicit disabled is,
+# and any other value fails the render naming its key.
+
+@test "the configuration template omits the autostart defaults, with or without a table" {
+  local data
+  for data in '{"pueue":{"linux":{"autostart":"systemd-user"},"macos":{"autostart":"launchagent"}}}' '{"pueue":{"linux":{},"macos":{}}}' '{"pueue":{"macos":{"autostart":"launchagent"}}}' '{"pueue":{"linux":{"autostart":"systemd-user"}}}'; do
+    _write_config "$data"
+    run --separate-stderr _render_config
+    assert_success
+    refute_output --partial 'autostart'
+    refute_output --partial '[data.pueue'
+  done
+}
+
+@test "the configuration template re-emits an explicit disabled autostart under its own table" {
+  _write_config '{"pueue":{"linux":{"autostart":"disabled"}}}'
+  run --separate-stderr _render_config
+  assert_success
+  assert_line '[data.pueue.linux]'
+  assert_line 'autostart = "disabled"'
+  refute_output --partial '[data.pueue.macos]'
+
+  _write_config '{"pueue":{"macos":{"autostart":"disabled"}}}'
+  run --separate-stderr _render_config
+  assert_success
+  assert_line '[data.pueue.macos]'
+  assert_line 'autostart = "disabled"'
+  refute_output --partial '[data.pueue.linux]'
+}
+
+@test "an autostart override survives a default parallelism of 2" {
+  _write_config '{"pueue":{"parallelism":2,"linux":{"autostart":"disabled"}}}'
+  run --separate-stderr _render_config
+  assert_success
+  assert_line 'autostart = "disabled"'
+  refute_output --partial 'parallelism'
+
+  _write_config '{"pueue":{"parallelism":2,"macos":{"autostart":"disabled"}}}'
+  run --separate-stderr _render_config
+  assert_success
+  assert_line 'autostart = "disabled"'
+  refute_output --partial 'parallelism'
+}
+
+@test "the configuration template fails on an unknown autostart value, naming its key" {
+  local data key
+  while IFS='|' read -r data key; do
+    _write_config "$data"
+    run --separate-stderr _render_config
+    [ "$status" -ne 0 ] || fail "$data: rendered instead of failing"
+    [[ "$stderr" == *"$key"* ]] || fail "$data: the error does not name $key: $stderr"
+  done << 'ROWS'
+{"pueue":{"linux":{"autostart":"system-user"}}}|data.pueue.linux.autostart
+{"pueue":{"linux":{"autostart":true}}}|data.pueue.linux.autostart
+{"pueue":{"linux":{"autostart":"launchagent"}}}|data.pueue.linux.autostart
+{"pueue":{"macos":{"autostart":"always"}}}|data.pueue.macos.autostart
+{"pueue":{"macos":{"autostart":true}}}|data.pueue.macos.autostart
+{"pueue":{"macos":{"autostart":"systemd-user"}}}|data.pueue.macos.autostart
+ROWS
+}
+
+@test "the configuration template fails when linux or macos is not a table, naming it" {
+  local data key
+  while IFS='|' read -r data key; do
+    _write_config "$data"
+    run --separate-stderr _render_config
+    [ "$status" -ne 0 ] || fail "$data: rendered instead of failing"
+    [[ "$stderr" == *"$key"* ]] || fail "$data: the error does not name $key: $stderr"
+  done << 'ROWS'
+{"pueue":{"linux":"disabled"}}|data.pueue.linux
+{"pueue":{"macos":"disabled"}}|data.pueue.macos
+{"pueue":{"linux":["disabled"]}}|data.pueue.linux
+ROWS
+}
+
+@test "unknown sibling fields under data.pueue stay dropped next to an autostart override" {
+  _write_config '{"pueue":{"parallelism":3,"retries":5,"linux":{"autostart":"disabled","timeout":9}}}'
+  run --separate-stderr _render_config
+  assert_success
+  assert_line 'parallelism = 3'
+  assert_line 'autostart = "disabled"'
+  refute_output --partial 'retries'
+  refute_output --partial 'timeout'
+}
+
+@test "the configuration template autostart output is valid TOML that round-trips the values" {
+  command -v python3 > /dev/null || skip "python3 is not available"
+  _write_config '{"pueue":{"parallelism":2,"linux":{"autostart":"disabled"},"macos":{"autostart":"disabled"}}}'
+  run --separate-stderr _render_config
+  assert_success
+  run python3 -I -c 'import sys, tomllib; d = tomllib.loads(sys.stdin.read())["data"]["pueue"]; print(d["linux"]["autostart"], d["macos"]["autostart"], "parallelism" in d)' <<< "$output"
+  if [ "$status" -eq 1 ] && [[ "$output" == *"No module named tomllib"* ]]; then
+    skip "tomllib needs Python 3.11"
+  fi
+  assert_success
+  assert_output "disabled disabled False"
 }
 
 @test "nothing in the source tree writes a pueue.yml or touches the default group" {
