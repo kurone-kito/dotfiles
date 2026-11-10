@@ -190,20 +190,24 @@ PY
   assert_output '0'
 }
 
-@test "systemd-analyze verifies the rendered unit with empty output" {
+@test "systemd-analyze reports no diagnostic for this unit under --user" {
   command -v systemd-analyze >/dev/null 2>&1 || skip "systemd-analyze is not installed"
   _render
 
-  # verify resolves %h from HOME and checks that ExecStart exists and is
-  # executable. A stub shim under the temporary home makes the result
-  # independent of the host, so a missing mise shim cannot hide a parser
-  # diagnostic behind a "not executable" message. The output must be empty,
-  # not merely free of the messages this test knows about.
+  # --user checks the unit in the user-manager context, as the zellij sibling
+  # test does. verify also loads every other user unit on the host, so its
+  # output can carry unrelated diagnostics. The checks below therefore look
+  # only for lines that name this unit. A stub shim under the temporary home
+  # makes ExecStart executable, so a missing mise shim cannot hide a parser
+  # diagnostic behind a "not executable" message.
   mkdir -p "$TMP_HOME/.local/share/mise/shims"
   printf '#!/bin/sh\nexit 0\n' > "$TMP_HOME/.local/share/mise/shims/pueued"
   chmod +x "$TMP_HOME/.local/share/mise/shims/pueued"
 
-  run env HOME="$TMP_HOME" LC_ALL=C systemd-analyze verify "$RENDERED"
-  assert_success
-  assert_output ''
+  run env HOME="$TMP_HOME" LC_ALL=C systemd-analyze verify --user "$RENDERED"
+  # A parser diagnostic for this unit carries file:line.
+  refute_output --regexp 'pueued\.service:[0-9]+: '
+  # Any other message about this unit, such as a dependency or executable
+  # error, names it as "pueued.service: ".
+  refute_output --partial 'pueued.service: '
 }
