@@ -166,8 +166,9 @@
 # script runs when the mode or the unit template changes, not on every apply.
 # [data.pueue.linux]
 # autostart = "systemd-user"  # "systemd-user" or "disabled"; default: "systemd-user"
-# How pueued starts on macOS. "disabled" turns autostart off. No supervisor
-# reads this yet; the supervisor children that follow will.
+# How pueued starts on macOS. The register script manages the LaunchAgent.
+# "disabled" unloads it and keeps it off. The script runs when the mode or the
+# plist template changes, not on every apply.
 # [data.pueue.macos]
 # autostart = "launchagent"  # "launchagent" or "disabled"; default: "launchagent"
 
