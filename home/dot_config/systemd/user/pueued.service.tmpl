@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the pueue daemon for the validation queue
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/mise/shims/pueued
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
