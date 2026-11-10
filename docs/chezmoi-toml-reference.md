@@ -235,8 +235,9 @@ The autostart settings live under `[data.pueue.linux]` and
 rendered config with no autostart field means the default applies. A
 `disabled` override is kept even when `parallelism` is the default `2`.
 A `linux` or `macos` value that is not a table fails the render and names
-its key. On Linux, `chezmoi apply` runs the register script, which starts or
-stops the unit to match the mode. The macOS mode is read by a later change.
+its key. On Linux, the register script runs when the mode or the unit template
+changes, not on every apply. It starts the unit for `"systemd-user"` and stops
+it for `"disabled"`. The macOS mode is read by a later change.
 
 An omitted key renders as `2`, a provisional default rather than a
 measured limit; no upper bound is set. A TOML integer is used exactly as
