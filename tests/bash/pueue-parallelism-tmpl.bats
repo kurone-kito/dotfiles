@@ -223,10 +223,8 @@ ROWS
   _write_config '{"pueue":{"parallelism":6}}'
   run --separate-stderr _render_config
   assert_success
+  python3 -I -c 'import tomllib' 2> /dev/null || skip "tomllib needs Python 3.11"
   run python3 -I -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["data"]["pueue"]["parallelism"])' <<< "$output"
-  if [ "$status" -eq 1 ] && [[ "$output" == *"No module named tomllib"* ]]; then
-    skip "tomllib needs Python 3.11"
-  fi
   assert_success
   assert_output "6"
 }
@@ -322,10 +320,8 @@ ROWS
   _write_config '{"pueue":{"parallelism":2,"linux":{"autostart":"disabled"},"macos":{"autostart":"disabled"}}}'
   run --separate-stderr _render_config
   assert_success
+  python3 -I -c 'import tomllib' 2> /dev/null || skip "tomllib needs Python 3.11"
   run python3 -I -c 'import sys, tomllib; d = tomllib.loads(sys.stdin.read())["data"]["pueue"]; print(d["linux"]["autostart"], d["macos"]["autostart"], "parallelism" in d)' <<< "$output"
-  if [ "$status" -eq 1 ] && [[ "$output" == *"No module named tomllib"* ]]; then
-    skip "tomllib needs Python 3.11"
-  fi
   assert_success
   assert_output "disabled disabled False"
 }
