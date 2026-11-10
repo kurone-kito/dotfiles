@@ -534,6 +534,42 @@ _darwin_plist() {
   assert_output --partial 'data.pueue.macos.autostart'
 }
 
+@test "the LaunchAgent hash changes when the plist template changes" {
+  local source="$BATS_TEST_TMPDIR/source" config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+  cp -R "$REPO_HOME" "$source"
+  printf '%s\n' '{}' > "$config"
+
+  local before after
+  before="$(chezmoi execute-template --file "$source/run_onchange_after_81-register-pueued.sh.tmpl" \
+    --config "$config" --config-format json \
+    --source "$source" --destination "$BATS_TEST_TMPDIR/destination" | grep '^# launchagent hash:')"
+  printf '\n# a change to the plist template\n' >> "$source/Library/LaunchAgents/com.kurone-kito.pueued.plist.tmpl"
+  after="$(chezmoi execute-template --file "$source/run_onchange_after_81-register-pueued.sh.tmpl" \
+    --config "$config" --config-format json \
+    --source "$source" --destination "$BATS_TEST_TMPDIR/destination" | grep '^# launchagent hash:')"
+
+  assert [ -n "$before" ]
+  assert_not_equal "$before" "$after"
+}
+
+@test "the macOS mode line renders the configured value and defaults to launchagent" {
+  local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+
+  printf '%s\n' '{ "data": { "pueue": { "macos": { "autostart": "disabled" } } } }' > "$config"
+  run chezmoi execute-template --file "$TEMPLATE" \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination"
+  assert_success
+  assert_line 'macos_autostart="disabled"'
+
+  printf '%s\n' '{}' > "$config"
+  run chezmoi execute-template --file "$TEMPLATE" \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination"
+  assert_success
+  assert_line 'macos_autostart="launchagent"'
+}
+
 @test "the rendered template body matches the fixture apart from the mode line" {
   local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
   local rendered="$BATS_TEST_TMPDIR/rendered.sh"
@@ -603,6 +639,8 @@ _darwin_plist() {
   run bash -n "$rendered"
   assert_success
   run grep -c '^# unit hash: [0-9a-f]\{64\}$' "$rendered"
+  assert_output '1'
+  run grep -c '^# launchagent hash: [0-9a-f]\{64\}$' "$rendered"
   assert_output '1'
 }
 

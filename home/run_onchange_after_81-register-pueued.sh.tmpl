@@ -1,6 +1,7 @@
 #!/bin/bash
-# chezmoi run_onchange_after script: register pueued with the Linux user
-# service manager. Re-runs when the autostart mode or the unit template changes.
+# chezmoi run_onchange_after script: register pueued with the user service
+# manager on Linux (systemd user unit) and on macOS (LaunchAgent).
+# Re-runs when a mode, the unit template, or the LaunchAgent plist template changes.
 # unit hash: {{ include "dot_config/systemd/user/pueued.service.tmpl" | sha256sum }}
 # launchagent hash: {{ include "Library/LaunchAgents/com.kurone-kito.pueued.plist.tmpl" | sha256sum }}
 set -euo pipefail
