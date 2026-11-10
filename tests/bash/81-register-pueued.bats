@@ -246,6 +246,27 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   assert_line 'linux_autostart="systemd-user"'
 }
 
+@test "an unknown mode fails the render and names the field" {
+  local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+  printf '%s\n' '{ "data": { "pueue": { "linux": { "autostart": "system-user" } } } }' > "$config"
+  run chezmoi execute-template --file "$TEMPLATE" \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination"
+  assert_failure
+  assert_output --partial 'data.pueue.linux.autostart'
+}
+
+@test "a value that would break out of the quoted assignment fails the render" {
+  local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
+  printf '%s\n' '{ "data": { "pueue": { "linux": { "autostart": "x\"; touch PWNED; \"" } } } }' > "$config"
+  run chezmoi execute-template --file "$TEMPLATE" \
+    --config "$config" --config-format json \
+    --source "$REPO_HOME" --destination "$BATS_TEST_TMPDIR/destination"
+  assert_failure
+  assert_output --partial 'data.pueue.linux.autostart'
+  refute_output --partial 'linux_autostart='
+}
+
 @test "the rendered template is valid bash and carries the unit hash line" {
   local config="$BATS_TEST_TMPDIR/chezmoi-config.json"
   local rendered="$BATS_TEST_TMPDIR/rendered-syntax.sh"

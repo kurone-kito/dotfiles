@@ -7,7 +7,11 @@ set -euo pipefail
 # See run_after_99-secret-status-summary.sh.tmpl for rationale.
 exec </dev/null
 
-linux_autostart="{{ dig "pueue" "linux" "autostart" "systemd-user" . }}"
+{{ $linuxAutostart := dig "pueue" "linux" "autostart" "systemd-user" . -}}
+{{ if not (or (eq $linuxAutostart "systemd-user") (eq $linuxAutostart "disabled")) -}}
+{{   fail (printf "data.pueue.linux.autostart must be \"systemd-user\" or \"disabled\"; got %q" $linuxAutostart) -}}
+{{ end -}}
+linux_autostart="{{ $linuxAutostart }}"
 
 dotfiles_user_systemd_available() {
   command -v systemctl >/dev/null 2>&1 \
