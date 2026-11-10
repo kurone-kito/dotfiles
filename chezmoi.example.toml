@@ -161,6 +161,14 @@
 # [data.pueue]
 # How many tasks the dotfiles pueue group runs at once. A positive whole number.
 # parallelism = 2  # default: 2
+# How pueued starts on Linux. "disabled" turns autostart off. No supervisor
+# reads this yet; the supervisor children that follow will.
+# [data.pueue.linux]
+# autostart = "systemd-user"  # "systemd-user" or "disabled"; default: "systemd-user"
+# How pueued starts on macOS. "disabled" turns autostart off. No supervisor
+# reads this yet; the supervisor children that follow will.
+# [data.pueue.macos]
+# autostart = "launchagent"  # "launchagent" or "disabled"; default: "launchagent"
 
 # Local development CA through mkcert (Windows only).
 # [data.mkcert]

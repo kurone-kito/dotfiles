@@ -222,10 +222,62 @@ age = {{ $tmpfilesAge | quote }}
 {{- else }}
 {{-   fail (printf "data.pueue.parallelism must be a positive whole number; got %#v" $pueueParallelism) }}
 {{- end }}
-{{- if ne $pueueText "2" }}
+{{- /* data.pueue.linux.autostart and data.pueue.macos.autostart: the
+     defaults systemd-user and launchagent are omitted and an explicit
+     disabled is re-emitted. Any other value fails the render and names its
+     key, so a typo cannot silently fall back to the default. */ -}}
+{{- $pueueLinuxAutostart := "" }}
+{{- if hasKey $pueue "linux" }}
+{{-   $pueueLinux := get $pueue "linux" }}
+{{-   if not (kindIs "map" $pueueLinux) }}
+{{-     fail (printf "data.pueue.linux must be a table that can hold autostart; got %#v" $pueueLinux) }}
+{{-   end }}
+{{-   if hasKey $pueueLinux "autostart" }}
+{{-     $pueueLinuxValue := get $pueueLinux "autostart" }}
+{{-     if not (kindIs "string" $pueueLinuxValue) }}
+{{-       fail (printf "data.pueue.linux.autostart must be \"systemd-user\" or \"disabled\"; got %#v" $pueueLinuxValue) }}
+{{-     end }}
+{{-     if eq $pueueLinuxValue "disabled" }}
+{{-       $pueueLinuxAutostart = "disabled" }}
+{{-     else if ne $pueueLinuxValue "systemd-user" }}
+{{-       fail (printf "data.pueue.linux.autostart must be \"systemd-user\" or \"disabled\"; got %#v" $pueueLinuxValue) }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+{{- $pueueMacosAutostart := "" }}
+{{- if hasKey $pueue "macos" }}
+{{-   $pueueMacos := get $pueue "macos" }}
+{{-   if not (kindIs "map" $pueueMacos) }}
+{{-     fail (printf "data.pueue.macos must be a table that can hold autostart; got %#v" $pueueMacos) }}
+{{-   end }}
+{{-   if hasKey $pueueMacos "autostart" }}
+{{-     $pueueMacosValue := get $pueueMacos "autostart" }}
+{{-     if not (kindIs "string" $pueueMacosValue) }}
+{{-       fail (printf "data.pueue.macos.autostart must be \"launchagent\" or \"disabled\"; got %#v" $pueueMacosValue) }}
+{{-     end }}
+{{-     if eq $pueueMacosValue "disabled" }}
+{{-       $pueueMacosAutostart = "disabled" }}
+{{-     else if ne $pueueMacosValue "launchagent" }}
+{{-       fail (printf "data.pueue.macos.autostart must be \"launchagent\" or \"disabled\"; got %#v" $pueueMacosValue) }}
+{{-     end }}
+{{-   end }}
+{{- end }}
+{{- if or (ne $pueueText "2") $pueueLinuxAutostart $pueueMacosAutostart }}
 
 [data.pueue]
+{{- if ne $pueueText "2" }}
 parallelism = {{ $pueueText }}
+{{- end }}
+{{- end }}
+{{- if $pueueLinuxAutostart }}
+
+[data.pueue.linux]
+autostart = {{ $pueueLinuxAutostart | quote }}
+{{- end }}
+{{- if $pueueMacosAutostart }}
+
+[data.pueue.macos]
+autostart = {{ $pueueMacosAutostart | quote }}
 {{- end }}
 {{- $mkcertInstall := dig "mkcert" "install" false . }}
 {{- $mkcertInstallTimeout := dig "mkcert" "installTimeoutSeconds" 180 . }}
@@ -309,6 +361,8 @@ attachment = {{ dig "attachment" "" $entry | quote }}
 # and docs/pueue-validation-queue.md. Optional parallelism of the
 # `dotfiles` pueue group (default 2), rendered to
 # ~/.config/dotfiles/pueue-parallelism for scripts/with-pueue.sh to read.
+# [data.pueue.linux] and [data.pueue.macos] hold the pueued autostart
+# settings (defaults systemd-user and launchagent); they render only here.
 #
 # mkcert local CA ([data.mkcert]):
 # docs/chezmoi-toml-reference.md#mkcert-local-ca-datamkcertinstall and
