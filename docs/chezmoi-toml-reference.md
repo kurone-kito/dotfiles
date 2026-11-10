@@ -227,7 +227,7 @@ See
 | Field             | Type    | Required | Default          | Purpose                                                                                                                                                                                               |
 | ----------------- | ------- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `parallelism`     | integer | no       | `2`              | How many tasks the `dotfiles` pueue group runs at once. A positive whole number.                                                                                                                      |
-| `linux.autostart` | string  | no       | `"systemd-user"` | How `pueued` starts on Linux: `"systemd-user"` (the default) or `"disabled"`. The supervisor children that follow read it; nothing reads it yet. Any other value fails the render and names this key. |
+| `linux.autostart` | string  | no       | `"systemd-user"` | How `pueued` starts on Linux: `"systemd-user"` (the default) or `"disabled"`. The register script reads it: `"systemd-user"` enables and restarts the unit, and `"disabled"` stops and disables it. Any other value fails the render and names this key. |
 | `macos.autostart` | string  | no       | `"launchagent"`  | How `pueued` starts on macOS: `"launchagent"` (the default) or `"disabled"`. The supervisor children that follow read it; nothing reads it yet. Any other value fails the render and names this key.  |
 
 The autostart settings live under `[data.pueue.linux]` and
@@ -235,8 +235,8 @@ The autostart settings live under `[data.pueue.linux]` and
 rendered config with no autostart field means the default applies. A
 `disabled` override is kept even when `parallelism` is the default `2`.
 A `linux` or `macos` value that is not a table fails the render and names
-its key. Setting these values does not start or stop `pueued` by itself;
-the supervisor scripts that read them are separate, later changes.
+its key. On Linux, `chezmoi apply` runs the register script, which starts or
+stops the unit to match the mode. The macOS mode is read by a later change.
 
 An omitted key renders as `2`, a provisional default rather than a
 measured limit; no upper bound is set. A TOML integer is used exactly as
