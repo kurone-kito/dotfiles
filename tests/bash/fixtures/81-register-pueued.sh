@@ -19,6 +19,10 @@ dotfiles_user_systemd_available() {
     && systemctl --user show-environment >/dev/null 2>&1
 }
 
+pueued_running_unmanaged() {
+  command -v pgrep >/dev/null 2>&1 && pgrep -u "$(id -u)" -x pueued >/dev/null 2>&1
+}
+
 register_linux_service() {
   # Validate the mode before any service manager call, so a typo fails loudly
   # on every host, with or without user systemd.
@@ -54,6 +58,14 @@ register_linux_service() {
       fi
       if ! systemctl --user show-environment >/dev/null 2>&1; then
         echo "warn: user systemd is not available; pueued user service not registered. After enabling user systemd, run: systemctl --user enable --now pueued.service" >&2
+        return 0
+      fi
+      # An unmanaged pueued (started by the validation wrapper) may already
+      # hold the queue socket. An enabled unit cannot bind it and would
+      # restart-loop, so stop here and name the handover. Never stop a running
+      # daemon from this script.
+      if pueued_running_unmanaged && ! systemctl --user is-active --quiet pueued.service; then
+        echo "warn: an unmanaged pueued is running; pueued user service not registered. To hand over, run: pueue shutdown, then: systemctl --user enable --now pueued.service" >&2
         return 0
       fi
       systemctl --user daemon-reload

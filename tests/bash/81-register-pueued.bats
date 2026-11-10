@@ -46,6 +46,10 @@ if [ "$*" = "--user show-environment" ]; then
   [ "${DOTFILES_TEST_USER_SYSTEMD:-1}" = 1 ] || exit 1
   exit 0
 fi
+if [ "$*" = "--user is-active --quiet pueued.service" ]; then
+  [ "${UNIT_ACTIVE:-0}" = 1 ]
+  exit $?
+fi
 verb=""
 for arg in "$@"; do
   case "$arg" in
@@ -64,13 +68,21 @@ echo "loginctl $*" >> "$TRACE"
 echo "${DOTFILES_TEST_LINGER:-yes}"
 EOF
 
-  chmod +x "$STUB_BIN/uname" "$STUB_BIN/systemctl" "$STUB_BIN/loginctl"
+  # pgrep reports an unmanaged pueued only when the test asks for one.
+  cat > "$STUB_BIN/pgrep" <<'EOF'
+#!/bin/sh
+[ "${UNMANAGED_PUEUED:-0}" = 1 ]
+EOF
+
+  chmod +x "$STUB_BIN/uname" "$STUB_BIN/systemctl" "$STUB_BIN/loginctl" "$STUB_BIN/pgrep"
 
   export PUEUE_LINUX_AUTOSTART=systemd-user
   export DOTFILES_TEST_USER_SYSTEMD=1
   export DOTFILES_TEST_LINGER=yes
   export UNAME_VALUE=Linux
   export FAIL_VERB=
+  export UNMANAGED_PUEUED=0
+  export UNIT_ACTIVE=0
 }
 
 # Runs the fixture with only the stub directory on PATH.
@@ -207,6 +219,27 @@ _expected_enable_path=$'systemctl --user show-environment\nsystemctl --user daem
   assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user daemon-reload"$'\n'"systemctl --user enable pueued.service"$'\n'"systemctl --user restart pueued.service"
   run grep -c 'disable' "$TRACE"
   assert_output '0'
+}
+
+@test "an unmanaged pueued blocks enable and restart and names the handover" {
+  export UNMANAGED_PUEUED=1
+  _run_fixture
+
+  assert_success
+  assert_stderr --partial 'an unmanaged pueued is running'
+  assert_stderr --partial 'pueue shutdown'
+  refute_output --partial 'pueued user service enabled.'
+  assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"
+}
+
+@test "an unmanaged pueued does not block a unit that is already active" {
+  export UNMANAGED_PUEUED=1
+  export UNIT_ACTIVE=1
+  _run_fixture
+
+  assert_success
+  assert_output --partial 'pueued user service enabled.'
+  assert_equal "$(cat "$TRACE")" "$_expected_show_env"$'\n'"systemctl --user is-active --quiet pueued.service"$'\n'"systemctl --user daemon-reload"$'\n'"systemctl --user enable pueued.service"$'\n'"systemctl --user restart pueued.service"$'\n'"loginctl show-user testuser -p Linger --value"
 }
 
 @test "the rendered template body matches the fixture apart from the mode line" {
