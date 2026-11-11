@@ -15,10 +15,10 @@ setup() {
   DOC="$REPO_ROOT/docs/pueue-validation-queue.md"
   # The whole document, joined, for the checks that span it.
   JOINED="$(tr '\n' ' ' < "$DOC" | tr -s ' ')"
-  # The "## Installing pueue" section, and the "## What the wrapper does"
-  # section, each joined on its own.
+  # The "## Installing pueue" section, joined on its own, and the text of
+  # decision step 4 alone: from its "4." list item up to the "5." item.
   INSTALL="$(awk '/^## Installing pueue/{f=1; next} /^## /{f=0} f' "$DOC" | tr '\n' ' ' | tr -s ' ')"
-  STEP4="$(awk '/^## What the wrapper does/{f=1; next} /^## /{f=0} f' "$DOC" | tr '\n' ' ' | tr -s ' ')"
+  STEP4="$(awk '/^4\. If the pueue daemon/{f=1} /^5\. /{f=0} f' "$DOC" | tr '\n' ' ' | tr -s ' ')"
 }
 
 # $1: a fixed string. Succeeds when the joined document contains it.
