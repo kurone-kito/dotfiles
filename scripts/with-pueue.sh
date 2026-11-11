@@ -18,9 +18,15 @@
 #      takes another slot.
 #   3. Without pueue, pueued or jq, on a Windows shell (MINGW, MSYS, CYGWIN:
 #      pueue runs a task through PowerShell there, not through a POSIX sh, so
-#      the quoted command line below would not mean what it says), or when
-#      one start attempt of the daemon leaves it unreachable, run the command
-#      directly.
+#      the quoted command line below would not mean what it says), run the
+#      command directly. When the queue is unreachable, a supervisor that owns
+#      the daemon decides what happens. An enabled systemd user unit that
+#      failed gets one start from this wrapper, with no reset of its start
+#      limit. A unit that is running or activating is waited for. A stopped or
+#      masked unit stays down. A present macOS LaunchAgent is waited for. In
+#      each case the wrapper never starts a second daemon, and it runs the
+#      command directly if the queue stays down. Only without a supervisor is
+#      one start attempt of the daemon made.
 #   4. Otherwise create the `dotfiles` group when it is not listed, set its
 #      parallelism, enqueue the command in the caller's working directory,
 #      wait, print the task's output and return the task's exit status. The
@@ -128,6 +134,70 @@ shell_quote() {
 
 queue_reachable() {
   pueue status --json > /dev/null 2>&1
+}
+
+# Polls for the queue daemon for at most start_polls ticks. Succeeds as soon
+# as the queue answers, and makes one last check before it gives up.
+wait_for_queue() {
+  local poll=0
+  while [ "$poll" -lt "$start_polls" ]; do
+    queue_reachable && return 0
+    sleep "$start_poll_delay"
+    poll=$((poll + 1))
+  done
+  queue_reachable
+}
+
+# Prints the supervisor that owns the queue daemon, as one word:
+#   linux-failed    an enabled user unit that is in the failed state
+#   linux-inactive  an enabled user unit that was stopped on purpose
+#   linux-other     an enabled user unit in any other state
+#   macos           the LaunchAgent plist is present
+#   none            no supervisor. A failed systemctl query counts as none,
+#                   because it does not show an enabled unit.
+supervisor_state() {
+  local props file_state active_state
+  case $(uname -s 2> /dev/null) in
+    Linux)
+      if ! command -v systemctl > /dev/null 2>&1; then
+        printf 'none'
+        return 0
+      fi
+      props=$(systemctl --user show --property=UnitFileState --property=ActiveState pueued.service 2> /dev/null) || {
+        printf 'none'
+        return 0
+      }
+      file_state=$(printf '%s\n' "$props" | sed -n 's/^UnitFileState=//p')
+      active_state=$(printf '%s\n' "$props" | sed -n 's/^ActiveState=//p')
+      case $file_state in
+        masked | masked-runtime)
+          # The operator masked the unit, so it is deliberately off. Starting
+          # a daemon beside it would undo that, so it counts as stopped.
+          printf 'linux-inactive'
+          ;;
+        enabled | enabled-runtime)
+          case $active_state in
+            failed) printf 'linux-failed' ;;
+            inactive) printf 'linux-inactive' ;;
+            *) printf 'linux-other' ;;
+          esac
+          ;;
+        *)
+          printf 'none'
+          ;;
+      esac
+      ;;
+    Darwin)
+      if [ -f "${HOME:-}/Library/LaunchAgents/com.kurone-kito.pueued.plist" ]; then
+        printf 'macos'
+      else
+        printf 'none'
+      fi
+      ;;
+    *)
+      printf 'none'
+      ;;
+  esac
 }
 
 # Best effort: stop the task so an interrupted call does not leave it holding
@@ -267,18 +337,34 @@ main() {
   esac
 
   if ! queue_reachable; then
-    # One start attempt. Its exit status says nothing about reachability, and
-    # the daemon would keep this call's output pipe open, so cut all three.
-    pueued -d < /dev/null > /dev/null 2>&1 3>&-
-    local poll=0
-    while [ "$poll" -lt "$start_polls" ]; do
-      queue_reachable && break
-      sleep "$start_poll_delay"
-      poll=$((poll + 1))
-    done
-    if ! queue_reachable; then
-      exec "$@"
-    fi
+    # A supervisor that owns the daemon is respected: a second daemon beside
+    # it would be unsupervised and would undo a clean stop. Only without one
+    # is pueued started here, as one detached start attempt.
+    case $(supervisor_state) in
+      linux-failed)
+        # One start. The start-limit counter is not cleared: that would let
+        # every validation call restart a crash loop. A refused start leaves
+        # the unit failed, and the command runs directly.
+        systemctl --user start pueued.service > /dev/null 2>&1 || exec "$@"
+        wait_for_queue || exec "$@"
+        ;;
+      linux-inactive)
+        # A stopped unit is a clean stop, and it must stay down.
+        exec "$@"
+        ;;
+      linux-other | macos)
+        # The supervisor owns the process. Wait for it, and run the command
+        # directly when the queue stays down.
+        wait_for_queue || exec "$@"
+        ;;
+      *)
+        # One start attempt. Its exit status says nothing about reachability,
+        # and the daemon would keep this call's output pipe open, so cut all
+        # three.
+        pueued -d < /dev/null > /dev/null 2>&1 3>&-
+        wait_for_queue || exec "$@"
+        ;;
+    esac
   fi
 
   listing=$(pueue group 2> /dev/null) || die 1 "could not list the pueue groups; not running the command"
