@@ -228,7 +228,7 @@ See
 | ----------------- | ------- | -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `parallelism`     | integer | no       | `2`              | How many tasks the `dotfiles` pueue group runs at once. A positive whole number.                                                                                                                      |
 | `linux.autostart` | string  | no       | `"systemd-user"` | How `pueued` starts on Linux: `"systemd-user"` (the default) or `"disabled"`. The register script reads it: `"systemd-user"` enables and restarts the unit, and `"disabled"` stops and disables it. Any other value fails the render and names this key. |
-| `macos.autostart` | string  | no       | `"launchagent"`  | How `pueued` starts on macOS: `"launchagent"` (the default) or `"disabled"`. The supervisor children that follow read it; nothing reads it yet. Any other value fails the render and names this key.  |
+| `macos.autostart` | string  | no       | `"launchagent"`  | How `pueued` starts on macOS: `"launchagent"` (the default) or `"disabled"`. The register script reads it: `"launchagent"` loads the LaunchAgent, and `"disabled"` unloads it and keeps it off. Any other value fails the render and names this key.  |
 
 The autostart settings live under `[data.pueue.linux]` and
 `[data.pueue.macos]`. Only an explicit `"disabled"` is re-emitted, so a
@@ -237,7 +237,8 @@ rendered config with no autostart field means the default applies. A
 A `linux` or `macos` value that is not a table fails the render and names
 its key. On Linux, the register script runs when the mode or the unit template
 changes, not on every apply. It starts the unit for `"systemd-user"` and stops
-it for `"disabled"`. The macOS mode is read by a later change.
+it for `"disabled"`. On macOS the same rule applies to the LaunchAgent: the
+script runs when the mode or the plist template changes.
 
 An omitted key renders as `2`, a provisional default rather than a
 measured limit; no upper bound is set. A TOML integer is used exactly as
