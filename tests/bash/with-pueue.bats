@@ -1051,6 +1051,202 @@ finish_held_add() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# The supervisor that owns the daemon
+# ---------------------------------------------------------------------------
+
+# A fake systemctl for the user unit. It answers the one query the wrapper
+# makes, and it records every call. A start brings the daemon up unless a test
+# sets systemctl-start-no-daemon. Refused starts and failed queries are set with
+# systemctl-start-refused and systemctl-query-fails.
+install_fake_systemctl() {
+  cat > "$FAKE_BIN/systemctl" << 'FAKE'
+#!/usr/bin/env bash
+state="$FAKE_PUEUE_STATE"
+echo "$*" >> "$state/systemctl-calls"
+case "$*" in
+  "--user show --property=UnitFileState --property=ActiveState pueued.service")
+    [ ! -e "$state/systemctl-query-fails" ] || exit 1
+    printf 'UnitFileState=%s\nActiveState=%s\n' \
+      "$(cat "$state/unit-file-state" 2> /dev/null)" "$(cat "$state/unit-active-state" 2> /dev/null)"
+    ;;
+  "--user start pueued.service")
+    [ ! -e "$state/systemctl-start-refused" ] || exit 1
+    [ -e "$state/systemctl-start-no-daemon" ] || : > "$state/daemon-up"
+    ;;
+esac
+exit 0
+FAKE
+  chmod +x "$FAKE_BIN/systemctl"
+}
+
+# A Linux host whose user unit has the given UnitFileState and ActiveState.
+use_linux_unit() {
+  install_fake_systemctl
+  printf '#!/bin/sh\necho Linux\n' > "$FAKE_BIN/uname"
+  chmod +x "$FAKE_BIN/uname"
+  printf '%s' "$1" > "$FAKE_PUEUE_STATE/unit-file-state"
+  printf '%s' "$2" > "$FAKE_PUEUE_STATE/unit-active-state"
+  # Clear every switch, so a case never inherits the previous one.
+  rm -f "$FAKE_PUEUE_STATE/daemon-up" \
+    "$FAKE_PUEUE_STATE/systemctl-start-refused" \
+    "$FAKE_PUEUE_STATE/systemctl-start-no-daemon" \
+    "$FAKE_PUEUE_STATE/systemctl-query-fails"
+}
+
+use_macos_host() {
+  printf '#!/bin/sh\necho Darwin\n' > "$FAKE_BIN/uname"
+  chmod +x "$FAKE_BIN/uname"
+  rm -f "$FAKE_PUEUE_STATE/daemon-up"
+}
+
+install_plist() {
+  mkdir -p "$HOME/Library/LaunchAgents"
+  : > "$HOME/Library/LaunchAgents/com.kurone-kito.pueued.plist"
+}
+
+# The number of queue checks made (each check is `pueue status --json`). The
+# initial check is one; a wait that polls adds one per tick plus one final.
+queue_checks() {
+  grep -c '^status --json$' "$FAKE_PUEUE_STATE/calls.log" || true
+}
+
+# The number of user-unit starts. A file that was never written means systemctl
+# was never called, which is zero starts.
+systemctl_start_count() {
+  local calls="$FAKE_PUEUE_STATE/systemctl-calls"
+  if [ ! -e "$calls" ]; then
+    echo 0
+    return 0
+  fi
+  grep -c '^--user start pueued.service$' "$calls" || true
+}
+
+@test "supervisor: an enabled unit that failed gets one start, no counter reset, and the queue is used" {
+  use_linux_unit enabled failed
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "1"
+  assert_equal "$(executions)" "1"
+  assert_equal "$(ran_count)" "1"
+  run grep -c 'reset-failed' "$FAKE_PUEUE_STATE/systemctl-calls"
+  assert_output '0'
+}
+
+@test "supervisor: a failed unit whose start is accepted but whose queue stays down runs the command directly" {
+  use_linux_unit enabled failed
+  touch "$FAKE_PUEUE_STATE/systemctl-start-no-daemon"
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "1"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+  # The start is followed by the poll: one initial check plus three more.
+  assert_equal "$(queue_checks)" "4"
+}
+
+@test "supervisor: a refused start leaves the unit failed and runs the command directly, with no enqueue" {
+  use_linux_unit enabled failed
+  touch "$FAKE_PUEUE_STATE/systemctl-start-refused"
+  wrap sh -c "$(mark_command 4)"
+  assert_failure 4
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "1"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+  # A refused start is not polled: only the initial check ran.
+  assert_equal "$(queue_checks)" "1"
+}
+
+@test "supervisor: a stopped unit stays down: no start, no daemon, and the command runs directly" {
+  use_linux_unit enabled inactive
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "0"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+}
+
+@test "supervisor: a unit in another state is waited for, and the command runs directly when the queue stays down" {
+  use_linux_unit enabled activating
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "0"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+  # The unit is waited for: one initial check plus three more.
+  assert_equal "$(queue_checks)" "4"
+}
+
+@test "supervisor: a masked unit stays down: no start, no daemon, and the command runs directly" {
+  use_linux_unit masked inactive
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(systemctl_start_count)" "0"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+}
+
+@test "no supervisor: a missing unit, a disabled unit, or a failed query is treated as unmanaged" {
+  local case_name
+  for case_name in missing disabled query-fails; do
+    : > "$MARK"
+    : > "$FAKE_PUEUE_STATE/pueued-calls"
+    : > "$FAKE_PUEUE_STATE/systemctl-calls"
+    : > "$FAKE_PUEUE_STATE/executions"
+    case "$case_name" in
+      missing) use_linux_unit "" "" ;;
+      disabled) use_linux_unit disabled inactive ;;
+      query-fails)
+        use_linux_unit enabled failed
+        touch "$FAKE_PUEUE_STATE/systemctl-query-fails"
+        ;;
+    esac
+    wrap sh -c "$(mark_command 0)"
+    assert_success
+    # The unmanaged path starts one daemon, and that daemon answers, so the
+    # command goes through the queue.
+    [ "$(pueued_calls)" = 1 ] || fail "$case_name: expected one pueued -d, got $(pueued_calls)"
+    [ "$(systemctl_start_count)" = 0 ] || fail "$case_name: expected no systemctl start"
+    [ "$(executions)" = 1 ] || fail "$case_name: expected the queue to run the command, got $(executions) executions"
+  done
+}
+
+@test "no supervisor: without systemctl one start attempt of pueued is made" {
+  printf '#!/bin/sh\necho Linux\n' > "$FAKE_BIN/uname"
+  chmod +x "$FAKE_BIN/uname"
+  rm -f "$FAKE_PUEUE_STATE/daemon-up"
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "1"
+  assert_equal "$(executions)" "1"
+}
+
+@test "macOS: a LaunchAgent plist that is present is never joined by a second daemon, and the command runs directly" {
+  use_macos_host
+  install_plist
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "0"
+  assert_equal "$(executions)" "0"
+  assert_equal "$(ran_count)" "1"
+  # The LaunchAgent is waited for: one initial check plus three more.
+  assert_equal "$(queue_checks)" "4"
+}
+
+@test "macOS: without a plist one start attempt of pueued is made" {
+  use_macos_host
+  wrap sh -c "$(mark_command 0)"
+  assert_success
+  assert_equal "$(pueued_calls)" "1"
+  assert_equal "$(executions)" "1"
+}
+
 @test "direct: a Windows shell (MINGW, MSYS, CYGWIN) runs the command directly, others use the queue" {
   local name
   for name in MINGW64_NT-10.0-26100 MSYS_NT-10.0 CYGWIN_NT-10.0; do
