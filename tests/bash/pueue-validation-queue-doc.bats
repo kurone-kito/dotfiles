@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 # Tests for docs/pueue-validation-queue.md. The install section and decision
 # step 4 describe the supervisor, the managed stops are named, and the
-# unmanaged fallback is documented. The document's lines are joined before
-# each match, so a sentence that wraps across lines is still found.
+# unmanaged fallback is documented. Each check reads only the section it is
+# about, after the section's lines are joined, so a sentence that wraps across
+# lines is still found and a sentence elsewhere cannot satisfy the check.
 
 bats_require_minimum_version 1.5.0
 
@@ -12,12 +13,23 @@ setup() {
 
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   DOC="$REPO_ROOT/docs/pueue-validation-queue.md"
+  # The whole document, joined, for the checks that span it.
   JOINED="$(tr '\n' ' ' < "$DOC" | tr -s ' ')"
+  # The "## Installing pueue" section, and the "## What the wrapper does"
+  # section, each joined on its own.
+  INSTALL="$(awk '/^## Installing pueue/{f=1; next} /^## /{f=0} f' "$DOC" | tr '\n' ' ' | tr -s ' ')"
+  STEP4="$(awk '/^## What the wrapper does/{f=1; next} /^## /{f=0} f' "$DOC" | tr '\n' ' ' | tr -s ' ')"
 }
 
 # $1: a fixed string. Succeeds when the joined document contains it.
 _contains() {
   grep -qF -- "$1" <<< "$JOINED"
+}
+
+# $1: a joined section text. $2: a fixed string. Succeeds when the section
+# contains the string.
+_in() {
+  grep -qF -- "$2" <<< "$1"
 }
 
 @test "the install section no longer says there is no service to set up" {
@@ -26,31 +38,45 @@ _contains() {
 }
 
 @test "the install section names the Linux unit and the macOS LaunchAgent" {
-  run _contains 'pueued.service'
+  run _in "$INSTALL" 'the systemd user unit `pueued.service`'
   assert_success
-  run _contains 'com.kurone-kito.pueued'
+  run _in "$INSTALL" 'the LaunchAgent `com.kurone-kito.pueued`'
   assert_success
 }
 
 @test "the first call starts the daemon on demand only when no supervisor is enabled" {
-  run _contains 'Only when no supervisor is enabled does the first call start the daemon on demand'
+  run _in "$INSTALL" 'Only when no supervisor is enabled does the first call start the daemon on demand'
+  assert_success
+}
+
+@test "the install section says that Linux needs user systemd, and that disabled falls back on demand" {
+  run _in "$INSTALL" 'user systemd is not'
+  assert_success
+  run _in "$INSTALL" 'With `disabled` on Linux, the unit is stopped and disabled'
+  assert_success
+}
+
+@test "the install section says that a disabled macOS LaunchAgent keeps its plist and never starts a daemon on demand" {
+  run _in "$INSTALL" 'keeps the plist'
+  assert_success
+  run _in "$INSTALL" 'never starts a daemon on demand'
   assert_success
 }
 
 @test "decision step 4 describes the supervisor and the one-shot pueued -d fallback" {
-  run _contains 'it first looks for a supervisor that owns the daemon'
+  run _in "$STEP4" 'it first looks for a supervisor that owns the daemon'
   assert_success
-  run _contains 'Only without a supervisor does it start the daemon once with `pueued -d`'
+  run _in "$STEP4" 'Only without a supervisor does it start the daemon once with `pueued -d`'
   assert_success
 }
 
 @test "the managed stop on Linux is systemctl --user stop pueued.service" {
-  run _contains 'systemctl --user stop pueued.service'
+  run _in "$INSTALL" 'systemctl --user stop pueued.service'
   assert_success
 }
 
-@test "the managed stop on macOS is launchctl bootout of the LaunchAgent label" {
-  run _contains 'launchctl bootout gui/<uid>/com.kurone-kito.pueued'
+@test "the managed stop on macOS is launchctl bootout of the LaunchAgent label, with a runnable uid" {
+  run _in "$INSTALL" 'launchctl bootout gui/$(id -u)/com.kurone-kito.pueued'
   assert_success
 }
 

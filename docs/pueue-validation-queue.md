@@ -175,17 +175,24 @@ callers; pausing the group does not hold them back for long.
 `home/dot_config/mise/config.toml` installs `pueue` and `pueued` through
 mise. The daemon runs under a supervisor when one is set up. On Linux,
 `chezmoi apply` writes the systemd user unit `pueued.service` and enables
-it, unless `data.pueue.linux.autostart` is `disabled`. The unit runs the
-daemon in the foreground, so it restarts after a crash. On macOS, the
-LaunchAgent `com.kurone-kito.pueued` runs the daemon the same way. Only when
-no supervisor is enabled does the first call start the daemon on demand.
-Without the binaries the wrapper simply runs the command, as before this
-change.
+it, unless `data.pueue.linux.autostart` is `disabled` or user systemd is not
+available. In the second case the unit is not enabled, and a warning names the
+manual command. The unit runs the daemon in the foreground, so it restarts
+after a crash. On macOS, the LaunchAgent `com.kurone-kito.pueued` runs the
+daemon the same way. Only when no supervisor is enabled does the first call
+start the daemon on demand. Without the binaries the wrapper simply runs the
+command, as before this change.
+
+With `disabled` on Linux, the unit is stopped and disabled, and the wrapper
+falls back to the on-demand daemon. On macOS, `disabled` unloads the
+LaunchAgent and keeps the plist. The wrapper still treats the plist as a
+supervisor, so it never starts a daemon on demand. When the daemon is
+unreachable it waits, and then it runs validation directly.
 
 To stop a supervised daemon, use its supervisor. On Linux,
 `systemctl --user stop pueued.service` leaves the unit enabled and inactive,
 so the daemon stays down until the next start. On macOS,
-`launchctl bootout gui/<uid>/com.kurone-kito.pueued` unloads the label and
+`launchctl bootout gui/$(id -u)/com.kurone-kito.pueued` unloads the label and
 leaves the plist in place.
 
 ## Troubleshooting
