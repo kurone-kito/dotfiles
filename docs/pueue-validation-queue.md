@@ -177,11 +177,16 @@ mise. The daemon runs under a supervisor when one is set up. On Linux,
 `chezmoi apply` writes the systemd user unit `pueued.service` and enables
 it, unless `data.pueue.linux.autostart` is `disabled` or user systemd is not
 available. In the second case the unit is not enabled, and a warning names the
-manual command. The unit runs the daemon in the foreground, so it restarts
-after a crash. On macOS, the LaunchAgent `com.kurone-kito.pueued` runs the
-daemon the same way. Only when no supervisor is enabled does the first call
-start the daemon on demand. Without the binaries the wrapper simply runs the
-command, as before this change.
+manual command. The same holds when an unmanaged `pueued` (one started by
+`pueued -d`) is already running and the unit is not active: the script does
+not enable the unit beside it, and the warning names the handover, which is
+`pueue shutdown` followed by `systemctl --user enable --now pueued.service`
+(on macOS, `launchctl bootstrap` of the plist). The unit runs the daemon in
+the foreground, so it restarts after a crash. On macOS, the LaunchAgent
+`com.kurone-kito.pueued` runs the daemon the same way. Only when no
+supervisor is enabled does the first call start the daemon on demand.
+Without the binaries the wrapper simply runs the command, as before this
+change.
 
 With `disabled` on Linux, the unit is stopped and disabled, and the wrapper
 falls back to the on-demand daemon. On macOS, `disabled` unloads the

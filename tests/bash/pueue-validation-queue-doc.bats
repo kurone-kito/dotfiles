@@ -56,6 +56,13 @@ _in() {
   assert_success
 }
 
+@test "the install section documents the handover when an unmanaged pueued is running" {
+  run _in "$INSTALL" 'the script does not enable the unit beside it'
+  assert_success
+  run _in "$INSTALL" '`pueue shutdown` followed by `systemctl --user enable --now pueued.service`'
+  assert_success
+}
+
 @test "the install section says that a disabled macOS LaunchAgent keeps its plist and never starts a daemon on demand" {
   run _in "$INSTALL" 'keeps the plist'
   assert_success
