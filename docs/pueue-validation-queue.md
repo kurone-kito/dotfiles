@@ -82,13 +82,21 @@ In this order:
    PowerShell there, so the POSIX-quoted command line the wrapper builds
    would not mean what it says. Use the wrapper from WSL, or call the
    script directly.
-4. If the pueue daemon is not reachable, it starts the daemon once with
-   `pueued -d` and checks again. If the daemon is still not reachable, it
-   runs the command directly. The exit status of the start is not used:
-   `pueued -d` can exit 0 and still fail to bind its socket. The start is
-   made with all three standard streams detached, because the daemon
-   would otherwise keep the caller's output pipe open and a caller that
-   reads the wrapper's output would never see it end.
+4. If the pueue daemon is not reachable, it first looks for a supervisor
+   that owns the daemon. On Linux, an enabled `pueued.service` systemd user
+   unit is handled by its state: a failed unit gets one
+   `systemctl --user start pueued.service` (the start limit is not reset),
+   a stopped or masked unit stays down, and a unit in another state is
+   waited for. On macOS, a present `com.kurone-kito.pueued` LaunchAgent is
+   waited for. In each case the wrapper never starts a second daemon, and
+   it runs the command directly if the queue stays down.
+   Only without a supervisor does it start the daemon once with
+   `pueued -d` and check again, and it runs the command directly if the
+   daemon is still not reachable. The exit status of that start is not
+   used: `pueued -d` can exit 0 and still fail to bind its socket. The
+   start is made with all three standard streams detached, because the
+   daemon would otherwise keep the caller's output pipe open and a caller
+   that reads the wrapper's output would never see it end.
 5. Otherwise it creates the `dotfiles` group when it is not listed,
    sets the group's parallelism, resumes the group if it is paused, adds
    the command as a task in the caller's working directory, waits for it,
@@ -165,9 +173,32 @@ callers; pausing the group does not hold them back for long.
 ## Installing pueue
 
 `home/dot_config/mise/config.toml` installs `pueue` and `pueued` through
-mise. There is no service to set up: the first call starts the daemon on
-demand. Without the binaries the wrapper simply runs the command, as
-before this change.
+mise. The daemon runs under a supervisor when one is set up. On Linux,
+`chezmoi apply` writes the systemd user unit `pueued.service` and enables
+it, unless `data.pueue.linux.autostart` is `disabled` or user systemd is not
+available. In the second case the unit is not enabled, and a warning names the
+manual command. The same holds when an unmanaged `pueued` (one started by
+`pueued -d`) is already running and the unit is not active: the script does
+not enable the unit beside it, and the warning names the handover, which is
+`pueue shutdown` followed by `systemctl --user enable --now pueued.service`
+(on macOS, `launchctl bootstrap` of the plist). The unit runs the daemon in
+the foreground, so it restarts after a crash. On macOS, the LaunchAgent
+`com.kurone-kito.pueued` runs the daemon the same way. Only when no
+supervisor is enabled does the first call start the daemon on demand.
+Without the binaries the wrapper simply runs the command, as before this
+change.
+
+With `disabled` on Linux, the unit is stopped and disabled, and the wrapper
+falls back to the on-demand daemon. On macOS, `disabled` unloads the
+LaunchAgent and keeps the plist. The wrapper still treats the plist as a
+supervisor, so it never starts a daemon on demand. When the daemon is
+unreachable it waits, and then it runs validation directly.
+
+To stop a supervised daemon, use its supervisor. On Linux,
+`systemctl --user stop pueued.service` leaves the unit enabled and inactive,
+so the daemon stays down until the next start. On macOS,
+`launchctl bootout gui/$(id -u)/com.kurone-kito.pueued` unloads the label and
+leaves the plist in place.
 
 ## Troubleshooting
 
@@ -175,7 +206,10 @@ before this change.
   parallelism and whether they run. A task that never starts is waiting
   for a free slot in the `dotfiles` group, or the group is paused and the
   wrapper is about to resume it.
-- To stop the daemon, run `pueue shutdown`.
+- To stop an unmanaged daemon, one that `pueued -d` started because no
+  supervisor is enabled, run `pueue shutdown`. That is the unmanaged
+  fallback. A supervised daemon is stopped through its supervisor, as
+  described under Installing pueue.
 - To run a command without the queue, call it directly, for example
   `scripts/run-validate.sh`.
 
