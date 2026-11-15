@@ -623,11 +623,11 @@ On success, continue to (h). If Git reports `fatal: working trees containing
 submodules cannot be moved or removed`, the worktree may be partly changed:
 inspect it and stop. On any other failure, stop and report it.
 
-(g) The F4 session never runs forced removal. Do not perform it while the
-options below remain unresolved. Only after the project's maintainers record a
-choice that permits a manual operator action outside F4, and after restarting
-at (a) to repeat the live claim, lock, preservation, and branch-tip checks, may
-the authorized operator run:
+(g) The F4 session never runs forced removal. A person outside the F4 session
+may run it only after restarting at (a) and repeating the live claim, lock,
+preservation, and branch-tip checks.
+The maintainer recorded that permission on 2026-11-14 in issue #733. The
+command is:
 
 ```sh
 git worktree remove --force "<issue-worktree-path>"
@@ -725,14 +725,20 @@ deletion. For the git-only reproduction above, no F4 helper steps were run.
 
 ### Unresolved project options
 
-The project has not chosen between these options:
+The maintainer chose on 2026-11-14, in issue #733.
 
-1. Escalate the observed mismatch upstream to `kurone-kito/idd-skill`.
-2. Change the worktree layout so IDD worktrees do not hold populated
-   submodules.
+1. Chosen: escalate the observed mismatch upstream to
+   `kurone-kito/idd-skill`. The handoff is the 2026-11-14 finding in gist
+   `9f2d7871542cb2f7a255f92a7c1232d0`, file `idd-skill-upstream-findings.md`.
+2. Not chosen: change the worktree layout so IDD worktrees do not hold
+   populated submodules.
 
-Neither option is chosen by this record, and choosing between them is outside
-this issue's scope. Their outcome may clarify whether the generic Local
-worktree recovery route applies after an F4 step 5 refusal. Until maintainers
-record a choice that permits it, do not perform step (g); an F4 session never
-uses forced removal.
+This record does not implement the upstream change and does not change the
+worktree layout. Criterion 7 in `docs/idd-user-global-reimport.md` stays
+`partially verified`. The manual `git worktree remove --force` fallback is not
+helper completion.
+
+Step (g) is permitted only as a manual operator action outside the F4 session,
+and only after the operator restarts at (a) and repeats the live claim, lock,
+preservation, and branch-tip checks. The F4 session never runs
+`git worktree remove --force`.
