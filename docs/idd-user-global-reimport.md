@@ -527,14 +527,20 @@ interleaved. In order, with each observed result:
 6. `git branch -d` deleted the local branch and exited 0. GitHub had already deleted
    the remote branch on merge.
 
-This is recorded as a manual fallback, not as a helper pass. The populated-submodule
-F4 path is tracked in follow-up #696.
+This is recorded as a manual fallback, not as a helper pass. Follow-up #696
+recorded that path. Issue #733 records the 2026-11-14 maintainer choice to
+escalate the mismatch upstream and not to treat this manual fallback as helper
+completion.
 
 ### Verification status
 
 Status: `partially verified`. The F4 helper did not complete (item 8), so this
-section does not state `verified`. Follow-up #696 tracks the
-populated-submodule F4 path.
+section does not state `verified`. Follow-up #696 recorded the manual path.
+On 2026-11-14 the maintainer chose, in issue #733, to escalate the mismatch
+upstream to `kurone-kito/idd-skill` and not to change the worktree layout.
+That choice does not make the F4 helper complete and does not
+accept the manual fallback as the criterion 7 result.
+The status stays `partially verified`.
 
 The status reads `verified` only when all three of these hold: the readiness at
 the final head is `ready: true` before cleanup (item 1), the F4 outcome is present
