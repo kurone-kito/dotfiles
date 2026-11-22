@@ -93,3 +93,8 @@ _in() {
   run _contains 'unmanaged fallback'
   assert_success
 }
+
+@test "the live WSL2 check section heading exists" {
+  run grep -qx -- '## Live WSL2 check' "$DOC"
+  assert_success
+}

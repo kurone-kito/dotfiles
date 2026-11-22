@@ -213,6 +213,22 @@ leaves the plist in place.
 - To run a command without the queue, call it directly, for example
   `scripts/run-validate.sh`.
 
+## Live WSL2 check
+
+Recorded on 2026-11-22 (UTC) on a WSL2 host. The `pueued.service` user
+unit was active, and the queue had no Queued, Running, Paused, or Stashed
+task before the signal.
+
+- Crash restart: `SIGKILL` on the active MainPID (3437) was followed,
+  within 2 seconds, by an `active` and `running` unit with a new MainPID
+  (411773) and `NRestarts=1`.
+- Clean stop: `systemctl --user stop pueued.service` left the unit
+  `inactive`, not `failed`, after 3 seconds.
+- Linger: `loginctl show-user "$USER" -p Linger` reported `Linger=no`.
+
+After the stop check, one restore start left the unit `active` with
+MainPID 411843. Linger was only read, not changed.
+
 ## See also
 
 - [chezmoi.toml Configuration Reference](chezmoi-toml-reference.md#pueue-validation-queue-datapueueparallelism)
