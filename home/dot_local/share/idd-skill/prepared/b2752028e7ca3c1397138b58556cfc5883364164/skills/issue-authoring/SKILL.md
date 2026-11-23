@@ -1,0 +1,562 @@
+---
+name: issue-authoring
+description: Draft or refine IDD-ready GitHub issues, roadmap issues, and sub-issues before the normal IDD execution loop begins. Use when a request is too large or ambiguous for one reviewable change, when work needs decomposition or dependency encoding, or when the user asks for issue drafting, roadmap planning, or parallelizable task breakdown.
+---
+
+# Issue Authoring
+
+Use this skill to prepare issue-ready work before execution starts.
+Keep the skill concise and treat the repository docs as the canonical
+source for the full contract and schema.
+The canonical source bundle lives in this repository; install copies in
+the agent-specific skill directory your runtime reads.
+
+During authoring, do not create, remove, or prune any Git worktree, and
+do not write files into the repository's default checkout or any linked
+checkout. Keep drafts, ledger data, and helper output outside every
+worktree. If the session itself created a file inside a checkout, move
+only that file outside the repository and leave unrecognized files
+untouched. Never stash,
+reset, clean, or delete checkout contents. Publishing under the
+authoring hold does not start claim or work. This boundary follows the
+2026-11-06 incident in issue `#5058`.
+
+## Stable Phases
+
+Use two stable phases:
+
+1. **Intake and Clarification** — inspect relevant context, identify
+   ambiguity, run a secondary critique or explicit self-critique, and
+   ask only the questions that block safe issue drafting; for an
+   interactive choice, the question blocks publishing, so it is asked unless
+   the auto-decide branch applies and takes the recommended option (see
+   [Human-dependency isolation](references/contract.md#human-dependency-isolation)).
+   Keep clarification bounded; use the repository-local
+   `issueAuthoring.maxClarificationRounds` value when available,
+   otherwise default to 3 rounds. **Under-clarification stop rule**: if,
+   after bounded clarification, you still cannot name the concrete
+   surface to edit or an objective verification for a candidate task,
+   apply the auto-decide branch in
+   [Human-dependency isolation](references/contract.md#human-dependency-isolation)
+   when it applies. When the branch does not apply, route it to
+   `needs-decision`, or for an interactive choice ask first under that section
+   — do not publish a confidently-vague `ready` issue. Reliability over speed.
+2. **Decompose and Draft** — restate the request in implementation
+   terms, split it into atomic tasks, classify readiness, reuse existing
+   issues when safe, and draft the smallest issue shape that preserves
+   dependencies and reviewability.
+
+Preserve low-readiness work in stable buckets: ready, deferred,
+needs-decision, blocked-by-human, and out-of-scope.
+
+## Workflow
+
+1. Read the bundled contract in
+   [references/contract.md](references/contract.md).
+2. Reuse or extend an existing issue before creating a new one — but
+   never edit the body of an actively-claimed or open-PR issue (its
+   claimed agent will not pick the change up); cover it with a follow-up
+   issue instead. See the contract's claim-state precondition.
+3. Choose the smallest safe output shape:
+   - orphan issue for one ready autonomous task only when the target
+     repository discovers orphans (`issue-scope: roadmap-first`, the
+     default, via the orphan fallback, or `orphan-first`) and any
+     configured `orphan-first-policy` approval step can be completed
+     after drafting
+   - roadmap plus sub-issues for multi-task or multi-session work
+   - stable non-ready buckets for deferred, needs-decision,
+     blocked-by-human, or out-of-scope work
+4. **Prefix-first**: resolve the target repository's marker prefix
+   before emitting any authoring marker — `roadmap-id`, `blocked-by`,
+   `autopilot-suitability`, or `effort`. Use the prefix documented by
+   the target repository's onboarding or IDD docs, and ask the user
+   instead of guessing when the prefix is not discoverable. Never
+   default to this source repository's `idd-skill` prefix in an
+   installed bundle.
+5. Keep dependencies machine-readable and minimal:
+   - roadmap identity via
+     `<!-- <marker-prefix>-roadmap-id: ... -->`
+   - active child issues via roadmap task-list links
+   - issue-to-issue dependencies via `Blocked by #NNN`
+   - sequential roadmap dependencies via
+     `<!-- <marker-prefix>-blocked-by: ... -->` only when a separate
+     roadmap
+     must close first
+   - keep independent sibling work in roadmap task lists unless a true
+     correctness, availability, or ordering constraint requires a
+     dependency edge
+   - for every hard edge, name the producer output, the blocked
+     operation or criterion, and its evidence; check the counterfactual
+     with other valid prerequisites retained, then verify the set keeps
+     independent siblings and natural cohesion. See the contract for the
+     unchanged packet fields and worked examples.
+6. Before the completed-draft adversarial review, verify material
+   factual claims that justify the draft's scope or design against
+   current sources: repository behavior against current code and docs;
+   issue or pull-request status and prior decisions against live GitHub
+   records; and runtime observations under the existing artifact-citation
+   rule. Correct, qualify, or remove any such unsupported claim, and put support
+   in the review packet's existing `evidence` array. Route a materially
+   unresolved claim through the existing uncertainty and
+   human-dependency rules: `needs-decision` for unresolved product,
+   policy, or design choices, and `blocked-by-human` when verification
+   waits on a person, credential, asset, or outside system. The packet
+   schema stays unchanged. This check responds to the factual-history
+   error reported in [issue #4566](https://github.com/kurone-kito/idd-skill/issues/4566),
+   which concerns [issue #3838](https://github.com/kurone-kito/idd-skill/issues/3838)
+   and [issue #1019](https://github.com/kurone-kito/idd-skill/issues/1019).
+   Then run the completed-draft adversarial review on each completed
+   roadmap, child, or orphan draft. This is
+   not the Intake critique above. The packet, checklist, mode table,
+   failure stop, wait ceiling, and no-mutation boundary are normative
+   in
+   [Completed-draft adversarial review](references/contract.md#completed-draft-adversarial-review).
+   Send only the exact title and body plus that bounded packet. Resolve
+   `idd-issue-authoring-delegate` when a helper runtime can run it; the
+   helper does not invoke the command. If the resolver cannot be run,
+   or `usable` is false, use the agent-native reviewer or a structured
+   self-critique. That is not a failed review. When `usable` is true,
+   the mode is `fallback` (default), `combined`, `on-success`, or
+   `never`; union findings when both mechanisms run. A missing command,
+   non-zero exit, timeout, cancellation, or unreadable findings is a
+   failure only after `usable: true`. A readable empty list is clean.
+   If no mechanism that ran returns a readable list, do not publish
+   the target: do not create it, update its body, change its label, or
+   append a marker for it. An existing held issue keeps its label and
+   previous body. The drafts go into a carrier marked
+   `Review: not reviewed` (step 8), unless they already sit in one or one
+   of step 8's two exceptions applies.
+   The reviewer returns findings only. Prefer a non-context-inheriting
+   reviewer; issue #3448 records why a context-inheriting no-mutation
+   dispatch can still publish. Bound the wait with
+   `issueAuthoring.adversarialReview.waitCeiling`
+   (default `PT20M`) using the caller's own wait and cleanup, and do
+   not wrap the command in a timeout utility. Dispose of every finding.
+   Keep a findings ledger in the namespace allocated under
+   [Findings ledger storage](#findings-ledger-storage), never in the
+   repository, and send each `rejected` finding that has evidence as a
+   `previously rejected:` string in the packet's `evidence` array
+   ([carry-forward rule](references/contract.md#carry-forward-of-rejected-findings)).
+   Review the revised draft again before the linter whenever that
+   revision changes more than wording, including acceptance criteria,
+   candidate files, dependency edges, roadmap task-list or relationship
+   wiring, scope or the proposed change, or the readiness bucket
+   ([Disposition](references/contract.md#disposition)). Wording-only
+   edits do not start another review. Audit every revised body before
+   publication. A roadmap shell may be reviewed
+   and published with an empty `## Tracks` list. Review each child
+   before publishing it. Review and lint the parent again when real child
+   numbers are written into `## Tracks`, before saving that edit.
+7. Before publishing a ready orphan, roadmap, or child body, or a draft
+   carrier (`--shape carrier`), run the `audit-authored-issue` linter
+   against it as the mechanical pre-publish gate — see
+   [Mechanical pre-publish gate](references/contract.md#mechanical-pre-publish-gate)
+   in the bundled contract, including the manual fallback for
+   `instructions-only` installs with no helper runtime. Resolve every
+   reported failure before treating the issue as ready; a carrier is
+   never published without that check, and it has no manual fallback
+   (step 8's second exception applies). An auto-decide confirmation issue is
+   linted with `--shape confirmation --current-repo <owner>/<repo>` instead, and
+   its record comments with `--confirmation-record`. Before newly
+   publishing a body into the `needs-decision` or `blocked-by-human`
+   bucket instead, also run the linter, passing
+   `--expect-bucket <needs-decision|blocked-by-human>` (choose the one
+   matching value) — the same gate section's `--expect-bucket` flag
+   requires the matching `authoring-bucket` marker for that publish,
+   closing the gap where a non-ready body would otherwise never be
+   audited at all. For every `needs-decision` lint — initial publication,
+   held-body re-lint, and Stage 2 — pass
+   `--expect-bucket needs-decision` and both configured labels.
+8. Publish each `ready`, `needs-decision`, or `blocked-by-human` body
+   directly under the authoring hold once the completed-draft review
+   (step 6) and then the mechanical gate (step 7) have passed. The
+   Intake critique stays the pre-draft
+   pass above and does not replace step 6. No separate publish
+   approval is needed. A reviewed draft does not end in local files only.
+   When its final shape cannot be published under the hold now (the
+   command cannot create it yet, such as a child whose set anchor is not
+   published and held, or the final form waits on something else), publish
+   a draft carrier with
+   `publish-authoring-hold --shape carrier` (run it with `--apply`; the
+   default is a dry run), as
+   [Draft carrier](references/contract.md#draft-carrier) defines. When a
+   ready child's original set no longer proves a held anchor, follow the
+   [re-anchoring procedure](references/contract.md#re-anchor-a-child-when-its-original-set-is-unavailable),
+   including its recorded roadmap-create intent, immediate carrier mapping,
+   defer-source reference exception, and live `## Tracks` check before closure.
+   Observed 2026-11-05 on carrier issue #5054; see the
+   [design rationale](https://github.com/kurone-kito/idd-skill/blob/main/docs/idd-design-rationale.md#cite-the-observed-incident).
+   A preview request also publishes a carrier, and the drafts are shown in
+   the reply too. When authoring stops before the review completes on a
+   planned stop (context pressure, or the user's instruction to stop), or
+   when the review fails or cannot finish, the target is not published;
+   its drafts go into a carrier marked `Review: not reviewed` (drafts
+   already in a carrier stay there). Two
+   exceptions keep the drafts local: the user explicitly says not to
+   publish (an instruction not to create any issue, not a request to see
+   the drafts first; the final message says that the drafts are not durable
+   and gives their local paths), or the carrier cannot be published either
+   (no helper runtime, `issueAuthoring.journalIssue` unset, or a failure
+   before the create; the final message says the same and asks the user
+   where to keep the drafts). A choice that the interactive rule in
+   [Human-dependency isolation](references/contract.md#human-dependency-isolation)
+   holds unpublished, where the auto-decide branch there does not take it, is
+   a pending question, not a reviewed draft. Manage
+   the authoring label for each created or updated issue:
+   - resolve `issueAuthoring.authoringLabelName`, defaulting to
+     `status:authoring`
+   - create the label with `gh label create` before first use when the
+     target repository does not already have it
+   - treat label creation or application failure as a publishing blocker
+   - apply the label before updating an existing issue
+   - for a `review-needs-decision` follow-up, see the narrow auto-release
+     exception in the contract for its extra label and release rules
+   - acquire per-target ownership before editing an existing issue or
+     roadmap; the shared label is a claim-suppression lock, not an owner
+     token. Follow the append-only owner-marker and re-read protocol in
+     [references/workflow-boundary.md](references/workflow-boundary.md)
+     and stop without editing when ownership or the target snapshot
+     conflicts
+   - for a new Stage 1 set, generate one opaque set ID and reuse it in every
+     owner marker for that set; when resuming an interrupted set, recover and
+     verify its persisted set ID from the exact trusted owner markers and
+     reuse it instead of generating a replacement; never infer set membership
+     from the label alone
+   - when a set includes a parent roadmap, publish a valid roadmap shell under
+     the authoring hold before any child; acquire and verify that roadmap as
+     the set anchor, leaving its `## Tracks` list empty only until child issue
+     numbers exist. Without a parent roadmap, use the designated lead target
+     as the anchor
+   - acquire and verify the set anchor before publishing or acquiring any
+     child; do not acquire children independently, and stop all edits if any
+     target cannot join that anchor's verified set
+   - before each child acquisition or resume, append and verify a same-owner
+     anchor heartbeat (or reuse one — see the heartbeat-coalescing rule
+     below), re-fetch the anchor's paginated log, then append the child
+     marker and immediately re-fetch both anchor and child. Stop with the
+     label in place if anchor ownership changed between those reads
+   - **Heartbeat coalescing** (`issueAuthoring.heartbeatCoalesceWindow`,
+     default `PT2M`): before appending a heartbeat, replay the target's
+     paginated log; reuse the latest trusted marker instead of appending
+     when it is the same owner/set/session, its mode is
+     `acquire`/`bootstrap`/`resume`/`heartbeat`, it is younger than the
+     window, and its `body-sha256` matches the just-fetched body — re-fetch
+     and verify the reused marker exactly as a fresh one. This window never
+     applies to `acquire`, `bootstrap`, `resume`, `release`,
+     `release-guard`, or `release-complete` appends themselves — only a
+     `heartbeat` append may be skipped
+   - persist the anchor's canonical repository/issue identity in every owner
+     marker for the set; the anchor marker points to itself, and a resume must
+     stop if the interrupted set's anchor cannot be proven
+   - immediately before every Stage 1 body or relationship edit, re-fetch both
+     the edited target and the set anchor; require each target's expected owner
+     token independently, plus the same set, anchor, and owning session, and
+     require an unchanged expected target snapshot before editing
+   - immediately before that edit, renew both generations with a trusted
+     same-owner-per-target heartbeat marker (one marker when target and anchor
+     coincide; reuse applies here too), re-fetch and verify both, and stop if
+     renewal or ownership verification fails
+   - create new issues only through a capability-checked publication command
+     that applies the authoring label atomically and carries an exact hidden
+     publication token for target, anchor, set, and session; if that operation
+     is unavailable, stop before creating the issue (a carrier cannot be
+     created either, so the second exception above applies) — never
+     intentionally create an unlabeled issue. That command is
+     `idd-publish-authoring-hold` (`node scripts/publish-authoring-hold.mjs`
+     in this source repository). It publishes one issue per call: an orphan
+     (the default), a draft carrier (`--shape carrier`), an auto-decide
+     confirmation issue (`--shape confirmation`), a roadmap shell
+     (`--shape roadmap`), or a child (`--shape child` with `--anchor` naming
+     the set anchor's `<owner>/<repo>#<number>`); see its `--help` and the
+     contract's
+     "New-issue ownership" section
+   - the hidden publication token is this exact HTML-first body line.
+     `anchor` reuses the opaque `target` value only when this new issue
+     is itself the set anchor (self-reference); for a non-anchor child,
+     `anchor` is instead the set anchor's already-resolved real
+     `<owner>/<repo>#<number>` reference, not an opaque id (full rule:
+     `references/contract.md`'s "New-issue ownership" section):
+
+     ```html
+     <!-- <marker-prefix>-authoring-publication: target=<opaque-target-id>; anchor=<opaque-anchor-id>; set=<opaque-set-id>; session=<opaque-session-id>; token=<opaque-publication-token> -->
+     ```
+
+   - The originating Stage 1 hold uses this append-only publication-intent
+     record, whose `anchor` follows the same self-anchor/non-anchor-child
+     rule:
+
+     ```html
+     <!-- <marker-prefix>-authoring-publication-intent: target=<opaque-target-id>; anchor=<opaque-anchor-id>; set=<opaque-set-id>; session=<opaque-session-id>; token=<opaque-publication-token>; journal=<owner>/<repo>#<number>; issue=<owner>/<repo>#<number>|none; actor=<trusted-marker-actor>; state=<pending|member|cleanup|abandoned> -->
+     ```
+
+     `issue` is the returned canonical issue identity or `none`. Append
+     `state=pending; issue=none` before creation, then append the returned
+     identity while it remains `pending`, append `member` only after the owner
+     marker is verified, and append `cleanup` before any safe-close mutation.
+     Append `abandoned` only after closed/label-absent verification. On
+     resume, paginate the hold log and select the latest valid record for the
+     exact token tuple; missing, conflicting, or out-of-order records fail
+     closed, while `pending` and `cleanup` remain recovery holds. When the
+     originating hold is in a retired journal (listed in
+     `issueAuthoring.retiredJournalIssues`), paginate `journalIssue` and every
+     listed retired journal and merge the records in time order first.
+
+     `journal` is the durable record location. For an existing set, use the
+     verified originating Stage 1 hold, or `issueAuthoring.journalIssue` when
+     that hold is in a retired journal; for a standalone set with no existing
+     issue or anchor, use the repository-level authoring journal target
+     configured at `issueAuthoring.journalIssue` in `.github/idd/config.json`
+     (an `owner/repo#number` reference to a pre-existing, durable,
+     comment-only issue) -- an unset `issueAuthoring.journalIssue` only
+     blocks a standalone set; an existing set with a verified Stage 1 hold
+     needs no journal configuration at all. Do not create that journal as
+     part of the same set. If the applicable location cannot be resolved --
+     no verified Stage 1 hold for an existing set, or
+     `issueAuthoring.journalIssue` unset or unverifiable for a standalone
+     set -- stop with `blocked-by-human` before creating any target. On
+     every paginated replay, require `actor` to equal the API author and
+     verify that actor is a trusted marker login with the required write-level
+     permission or configured bot/app trust. An untrusted, malformed, or
+     conflicting exact-token record is not valid evidence; fail closed and
+     retain the hold.
+
+     Generate the opaque `target` id and token before creation because the
+     new issue's own number is not yet known, and generate `anchor` the
+     same way only when this new issue is the set anchor itself --
+     otherwise reuse the anchor's already-resolved real reference, per
+     the self-anchor/non-anchor-child rule above. Before issuing the
+     create, persist those preallocated
+     IDs, the exact token, and `state=pending` in that journal. After
+     a successful create, attach and verify the returned issue identities on
+     that pending record before appending the owner marker. If the pre-create
+     hold write cannot be verified, do not create; if the post-create identity
+     attachment cannot be verified, leave the returned issue held for recovery.
+     Transition to `member` only after owner-marker verification or
+     `abandoned` only after the verified safe close and label removal. On
+     resume, match the exact token and persisted identities; an incomplete
+     scan or state mismatch is recovery.
+   - immediately after a new issue is created and labeled, append its
+     `mode=acquire` owner marker with the current set ID, then re-fetch the
+     labels, body, and owner comments before treating it as a set member
+   - an atomically labeled publication is not set membership until its owner
+     marker is verified; persist each returned target identity in the journal
+     before appending the marker; when the set's originating hold is in a
+     retired journal, persist it in `issueAuthoring.journalIssue` instead. On
+     resume, reconcile recorded identities and only issues carrying this set's
+     exact publication
+     token; an incomplete scan or unmarked match is a recovery hold, so never
+     infer membership or completion from the shared label alone
+   - if owner-marker append or verification is uncertain for a new issue,
+     reconcile the returned comment ID and the paginated owner-marker log with
+     bounded retries before closing; if a trusted marker is found, retain the
+     label and recover or reopen the issue as a set member. Otherwise re-fetch
+     labels, body, current `claimed-by` state, and the paginated owner-marker
+     log; if that final read proves no competing claim or owner marker, append
+     `state=cleanup` before closing the issue or removing its authoring label.
+     Re-fetch and verify closed/label-absent state, then append
+     `state=abandoned`. If any disposition or cleanup read is uncertain,
+     retain `state=cleanup`, leave the issue held, and report the recovery hold
+   - if an allegedly atomic create unexpectedly returns an unlabeled issue,
+     re-fetch its labels, body, current `claimed-by` state, and paginated
+     owner-marker log before closing. If a trusted claim or owner marker from
+     another session/set is present, do not close or overwrite the exposed
+     issue; report the ownership conflict and stop. If no competing claim is
+     present, apply and verify the authoring label as a safe hold, then
+     re-fetch its labels, body, current `claimed-by` state, and paginated
+     owner-marker log again before closing. If that hold or final re-read
+     cannot be verified, leave the issue open and report the recovery hold.
+     Deletion needs admin permission and is not the default recovery path
+   - held issues under the label ARE the drafts: do in-place body
+     edits, roadmap relationship wiring, and re-lint of already-published
+     bodies on the published issue itself, under the same label (a draft
+     carrier's body is the exception: it is never edited after publication)
+   - if a session is interrupted before the set is fully wired, leave the
+     label and owner markers in place — the label suppresses Discover and
+     the markers preserve the set identity for a later verified resume
+   - read every target and anchor owner-marker log with paginated retrieval and
+     deterministic comment order; never rely on a single API page
+   - after the release checklist passes and the user explicitly requests
+     release — or, under the narrow auto-release exceptions in
+     [Authoring hold and release](references/contract.md#authoring-hold-and-release),
+     for a single target whose body carried the defer-source marker at
+     Stage 1 publication time (never a marker added later), for a single
+     self-anchor target under the standing release approval, for a draft
+     carrier whose creation hold `publish-authoring-hold --shape carrier`
+     releases itself, or for an auto-decide confirmation issue whose creation
+     hold `publish-authoring-hold --shape confirmation` releases the same way
+     — preflight and verify or reuse a matching
+     `mode=release` marker for every target (with `supersedes` equal to the
+     current owner token)
+     before removing any label; record its GitHub comment ID, never append a
+     duplicate on retry, append and reconcile an anchor-only
+     `mode=release-guard` marker before the first label removal, keep the set
+     anchor held, and remove it last. Recheck
+     each target's expected owner token independently, plus the shared
+     set/anchor/session, recorded marker, and expected snapshot immediately
+     before each removal. Renew and verify the set anchor heartbeat first
+     (reuse applies here too), re-fetching its current owner, set, anchor,
+     and session; only then renew and verify the target heartbeat when
+     distinct (one marker when they coincide; reuse applies here too).
+     Remove non-anchor labels one at a time and
+     verify the whole set. Every label removal in this release, the anchor label
+     included, and every restore that follows uses `gh issue edit <number>
+     --remove-label "<authoring label>"` or `gh issue edit <number> --add-label
+     "<authoring label>"`, with `--repo <owner>/<repo>` outside the repository.
+     The IDD template's opt-in Claude Code baseline denies the `gh api -X
+     DELETE` spelling and does not allowlist `gh api`, so that spelling is not
+     used (observed on issue #3841, 2026-10-08; see issue #3898). After the
+     final anchor label removal is verified,
+     reuse or append the anchor-only `mode=release-complete` marker and record
+     its comment ID. Reconcile that ID and the paginated anchor log with
+     bounded retries; a successful POST or verification timeout is
+     inconclusive. If the trusted marker is found, keep labels absent and
+     close the set. If a complete fresh read conclusively proves that no
+     trusted marker was appended, restore labels for every target and leave
+     every target generation open. If reads remain inconclusive, keep the
+     release guard and current labels/state in place, leave the set held, and
+     record a recovery hold. Never infer marker absence or roll back from a
+     verification timeout. Discover must treat the reconciled release guard as
+     suppressing every target until the anchor completion marker is found.
+     Treat each release marker, removal, and completion
+     marker as provisional until the durable completion event is reconciled.
+     If a later removal or verification fails, retry a failed post-removal
+     read with a bounded fresh read, restore labels for already processed
+     targets while the owner/set still match, verify the restored set, and
+     leave every target generation open
+9. Stop at the single approval boundary: release. Publishing under the
+   hold does not by itself authorize starting the IDD execution loop —
+   the user's explicit release request does, except under the narrow
+   defer-source auto-release exception or the standing release approval
+   for a single self-anchor target, both in
+   [Authoring hold and release](references/contract.md#authoring-hold-and-release).
+   Its carrier and confirmation creation-hold exceptions release a carrier
+   or an auto-decide confirmation issue, neither of which enters the loop.
+   A released `review-needs-decision` follow-up remains out of Discover
+   while the label configured as `labels.needsDecisionLabelName` is
+   present (default: `status:needs-decision`).
+   After a standing-approval release completes, post the anchor's record line
+   in the format defined in [policy constants](../../docs/policy-constants.md#standing-approval-defaults).
+
+## Findings ledger storage
+
+Before the first ledger write, read
+[Ledger storage](references/contract.md#ledger-storage) and follow it. In brief:
+a supplied scratch root is the only candidate; if a supplied root is missing or
+fails, stop and report without trying another root. Only when no root was
+supplied,
+allocate a new `issue-authoring-<uuid>` directory with exclusive creation (a
+non-recursive `mkdir`, never `mkdir -p`) in the runtime's absolute temporary
+directory, or in the existing user state directory. Use `$XDG_STATE_HOME`,
+`$HOME`, or `%LOCALAPPDATA%` only when its value is a fully qualified absolute
+path, never resolved against the current directory. Keep
+the namespace outside every worktree and Git directory, including mount aliases
+checked through filesystem evidence. Keep one owner-only `<uuid>.json` ledger
+per draft; rename it to the issue number without overwriting another file.
+Never share a ledger or write one to the repository or a marker, and never reuse
+another session's namespace. Unsafe, conflicting, or unreadable storage stops
+the review: report its path and preserve unverified entries; cleanup is limited
+to entries this session created whose recorded identity still matches.
+
+A lost ledger starts empty. Losing the identity record, including after context
+compaction, loses the ledger: allocate a new namespace under the supplied root
+when retained history shows one; when history does not show whether a root was
+supplied, write no ledger and ask the operator. If a registered worktree
+checkout is absent, stop with a message that names the path and the operator
+step: the operator confirms the checkout was deleted rather than moved or
+unmounted, backs up a detached record's `HEAD`, unlocks a locked record only
+when its lock reason allows (never a second `--force`), and then, under the
+clone's worktree lock, re-checks that the path is still absent immediately
+before removing only that record with `git worktree remove --force <path>`,
+never a clone-wide `git worktree prune`; this operator recovery starts only
+after the authoring session stops; the next run repeats the inventory.
+Automation never
+prunes or removes worktree records and does not bypass claim or worktree
+recovery.
+
+Resolve every root path component without following links, and require each
+ledger read, write, copy, replacement, and unlink to hold the namespace's
+verified exclusive lock while rechecking ownership and hashes. An
+instructions-only or same-response self-critique run whose shell calls cannot
+keep the verified directory handle and exclusive lock open in one process must
+not start the procedure: it writes no ledger, never substitutes path-based
+operations, and runs the review without a ledger, as after a lost ledger. To
+keep a ledger, run the procedure in one long-lived process. On macOS, check the
+root's ACL through the verified handle, because the mode bits do not show it.
+When storage stops the review, send the drafts to a carrier marked
+`Review: not reviewed`.
+
+## Reference Routing
+
+- For the bundled contract, output schemas, and discoverability guard:
+  read [references/contract.md](references/contract.md).
+- For the bundled two-stage authoring/release contract and the
+  boundary with the IDD execution loop: read
+  [references/workflow-boundary.md](references/workflow-boundary.md).
+- For concrete drafting patterns and example prompts: read
+  [references/draft-patterns.md](references/draft-patterns.md).
+- When editing this bundle inside the source repository, keep the
+  bundled references synchronized with the canonical maintenance docs at
+  repo-root `docs/issue-authoring-skill.md` and `docs/idd-workflow.md`
+  (relative links are avoided here since this file is mirrored at a
+  different path depth in `.claude/skills/issue-authoring/`).
+
+## Output Checklist
+
+- Preserve low-readiness work in stable buckets instead of dropping it.
+- Keep acceptance criteria explicitly verifiable.
+- For a draft that deletes, overwrites, recursively removes, records file
+  ownership, or writes through a possible link, give each such operation a
+  criterion for each case in
+  [Destructive operations](references/contract.md#destructive-operations), or
+  name the guard that makes the case impossible.
+- For a draft that deletes, renames, or moves a repository path or tree,
+  include the reference inventory under
+  [Destructive operations](references/contract.md#destructive-operations):
+  repository references, including prose documentation that names the path,
+  and executable consumers (links, tests, hooks, workflows, templates, and
+  scripts).
+- Keep human-dependent setup, review, and approval work isolated from
+  ready execution issues whenever possible.
+- Link every active child issue from its roadmap body.
+- For every hard dependency edge, name the consumed producer output,
+  blocked operation or criterion, supporting evidence, and
+  counterfactual while retaining other valid prerequisites. Keep the
+  rationale in the issue body; for a multi-issue set, map edges in
+  `relationships` and support them with `evidence`; for a single issue,
+  keep `relationships` empty and put supporting evidence in `evidence`.
+  Keep independent sibling work in roadmap task-list entries.
+- Record reuse or extension decisions when the skill does not create a
+  new issue.
+- Avoid widening drafting output beyond the user request without saying
+  so.
+- Before the completed-draft adversarial review and mechanical audit,
+  verify material factual claims through the established
+  [Factual-claims check](references/contract.md#factual-claims-check)
+  and put supporting evidence in the review packet's existing
+  `evidence` array.
+- Run the completed-draft adversarial review, then the
+  `audit-authored-issue` linter (or its manual fallback in
+  `instructions-only` installs), against every drafted roadmap, child,
+  or orphan body. That includes a body published into
+  `needs-decision` or `blocked-by-human`; pass `--expect-bucket` for
+  those two buckets. Lint every draft carrier with `--shape carrier`; its
+  body is linted, not reviewed. Resolve every reported failure before
+  publishing. A failed review does not publish the target; its drafts go
+  into a carrier unless an exception in step 8 applies.
+- No reviewed draft ends in local files only, except the two exceptions in
+  step 8.
+- Name a concrete surface to edit and an objective verification for
+  every `ready` candidate; route anything else to `needs-decision` instead
+  of guessing. The auto-decide branch in
+  [Human-dependency isolation](references/contract.md#human-dependency-isolation)
+  takes a recommended option that cites repository evidence when it applies,
+  and otherwise an interactive choice is asked first (the under-clarification
+  stop rule).
+- Split an effort `L` task into `S` or `M` issues (or a roadmap whose
+  children are each `S` or `M`), or publish it as `needs-decision` (an open
+  design decision) or `blocked-by-human` (waiting on a person, credential,
+  asset, or outside system), when the target repository sets
+  `autopilotSuitability.effortL` to `refuse`.
+- Resolve the target repository's marker prefix before emitting any
+  authoring marker; never assume this source repository's `idd-skill`
+  prefix in an installed bundle (the prefix-first rule).

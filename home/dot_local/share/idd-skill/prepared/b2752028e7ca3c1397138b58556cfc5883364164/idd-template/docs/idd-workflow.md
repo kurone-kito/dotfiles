@@ -1,0 +1,4401 @@
+---
+type: workflow
+title: IDD workflow guide
+description: Routes each agent to its entry file and the phase file matching its current state.
+tags: [workflow, phase-routing]
+---
+
+# IDD workflow guide
+
+This document is the neutral entry point for the repository's
+Issue-Driven Development (IDD) workflow across GitHub Copilot, Codex
+CLI, OpenCode, Grok Build, Cursor CLI, Claude Code, and Antigravity CLI
+(formerly Gemini CLI).
+
+Use it when you need to answer three questions quickly:
+
+- Which repo entry file should I read first?
+- Which IDD instruction files load automatically for my agent?
+- When does the workflow rely on GitHub Copilot review state rather than
+  on my local CLI?
+
+This guide's `.github/` distribution, tooling, and Copilot-advisory
+review steps describe today's only implemented provider, GitHub. IDD
+defines a provider-neutral adapter boundary internally as a staged
+foundation for future non-GitHub adapters; see
+[Provider Portability](customization.md#provider-portability) for the
+capability-group model and staged rollout order. Nothing below assumes
+that boundary is exercised by a shipped adapter yet.
+
+## Start sequence
+
+If you arrived here from your agent's entry file, pick up at step 2. If
+you are reading this guide first, start at step 1.
+
+1. Read the entry file for your agent or surface (see table below).
+2. Read `.github/instructions/idd-overview-core.instructions.md`.
+3. Read `.github/instructions/idd-overview-appendix.instructions.md`,
+   unless the phase file that matches your current state is under
+   `.github/instructions/lite/`. A session routed to a `lite/` file does
+   not read the appendix.
+4. Read the phase file that matches your current state.
+5. If you are editing package-specific code, also follow the matching
+   scoped instruction file in `.github/instructions/`.
+
+## Questions for operators
+
+When an IDD step already requires a user decision or action, use the
+shared baseline: the operator is skilled in manual issue-driven
+development and GitHub Flow, but unfamiliar with idd-skill-specific
+automation. Treat issue triage and planning, branches, commits, pull
+requests, CI, reviews, and merges as known. This applies to agent-authored
+questions and explanatory follow-ups in full and Lite sessions, onboarding,
+issue-authoring interviews, and ordinary execution. Fixed CLI prompt
+catalogs are outside this presentation policy.
+
+For presentation, follow a current explicit operator instruction first;
+otherwise use explicit repository-local audience guidance, then the shared
+baseline. Repeated use alone does not establish expertise or a standing
+audience preference (preventive; no observed incident yet). Each question
+should explain the relevant idd-skill convention and its practical
+decision effect, request the exact action, and recommend an option with its
+main cost when alternatives matter. Keep the ask concise and self-contained.
+These conventions do not change when the workflow asks, who can approve,
+or the safety and quality evidence required.
+
+Examples of how to explain a term, consequence, and requested action:
+
+- **Scope choice — `Candidate files`.** This section lists the paths an
+  issue expects implementation to edit. If the acceptance criteria also
+  require an unlisted path, describe it as an expanded scope that may
+  trigger the effort limit rather than saying the scope check blocks editing
+  it.
+  Ask: “May I add `src/path.ts` to `Candidate files`? I recommend adding
+  it so the acceptance criteria stay intact; that expands the review
+  surface. The alternative is to revise or defer that criterion, which
+  leaves this behavior for later.” Scope overrun returned to authoring on
+  issues [#4064 (2026-10-12) and #3824 (2026-10-10)](idd-design-rationale.md#b3--scope-overrun-returns-to-authoring).
+- **Authoring release — `status:authoring`.** This label holds a draft
+  outside execution claims until its Stage 2 release checklist passes.
+  Ask: “The draft body and child membership are ready. May I run Stage 2
+  release? I recommend doing so after your review; it removes the hold and
+  makes the issue claimable, so automation can start work. Leaving it held
+  avoids a claim now but delays execution.” The release delay was observed
+  on 2026-09-25 in issues [#3372 and #3426](idd-design-rationale.md#e4e5-adopt-now-urgency-defer).
+- **Unknown-owner recovery — `owner_evidence_required`.** This result
+  means the helper could not prove that this session owns the local claim
+  and stops before mutation. Inspect the linked worktree, claim lock, and
+  generated token record first. Ask: “I cannot match the active claim to
+  this worktree's ownership records. Do you recognize this worktree or
+  know the intended recovery owner? I recommend leaving it untouched until
+  ownership is proven; that delays the task but avoids changing another
+  session's work. If you identify the expected worktree, I will re-check
+  the evidence before continuing.” An observed forced-handoff case is
+  documented for [issue #3597](idd-resume-detail.md), observed 2026-09-30.
+
+## Entry points and auto-load expectations
+
+| Agent / surface         | Read first                        | Automatically available IDD context                                                                                                                                                                                                                   | Open manually                                                                                                                                                                                                                                                                                      |
+| ----------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Copilot surfaces | `.github/copilot-instructions.md` | `.github/instructions/idd-overview-core.instructions.md` for execution surfaces; package-scoped `.instructions.md` files in VS Code Copilot when editing matching paths                                                                               | `.github/instructions/idd-overview-appendix.instructions.md`; the routed phase file when the current step changes                                                                                                                                                                                  |
+| Codex CLI               | `AGENTS.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file                                                                                                                                                  |
+| OpenCode                | `AGENTS.md`                       | `AGENTS.md` itself — OpenCode's native rules mechanism auto-loads it; none from `.github/instructions/`                                                                                                                                               | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file                                                                                                                                                  |
+| Grok Build              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (same contract; Grok Build loads every matching filename, unlike OpenCode's first-match); none from `.github/instructions/`                                                                               | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file; see [B1's harness-native worktree tool caveat](../.github/instructions/idd-work.instructions.md#worktree-creation)                              |
+| Cursor CLI              | `AGENTS.md`                       | `AGENTS.md` and `CLAUDE.md` when both exist (Cursor always applies `CLAUDE.md`; treat the shared contract as `AGENTS.md`; do not follow Claude-only adapter bullets such as `--vendor claude` outside Claude Code); none from `.github/instructions/` | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file                                                                                                                                                  |
+| Claude Code             | `CLAUDE.md`                       | None from `.github/instructions/` by default                                                                                                                                                                                                          | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file; see [B1's harness-native worktree tool caveat](../.github/instructions/idd-work.instructions.md#worktree-creation) before using `EnterWorktree` |
+| Antigravity CLI         | `GEMINI.md`                       | None from `.github/instructions/`                                                                                                                                                                                                                     | `.github/instructions/idd-overview-core.instructions.md`, `.github/instructions/idd-overview-appendix.instructions.md`, and the routed phase file                                                                                                                                                  |
+
+The [Start sequence](#start-sequence)'s `lite/` exception applies to the
+"Open manually" cells: a session routed to a `lite/` phase file does not
+open the appendix.
+
+When the `issue-authoring` or `idd-spec-audit` companion bundle is
+installed under `.claude/skills/` in a target repository, OpenCode,
+Grok Build, and Cursor CLI also discover it there through
+`.claude/skills/` compatibility. Do not add checked-in
+`.cursor/skills/` or `.agents/skills/` mirrors for those companions
+(preventive; no observed incident yet).
+
+During IDD, do not call Grok Build's `enter_plan_mode` (it blocks
+non-plan-file edits). Do not switch into Cursor Plan mode / `/plan`
+(or SwitchMode Plan) in a way that blocks non-plan-file edits. Do not
+let the bundled `review`, `pr-babysit`, or `execute-plan` skills
+replace IDD E/F phases or spawn extra worktrees. (Preventive; no
+observed incident yet.)
+
+During onboarding, create or update `CLAUDE.md`, `AGENTS.md`, and
+`GEMINI.md` so each non-Copilot agent listed above has a stable first
+file to read. GitHub Copilot remains an update-if-present surface via
+`.github/copilot-instructions.md`. Skipping creation of a missing root
+entry file should be an explicit operator choice, not the default.
+
+## Model capability expectations
+
+The workflow above assumes at least a **middle-tier cloud-class**
+model for the full Discover → Claim → Work → PR → Review → Merge → F4
+loop, reusing the three model-capability classes from the optional
+issue-authoring companion's specificity target: **frontier**,
+**middle-tier cloud**, and **lightweight local or compact cloud**. (If
+your repository installed that companion, its specificity target
+documents these three classes in detail; the terminology here stands
+on its own otherwise.)
+
+Classify models on **two independent axes**, not context size alone:
+
+1. **Context sufficiency** — can the window hold the entry file,
+   `idd-overview-core.instructions.md`,
+   `idd-overview-appendix.instructions.md` (unless the routed phase file
+   is under `lite/`), the routed phase file, and tool schemas at once?
+2. **Self-direction capability** — can the model plan and track a
+   multi-turn loop across claim / work / PR / review steps, not merely
+   answer one well-specified prompt?
+
+A large context window does **not** imply self-direction. Field
+experience has included models that clear a 100K+ context bar yet fail
+to drive a multi-step agentic loop without external orchestration.
+Likewise, self-direction and **local runtime speed** on the adopter's
+hardware are separate considerations: a model that clears both
+capability axes can still be impractical if it is too slow on
+CPU-only (or other constrained) local hardware. This guide does not
+pin a normative tokens-per-second floor; operators should measure on
+their own targets.
+
+- **Frontier** and **middle-tier cloud** classes need no additional
+  guardrails beyond the rest of this guide; this is the assumed
+  default for every phase file above. They are expected to clear both
+  axes under normal operator hardware.
+- **Lightweight local or compact cloud** (the supported low tier):
+  models that have **both** sufficient context **and** demonstrated
+  self-direction for contained, fully-specified tasks, but still show
+  weak adherence to long multi-file instruction sets (the phi-4-mini
+  class — roughly 128K context, tool calling supported — is the
+  reference example). Treat "tool calling supported" as a
+  runtime-specific claim, not a guarantee: field evidence found that a
+  local ONNX serving stack silently degraded structured tool-calls to
+  plain text with no error, so a model's stated capability listing tool
+  calling does not mean structured tool-calls are reliably available in
+  practice — see [Weak-model guardrails](#weak-model-guardrails) for
+  the harness-owned mitigation. Confine this tier to narrowly-scoped
+  roles under operator supervision:
+  - executing a single, fully-specified `idd:ready` issue rather than
+    Discover's open-ended candidate selection;
+  - preferring a deterministic helper command (see
+    [IDD helper script evaluation](idd-helper-scripts.md)) over prose
+    judgment wherever one exists for the current step;
+  - drafting output for human review rather than running the
+    autonomous merge phases, unless the F2.5 merge handoff resolves the
+    merge policy to the enum `fully_autonomous_merge` (a raw
+    `mergePolicy` value does not count).
+- **Large-context, non-self-directing** (named out-of-band class):
+  models that clear the context-sufficiency bar but cannot reliably
+  self-direct a multi-turn execution loop. They are **not** admitted
+  into the supported lightweight tier by context size alone. Prefer a
+  harness-orchestrated execution mode for this class (the model stays a
+  step-level worker; the harness owns phase routing, tool selection,
+  and acceptance gates). That path is an open investigation rather than
+  a shipped workflow profile — track the corresponding investigation
+  issue in the repository that filed it (for example
+  [kurone-kito/idd-skill#1555](https://github.com/kurone-kito/idd-skill/issues/1555)
+  in the source repository).
+- **Unsupported (context floor)**: a model whose context window cannot
+  hold the entry file, `idd-overview-core.instructions.md`,
+  `idd-overview-appendix.instructions.md` (unless the routed phase file
+  is under `lite/`), the routed phase file, and tool schemas at the
+  same time — the
+  qwen2.5-coder-1.5b class (roughly 32K context) is the practical
+  cutoff example. Below this floor, IDD execution is out of scope; such
+  a model can still be a downstream _consumer_ of an artifact this
+  workflow produces, just not an IDD execution agent.
+
+### Weak-model guardrails
+
+When a lightweight-tier model runs any part of this loop:
+
+- Prefer a documented helper command over prose interpretation
+  wherever [IDD helper script evaluation](idd-helper-scripts.md) lists
+  one for the current step **and the repository's helper runtime is
+  not the `instructions-only` profile**; treat an expected helper that
+  is missing or failing as a stop-and-ask condition, never a silent
+  fallback to prose judgment. On the default `instructions-only`
+  profile, following the documented Markdown / `gh` / `jq` procedure
+  directly is the normal, supported path for this tier too, not a stop
+  condition.
+- **Weak-tier tool/retrieval contract**: have the harness — not the
+  model — own tool execution, query construction, and input-slice
+  quality (a clean, column-labeled, minimal slice rather than a raw
+  dump), and gate tool/retrieval use on a cheap uncertainty signal (for
+  example, self-consistency sampling: sample k responses, treat
+  unanimity as sufficient to skip retrieval and disagreement as the
+  trigger to search) rather than firing augmentation unconditionally.
+  Field evidence found unconditional "always augment on failure"
+  net-negative on a weak model (3/7 correct, below a 4/7
+  no-augmentation baseline) because retrieval corrupted facts the model
+  already knew, while a harness-owned self-consistency gate recovered
+  "don't retrieve what you already know" and a harness-owned web search
+  took a weak model from 1/4 to 4/4 correct on factual questions.
+- Retrieval augmentation is more reliably useful for a QA/spec step —
+  two conditions must hold: a knowledge gap exists, and the needed fact
+  is in the returned snippet — than for a mid-code-fix step, which
+  chains a third condition (the model must also transcribe the fact
+  correctly into code). It is not a substitute for fixing logic or
+  truncation failures, which retrieval cannot address.
+- Narrow the question before adding judges: when a weak model has to
+  judge semantic quality, ask a narrow, falsifiable check instead of an
+  open-ended review. The failure mode is correlated bias, not
+  independent noise, so majority voting does not repair it; keep the
+  result advisory, not veto-bearing.
+- Parse structured output leniently with a bounded retry: for fixed
+  formats, strip common Markdown wrappers, require at least one
+  discriminating field, normalize and de-duplicate the results, and
+  retry once with a short example before treating the attempt as failed.
+  This applies only to weak-model output readers and does not change the
+  byte-exact marker verification used for published IDD markers.
+- See the upstream IDD repository's lite-profile roadmap/design note
+  (`docs/weak-model-lite-profile-design.md`) for the E9-E15
+  upstream-triage boundary; the E4 narrow-rubric result is recorded
+  there as future nuance, not as a scope change here. This note does not
+  change the upstream repository's Copilot advisory-review convergence
+  scope decision or the lite-profile exclusion of
+  `idd-review-triage.instructions.md`.
+- Follow the resolved merge policy, including on this tier. A recorded value is
+  either one string, which applies to every tier and does not read a tier name,
+  or an object with `frontier`, `middle-tier`, and `lightweight`, each one of
+  `human_merge`, `fully_autonomous_merge`, or `separate_merge_agent`. On the
+  standard profile, a resolved `fully_autonomous_merge` runs F3 after the
+  existing gates. `separate_merge_agent` keeps handoff step 5: the first branch
+  runs only when repository documentation explicitly records that this session
+  is the designated merge-capable actor and the documented resume condition is
+  satisfied, and the Otherwise branch keeps both bullets, including no release
+  post when the claim was already lost. An unresolved tier on an object is the
+  standard unknown-policy hold. On the lite profile, a schema-valid tier object
+  is resolved only when `git fetch origin {development-branch}` succeeds (a
+  failed fetch never falls back to a local ref), `config.json` matches
+  `origin/{development-branch}`, the operator named one of those three tiers,
+  and the resolver exits 0 with stdout exactly one of the three enums. Any other
+  result stays unrecognized. A string does not read a tier name. A resolved
+  `fully_autonomous_merge` continues at the standard handoff, which runs F3
+  after the existing gates. The lite profile has no F3 file. The lite file does
+  not run `gh pr merge`; a resolved `fully_autonomous_merge` continues at the
+  standard handoff, which runs F3. A resolved `human_merge` keeps the claim. A
+  resolved `separate_merge_agent` releases the claim only when `ready` is true
+  and the guard passes. The lite file does not evaluate standard step 5.
+  `mergePolicyAck` stays diagnostic. The older sentence, "do not run the
+  autonomous merge phases (F3 onward) on this tier," described the hold that
+  ends only when the F2.5 handoff resolves this route. See [Onboarding Reference
+  — Policy Decisions](onboarding/policy-decisions.md#merge-policy).
+- This is additional to, not a replacement for, the uniform C-phase
+  objective diff validation floor in
+  [Critique pass invocation](#critique-pass-invocation): that floor
+  exists precisely because judging whether a same-response
+  self-critique is truly independent is the kind of fragile runtime
+  self-detection a weak model could get wrong, so it applies uniformly
+  regardless of declared model tier.
+- **Acceptance-check rigor**: any per-unit acceptance check gating
+  weak-tier generated output should include multiple boundary cases,
+  explicit assertions, and a timeout — the timeout specifically is
+  what turns an infinite loop into a caught failure instead of a hang.
+  A narrow check (one or two cases) can let a fragile generation with a
+  real defect pass undetected.
+- **Clean-artifact generation**: a generation prompt driving weak-tier
+  output should instruct the model to produce a clean, importable
+  artifact — the target definitions and needed imports only — and
+  explicitly forbid embedding the acceptance test, assertions, prints,
+  or a self-invoking entrypoint block (Python's `__main__` guard, for
+  example), and forbid importing the artifact under construction. The
+  acceptance check itself — the literal test code, assertions, and
+  expected outputs, as distinct from the behavioral acceptance
+  criteria described in the prompt —
+  must never be shown to the generating model, since a weak model that
+  sees the test tends to reproduce it inline rather than keeping the
+  two separated.
+
+These tiers are practical operating guidance, not a new enforced
+runtime gate: `.github/instructions/idd-suitability.instructions.md`'s
+Edge Cases already treat an agent's inability to reliably perform a
+check as a PASS (fail-closed only for Check 3, Trust/Safety), so this
+section documents an operator-facing expectation rather than a new
+A4/A4.5 check.
+
+### Model selection and prompting for the weak tier
+
+Independent field evidence surfaced three predictable model-selection
+and prompting mistakes at the weak-local tier that the capability-tier
+classification above does not warn against on its own:
+
+- **Loop-stability-versus-single-shot mismatch**: a model's single-shot
+  coding pass rate does not predict whether it can hold a multi-turn
+  agentic loop without spiraling — the single-shot-coding knee and the
+  agentic-loop-stability knee can sit at different model sizes
+  entirely. Do not select a model for loop execution on a single-shot
+  battery alone. Use a cheap smoke test instead: can the model run N
+  turns on a simple task without spiraling? Gate model selection for
+  loop execution on that result, not the single-shot score.
+- **Reasoning-model spec-drift**: for mechanical, fully-specified,
+  single-clause steps, prefer a literal, low-reasoning model over a
+  verbose reasoning model — select for obedience, not cleverness, at
+  this tier. A reasoning model can "improve" on a literal instruction
+  instead of obeying it (for example, returning a different type than
+  specified, or renaming a referenced symbol so downstream code
+  breaks), while costing substantially more tokens and wall-time than a
+  leaner, non-reasoning model that follows the spec literally. More
+  reasoning is not automatically a safer default for this kind of step.
+- **Full-agent-wrapper degradation**: at the weak tier, prefer a
+  direct, minimal-prompt generation path — feeding only the atomic task
+  and its acceptance context — over routing the same request through a
+  full agent session with its system prompt and instruction stack. The
+  added context (system-prompt injection, a large per-turn instruction
+  stack) can push a small model past its reliable zone, so the same
+  model that succeeds on a direct minimal prompt can fail through the
+  full agent wrapper.
+
+These are adopter-facing model-selection and prompting heuristics, not
+a new requirement on your repository's own instructions or tooling.
+
+### Lite instruction profile opt-in
+
+The guardrails above assume a session already knows to look for a
+condensed instruction bundle, when your repository ships one. This
+subsection records how a repository declares that opt-in and how a
+session resolves it, so the convention reads as part of the tier
+guidance above rather than a parallel mechanism.
+
+**Opt-in signal (recorded convention).** A repository declares its
+lite-profile choice with an `.github/idd/config.json` policy field,
+`instructionProfile`, following the same repository-local
+policy-field pattern as `mergePolicy`, `reviewPolicy`, and the other
+fields in
+[Repository-local IDD policy](customization.md#repository-local-idd-policy):
+
+- `"standard"` (default; equivalent to the field being absent) —
+  every phase uses its standard
+  `.github/instructions/idd-*.instructions.md` file, unconditionally.
+- `"lite"` — a lightweight-tier session prefers the condensed
+  `.github/instructions/lite/idd-*-lite.instructions.md` bundle for
+  any phase that has shipped one, and falls back to the standard file
+  for every phase that has not (see the mapping and fallback below).
+
+A machine-readable config field, rather than a routing note folded
+into `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` prose, follows the
+upstream lite-profile design's content principle on mechanical,
+fail-closed control surfaces (see `docs/weak-model-lite-profile-design.md`
+in the source repository): mechanical, fail-closed control surfaces
+carry the safety weight for this tier, not prose judgment. A prose
+routing note is itself a cross-file reference a weak-adherence
+session could drop — exactly the failure mode the lite profile exists
+to route around.
+
+**Recorded convention, not yet wired.** `instructionProfile` is not
+yet part of the published policy schema
+(<https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json>,
+whose root object rejects unknown properties), and no phase file or
+the routing table in `idd-overview-core.instructions.md` reads it
+today. This subsection records the intended shape for a future change
+to add the schema field and the routing read against. **Do not set the
+field yet**: if your repository validates `.github/idd/config.json`
+against that schema (for example with `idd-doctor` or an equivalent
+schema check), adding `instructionProfile` today fails that
+validation outright, because the schema's root object rejects unknown
+properties — it is not merely inert. Until the schema follow-up
+lands, point a lite-tier session at the right files with an explicit
+operator instruction, or have it open the phase files below manually.
+
+**Phase → lite file mapping** — the "Lite file" column names the path
+a shipped file would use, not a guarantee that your repository has
+one: check your own `.github/instructions/lite/` directory before
+trusting this table to stay current. A template import may already
+include some or all of these files (the upstream IDD repository
+dogfoods its own lite-execution-profile roadmap and this table
+mirrors its current state), or none, depending on when you imported
+and whether your repository has authored any of its own:
+
+| Phase                    | Standard file                         | Lite file                                       |
+| ------------------------ | ------------------------------------- | ----------------------------------------------- |
+| A5 Claim                 | `idd-claim.instructions.md`           | `lite/idd-claim-lite.instructions.md`           |
+| B1-C6 Work               | `idd-work.instructions.md`            | `lite/idd-work-lite.instructions.md`            |
+| D1-D4 PR-submit          | `idd-pr-submit.instructions.md`       | `lite/idd-pr-submit-lite.instructions.md`       |
+| E1-E3 Review-snapshot    | `idd-review-snapshot.instructions.md` | `lite/idd-review-snapshot-lite.instructions.md` |
+| E9-E15 Review-fix        | `idd-review-fix.instructions.md`      | `lite/idd-review-fix-lite.instructions.md`      |
+| F1-F2 helper-read subset | `idd-pre-merge.instructions.md`       | `lite/idd-pre-merge-lite.instructions.md`       |
+| F2.5 handoff-stop        | `idd-merge-handoff.instructions.md`   | `lite/idd-merge-handoff-lite.instructions.md`   |
+| Resume                   | `idd-resume.instructions.md`          | `lite/idd-resume-lite.instructions.md`          |
+| Resume-stall             | `idd-resume-stall.instructions.md`    | `lite/idd-resume-stall-lite.instructions.md`    |
+
+The F1-F2 and F2.5 rows cover a **partial** slice of their standard files only:
+the lite F1-F2 file covers just F1's read-only branch check and reading the
+`pre-merge-readiness` helper verdict, never the standard file's written prose
+fallback. The lite F2.5 file reads the recorded policy. A string is one enum for
+every tier and does not read a tier name. An object has `frontier`,
+`middle-tier`, and `lightweight`, each a known enum. A schema-valid object is
+resolved only when `git fetch origin {development-branch}` succeeds (a failed
+fetch never falls back to a local ref), `config.json` matches
+`origin/{development-branch}`, the operator named one of those three tiers, and
+the resolver exits 0 with stdout exactly one of the three enums. Any other
+result stays unrecognized. A resolved `fully_autonomous_merge` continues at the
+standard handoff, which then runs F3 after the existing gates. The lite profile
+has no F3 file. The lite file does not run `gh pr merge`; a resolved
+`fully_autonomous_merge` continues at the standard handoff, which runs F3. A
+resolved `human_merge` posts the handoff comment and keeps the claim. A resolved
+`separate_merge_agent` posts that comment and releases the claim only when
+`ready` is true and the guard passes; otherwise it posts no release. The lite
+file does not evaluate standard step 5. Any other value stays unrecognized.
+`mergePolicyAck` stays diagnostic. A broken or missing F1-F2 helper stays a
+stop-and-ask condition.
+
+`idd-ci.instructions.md` and `idd-advisory-wait.instructions.md` are
+shared helper files, not phases of their own, so they never appear as
+a row in the table above. Each now ships a standalone lite sibling
+instead — `lite/idd-ci-lite.instructions.md` and
+`lite/idd-advisory-wait-lite.instructions.md` — that a lite caller
+references one hop away (content principle 3), rather than restating
+every load-bearing rule from the full-size file inline, which is
+content principle 1's default for a lite file with no in-scope
+sibling to reference. The
+advisory-wait lite sibling covers only the **E14-caller subset**: F2's
+prose fallback and F3's merge-time call site stay excluded, matching
+the split-by-caller scoping for this file recorded in the upstream IDD
+repository's lite-profile roadmap/design note
+(`docs/weak-model-lite-profile-design.md`, "Phase scoping").
+
+**Explicit fallback.** Every phase without a row above falls back to
+its standard instruction file — this is the documented default, not
+an implied gap. Some phases lack a lite file because a repository's
+own lite-profile track has not shipped one yet even though it is in
+scope by design; others are permanently excluded by design — the
+open-ended selection and judgment-heavy classification phases
+(Discover, Suitability, and Review-triage) stay on the standard file
+always. The lite profile has no F3 file. A resolved
+`fully_autonomous_merge` continues at the standard handoff, which runs
+F3 after the existing gates. A string applies to every tier and does
+not read a tier name. An object names `frontier`, `middle-tier`, and
+`lightweight`. `mergePolicyAck` stays diagnostic. A lite-opted-in
+session encountering a missing lite file reads the standard file the
+same way a standard-tier session would.
+
+## IDD file map
+
+| File                                                         | Role                                                                                                                                                                                            |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/instructions/idd-overview-core.instructions.md`     | Shared definitions, command sets, routing table, critique-pass mapping                                                                                                                          |
+| `.github/instructions/idd-overview-appendix.instructions.md` | Reference and implementation detail for core: live status digest, abort/hold templates, commit signing, critique-pass detail, and template-sync guidance                                        |
+| `.github/instructions/idd-discover.instructions.md`          | A0-T–A4: find a viable issue and classify roadmap vs. leaf nodes during traversal, then hand off to the A4.5 row below                                                                          |
+| `.github/instructions/idd-roadmap-audit.instructions.md`     | A1.5: audit roadmap completion, including bottom-up recursive roadmap closure, before A2                                                                                                        |
+| `.github/instructions/idd-suitability.instructions.md`       | A4.5: pre-claim suitability triage — filter incoherent, unsafe, duplicated, or out-of-scope candidates before claim                                                                             |
+| `.github/instructions/idd-claim.instructions.md`             | A5: run claim pre-checks and claim verification                                                                                                                                                 |
+| `.github/instructions/idd-work.instructions.md`              | B1-B3 + C1-C6: create worktree, plan, implement, and self-review                                                                                                                                |
+| [docs/idd-worktree-setup.md](idd-worktree-setup.md)          | On-demand B1 guide for branch roles, primary checkout sync, worktree creation, dependency installation, and self-checks                                                                         |
+| `.github/instructions/idd-pr-submit.instructions.md`         | D1-D4: rebase, validate, push, open PR, and wait for CI                                                                                                                                         |
+| `.github/instructions/idd-ci.instructions.md`                | D4/E15 helper: shared CI polling helper used by later phases                                                                                                                                    |
+| `.github/instructions/idd-advisory-wait.instructions.md`     | AW1-AW5 helper: shared Copilot advisory-wait protocol (E14, F2, F3)                                                                                                                             |
+| `.github/instructions/idd-review-snapshot.instructions.md`   | E1–E3: fetch activity snapshot, run critique, check if ReviewItems_snapshot is empty                                                                                                            |
+| `.github/instructions/idd-review-triage.instructions.md`     | E4–E8: classify items, score, record dispositions, and run E-phase branch-sync check before F-phase                                                                                             |
+| `.github/instructions/idd-review-fix.instructions.md`        | E9-E15: fix accepted review items and push follow-up commits (merge-from-`{development-branch}`, not rebase)                                                                                    |
+| `.github/instructions/idd-pre-merge.instructions.md`         | F1: final read-only branch-state check; F2: verify all pre-merge conditions                                                                                                                     |
+| `.github/instructions/idd-merge-handoff.instructions.md`     | F2.5: resolve merge-policy handoff vs autonomous merge routing                                                                                                                                  |
+| `.github/instructions/idd-merge.instructions.md`             | F3–F5: execute the merge, clean up, and loop back to discover                                                                                                                                   |
+| `.github/instructions/idd-resume.instructions.md`            | Resume Step 0-3: route crash, stalled, stale-takeover, or clean continuation                                                                                                                    |
+| `.github/instructions/idd-resume-stall.instructions.md`      | Resume S1-S5: handle stalled-session recovery with a dedicated safety gate                                                                                                                      |
+| `.github/instructions/idd-orchestrator.instructions.md`      | Orchestrator fan-out phase: activation, roster, dispatch, refill, report and disposal, worker span                                                                                              |
+| `.github/instructions/lite/idd-*-lite.instructions.md`       | Condensed weak-model-tier phase files for phases with a shipped lite bundle; see [Lite instruction profile opt-in](#lite-instruction-profile-opt-in) for the mapping and standard-file fallback |
+| `docs/idd-review-policy-profiles.md`                         | PR review policy profiles and customization surfaces                                                                                                                                            |
+| `docs/idd-comment-minimization.md`                           | Live status digest contract and post-merge comment minimization policy                                                                                                                          |
+
+## ReviewItems_snapshot lifecycle
+
+`ReviewItems_snapshot` is a session-local collection, scoped to the
+current claim, created from E1's activity-universe fetch — not a
+literally immutable value a later session may reuse as-is.
+
+| Phase   | Operation                                                                                                   | State     |
+| ------- | ----------------------------------------------------------------------------------------------------------- | --------- |
+| E1      | Fetch threads/reviews/comments, exclude trusted operational markers, and freeze the current item universe   | created   |
+| E2      | Run critique pass and append newly found findings to the same snapshot scope                                | extended  |
+| E3      | Evaluate empty/non-empty routing based on the frozen snapshot plus E2 findings                              | evaluated |
+| E4-E8   | Classify, score, disposition, and verify each snapshot item (PATH A/PATH B) without redefining the snapshot | triaged   |
+| E9-E11  | Fix Accepted PATH A items, validate with a critique pass, and resolve conflicts with `{development-branch}` | actioned  |
+| E12     | Lint, test, and push the commit(s) addressing the actioned items                                            | committed |
+| E13-E14 | Reply to each snapshot item with its disposition, resolve its thread, and request re-review                 | replied   |
+| E15     | CI resolves for the pushed commit(s) and the loop returns to E1, ending this snapshot's role for the round  | complete  |
+
+The name intentionally emphasizes snapshot semantics: E1-E3 builds and
+gates on a time-locked view, E4-E8 triages that view, and E9-E15 drives
+it to completion, normally within the current session, before the next
+E1 fetch supersedes it.
+
+**Cross-session hygiene**: because the snapshot is session-local, a
+resumed or forced-handoff session must not inherit a prior session's
+`ReviewItems_snapshot`, watermark, or baseline markers as still
+authoritative for its own review pass. Rebuild from a fresh E1 fetch
+instead, and treat prior-claim operational markers as non-reusable even
+when the branch and HEAD are unchanged — see
+`idd-resume.instructions.md`'s CI/review routing table and its
+forced-handoff recovery note for the authoritative rule.
+
+**Cold entry outside Resume**: `idd-resume.instructions.md` owns
+mid-review resume routing -- see its Step 3 table and forced-handoff
+note, and `docs/idd-resume-detail.md` §W3/§W5. Where any of those
+routes lands a session at E4 or E9 without a `ReviewItems_snapshot`
+from its own E1-E3 pass, the cold-start reconstruction section below
+applies; reconciling §W3's own dirty-worktree instructions with that
+section's stop-and-reconcile rule is a follow-up to
+`idd-resume-detail.md` itself, not a gap this section can close by
+restating Resume's routing here. The gap this section closes directly
+spans two paths:
+`idd-overview-core.instructions.md`'s phase-routing entries for
+"Snapshot done" / "Review feedback accepted," followed without having
+just run E1, and an orchestrator fan-out delegation brief that hands a
+worker straight into mid-review (see
+[Orchestrator fan-out variant](#orchestrator-fan-out-variant) below).
+`idd-review-snapshot.instructions.md`'s cold-start reconstruction
+section is the named procedure for both, including the two edge cases
+a naive rebuild could get wrong.
+
+## Artifact taxonomy and ownership
+
+This exported template is instruction-template-first. Keep these
+ownership boundaries explicit:
+
+- **Live repository instructions**:
+  `.github/instructions/*.instructions.md` are the canonical workflow
+  rules that drive the execution loop.
+- **Agent entry files**: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and
+  `.github/copilot-instructions.md` tell each agent where to start.
+- **Workflow docs**: files under `docs/` explain architecture, policy,
+  and onboarding, but should not replace the operational instruction
+  files.
+- **Native skill bundles**: optional `SKILL.md` bundles may sit beside
+  this template in a downstream repository, but they are separate from
+  the exported instruction surface and must document their own boundary
+  to the execution loop.
+
+Some older project text may still use "skill files" as shorthand, but
+these instruction files are not agent-native `SKILL.md` bundles.
+
+The distributed workflow remains an instruction template first. Native
+skills can sit beside it as optional helpers, but they do not replace
+these execution-layer files.
+
+If you need to understand or change distributed timing defaults, start
+with [IDD policy constants](policy-constants.md). It names the claim,
+advisory, CI, and critique-loop defaults and points to the instruction
+files that own each value.
+
+When helper support is enabled, the discover and suitability phases may
+use the helper-backed evidence collectors first, but the Markdown
+instruction files remain the final authority whenever helper output is
+missing or disagrees.
+
+When an operator gives exactly one issue target, Discover can verify that
+target directly before Claim. The shortcut avoids broad roadmap
+enumeration, but it still applies targeted readiness checks, the A4
+viability gate, and the A4.5 suitability gate before the normal A5 claim
+safety checks.
+
+### Completed-draft adversarial review
+
+The Intake critique of an emerging interpretation stays in Intake.
+After a roadmap, child, or orphan body is drafted, a separate review
+runs before `audit-authored-issue` and before publication. Review a
+roadmap shell while `## Tracks` may still be empty, then each child,
+then the parent again before saving real child numbers into
+`## Tracks`.
+
+The reviewer receives the exact title and body plus only the user's
+goal, confirmed constraints and design choices, relevant evidence or
+file references, relationship context for a multi-issue set, and the
+issue-authoring critique checklist. That checklist checks the confirmed
+goal, a concrete surface and objective verification, hidden human
+dependencies, true dependency edges, the specificity target range, and
+candidate files used as cues. It does not receive the whole
+conversation or unbounded work instructions.
+
+Resolve `idd-issue-authoring-delegate` when a helper runtime can run
+it. Where that helper is available as a script file, the equivalent is:
+
+```sh
+node scripts/idd-issue-authoring-delegate.mjs [--policy <path>] [--no-user-global]
+```
+
+The helper does not invoke the command and does not read
+`critiqueLoop.delegate`. If the resolver cannot be run, or `usable` is
+false, keep the agent-native reviewer or a structured self-critique.
+That is not a failed review. When `usable` is true, the modes match the
+C/E delegate:
+
+| mode                 | delegate succeeded           | delegate failed              |
+| -------------------- | ---------------------------- | ---------------------------- |
+| `fallback` (default) | native reviewer does not run | native reviewer runs         |
+| `combined`           | both run                     | both run                     |
+| `on-success`         | both run                     | native reviewer does not run |
+| `never`              | native reviewer does not run | native reviewer does not run |
+
+Union the findings whenever both mechanisms run. After `usable: true`,
+a missing command, non-zero exit, timeout, cancellation, or unreadable
+findings is a failure. A readable empty list is a clean verdict. If no
+mechanism that ran returns a readable list, do not publish the drafted
+issue: do not create it, update its body, change its label, or append a
+marker for it. An existing held issue keeps its label and previous body.
+The drafts go into a draft carrier marked `Review: not reviewed` (see the
+[issue-authoring skill contract](https://github.com/kurone-kito/idd-skill/blob/main/docs/issue-authoring-skill.md#draft-carrier)),
+unless they already sit in one (they stay there), the user said not to
+create any issue, or the carrier cannot be published either (then they stay
+local).
+A failure is never a clean review.
+
+The reviewer must be read-only and returns a findings list only: it must
+not create or update issues, change labels, or append markers. That is a
+trust-based contract, not an enforced sandbox, because the configured
+command runs in the caller's environment as executable configuration.
+Prefer a non-context-inheriting reviewer, and use a read-only capability
+or sandbox where the harness offers one.
+kurone-kito/idd-skill#3448 records the observed risk that a
+context-inheriting no-mutation dispatch still publishes. Bound the
+delegated command with
+`issueAuthoring.adversarialReview.waitCeiling`
+(default `PT20M`) through the caller's own wait and cleanup. Do not wrap
+the configured command in a timeout utility. The ceiling does not read
+`critiqueLoop.subagentWaitCeiling`, and a user-global ceiling is
+ignored. Use the same caller-side bound for the native reviewer, so a
+hung native pass is not an unbounded substitute. The configured command
+is trusted executable configuration and may transmit the supplied draft
+and evidence packet. The caller sends the draft to the command on stdin as
+one JSON object (`title`, `body`, and a bounded `packet`), described by the
+[issue-authoring review input schema][issue-authoring-review-input-schema].
+The normative checklist and disposition rule live in the
+[issue-authoring skill contract](https://github.com/kurone-kito/idd-skill/blob/main/docs/issue-authoring-skill.md#completed-draft-adversarial-review).
+
+### User-global issue-authoring delegate default
+
+This resolver reads only its own fragment of the user-global file. The
+layered rules for `overrides[]`, the repository-policy field class, and the
+CI off switches are in the
+[user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md).
+
+A local runtime may also inherit `issueAuthoring.adversarialReview.delegate`
+from the same optional user-global file the critique delegate uses when the
+repository leaves the repo-local field genuinely absent. A GitHub-hosted or
+other remote agent surface is not meant to consult this layer, but the helper
+detects only `GITHUB_ACTIONS=true` on its own; pass `--no-user-global` on any
+other remote surface. The file path and the qualified-root rule are the ones in
+[User-global critique delegate default](#user-global-critique-delegate-default)
+(`$XDG_CONFIG_HOME/idd-skill/config.json`, falling back to
+`$HOME/.config/idd-skill/config.json`); a missing, unreadable, invalid-JSON, or
+non-object file is treated as absent, and the layer is opt-in.
+
+Resolution order: a repo-local `issueAuthoring.adversarialReview.delegate` (a
+configured object, an explicit JSON `null` disable, or a malformed value)
+always wins outright and never inherits the global layer, so an explicit
+repo-local `null` keeps the native reviewer even when a global delegate exists.
+A repo-local `issueAuthoring` or `adversarialReview` that is not an object, or
+an `adversarialReview` with a key other than `delegate` and `waitCeiling`, is
+malformed in the same way, so a typo cannot inherit a global command. Only when
+the repo-local delegate is entirely absent does the global fragment apply;
+absent both, the native reviewer or structured self-critique above runs
+unchanged. A malformed or explicit-`null` global fragment, including an
+`adversarialReview` with an unknown key, is treated the same as a missing one.
+`GITHUB_ACTIONS=true` always skips the global layer, and `--no-user-global`
+skips it on any other remote surface the caller recognizes (see
+[Effective issue-authoring adversarial review delegate](idd-helper-scripts.md#effective-issue-authoring-adversarial-review-delegate)).
+This resolver reads only that fragment: it never reads `critiqueLoop.delegate`,
+and the critique delegate never reads it.
+
+Example (a generic local draft reviewer, not a specific product):
+
+```json
+{
+  "issueAuthoring": {
+    "adversarialReview": {
+      "delegate": { "command": "my-local-draft-reviewer" }
+    }
+  }
+}
+```
+
+The optional `mode` takes the same values as the critique delegate and defaults
+to `fallback`. `issueAuthoring.adversarialReview.waitCeiling` stays
+repository-local (default `PT20M`), so a user-global ceiling is ignored. The
+command is trusted executable configuration and may transmit the issue draft it
+receives, so neither the user-global nor the repo-local config file should hold
+secrets.
+
+## External-signal entry path
+
+The Discover -> Claim -> Work loop above only reads issues already
+present in your tracker. A repository fed by an external signal source
+(error tracker, alert, support intake) needs a distinct on-ramp into
+issue-authoring before that loop ever sees anything.
+
+1. **Triage** (optional, agent-local): classify the incoming signal and
+   dedupe it against existing open issues or roadmap nodes before
+   drafting anything new. IDD does not define this stage's tooling — a
+   webhook receiver, a scheduled poll, or a manual review are all
+   equally valid, repository- or agent-specific integrations.
+2. **Hand off to issue-authoring**: once a signal survives triage as a
+   genuinely new, actionable item, feed its content to the
+   `issue-authoring` companion the same way a human-authored idea
+   would be if your repository has installed one (see
+   [Artifact taxonomy and ownership](#artifact-taxonomy-and-ownership)
+   above). The companion produces a normal, schema-conformant IDD
+   issue.
+3. **Rejoin the normal loop**: the produced issue is claimable by
+   Discover like any other issue — nothing about its external origin is
+   visible to A0-A5.
+
+Because the triage stage is optional and agent-local, an issue produced
+this way must never cite the triage tooling itself as a completion
+dependency: its acceptance criteria stay implementable by any agent,
+including one lacking that specific integration.
+
+A sibling entry path exists for a signal whose _root cause_ lives in a
+different repository (the `idd-skill` distribution itself) rather than
+in this one: see
+[Upstream-candidate escalation](../.github/instructions/idd-overview-appendix.instructions.md#upstream-candidate-escalation)
+in the reference appendix for the qualifying criteria and the local
+marker/label convention it produces.
+
+## Issue-author approval contract
+
+Repositories may also keep a secure-by-default issue-author approval
+gate ahead of Claim. The distributed discover and claim instructions
+already enforce this behavior: explicit-target runs stop before claim
+when the selected issue lacks the required approval, and discovery keeps
+underprivileged unapproved issues in an approval-needed fallback bucket
+instead of treating them as ready to start. Approval actors are a
+repository-local policy choice and remain distinct from trusted
+operational marker actors; CODEOWNERS mismatch does not replace this
+pre-start gate.
+
+## CODEOWNERS and Merge Gates
+
+CODEOWNERS are evaluated after work reaches the pull request, not during
+Discover or Claim. They become part of the PR review and merge gates in
+E and F phases: review snapshots must report required approval and
+CODEOWNER satisfaction, and F2/F3 must prove that unresolved review
+state, advisory state, CI, and branch freshness are all current for the
+same head.
+
+Autonomous operation therefore requires a satisfiable GitHub merge
+topology in addition to a recorded IDD merge policy. If the PR author is
+also the only matching CODEOWNER, GitHub's self-approval limit can make
+required CODEOWNER review impossible to satisfy. In that topology, IDD
+must wait for an eligible non-author reviewer, use a deliberately
+configured pull-request-only ruleset bypass for the trusted merge actor,
+or stop for a repository policy change.
+
+## Suitability policy handoff
+
+A4.5 outcomes should map to explicit repository policy, not ad hoc
+session choices. Keep the mapping in [Customizing IDD](customization.md)
+for labels, comment-and-stop defaults, and close boundaries:
+
+- uncertain outcomes (`unclear`, `needs-decision`, `blocked-by-human`)
+  stay open by default with a concise routing comment, then A4.5 keeps
+  scanning remaining candidates in the same run;
+- high-confidence `duplicate`, `invalid`, and `out-of-scope` outcomes
+  are read-only by default and require explicit A4.5 mutation-policy
+  customization before close/label side effects;
+- configured ready-label approval ownership is separate from trusted
+  marker actor authority for operational claim/review markers.
+
+### Check 1 fixture cues (A4.5)
+
+A negative regression fixture or expected-rejection example is descriptive
+context, not a live prerequisite, only when an explicit, positively framed
+fixture/rejection cue precedes the external-access phrase in the same
+Markdown paragraph or list item. The accepted cues are `negative fixture:`,
+`regression fixture:`, `expected rejection:`, and `expected failure:` (the
+last two may also be written with a hyphen), each followed by a colon. On a
+list marker line, the cue and phrase must remain in the same sentence; a
+separate sentence is part of the same
+context only when it is a correctly indented loose-list continuation
+paragraph whose cue text also identifies the external/access context. A
+heading at the list item's indentation ends that context. Inline-code terms
+remain scannable when they occur in a live prerequisite, while fixture cues
+inside inline code, strikethrough, and inline-code-only examples are
+ignored. A separate live prerequisite still fails this check, while
+unrelated or negated cues (including `non-`/`not-` prefixed variants), a cue
+after the access phrase, a cue in another paragraph, and ambiguous wording
+remain fail-closed. This boundary follows the observed false positive in
+issue #3522.
+
+## Grooming pass for rejected and below-floor issues (optional)
+
+A4.5 rejections and below-floor autopilot-suitability scores
+accumulate into a backlog that ordinary Discover never revisits on its
+own. An optional, human-initiated **Groom** phase lets an operator
+batch-review that backlog and clear entries whose blocker has become
+answerable. This is distinct from durably recording a rejection so it
+does not silently resurface (a separate concern, tracked upstream as
+[kurone-kito/idd-skill#2243](https://github.com/kurone-kito/idd-skill/issues/2243)
+in the source repository) -- grooming is about _reversing_ a rejection
+later, once circumstances change.
+
+**Classify before spending operator time.** Sort each candidate into
+one of three buckets:
+
+- **execution-blocked** -- no operator input helps; only further agent
+  work can resolve it. Leave these for Discover/Claim to pick up
+  normally once unblocked.
+- **decision-blocked** -- a genuine human call is required (a product
+  tradeoff, an ambiguous acceptance criterion, an already-recorded
+  policy choice). A bounded question set can resolve these.
+- **fact-blocked** -- the rejection cited a fact (a dependency, a
+  blocking issue) that may no longer hold.
+
+**Re-check facts before drafting a question.** For a fact-blocked
+candidate, check whether any issue or PR the original rejection cited
+as a blocker has since closed or merged -- a cached readiness snapshot
+can be stale, and a closed blocker is a "free" suitability lever that
+costs nothing to re-apply.
+
+**Verify feasibility before drafting a question.** Before drafting a
+decision-blocked question, confirm every option it offers is actually
+buildable against the codebase's current architecture, with no
+undisclosed scope expansion -- a new persistence layer, a new
+dependency, or a change to an unrelated component's contract. A
+competing-options question can read as complete because every option
+sounds coherent in English, while only an implementing session's actual
+codebase familiarity reveals that one option needs a capability the
+architecture does not have. If an option fails this check, either drop
+it from the question or disclose the scope expansion it would require
+as part of the question itself, so the operator chooses with the same
+information an implementing session would need (field evidence observed
+2026-09-10,
+[kurone-kito/idd-skill#2805](https://github.com/kurone-kito/idd-skill/issues/2805)
+in the source repository).
+
+**Never override a deliberate decision.** When the original rejection
+recorded a genuinely deliberate empirical or product decision (not
+merely an unanswered question), grooming must never resolve it
+unilaterally. Offer "keep the existing decision" as one of the
+operator's own answer choices instead.
+
+**Explain before asking.** Give the operator the background and
+tradeoffs behind each question before asking it, rather than bundling
+several unrelated technical topics into one dense batch.
+
+**Apply the operator's answers back onto the issue**: update the score
+footer, remove or update the `triage:{outcome}` label -- and the
+configured needs-decision label too, when the hold-and-return rule
+below applied it to this same candidate, so Discover's own A3
+readiness filter stops excluding it -- revise acceptance criteria to
+reflect the decision, and record the
+decision as inline prose in the issue body: `Maintainer decision (<provenance>,
+Groom hearing, <date>): <resolution text>` -- the shape
+`suitability-triage.mjs`'s Check 7 recognizes as a resolved
+decision
+([kurone-kito/idd-skill#2661](https://github.com/kurone-kito/idd-skill/issues/2661)
+in the source repository); a comment may additionally note the
+decision, but the body itself is what re-triage reads. This exact line
+is also exempt from A4's own `autonomous_completion` gate
+(`discover-viability-gate.mjs`,
+[kurone-kito/idd-skill#2763](https://github.com/kurone-kito/idd-skill/issues/2763)
+in the source repository), so a re-groomed issue is not discarded
+before Check 7 ever sees it. The next
+ordinary Discover pass then
+picks the issue up normally -- grooming itself never claims or works
+the issue (see
+[Mutation Policy and Coordination Rule](../.github/instructions/idd-suitability.instructions.md#mutation-policy-and-coordination-rule)).
+
+**Hold when a recorded resolution proves infeasible.** The feasibility
+check above reduces the risk of drafting an infeasible option, but does
+not eliminate it -- the same field evidence (2026-09-10,
+[kurone-kito/idd-skill#2805](https://github.com/kurone-kito/idd-skill/issues/2805)
+in the source repository) shows infeasibility that only became visible
+once an implementing session was deep enough into the codebase to see
+it. When a session reaches implementation and finds the Groom-recorded
+resolution cannot be built as specified, it must hold the candidate as
+decision-blocked again, rather than silently reinterpreting,
+downscoping, or unilaterally picking a different resolution: apply the
+configured needs-decision label and release the claim, the same
+general hold mechanism the shared Hold / suspend rules in
+`.github/instructions/idd-overview-appendix.instructions.md` already
+document. Record exactly what made the recorded option infeasible in
+the hold comment, so the next Groom pass has the information a
+corrected question needs. That later pass removes the needs-decision
+label as part of applying its own operator's answers back onto the
+issue (above), alongside the `triage:{outcome}` label and the score
+footer, rather than leaving the label in place indefinitely or
+removing it without recording a genuinely buildable replacement.
+That replacement must strike through or otherwise replace the
+infeasible `Maintainer decision` line rather than merely append beside
+it -- re-triage's own `hasResolvedDecision` check treats every unstruck
+occurrence as live and has no way to tell which one is current, so an
+unstruck infeasible line can keep reading as resolved alongside its
+replacement. Removing the label here does not itself trigger the
+appendix's usual removal-and-re-claim pairing: like the adjacent
+`triage:{outcome}` removal above, the actual re-claim happens through
+the next ordinary Discover pass reading the now-label-free issue, not
+through the Groom pass itself, which -- as already stated above --
+never claims or works the issue.
+
+**Worked example.** An issue was rejected `needs-decision` at score
+`2/5` because its acceptance criteria read "add caching, or document
+why caching is unsafe here" -- an unresolved subjective call under
+A4.5's escape-hatch guidance. Grooming classifies it decision-blocked,
+explains the caching-correctness-vs-simplicity tradeoff, and asks the
+operator to choose between TTL-based expiry and explicit
+invalidation-on-write. After the operator picks TTL-based expiry, the
+acceptance criteria are rewritten to "cache reads for up to 60 seconds
+via TTL-based expiry; no explicit invalidation path is required", the
+score footer is raised to `4/5`, and the `triage:needs-decision` label
+is removed after the body records `Maintainer decision (Groom hearing,
+2026-06-27): TTL-based expiry, chosen over explicit
+invalidation-on-write for simplicity`.
+
+## Provisional decision lifecycle
+
+Provisional decisions are available only when a repository explicitly
+sets `dangerouslyAutoDecide: true` in trusted repository policy. The
+setting defaults to `false` and does not grant credentials, scope,
+approval, permission, or a waiver of the normal claim, safety, CI,
+review, branch, or merge gates. Each repository decides whether to
+enable the feature; the IDD source repository records its own choice in
+its `AGENTS.md`.
+
+For a needs-decision source, before provisional work starts, persist a
+canonical decision record on the source issue. Its body begins with
+`<!-- idd-provisional-decision-record:v1 -->`, followed by one JSON value
+matching `provisional-decision-record.schema.json`. The record binds the
+source snapshot, decision bundle and generation, claim lineage, evidence,
+selected option, feasible alternatives and their rejection reasons, and
+execution criteria. Record events distinguish a provisional selection,
+work start, verified completion, confirmation, and alternate-choice
+rework. Keep every unresolved choice visible in the current bundle.
+
+A selection is provisional, not confirmation. For a needs-decision source,
+verified work completion leaves the source issue open in a confirmation-pending
+state; it does not make the decision confirmed, permit automatic close, or cause
+the same completed work to execute again. Downstream work can use completed
+provisional work only through its own opt-in and evidence gates. These
+boundaries preserve the roadmap's confirmed lifecycle contract ([issue #4528](https://github.com/kurone-kito/idd-skill/issues/4528)).
+
+When asking for confirmation, present the complete implemented bundle,
+its alternatives, verified results, and the implications of rework. An
+interactive prompt uses `N` as its default. A non-interactive session
+needs an explicit answer in the current conversation or CLI input; `N`,
+Enter, EOF, cancellation, silence, and missing input leave the source
+pending. A previously recorded valid answer replays without asking again.
+
+An authorized recorder, including an agent using a shared authorized
+GitHub account, may persist the user's actual answer on the source issue.
+The answer comment begins with
+`<!-- idd-provisional-decision-agent-answer:v1 -->`, followed by JSON
+that records the source snapshot, current bundle and decision
+generations, claim IDs, the presented choices and verified results, the
+response, and the answer received. The `confirmed` event points to that
+comment and binds its API creation time and scope to the completion
+records. Replay checks the reference, trusted API authorship, edit state,
+source and claim freshness, generations, and completed-work evidence.
+Source freshness uses repository, issue, title, and body content; it does
+not use GitHub's `updated_at`, which changes when comments are added. Each
+record must bind to the claim lineage active when that comment was posted,
+while a prior answer remains bound to the lineage of the confirmation or
+rework record that cites it. Confirmation and rework answers must follow
+every completion comment in the bundle, using server order when timestamps
+tie. Each same-source body rewrite must match a rework-authored record and
+caller-verified authoring evidence, including the trusted author, owner,
+fresh authoring set, roadmap, and audited child wiring. The verified
+source transition becomes the basis for later records and rework
+generations.
+The watermark identifies the canonical recorded-answer format; it is
+not proof of a person's identity and does not classify the account
+operator as human or agent. A trusted recorder is responsible for
+recording an actual user response. A marker alone, an ordinary trusted
+comment, or a provisional selection does not confirm the bundle; this
+provenance boundary follows the clarification recorded in
+[issue #4528](https://github.com/kurone-kito/idd-skill/issues/4528) after
+the confirmation-provenance hold on
+[issue #4571](https://github.com/kurone-kito/idd-skill/issues/4571).
+No separate account, signing key, authenticated transcript, or external
+identity service is required.
+
+Every answer presents the entire current completed bundle for context;
+the linked event applies that answer to its own decision generation.
+This allows one decision to be confirmed while another receives a
+different explicit preference and begins rework. Once confirmation or
+rework begins, keep that bundle generation closed. Start a new generation
+only after every decision in the prior bundle is confirmed or has
+verified rework authoring. A different explicit preference records a
+rework request, preserves the earlier choices and completed-work links,
+and uses the normal held authoring process to turn the same source issue
+into its rework roadmap. Missing, edited, stale, untrusted, conflicting,
+or incomplete evidence grants no transition authority. Keep the complete
+record and answer history available through crashes, claim takeover, flag
+disablement, and comment cleanup so later sessions can replay it.
+
+Under roadmap #4955, the worktree-remnant and B1-leftover classes of
+auto-decide act on claim-ownership and destructive-operation stops. They act
+only while their own switch is on, and only through remedies that first save
+everything (a stash, a backup ref, or a preserve directory) and then remove.
+The statements about recording on the source and keeping the source open
+apply to needs-decision sources only, and the no-waiver statement above
+applies to every class, including these two. This exception is recorded by
+[issue #4528](https://github.com/kurone-kito/idd-skill/issues/4528).
+
+### Resolving a confirmation-pending source
+
+This applies to a needs-decision source whose current bundle has verified
+completed work for every decision. The `runProvisionalResolution` function
+of `provisional-decision.mts` runs it, and the `idd-provisional-decision`
+command runs it for a request of type `resolve`. That request names the
+coordination claim (`claimId`, `agentId`, `branch`), the decisions of the
+current bundle (`decisionGenerations`), and optionally what the user did
+(`input`) with the digest it answered (`answeredPresentationSha256`, required
+when the input answers: echo the digest a dry run reported) and the later
+results that relied on the prior ones (`downstreamResults`). A dry run
+reports the next step and `needsUserAnswer`, and the presentation and its
+digest when there is one. With no answer to give and none stored to resume,
+`--apply` only releases the coordination claim, so run the dry run first. The
+action reads no opt-in switch, so confirmation and rework still work after
+`dangerouslyAutoDecide` is turned off, but the command needs a readable
+trusted repository policy, which supplies the trusted marker actors, and a
+change to that policy between the planning read and a write blocks the write.
+The command does not run the `rework-authored` request, because it cannot
+derive that request's authoring evidence, and it derives no rework roadmap
+evidence, so a source that already holds a `rework-authored` record is a
+recovery hold there. It exits `0`, `2`, `3`, or `4` as for a transition, and
+exit `2` with a `nextStep` means that step is still to do: read its `reason`,
+then run it again. The `input` is what the caller reports, so the
+input-boundary rule below applies to it.
+
+1. **Coordination claim.** Take the review under a fresh claim on the
+   source, posted through the normal claim protocol with a branch of the
+   form `issue/<number>-<slug>`. It is separate from implementation
+   execution: it needs no worktree. The request names the claim's ID, agent,
+   and branch, and all three must match the active claim marker. The
+   resolution refuses when another claim is active or when the active claim
+   is one that the bundle's records name as having run the implementation. An
+   uncertain release of an earlier coordination claim is reconciled first,
+   because that claim stays active.
+2. **Present.** A dry run reports the presentation: for every decision its
+   question, the selected option, the verified result, and each alternative
+   with its consequences and the rework it implies, plus a SHA-256 digest
+   of that presentation, the next step, and `needsUserAnswer`. When it is
+   true, the user has not answered yet: show the presentation and ask
+   `Were the implemented choices above acceptable? [y/N]`. When it is
+   false, the user has already given an answer (including a no or an
+   abort), a persisted answer resumes, or a finishing step runs, so ask
+   nothing.
+3. **Read the actual answer.** The input adapter reads one reported event
+   and never creates input; a pending question produces no answer by itself.
+   An answer must also carry the digest it answered, so a changed source,
+   bundle, or result makes it stale.
+4. **Persist, close, release.** For an affirmative answer the helper
+   appends the answer comment (a one-line note, then its JSON), reads it
+   back, appends one `confirmed` record for each decision the answer applies
+   to, replays the history to show them, closes the source as completed once
+   every decision of the bundle is confirmed, reads the closed state back,
+   and releases the coordination claim. A source that is closed for any other
+   reason is a recovery hold, not a confirmed close. Each write is preceded
+   by a second fresh plan that must name the same step, and followed by a
+   fresh read that must show it.
+
+| Reported input                                                      | Verdict                                   |
+| ------------------------------------------------------------------- | ----------------------------------------- |
+| `y` or `yes` typed by a user at an interactive prompt               | Accepted                                  |
+| A user's conversation reply that the agent reads as acceptance      | Accepted, with the reply kept verbatim    |
+| `option <id> <rationale>` or a reply naming a recorded alternative  | Alternate preference for one decision     |
+| `n`, Enter, EOF, cancellation, timeout, missing or unclear input    | Pending; the claim is released, no record |
+| A generic request to resolve, or a preselected option               | Pending                                   |
+| Assistant-written user dialogue, agent-fed or piped terminal input  | Pending; origin is not the user           |
+| A prior answer that no longer matches the bundle, source, or result | Ignored; it is stale or partial           |
+
+An answer comment keeps the canonical shape described above and adds the
+question that was asked and the decisions it applies to, so one answer can
+confirm some decisions of a bundle while another receives a different
+preference. The reply is stored verbatim, with its whitespace. An at-sign in
+it, or in a source title, is JSON-escaped in every comment the flow writes,
+so none notifies anybody. The first valid answer in history wins, and a
+valid persisted answer or confirmation resumes without another prompt; only
+an answer that carries the canonical question and was recorded while a
+coordination claim was active, never one the implementation session wrote on
+its own or one posted between two claims, is reused (preventive; no observed
+incident yet). A later input that agrees
+with it, or none, resumes it. A conflicting input is refused, because a
+confirmation cannot be undone: an N or a conversational no, Enter, EOF,
+cancellation, an unclear reply, or another option. The same refusal applies
+after the confirmation or rework request record is stored, and before any
+write when any targeted decision already has one. While another targeted
+decision is still undecided, an N, an abort, or an unclear reply only keeps
+that decision pending, unless a valid persisted answer already covers it.
+A resumed request should name only the undecided decisions, because an
+accepted or alternate reading is compared with every persisted response of
+the decisions it names. A generic request to resolve is not a conflict.
+
+Agents follow an input-boundary rule: never write the user's reply, and
+never feed `y` to a prompt the agent is waiting on (preventive; no observed
+incident yet). A TTY only shows that a prompt can be displayed. It does not
+authenticate anyone, and the adapter does not try to identify who supplied
+the bytes; a deliberately dishonest authorized caller is outside the
+guarantee.
+
+Every next step is derived from fresh reads, so a crash or uncertain write
+resumes exactly the remaining step and never executes the implementation
+again (preventive; no observed incident yet). A write that throws is checked
+by one fresh read: one whose own content is in place (a trusted, unedited
+comment with the same content, or a source closed as completed) is counted
+and reported in `warnings`, and one that is still absent is a recovery hold,
+not a retry. `warnings` also names downstream results that could not be
+recorded. The close step passes what the plan evaluated: the open state, the
+title and the SHA-256 hex digest of the body's UTF-8 bytes, and the
+coordination claim that must still be active. A store should verify them as
+far as its API allows, so a close never overwrites an intervening close and
+never runs under a claim that was taken over; the planner re-reads just
+before the write. A record step is compared by its whole content before it is
+written. Every refusal and recovery hold keeps the coordination claim until
+its cause is fixed. If the confirmation is stored but the close failed, only
+the close resumes. If the close succeeded but the claim release failed, only
+the release resumes and the issue is not closed again. A pending outcome
+records nothing new and only releases the claim; it reports
+`rework-handoff-recorded` when a rework request for the bundle is already
+stored. A release that a fresh read cannot
+confirm is reported as `reconciled` with `nextStep` set to `release-claim`,
+and the next run repeats it while the claim is still active; `reconciled`
+without a `nextStep` means everything is already done. A refusal with action
+`none` means nothing can be resolved yet and keeps the claim, so release it
+with the normal unclaim.
+
+The command's GitHub store takes a record or an answer as already written only
+when its comment is unedited and its author is a trusted marker actor or this
+run posted it. An untrusted comment that pre-posts a deterministic record ID is
+therefore ignored and cannot stall the resolution (found in the review of pull
+request `#5264`, merged 2026-11-17). The decision transitions keep their own
+rule: their planner holds while an untrusted or edited comment carries the ID
+of the record it would write. In a resolution the store checks the claim
+against the history it has just read, right before every answer or record
+append of the `resolve` action that writes. The close re-reads the issue
+and then the claim, and the release re-reads the claim, just before the write,
+and the close reads the closed state back. In a resolution the store also
+calls a caller-supplied hook, which re-checks the trusted policy, as its last
+step before each write. It refuses every write when the authenticated GitHub
+account cannot be read or is not a trusted marker actor (the planner ignores
+that account's markers, so a retry could never advance, and an app
+installation token names no user, so a resolution needs a user token, as the
+claim collectors do). It refuses the rework-authored append while a
+coordination claim is active, and counts a write as landed only from a
+complete history read-back. GitHub offers no conditional write, so a close
+that another actor
+made with another reason before the `gh` close call is reported and never
+overwritten, while a foreign close inside that call cannot be told from this
+one (preventive; no observed incident yet). Neither write invalidates the
+Discover hints, which age out or refresh like any other raw write.
+
+An alternate preference persists the answer and one `rework-requested`
+record for the one decision it names. The record carries a `handoff` with
+a stable identity shared by the bundle, the authoring set and session
+preallocated for the rework, the source issue as the anchor, the completed
+results it affects, and any downstream results the recorder knows. The
+downstream results are kept in the answer too, so a retry recovers them, and
+a later request of the bundle adds its own to the earlier ones; read the
+union of the bundle's handoffs. It grants no publication permission and
+never reuses an earlier set, and replay refuses a handoff that does. If the
+handoff write fails, the coordination claim is kept as a recovery hold
+(preventive; no observed incident yet) and a retry reuses the persisted
+answer. After the write succeeds, the claim is released before the
+authoring pass acquires ownership, unless the source was closed meanwhile,
+which is a recovery hold because the rework needs the source open. The same
+request cannot produce another handoff or erase an earlier choice.
+
+The `rework-authored` transition is a separate guarded request. It needs
+the coordination claim to be released and to be one that recorded a rework
+request of the bundle, a source that the authoring pass already rewrote, an
+authoring owner that is trusted, fresh, and matches the handoff's set,
+session, and anchor, an audited roadmap on the same source, and real child
+issues wired under it. The evidence names the title and body digest of the
+source as it was when the audit began, which the caller captures before it
+reads the roadmap and its children, and they must still match the source
+when the record is written, and the store appends it only while that still
+holds, so a source closed or edited after the final check holds the run and
+records nothing. The source must still be open: a closed source is a recovery
+hold, while an authoring that is already recorded stays recoverable after the
+roadmap closes. It only appends the record. It never releases the authoring
+hold, and unknown ownership or wiring refuses it. It is
+terminal only when every decision of the bundle is confirmed or has its
+record.
+
+### Provisional plan assessment (A4 and A4.5)
+
+This applies only to a needs-decision source, and only when the trusted
+read of the `decisionIssue` class says `enabled`. The master switch is part
+of that read. A4 and A4.5 are the last checks before a claim on every path,
+A0-T included, so each one reads the trusted verdict again (a fresh
+`idd-effective-config --trusted-auto-decide` read of the repository's own
+policy, never a feature branch) instead of relying on an earlier selection.
+With the class absent, false, or unreadable, the current needs-decision route
+stays, and so it does when the plan's choices exceed `maxDecisionsPerClaim`
+from that same read or the cap cannot be read. A source whose body names no
+choice word (decision, option, whether, and similar; a keyword check, not a
+judgment of the choice, and code blocks, inline code, and comments do not
+count) is not a decision source, whatever its label says. A source that
+already has records, or whose record state is inconsistent, is not assessed
+afresh. A fresh assessment starts a new decision bundle, so the generations
+the bundle would hold after selection are exactly the plan's pickup choices.
+Runtime questions later in the same
+claim count against the same cap
+([issue #4955](https://github.com/kurone-kito/idd-skill/issues/4955)).
+
+The session does the reasoning: it reads the repository evidence, compares
+the feasible alternatives, and writes a structured plan to a scratch file
+outside the worktree. Helper code only validates the plan, the replayed
+record state, and the trusted verdict. It ranks nothing and never fills in a
+missing recommendation, measurement, or evidence. Pass the file to both
+gates, which run the same assessment and report it as a `provisional` block:
+
+```sh
+node scripts/discover-viability-gate.mjs --issue <n> --provisional-plan <file>
+node scripts/suitability-triage.mjs --issue <n> --provisional-plan <file>
+```
+
+The plan is one JSON object with `schemaVersion` 1 and these keys, all
+required except `suitability`; an unknown key is refused, so a plan cannot
+claim approval (preventive; no observed incident yet):
+
+- `source`: an object with `repository` (`owner/repo`), `issueNumber`, and
+  `bodySha256`, the SHA-256 of the issue body, so a plan for another issue or
+  an edited body is stale. A refusal names the current hash.
+- `humanChoiceCriteria`: the original human-choice criteria, copied from the
+  source; each must be an excerpt of its body (case and spacing aside). They
+  stay pending; no plan marks them satisfied or speaks as a maintainer.
+- `recordedChoices`: each operator choice already recorded in the source: a
+  `reference` that is a verbatim excerpt of it, a `summary`, and
+  `respected: true`. A source that records one needs at least one entry, and
+  a `false` blocks.
+- `choices`: one entry per choice, in the shape of the `selected` event of
+  the decision record: `question`, `selectedOption`, `feasibleAlternatives`
+  (at least one, so at least two feasible options, all distinct), and
+  `executionCriteria`, each, like the selected option's `verification`,
+  checkable without a person's opinion and depending on no approval or
+  credential; a deliverable's `purpose` depends on none either.
+- `deliverables`: the concrete edit or deliverable surface, each a `file` (a
+  repository-relative path), a `document`, or an `issue-comment`, within the
+  effort estimate's limit on the number of deliverables, of any kind (3 for
+  S, 8 for M; effort L stays refused under
+  `autopilotSuitability.effortL: "refuse"`). When the issue lists
+  `## Candidate files`, every file deliverable must be one of them, and a
+  section that lists no path blocks, so the plan never widens the source into
+  other code changes (preventive; no observed incident yet).
+- `evidence`: the repository references the choice rests on.
+- `evidenceGaps`: each open gap with an authorized measurement. A gap closes
+  only when that measurement ran and its result and reference are recorded.
+  A proposed measurement, an unavailable one, or a result without a run
+  blocks.
+- `independentObstacles`: anything other than the input choice that blocks
+  the work; any entry blocks.
+- `suitability` (optional): for an authored score below the floor, whether
+  the input choice alone causes it, with a reassessed score at or above the
+  floor and its rationale. The floor, the authored marker, and the effort
+  limits are never changed.
+
+The result is `eligible` with `route: "claim-and-record"` and the normalized
+plan, or a list of precise blockers. Every other route keeps today's
+behavior: `current-route` for a class that is off, an unreadable policy,
+cap, or state, a missing or stale plan, or records that Resume owns, and
+`no-new-execution` for a source whose recorded work awaits confirmation.
+
+Only an eligible assessment relaxes anything, and only what the choice
+itself causes:
+
+- A4's `autonomous_completion` skips a `human decision` or `maintainer
+  decision` phrase whose own clause names no approval, credential, or other
+  authority.
+- A4.5 Check 5 accepts the plan's deliverables and criteria for the missing
+  scope and acceptance detail. Check 6 waives the needs-decision label (only
+  when A4's autonomy criterion also passes for the same body) and decision
+  or unresolved-choice phrases. Check 7 accepts the plan's execution criteria
+  for a missing verification signal and for a decision or preference line.
+- Each phrase is judged on its own, so a later credential or sign-off
+  phrase still blocks. Under a relaxation, A4's autonomy criterion fails and
+  A4.5 Check 6 stays blocked while the title or body names an approval,
+  sign-off, or authorization requirement in any sentence (inline code
+  included), in either
+  word order and at any distance, unless a phrase in it denies that very
+  requirement, such as "does not need any approval". The needs-decision label
+  was the only catch-all before. This lexical net is not complete: the plan's
+  `independentObstacles` is where a session declares such a requirement.
+- An assessment relaxes only the issue and body snapshot it was computed
+  for, and only an assessment that the helper made in the same process; the
+  number and the body hash must match the source under evaluation.
+
+Never relaxed: Checks 1 to 4; the blocked-by-human label, title prefix, and
+authoring-bucket marker; approval, sign-off, credential, secret, and
+production-access requirements, as far as the lexical scans above and the
+plan's `independentObstacles` declaration reach; an empty
+`## Candidate files` section; the
+standing-rejection pre-check; effort limits; and authoring, claim, and open
+pull request conflicts.
+
+An eligible plan is only a candidate. After ownership is acquired and before
+any execution, persist and verify it through the provisional-decision
+`selected` transition: `optionComparisonValid` is true only for an eligible
+assessment, and `policyTrusted` is true only when the same trusted read
+reports the `decisionIssue` class `enabled`. Do not begin B2 or B3 work on
+the choice until that record reads back verified. The source keeps its
+needs-decision label, and its original human-choice criteria stay pending
+until a person confirms the work.
+
+## Auto-decide at a stop
+
+When a session reaches a stop in a class that the repository has switched
+on, it runs the steps below before it stops: check the switches, rule out a
+false positive on mechanical evidence, check the caps, weigh the options,
+apply the needs-decision stop test, record a confirmation, and then act.
+Every check uses fresh, trusted reads. A check that cannot be judged leaves
+the stop as it is today. The per-class switches and caps are listed in
+[Auto-decide classes](customization.md#auto-decide-classes).
+
+### Who
+
+- A session acts only in the full execution profile, or as an authoring
+  session with a helper runtime (not `instructions-only`).
+- The profile-selected `idd-effective-config --trusted-auto-decide` must
+  report the class as `enabled`. Pass `--owner` and `--repo` for the
+  repository that owns the pull request's base branch, or for the issue's
+  repository when there is no pull request, so a fork checkout never
+  supplies its own `origin` policy. Pass `--base-ref` with the pull request's
+  base branch name only, never a head or feature ref; without a pull request,
+  omit it. Any other result, a non-zero exit included, leaves the stop as it
+  is today.
+- `worktreeRemnant` is not wired to this procedure yet. Until its consumer
+  child lands, a session keeps today's route for its stops: §LWR's operator
+  attestation still applies, and this section does not act on them.
+  `b1Leftover` is wired through `claim-issue --preserve-b1-leftovers`, which
+  points at this procedure, so it follows the procedure with that helper's
+  preconditions.
+- The classes that file confirmation issues (all but `decisionIssue`) also
+  need the issue-authoring companion and `issueAuthoring.journalIssue`.
+- `decisionIssue` uses only the trusted read and the pending cap. Its per-claim
+  cap is applied by kurone-kito/idd-skill#4535 to the pickup choices, and its
+  options and record follow the kurone-kito/idd-skill#4528 lifecycle. A later
+  question in the same claim uses `runtimeQuestion` and counts the pickup
+  choices too (see Caps).
+- The lite profile keeps its stronger-session handoff.
+
+### False positive
+
+The rule comes from two observed incidents. On 2026-10-15 (UTC), a claim on
+kurone-kito/idd-skill#4368 skipped the authoring-owner guard on the session's
+own reading. Later that day, the worker on kurone-kito/idd-skill#4375 read the
+B3 scope gate as a post-push gate and merged PR kurone-kito/idd-skill#4399.
+
+- The same check, re-run on fresh reads, no longer reports the stop. The
+  session comments the command and its output on the issue or pull request,
+  and continues.
+- Primary data (labels, API responses, git state) shows that the trigger
+  does not hold, but the helper still refuses. The session uses only the
+  class's documented remedy, never an ad hoc flag or environment variable.
+  If no remedy applies, it files a bug issue through the issue-authoring
+  companion and keeps today's stop. It skips the bug issue when an open
+  issue titled `auto-decide false positive: <helper> <stop>` already exists.
+- The judgment that a rule is too strict is never a false positive.
+- A re-run that finds no live process, or no occupancy, is not proof that a
+  `worktreeRemnant` stop was false: §LWR treats absent or unreadable
+  liveness evidence as inconclusive. Only a class whose contract calls the
+  re-run conclusive may continue on it; otherwise the stop stays.
+
+### Caps
+
+Counts come from `idd-auto-decision-records`. Every call in this section
+takes the same `--owner`, `--repo`, and `--base-ref` as the trusted verdict
+(see Who), so the verdict and the counts read one policy. A count that cannot
+be read (exit 1) leaves the stop as it is today, and so does a count at or
+above `maxPendingConfirmations` or `maxDecisionsPerClaim`.
+
+- **Pending count.** `--pending-count`: the open issues that carry the
+  confirmation label. At selection, kurone-kito/idd-skill#4538 also counts its
+  own confirmation-pending needs-decision sources, which only makes that class
+  stricter.
+- **`runtimeQuestion`.** `--records --class runtimeQuestion --source <claimed
+  issue> --claim <current claim> --state all`. In a needs-decision source
+  under provisional execution, add the number of pickup choices in the plan
+  that this claim executes, so the claim's total stays within the cap.
+- **`authoringChoice`.** `--records --class authoringChoice --set <set ID>
+  --state all`.
+- **`worktreeRemnant` and `b1Leftover`.** `--records --class <class>
+  --source <issue> --state all`. These classes act before the session holds
+  a claim on that issue.
+
+### Options
+
+- Draft at least two materially different options, each with its main cost.
+  One of them is "Keep today's behavior".
+- A workaround is chosen only when it is better than that option, can be
+  undone, and stays inside the issue's scope. It must also need no
+  credential and waive no gate beyond the class's documented remedy, which
+  kurone-kito/idd-skill#4528 records as an exception.
+- It must pass the stop test judged against "Keep today's behavior":
+  - it adds no claim, lock, merge-gate, security, secret-handling, or
+    data-destroying behavior beyond the issue's stated scope or the class
+    remedy;
+  - it is not known to leave CI red, and the CI gate still applies
+    afterwards;
+  - it ships no instruction or helper contradiction;
+  - it can be undone.
+- The session never invents an option or evidence to get past a stop.
+
+### Record, then act
+
+- **Which record.** `--records --class <class> --source <source> --state open`
+  lists the counting records with their confirmation issue numbers. Like every
+  call in this section, it takes the trusted `--owner`, `--repo`, and
+  `--base-ref` (see Caps). For `authoringChoice`, pass `--set <set ID>` in place
+  of `--source`: its confirmation identity is the authoring set, so a
+  source-only lookup can find another set's issue. For each distinct issue,
+  `--confirmation <number>` shows whether it still carries the authoring label.
+  That list omits a voided record, yet its confirmation issue can stay open with
+  the authoring label, and a later session would then call the class and key
+  free and publish a second issue for it (observed 2026-11-11,
+  kurone-kito/idd-skill#5177, found while reviewing
+  kurone-kito/idd-skill#5168). So before it treats the class and key as free,
+  the session also runs
+  `--open-issues --class <class> --source <source>` (`--set <set ID>` in place
+  of `--source` for `authoringChoice`), with the same trusted flags. That
+  separate read lists every open confirmation issue for the class and key,
+  including one whose record was voided, and reports `publication` as
+  `blocked` when it lists any. Like `--records`, it sees only an issue whose
+  body record counts.
+  - With `publication` `free` (no open issue for the same class and key: the
+    source, or the set for `authoringChoice`), the session publishes a new one.
+  - With exactly one, which `--records` lists too, and it is released, the
+    session appends to it.
+  - With one that still carries the authoring label, one that `--records` does
+    not list (its record was voided), two or more, or a lookup that cannot be
+    read (exit 1), it does neither: the decision is not recorded, the stop
+    stays as it is today, and the session reports it. It never publishes
+    another issue while `publication` is `blocked`.
+- **New issue.** The session publishes with
+  `publish-authoring-hold --shape confirmation`, passing `--owner` and
+  `--repo` for the base repository that the trusted verdict names. Without
+  them the helper uses the checkout, which in a fork is the fork. It also
+  passes `--policy` with the policy file read at the trusted base ref, and
+  `--marker-prefix` when the target repository, or the repository of
+  `issueAuthoring.journalIssue`, is not this checkout, so that no value comes
+  from fork-controlled files. Before it records anything, the session checks
+  that the issue it created is in the base repository.
+  - `outcome: "published"` with `release.state` `released` counts as
+    recorded.
+  - `release.state` `held` counts as recorded for `runtimeQuestion` and
+    `authoringChoice`: the issue waits for a person's release, and the
+    session reports it. For `worktreeRemnant` and `b1Leftover`, whose
+    helpers refuse a held record, `held` is not recorded.
+  - A `recovery-hold` or `refused` result (exit 1), or a `blocked-by-human`
+    result (exit 2), is not recorded. The stop stays as it is today, and the
+    session reports the state. A `recovery-hold` with `issue: null` (the
+    create call failed) leaves no issue to void; the session reports the
+    publication token so that a person can check for an issue that carries
+    it.
+- **Append.** The session lints the comment with `audit-authored-issue
+  --shape confirmation --confirmation-record --current-repo <owner>/<repo>
+  --expect-class <class> --expect-source <ref> --body-file <file>`, adding
+  the matching `--expect-claim` or `--expect-set`. It posts the comment,
+  then checks with `--confirmation <number>` that the record counts.
+  Anything else is not recorded.
+- **Not recorded, but something was written.** When a not-recorded outcome
+  leaves an issue or a comment behind (a `held` issue for `worktreeRemnant` or
+  `b1Leftover`, a `recovery-hold` issue with an issue number, or an append that
+  the check cannot confirm), the session comments the void marker for that
+  decision on the confirmation issue (kurone-kito/idd-skill#4961). A voided
+  decision is never completed and does not count. A `held` issue for the other
+  classes is recorded and never voided.
+- **Link.** Right after the record, the session posts the link marker as the
+  first line of a comment on the source issue. It posts there when it holds
+  that issue's claim or owns that authored target. For `worktreeRemnant` and
+  `b1Leftover`, it posts after its claim on the issue exists. If the post
+  fails, it retries once and reports it. The caps count records, not links,
+  so a missing link changes no count.
+- **Authoring order.** The authoring class publishes its target under the
+  authoring hold first, because a held target cannot run until a person
+  releases it.
+
+### Act, then note
+
+- The session comments on the confirmation issue where any preserved data,
+  stash, backup ref, or preserve directory now is, so a person can undo the
+  choice. The first line of that comment is the note marker with `kind=location`
+  for that decision (kurone-kito/idd-skill#4961). A decision whose action
+  changed nothing gets a `kind=location` note that says so.
+- If the action fails, the session comments the failure there, with the note
+  marker `kind=failure` as the first line, and falls back to today's stop.
+  A failure after a partial change gets both notes: the location of what
+  changed, then the failure. The open confirmation issue still counts toward
+  the pending cap until a person closes it.
+- If a comment fails, the session retries once and reports it in its run
+  report.
+
+### Resume after a crash
+
+The session finds its records with `--records --state all`, with the same
+trusted `--owner`, `--repo`, and `--base-ref` as the verdict (see Caps): by
+claim for `runtimeQuestion`, by set for `authoringChoice`, and by source and
+subject for `worktreeRemnant` and `b1Leftover`, with the recovered claim as well
+for `worktreeRemnant`. It reads the class verdict again, then:
+
+- A voided decision, a record with a `failure` note, a record whose confirmation
+  issue is closed, and a `worktreeRemnant` or `b1Leftover` record with a
+  `location` note are never resumed. A location note on those classes means the
+  decision was acted on (kurone-kito/idd-skill#4961). A further attempt is a new
+  decision that runs the whole procedure, caps included.
+- A `runtimeQuestion` or `authoringChoice` record with only a `location`
+  note is verified. If its action turns out incomplete, the session posts a
+  `failure` note and keeps today's stop.
+- A `runtimeQuestion` or `authoringChoice` record with no note is verified or
+  completed, and gets the matching note, only when a counting record names the
+  decision: a record that [Record, then act](#record-then-act) counts as
+  recorded. A `recovery-hold` result, including one whose void marker was
+  never written, is not that evidence (kurone-kito/idd-skill#5184). That
+  decision is not recorded, so it keeps today's stop and the session reports
+  it. The label state of its issue is not consulted.
+- A `worktreeRemnant` or `b1Leftover` record with no note is neither
+  completed nor verified against its subject, because the claim step can
+  recreate the subject and a new leftover can share it. The session posts a
+  `failure` note and keeps today's stop; a further attempt is a new decision.
+  Preserved data is never deleted, so nothing is lost.
+- When the class is not `enabled`, or the read fails, no action is completed
+  under any of these rules.
+
+Two accepted risks follow (both preventive; no observed incident yet). A lost
+`failure` note lets a `runtimeQuestion` or `authoringChoice` decision be
+completed once more under its record. A lost `location` note on a
+`worktreeRemnant` or `b1Leftover` decision costs one extra decision toward the
+caps.
+
+### Pull request
+
+- At D3, and at any later point through the E12 pull-request-body safeguards
+  whatever the phase, the body lists each confirmation issue with a `Refs`
+  line under its own "Auto-decide confirmations:" heading.
+- That list is not the follow-up section, so the needs-decision deferral cap
+  does not count it. The F2 follow-up gate matches only the defer-source
+  marker, so it ignores the list by design.
+- With no pull request, the list does not apply.
+
+### Never
+
+- No session answers, closes, relabels, or edits the body of a confirmation
+  issue, and Discover never selects one. The exception is
+  `publish-authoring-hold`'s own creation-hold release and its recovery.
+- Appending a record, a void marker, or a note marker is an addition, not an
+  edit.
+- Publishing a confirmation issue, including its self-release, is not
+  unplanned follow-up work and not the release of a follow-up that the work
+  phase forbids (see the confirmation creation-hold exception in
+  `contract.md`).
+
+### Classes
+
+- `decisionIssue`: kurone-kito/idd-skill#4538 and kurone-kito/idd-skill#4535,
+  with the kurone-kito/idd-skill#4528 lifecycle.
+- `runtimeQuestion`: a product, technical, or scope choice that a
+  full-profile session meets while implementing a claimed issue (B2, B3,
+  or C), in an ordinary issue or in a needs-decision source under
+  provisional execution. With the class enabled and the procedure passing,
+  the session records `class=runtimeQuestion` with `source` set to the
+  claimed issue and `claim` to its claim ID, files the confirmation issue,
+  and continues within the issue's scope. An ordinary claimed issue closes
+  on merge as usual. A needs-decision source follows the
+  kurone-kito/idd-skill#4528 lifecycle and keeps its bundle unchanged, and
+  its cap counts the pickup choices too. A choice whose options all leave
+  the issue's scope keeps today's hold. A diff that fails
+  `effort-candidate-file-limit`, with no advisory disposition from the
+  helper, takes the B3 scope-overrun route. When the
+  class is not enabled, the trusted read fails, a cap is reached or
+  unreadable, or the procedure keeps today's behavior, the stop stays as it
+  is today. These routes stay unchanged: review findings handled by
+  `critiqueLoop.deferNeedsDecision`, where a CODEOWNER or required reviewer,
+  `CHANGES_REQUESTED`, scope-fenced items, merge holds, and CI and
+  branch-sync holds still stop; any other E or F phase question; a B2.1
+  premise conflict, which keeps its addendum route; a B3 scope overrun; and
+  the lite profile's stronger-session handoff.
+- `authoringChoice`: the Interactive choice rule in `contract.md`.
+- `worktreeRemnant`: §LWR in [idd-resume-detail.md](idd-resume-detail.md).
+- `b1Leftover`: [B1 leftovers](#b1-leftovers).
+
+The classes that the hearing left out keep their behavior.
+
+### B1 leftovers
+
+The `b1Leftover` class covers two stops of B1 worktree setup. Both come
+before the session's claim exists, and both wait for a person today. The
+operator chose, at the 2026-11-01 hearing recorded in roadmap
+kurone-kito/idd-skill#4955, that with the class switched on the session
+preserves the leftover and continues. It acts only through
+`claim-issue --preserve-b1-leftovers`, which saves the leftover first (a
+backup ref for a branch, a move into a preserve directory for a path) and
+only then clears it out of the claim's way. A branch keeps its commits on
+the backup ref and loses its reflog and its `branch.<name>` configuration
+section. The helper's preconditions, actions, and report are in
+[B1 leftover preservation](idd-helper-scripts.md#b1-leftover-preservation);
+the procedure above supplies the checks and the records.
+
+- **Leftover branch.** A local branch with the claim's name exists.
+  `claim-issue --apply` reports `b1-cleanup-needed`. By hand this is the
+  hold-and-stop of pre-creation step 3 in `idd-work.instructions.md`, which
+  is reached only when `git branch -d` refuses the branch.
+- **Occupied path.** Something that is not a registered worktree sits at the
+  computed worktree path. `claim-issue --apply` reports `path-occupied`. By
+  hand this is Step 1 of Worktree creation in the same file.
+- **Left out.** These keep today's route: unpushed commits on the local
+  default branch (`primary-not-ready`; pre-creation step 1 by hand),
+  anything in the primary worktree, a prunable worktree entry (it also
+  reports `b1-cleanup-needed`), and a branch that `git branch -d` deletes.
+
+The order follows the procedure, with one addition: the helper's dry run
+comes before the record, because it lists the subjects:
+
+1. Run the procedure's checks, from Who through Options. A check that fails
+   leaves today's stop.
+2. Dry run `claim-issue --preserve-b1-leftovers` without `--confirmation`.
+   Its report lists each leftover with its subject: the short branch name,
+   or the absolute path. Without `--confirmation` the helper reports the
+   `record`, `decision-pairing`, and each subject's `record-match`
+   preconditions as unmet, by design, and the apply run checks them again.
+   Go on only when every other precondition is met. Then check the decision
+   cap for the whole batch: the decisions that Caps counts for this source,
+   plus one per listed subject, must not exceed
+   `autoDecide.maxDecisionsPerClaim`, because the helper does not enforce
+   the count. Otherwise keep today's stop.
+3. Record one decision per subject, as in Record, then act, each with its
+   own decision ID and a `Subject:` line that holds that subject. All the
+   records of the run go on one confirmation issue, the one that Which
+   record selects (a new issue, or an open released one to append to),
+   because `--confirmation` names one issue and two open same-source issues
+   stop the procedure.
+4. Run the same command with `--apply` (and its required `--agent-id` and
+   `--project-status`), `--confirmation` for that issue, and one
+   `--decision` per subject. The helper checks every precondition again
+   before it changes anything. The run also creates the worktree and posts
+   the claim, so the session continues in that worktree at the install step
+   (the fresh-claim order of `idd-claim.instructions.md`, step 6) and does
+   not create the worktree again.
+5. Post the `kind=location` note (the note marker of
+   kurone-kito/idd-skill#4961) for each decision on the confirmation issue.
+   It names each backup ref and preserve directory, and it is posted even
+   when a later claim step fails.
+6. Once the claim exists, post the link marker for each decision on the
+   claimed issue.
+
+A dry run or an `--apply` run that refuses before it preserves anything
+keeps today's stop, and the session comments the failure on the
+confirmation issue when one exists. When `--apply` fails after it changed
+state (`b1-preserve-failed`, for example the branch is saved and the path
+move then fails), the session posts the location note for every saved
+location in the helper report and then the failure note, and today's stop
+follows. The saved state is finished or undone by hand before the helper
+runs again. When `--apply` preserved a leftover and a later claim step fails,
+the leftover stays preserved: the session posts the location note and then
+the failure note, and today's stop follows under that step's reported next
+action. The `lost-claim-cleanup` of `idd-claim.instructions.md` is one
+possible action, under its own triggers. A further attempt is a new
+decision.
+
+The region classifier is the trusted class read and the procedure's checks,
+followed by the helper's preconditions. It loosens only the two stops above.
+These shapes keep today's hold or stop:
+
+- the class is not enabled, a cap is reached or cannot be read, or the
+  run's decisions would take the count past its cap;
+- a branch that is the default or development branch, is checked out or
+  mid-rebase or mid-bisect in any worktree, is one that `git branch -d`
+  deletes, exists on a remote, or is the head of an open pull request;
+- a path that is a registered worktree, contains or sits inside one, or is
+  owned by another user;
+- unpushed commits on the local default branch, the primary worktree, and a
+  prunable worktree entry;
+- a claim that is not fresh: the fresh-claim gate does not read `claimable`,
+  or the leftover is the branch of a released claim, or the path derived
+  from it, which is inheritable;
+- a confirmation record that is not recorded, or a refusal by the flag.
+
+### Decision table
+
+In the rows below, the "same key" is the source issue, or the authoring set
+for `authoringChoice`.
+
+| Input                                                                                                                                                       | Expected verdict                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Lite profile, `instructions-only`, trusted read not `enabled` or a non-zero exit; for confirmation-filing classes, no companion or no journal issue         | Today's stop                                                                                                                 |
+| Fresh re-run no longer reports the stop                                                                                                                     | Continue, with the command and output commented                                                                              |
+| Primary data contradicts the trigger, but the helper still refuses and no class remedy applies                                                              | Bug issue filed unless a matching one is open; today's stop                                                                  |
+| The session only reads the rule as too strict                                                                                                               | Not a false positive; no ad hoc flag                                                                                         |
+| A count at or above its cap, or a count that cannot be read                                                                                                 | Today's stop                                                                                                                 |
+| No workaround beats "Keep today's behavior", or the best one fails the adapted stop test                                                                    | Today's stop                                                                                                                 |
+| No open same-class, same-key confirmation issue                                                                                                             | Publish a new one                                                                                                            |
+| An open, released same-class, same-key confirmation issue                                                                                                   | Append a record                                                                                                              |
+| A same-class, same-key issue still under its authoring hold                                                                                                 | Not recorded; today's stop; reported                                                                                         |
+| `outcome: "published"` with `release.state` `released`, or `held` for `runtimeQuestion` and `authoringChoice`                                               | Recorded; act                                                                                                                |
+| `recovery-hold`, `refused`, `blocked-by-human`, or an append that does not count; `held` for `worktreeRemnant` or `b1Leftover`                              | Not recorded; today's stop; reported; a void marker when something was written                                               |
+| Two or more open same-class, same-key confirmation issues                                                                                                   | Not recorded; today's stop; reported                                                                                         |
+| Link post fails twice                                                                                                                                       | Reported; caps unaffected                                                                                                    |
+| A `location` or `failure` note fails to post twice                                                                                                          | Reported; on resume, the record is handled by the rule for the notes it has                                                  |
+| Recorded; the action then fails                                                                                                                             | `failure` note, after a `location` note when something changed; today's stop; the issue still counts                         |
+| Recorded; the action succeeds                                                                                                                               | `location` note                                                                                                              |
+| `recovery-hold` with `issue: null`                                                                                                                          | Not recorded; no void marker possible; token reported                                                                        |
+| Resume finds a voided decision, a record with a `failure` note, one in a closed issue, or a `worktreeRemnant` or `b1Leftover` record with a `location` note | Not resumed; a further attempt is a new decision through the whole procedure                                                 |
+| Resume finds a `runtimeQuestion` or `authoringChoice` record with only a `location` note                                                                    | Verified; a `failure` note and today's stop if incomplete                                                                    |
+| Resume finds a `runtimeQuestion` or `authoringChoice` record with no note that a counting record names, class `enabled`                                     | Verified or completed; the matching note; label state not consulted                                                          |
+| Resume finds a `runtimeQuestion` or `authoringChoice` record with no note and no counting record, such as a `recovery-hold`                                 | Not completed; today's stop; reported                                                                                        |
+| Resume finds a `worktreeRemnant` or `b1Leftover` record with no note                                                                                        | `failure` note; today's stop; a further attempt is a new decision                                                            |
+| Resume with the class no longer `enabled`, or the read fails                                                                                                | No action completed                                                                                                          |
+| Pull request exists, or is opened later                                                                                                                     | "Auto-decide confirmations:" list maintained; not the follow-up section                                                      |
+| Any session meets a confirmation issue                                                                                                                      | Never answered, closed, relabeled, edited, or selected (creation-hold release excepted)                                      |
+| Pickup choices of a needs-decision source (`decisionIssue`)                                                                                                 | kurone-kito/idd-skill#4528 lifecycle; no confirmation issue; a later question during its execution follows `runtimeQuestion` |
+
+### Loosening a fail-closed check
+
+The region classifier is the trusted class read, the false-positive rule, the
+caps, and the adapted stop test, applied in that order. Each class names its
+own classifier and shapes on top. These shapes keep today's stop in every
+class:
+
+- the master or class switch is off or unreadable, and every case listed
+  under Who;
+- a helper still refuses, unless the class's documented remedy or a passing
+  re-run applies;
+- a cap is reached or unreadable;
+- no option beats "Keep today's behavior", or the best one fails the adapted
+  stop test;
+- a confirmation is not recorded, including a same-source issue still under
+  its authoring hold;
+- a resumed action whose class is no longer `enabled`;
+- every class the hearing left out, and the record-on-source lifecycle of
+  needs-decision sources.
+
+## Roadmap completion audits
+
+Discover owns roadmap-level state. After it finds an open roadmap, it
+can audit whether all explicitly referenced child work is complete
+before selecting the next issue. Passing audits post a concise evidence
+summary and close the roadmap; failing audits either add/link
+autonomous follow-up issues or route human-dependent gaps to an explicit
+blocked or needs-decision state. Roadmap-level side effects still use a
+temporary claim on the roadmap issue itself, so concurrent agents do not
+close or edit the same roadmap at the same time.
+This roadmap claim is a coordination lock only: child issue claims stay
+independent execution locks and can proceed in parallel unless blocked
+by their own readiness or dependency rules. Roadmap-level blocker labels
+still gate selection as described in Discover.
+
+This audit intentionally lives before A2 rather than in F4. F4 is
+limited to the PR that just merged and the local cleanup for that child
+issue. F5 then loops back to Discover, where roadmap completion can be
+checked with the broader parent context.
+
+## Resume routing model
+
+Resume now starts with a deterministic external-signal classifier before
+claim-state branching. The classifier routes each run into one of four
+paths: crash recovery, progress-stalled or rate-limit recovery,
+stale-claim takeover, or ordinary clean continuation. This keeps crash
+and stall handling separate without requiring the stalled session to
+publish a final self-report.
+
+## Autopilot operating model
+
+The execution loop is **one issue = one short-lived session**: drive a
+single Discover → Claim → Work → PR → Review → Merge → F4 cleanup cycle to
+completion, then let the session end. All durable loop state — claims, PRs,
+and issue/PR status — lives in the forge (GitHub), not in the agent's
+context, so the loop does not need to be carried in one long-lived process:
+a thin external runner or scheduler (or a dynamic-paced loop primitive)
+re-enters Discover for the next unclaimed issue in a fresh session. This
+composes with IDD's existing model — it ships no daemon and relies on an
+external scheduler to drive the loop.
+
+### Live-session E/F orientation
+
+When a live session still owns its claim but is unsure what to check next
+mid E/F-phase — not after a crash, takeover, or missing review snapshot —
+use the existing gates as a navigation aid. The observed navigation failure
+is recorded in source issue `kurone-kito/idd-skill#3494` (2026-09-26).
+With helper runtime, use the
+profile-selected `pre-merge-readiness` invocation documented under
+[merge-gate evidence](idd-helper-scripts.md#merge-gate-evidence) for the
+current PR, passing `--pr <n> --claim-issue <n>` and this session's
+locally persisted `--claim-id` and `--agent-id`, plus `--nonce` when this
+session recorded one. Before the call, separately verify those persisted
+values match the trusted active claim and nonce markers. The readiness
+helper compares the supplied values with the active marker; it does not
+prove that the caller owns a locally persisted pair. Never copy marker
+values to fill a missing local value; stop if a required value is absent or
+does not match. The legacy omission path applies only to a pre-rule bare-ID
+claim checked with `resume-claim-routing`, not as a general shortcut for
+this readiness invocation. Route by its
+`ready`/`blockers` verdict and then its `branchCurrency`, `threads`,
+`unrepliedComments`, `reviewerStates`, `advisoryWait`, `ci`,
+`dispositionEvidence`, `secondaryQuietWindow`, `claim`, and `closingSet`
+sections to the existing E-phase or F-phase section that resolves the
+blocker. Without helper runtime, use `idd-resume.instructions.md` Step 3's
+CI-state × review-state table for the same routing. This is a pointer only:
+it changes no phase behavior and creates no new rule.
+
+Treat the **context window as a first-class, exhaustible resource**,
+alongside wall-clock time and token budget. A single session that runs
+F5 → Discover → … → F5 in-process accumulates every issue's tool output,
+diffs, CI logs, and review threads, so each later issue pays a steadily
+larger context-re-read cost — a direct cause of mid-run context exhaustion.
+The monolithic single-session loop is therefore the **anti-pattern**;
+prefer short sessions that exit at the F4/F5 boundary and let the runner
+start the next one.
+
+F4-complete / F5 is therefore the recommended **safe session-exit boundary**.
+When context pressure hits mid-issue, a session can die mid-flight and leave a
+partially-progressed issue (claimed, branch pushed, PR open, or mid-review) for
+a later session to untangle. Finishing the current issue to the F4/F5 boundary
+and exiting there converts that uncontrolled failure into a controlled handoff —
+durable claim and PR state plus the existing resume phase let a fresh session
+pick up cleanly at Discover, rather than starting another issue and risking a
+mid-loop death.
+
+Mid-review carries a narrower, equivalent boundary, and each point
+below shares two conditions: no pending `Awaiting maintainer
+decision` item remains, thread or regular comment (E7 permits one to
+stay unresolved during triage, so its absence needs a separate check
+at exit), and the worktree is clean with no local-ahead commit still
+unpushed (the cold-start reconstruction section's edge case 2 pushes
+one first, via E10-E12, before any point applies). A session may
+deliberately exit after E3 completes with an empty snapshot (E1's
+watermark alone is not enough -- E2's critique pass must actually run
+first, which Resume's clean/successful-PR route to F2 does not
+guarantee), after E8 finds zero Accepted PATH A items, or after a
+round completes **both** E13 and E14: the
+first point has no dispositions to preserve; the other two leave
+every reviewer-visible disposition durable on GitHub. A successor
+re-enters through Resume's own routing. E14 belongs in that boundary,
+not only E13 — E1 Step 3 excludes a `CHANGES_REQUESTED` review body
+only once it has **both** a reply and a re-review request, so exiting
+right after E13's replies but before E14 requests review leaves that
+body's exclusion condition unmet, and a fresh E1 pass re-surfaces it.
+Exiting anywhere between
+E4 and a round's completed E14 is not recommended — an Accepted-PATH-A
+decision carries no durable marker until E13 posts it (E6 defers that
+reply on purpose), and a `CHANGES_REQUESTED` body needs E14's request
+too for its own exclusion to hold — so a session forced to exit or
+resume there instead relies on the recovery procedure the
+[ReviewItems_snapshot lifecycle](#reviewitems_snapshot-lifecycle)
+section names.
+
+This boundary covers same-session continuation and orchestrator
+fan-out delegation, which already carries the active claim verbatim to
+the next worker (see [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation)).
+It does not by itself authorize a genuine cross-session handoff: the
+claim stays active and owned until released, so an unrelated session
+that simply shows up hits `idd-resume.instructions.md`'s
+non-owned-active-claim stop path. A deliberate operator-driven handoff
+at this boundary uses [Operator-present release](../.github/instructions/idd-resume.instructions.md#operator-present-release)
+instead of a new mechanism.
+
+Short sessions need cheap ramp-up, which the "facts live in docs and
+helpers, not in session memory" design already supports: a fresh session
+reconstructs what it needs from the instruction files, `.github/idd/`
+config, and forge state. This guidance is **advisory** — a recommended
+practice with its rationale, not a hard requirement — and
+**runner-agnostic**, since this repository ships no runner.
+
+### E/F edge cases from field reports
+
+Three situations from 2026-09-30 field reports have no complete written
+answer in the phase files. None changes a gate; each cites its reported
+incident.
+
+- **A commit on the PR branch that this session did not write.** A
+  maintainer applied Copilot Autofix in the GitHub web UI (committer
+  `web-flow`, trailer "Co-authored-by: Copilot Autofix powered by AI")
+  on a pull request that had one `github-advanced-security[bot]` thread.
+  Reported 2026-09-30 (kurone-kito/idd-skill#3678): the thread ended
+  resolved and outdated with no reply, the successor's local branch was
+  one commit behind origin, and the `Bash tests (bats)` check was red on
+  that commit because the autofix changed a shape a test mock relied on;
+  nothing but CI validated the diff. Fetch and fast-forward the local
+  branch (a branch behind origin is the benign case), let E1 take the
+  moved head (`diffReviewSnapshot` already routes a moved head to E1 as
+  `head-changed`), and run the repository's objective validation on that
+  diff, because only CI has validated it. A resolved bot thread needs no
+  marker-first reply: `classifyReviewThreadForGate` returns `resolved`
+  for any resolved thread whoever wrote it, so it does not count toward
+  the unresolved-threads gate, and the disposition-evidence gate skips
+  it once the E1 watermark on the moved head is newer than its last
+  external comment, so that E1 pass, not a reply, is what clears it. The
+  fix itself stays unvalidated until CI or E12's lint and test step says
+  otherwise. Whether the commit subject follows a convention is adopter
+  policy.
+
+- **A pull request that must not close its claimed issue.** Reported
+  2026-09-30 (kurone-kito/idd-skill#3678): an acceptance criterion that
+  only a later session can check after the merge (a throwaway pull
+  request that must show a CI check passing) led an orchestrator to tell
+  the worker to write `Refs`, not a closing keyword. The F2 collector
+  then had no fitting mode: with `--claim-issue N` the closing set is
+  `[N]` and `--closing-issues` must include the claimed issue number,
+  while `--claimless` skips claim revalidation, so claim ownership was
+  covered only by a gate script the session wrote. Split the issue
+  instead, through the `issue-authoring` skill: an implementation issue
+  that closes with its pull request and the closing keyword D3 requires,
+  and a verification issue that carries the post-merge check. Do not use
+  a `Refs`-only body for the claimed issue, and do not use `--claimless`
+  to get around the closing set.
+
+- **A closing link that stays empty.** D3.5 already says to wait, and
+  not to edit the body, toggle draft, or close and reopen, while the
+  pull request is under 4 hours old (by `createdAt`) and its keyword
+  matches step 3's regex (kurone-kito/idd-skill#3660). Two adopters'
+  reports add what it does not say: across seven pull requests the field
+  stayed empty for 1 h 04 min to at least 2 h 24 min and healed without
+  action, and the delay is neither a fixed age nor a shared clock time,
+  so a session cannot plan the wait. To tell quickly whether the fault
+  is platform-wide, sample one unrelated recent pull request that has a
+  closing keyword and read its `closingIssuesReferences`: if that is
+  also empty, keep waiting. The operator may also add the
+  issue-to-pull-request link by hand in the web UI's Development
+  sidebar.
+
+### Orchestrator fan-out variant
+
+A long-lived orchestrating session may run Discover and Claim itself and
+delegate each claimed issue's B-through-F execution to an isolated
+subagent, instead of a thin external runner re-entering a fresh session
+per issue. This is an **explicitly supported alternative** to the
+one-issue-one-session model above, not a replacement for it — the
+monolithic-loop anti-pattern is about a single session accumulating every
+issue's diff, CI log, and review-thread noise in its own context, and
+the orchestrator avoids exactly that: its own context holds only claim
+tokens, branch names, and each worker's final report, while the
+per-issue noise stays inside each short-lived worker's own throwaway
+context. Cross-issue bookkeeping (the claimed set, a concurrency budget,
+one desync token reused across the run) is also cheaper to keep in one
+orchestrating session than to reconstruct per invocation of a stateless
+external scheduler.
+
+The operating rules for this variant are in the
+`.github/instructions/idd-orchestrator.instructions.md`,
+which an agent reads only when its activation conditions hold or a fan-out
+session restarts.
+
+The orchestrator's end-of-run report is defined under
+[Orchestrator run report](#orchestrator-run-report). The `outcome` that each
+worker's own final report carries for each way a run can end is listed under
+[Worker report outcomes](#worker-report-outcomes).
+
+#### Live capability decision
+
+The orchestrator instructions use this table before scratchpad setup, a fresh
+claim, or worker launch. Its inputs are the current session's callable tools,
+their documented lifecycle behavior, and the session's launch/roster history.
+The vendor worker table is a support hint; a row marked `orchestrator` does not
+prove that its tools are callable in the current session. Evaluate only the
+lifecycle operations required by the selected mechanism, along with its
+confirmed wait model, documented lifetime, and the existing concurrency cap.
+
+A session is a static fan-out candidate only when all of these hold:
+
+- the harness worker mechanism table row has Eligibility `orchestrator`;
+- helper support is installed (`instructions-only` has none), so the
+  profile-selected `idd-worker-budget` exists;
+- the effective `orchestrator.maxWorkers` is at least 2 (read `maxWorkers`
+  from `idd-worker-budget --running 0 --startable 0`);
+- the session is not on the lite profile;
+- the session was not started for one explicit issue (A0-T) or a single-issue
+  request;
+- `GITHUB_ACTIONS` is not `true`.
+
+The table below then decides the route.
+
+| Evidence                                                                                                                                                                                                                                                       | Route                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Static fan-out requirements pass and a documented mechanism's required live tools, wait model, and multi-hour lifetime are confirmed; prior-worker state is known; at a refill, known running workers continue on this row while the capability remains usable | Fan-out, then resolve and verify the session scratchpad through the lifecycle below before Discover, A5, or dispatch                                                           |
+| This uninterrupted session positively shows no launch was attempted, but no eligible multi-hour mechanism is callable, or a required wait/lifetime condition is not met                                                                                        | Mode decision before A5; then ordinary single-issue Discover/Claim/Work. Do not call a missing roster tool, provision fan-out scratch space, launch a worker, or claim a batch |
+| The request is one explicit issue, the profile is lite, `GITHUB_ACTIONS` is `true`, helper support is absent, `maxWorkers` is below 2, or the worker table says `one issue per session`                                                                        | Ordinary single-agent route under the existing activation rules, only when no launch, own claim, or potentially live writer is unresolved; otherwise the recovery and hold row |
+| At a later refill, the fan-out capability is lost (a required lifecycle tool, wait model, or lifetime condition is no longer met), every prior worker is verified disposed, and no uncertain launch, unmatched own claim, or potentially live writer remains   | Continue in the current session as single-agent before the next A5; process one issue to its normal terminal phase, then return to Discover                                    |
+| The session restarted or a launch was attempted, but the roster is unavailable/incomplete, or any worker, claim, or writer remains unresolved                                                                                                                  | Existing restart/recovery and hold; missing tools or scratch files do not prove that no worker exists                                                                          |
+| Scratchpad metadata is missing while fan-out remains usable                                                                                                                                                                                                    | Resolve or provision it through the session scratchpad lifecycle below before any claim or dispatch                                                                            |
+| Ownership, workspace, host/API admission, CI, review, or merge evidence is ambiguous or fails its gate                                                                                                                                                         | Keep the existing safety stop or wait; execution-mode selection does not waive a gate                                                                                          |
+
+Final pre-B1 worker stops use this route only if all proofs below pass. Use
+the verified pre-B1 parent-continuation route below; otherwise use existing
+recovery/hold.
+
+When more than one row matches, a row that leaves a launch, own claim, or
+potentially live writer unresolved takes precedence over every static
+fallback.
+
+Observed 2026-10-25 in issues #4698 and #4712: static eligibility alone did
+not establish whether the current session could start, observe, wait for, or
+control a worker. The table records the selected response.
+
+##### Verified pre-B1 parent continuation
+
+Use this narrow route only when the original parent is still in the same
+uninterrupted session that dispatched the worker and every proof below passes.
+A pre-B1 stop by itself does not qualify. A runtime result must be final, not
+interim. Reconcile the complete worker/launch history and live process evidence
+to prove the child stopped before B1 and no child process or other writer
+remains. Revalidate the original claim and winning nonce, branch, exact
+worktree, lock, and generated tokens. Inspect the worktree, commit history,
+linked PRs, child report state, and session artifacts for post-B1 work or
+unresolved allocation; a clean `git status` alone is not proof. Any restart,
+incomplete listing, unknown launch, mismatch, unreadable worktree,
+implementation change/commit, existing PR, or unresolved report artifact uses
+existing recovery/hold and never this shortcut. Observed 2026-10-25 on issue
+`#4698`; follow-up issue `#4714` records this narrow recovery.
+
+Reconcile scratch separately. Reuse a valid existing session record and its
+exact canonical root read-only. Use the first-allocation procedure from issue
+`#4685` only
+when complete process, session, and artifact evidence proves no earlier root,
+record, reservation, or child scratch/report artifact was created or used.
+Missing artifacts by themselves do not prove first use; unknown allocation or
+report history is a hold. Never overwrite, delete, unlink, or replace uncertain
+storage.
+
+After the initial evidence passes, read the complete trusted claim/hold
+history for the active claim and classify the child's hold before changing its
+roster state or posting a heartbeat. An active child hold requires a trusted,
+unedited `idd-hold` marker for the active claim under the
+[fan-out hold rule](#orchestrator-fan-out-variant): the trusted actor, agent
+and claim ids, and claim recorded for the roster entry must match, and
+GraphQL `lastEditedAt` must be explicitly `null`. The complete history must
+show that the marker is still active. If no trusted active hold exists, only a
+complete trusted history read can prove that none exists. A missing, edited,
+untrusted, or unreadable marker is not proof of absence; use existing
+recovery/hold. Observed 2026-10-30 on pull request `#4832` for issue `#4714`.
+
+The parent keeps the existing claim and activation nonce in the same worktree
+but does not enter B1 Step 3 yet. Before changing the per-issue role, posting a
+heartbeat, or changing either roster entry, persist a `pending` continuation
+recovery record as `issue-<n>-pre-b1-continuation.json` under the verified
+session scratchpad root. Create it exclusively; never overwrite or follow a
+pre-existing or symlinked file at that path. Later state changes replace only
+this record, using the atomic write and read-back step.
+Record the session id, issue, agent id, claim id, nonce, branch, exact worktree,
+child handle,
+pre-transition roster state, transition stage, intended parent role, intended
+final roster pair, and either the trusted active hold marker id and GitHub
+`created_at` or the complete-history evidence that no active hold exists.
+Write the record atomically and read it back. A conflicting, incomplete, or
+unreadable record uses existing recovery/hold. A pending record keeps the issue
+occupied exactly once and in-flight exactly once, pauses new refills/claims,
+and permits only the verified transition steps below; it blocks all other
+mutation or implementation until its exact effects are reconciled. A restarted
+parent treats a pending record as recovery/hold; it does not authorize this
+same-session shortcut.
+
+If the record proves an active child hold, first record the per-issue role
+change to `parent-continuation` in the pending recovery record. The parent then
+stops renewing that child as its orchestrator and posts an ordinary
+`claimed-by` heartbeat as the continuation worker. Verify the exact returned
+comment when available and the complete trusted claim/hold history; the
+heartbeat ends the hold only when the claim parser recognizes it as a valid
+worker heartbeat newer than the trusted marker. An orchestrator renewal does
+not end the hold. A complete read proving the heartbeat absent follows the
+existing bounded retry. If POST or read-back remains uncertain, keep the
+pending record and the existing child roster entry counted, preserve claim,
+worktree, and storage, and make no further mutation, budget/overlap call,
+refill, or implementation change. If the complete history proves no active
+hold, no hold-ending heartbeat is needed.
+
+If claim freshness requires a heartbeat and there is no active child hold,
+revalidate the claim and post the ordinary parent heartbeat under the existing
+claim rule, including its bounded retry. This renewal does not replace the
+complete-history proof that no hold exists. With an active hold, use the
+continuation-worker heartbeat above after recording the role change; a prior
+orchestrator renewal does not satisfy the hold-ending requirement. Any
+uncertain heartbeat remains pending.
+
+Only after the hold-ending heartbeat is verified, or complete trusted history
+proves no active hold, replace the roster atomically in one update: retain the
+child entry as `disposed` with its handle as history, and add one separate
+`parent-continuation` entry for the same issue, claim, and branch as `running`.
+The continuation entry represents the parent's active execution slot, not a
+dispatched worker; it has no worker handle or report path. Do not dispose the
+child and add the parent entry as separate roster writes. If the atomic update
+or its read-back is incomplete or uncertain, keep the pending record, retain
+the pre-transition child entry as the counted slot, and make no further
+mutation, budget/overlap call, refill, or implementation change until the
+exact effects are reconciled. After verifying both roster entries, atomically
+mark the recovery record `reconciled` and read it back. An uncertain record
+update remains pending and blocks B1.
+
+Count the continuation entry once in `--running`, pass its issue exactly once
+as `--in-flight`, and never count the disposed child. Keep the continuation
+entry active through the parent's terminal phase, then mark it `disposed`.
+Record both entries and the role transition in the run report. Do not enter B1
+Step 3 or start implementation until the hold-ending heartbeat is verified or
+complete trusted history proves no active hold, the recovery record is
+`reconciled`, and current ownership, storage/record state, both roster entries,
+and parent role are reconciled. A `disposed` child entry alone does not prove
+that the hold ended (observed on PR `#4832` for issue `#4714`). Only then
+continue in the same worktree with the original claim and nonce. Keep the
+issue as one occupied slot and in-flight through the
+parent's terminal phase. Pause new refills/claims while the parent implements,
+while managing known siblings normally; a hold on another issue is local, not
+global exhaustion. Resume ordinary discovery/refill after the parent reaches
+terminal and let normal budget/overlap checks choose eligible work. Never
+restart the ended child or mint a claim, nonce, or forced handoff. During
+recovery, do not delete the ended child's branch/worktree, take over a lock
+automatically, or reset lost work. After the parent reaches its terminal phase,
+the normal cleanup contract applies, including proof-bound F4 removal of the
+linked worktree and branch under `fully_autonomous_merge`.
+Report the child's actual pre-work stop and the parent's later result
+separately. Do not append a terminal worker report or F4 result for the pre-B1
+child, and do not change the worker-report schema.
+
+#### Session scratchpad lifecycle
+
+The orchestrator owns one scratchpad root for the full runtime session. Resolve
+and record it before Discover starts, before any fresh A5 claim, and before any
+worker dispatch. On restart, resolve the same root before rebuilding the roster
+or refilling. A worker only receives session-scratchpad paths under the root;
+the Worker brief's named critique scratch directory is the explicit exception.
+The worker never provisions the session root. This parent preflight closes the
+gap observed on issues
+`#4668` and `#4675`: no harness path had ever been allocated, so the missing
+value was not an operator setting to recover.
+
+Use the stable session identifier supplied by the current harness context and
+obtain a complete live harness worker listing. If the listing is unavailable or
+incomplete, treat prior-worker state as uncertain; hold for reconciliation
+before reuse, first allocation, or dispatch. Absence of scratchpad artifacts
+alone does not prove that no worker start was attempted. Do not derive an
+identity or root from the issue, branch, worktree, worker agent id, current
+directory, or a path that is absent. Require the supplied session id to be a
+non-empty,
+path-safe single component; reject separators and `.` or `..`. Bind the record
+to the exact session id, repository slug,
+canonical repository root, and canonical git common directory. Resolve the
+per-user state base the same way as `resolveStateBase` in
+`src/scripts/idd-worker-report.mts`: on POSIX, use an absolute
+`XDG_STATE_HOME`, otherwise `~/.local/state`; on Windows, use an absolute
+`LOCALAPPDATA`, otherwise `%USERPROFILE%/AppData/Local`.
+
+Keep the discovery record and root-reservation entry outside the scratchpad
+root, so a missing or unavailable scratchpad does not hide its own recovery
+state:
+
+```text
+<state-base>/idd-skill/orchestrator-sessions/records/<session-id>.json
+<state-base>/idd-skill/orchestrator-sessions/root-reservations/<root-key>.lock
+<state-base>/idd-skill/orchestrator-sessions/scratchpads/<session-id>/
+```
+
+The separate `scratchpads/` parent prevents a session id such as `records`
+from aliasing the record index (preventive; no observed runtime incident yet;
+identified during E1 review on 2026-10-25, PR `#4690`, issue `#4685`).
+
+Verify the canonical state base, record directory, reservation directory, and
+scratchpad root all lie outside every worktree. Reject symlink components along
+each managed path. Reuse an existing namespace only when it is a directory
+owned by the current user with private permissions; hold on a broad or
+conflicting namespace and do not change its permissions.
+
+The JSON record has `schemaVersion`, `sessionId`, `repository`,
+`repositoryRoot`, `gitCommonDir`, `scratchpadRoot`, and `allocationSource`
+(`harness` or `parent`). Its strict version 1 shape requires exactly these
+seven fields and rejects missing or additional fields:
+
+- `schemaVersion`: JSON integer exactly `1`.
+- `sessionId`: non-empty JSON string containing one path-safe component,
+  excluding `.`/`..`, path separators, and control characters.
+- `repository`: non-empty JSON string in `owner/repo` form. For the exact
+  current-session record, it must equal the current repository slug after
+  normalizing both owner and repo components case-insensitively before
+  comparison. Foreign records retain their own repository slug.
+- `repositoryRoot`, `gitCommonDir`, and `scratchpadRoot`: non-empty JSON
+  strings containing canonical absolute paths for the current operating
+  system.
+- `allocationSource`: JSON string exactly `harness` or `parent`.
+
+Reject an unsupported schema version, wrong JSON type, malformed value, or
+unknown property before trusting the record. After strict parsing, apply
+session and repository identity matching and full root-safety checks only to
+the exact current-session record. For foreign records, do not match identity
+fields to the live session; validate schema and path structure strictly, then
+use each safely comparable canonical root identity only for the candidate-root
+collision check below. An existing valid exact current-session record takes
+precedence over any new allocation. If that exact current-session record and
+the current harness context name different roots, treat that as a contradiction
+and hold. For the current session's harness-supplied root, verify the canonical
+path is an existing writable
+directory, has current-user-only access, contains no unsafe links, and lies
+outside every worktree for this repository. If the harness supplies no root,
+the parent may create the fallback root below the verified state base, outside
+every worktree. Require a stable session id and a writable state base first.
+
+For a first allocation, canonicalize the candidate root with the operating
+system's filesystem comparison rules (including case normalization on
+case-insensitive filesystems), then atomically create an exclusive
+reservation keyed by that path in the private `root-reservations/` directory.
+Create it with private permissions (POSIX mode `0600`; equivalent
+current-user-only ACL on Windows), name it with the SHA-256 digest of the
+canonical path's UTF-8 bytes, and store the full path, session id, and repository
+for exact read-back verification. An existing reservation without an exact,
+valid record for this session is a hold: preserve it and never overwrite or
+remove it automatically.
+
+Keep a first-allocation reservation while strictly parsing every session
+record and comparing the candidate root with each record's validated
+canonical root identity. For a foreign record, this is a collision check only:
+do not require its root to exist, prove its runner stopped, or inspect its
+worker, artifact, or report state. A valid foreign record with an
+unambiguously distinct root does not block allocation even when that root is
+absent. Hold and preserve unreadable, malformed, or unsafe records; records
+whose canonical root identity cannot be compared reliably; and any record
+naming or aliasing the candidate root. Apply
+the full session, repository, root-safety, worker, artifact, report, and
+recovery checks to the exact current-session record; keep the candidate's own
+reservation and first-allocation safety checks in force. Exclusively create
+and verify the current session record, then remove only the reservation this
+invocation created after verification.
+
+Observed 2026-10-30 on issue `#4827`: an autopilot run stopped before fresh
+Discover after a read-only snapshot showed two missing foreign roots and no
+candidate-root collisions. This was an agent interpretation, not a reproduced
+allocator defect; this prose and its consistency assertions do not establish a
+completed live autonomous run.
+
+A later preflight in the same uninterrupted allocator invocation may continue
+only when it carries the invocation-local owner token created after that
+invocation successfully acquired the exclusive reservation. Require exact
+session, repository, canonical root, and record matches, plus the complete
+collision, worker, artifact, and report checks. Keep the token only in that
+live invocation; never persist or reconstruct it from a matching session id,
+record, manifest, or copied context. A missing token means the invocation
+restarted or is unknown.
+
+For a restarted or unknown invocation, the valid record identifies the root
+but does not prove its runner stopped. Before reuse, the resumer must obtain a
+trusted maintainer's explicit confirmation in the current operator-run
+recovery: the maintainer confirms no orchestrator for this exact session is
+live and grants this resumer sole control. This is the operator confirmation
+in step 2 of [LWR](idd-resume-detail.md#lwr--local-worktree-recovery), a human
+assertion rather than a machine-checked liveness result. No issue thread or new
+marker is required; do not infer confirmation from prior comments or matching
+session identifiers. If confirmation is unavailable, hold and preserve the
+record and any reservation.
+
+Follow the liveness check in
+[LWR](idd-resume-detail.md#lwr--local-worktree-recovery) before resuming.
+Verify the record's exact session, repository, and canonical root. If a
+reservation remains, require its full tuple to match the record; if none
+remains, do not recreate it. Scan every record for root collisions and require
+settled worker, artifact, and report evidence. During recovery preflight,
+reuse the recorded root read-only and leave any reservation untouched. After
+sole control is established, an eligible never-dispatched resume may use the
+normal brief/report path and write only to verified child issue directories
+and report drafts under that root. Matching files alone never authorize
+reuse, elapsed time and process ids do not prove liveness, and no new marker or
+automatic unlink is used. Hold and preserve on any mismatch or uncertainty.
+A per-session exclusive record does not serialize the first allocation scan:
+two sessions could otherwise accept one canonical root (preventive; no
+observed runtime incident yet; identified during E1 review on 2026-10-25, PR
+`#4690`, issue `#4685`). Apply collision checks to harness-supplied and
+parent-fallback roots.
+
+Create each parent-owned directory exclusively with private permissions
+(POSIX mode `0700`; equivalent current-user-only ACL on Windows), refusing
+symlinks and conflicting existing entries. Create the record exclusively too
+(POSIX mode `0600`; equivalent current-user-only ACL on Windows), then read it
+back and verify it before dispatch. Never overwrite a record, reuse an
+unrecorded fallback directory, remove an old root, or use `mkdir -p`. If root
+allocation succeeds but exclusive record creation or read-back fails, keep the
+allocated directory and any known path, start no worker, and hold for
+reconciliation. The worker-side missing-parent guard remains in force (issue
+`#4377`). This documented lifecycle adds no helper, policy key, or automatic
+scratchpad deletion.
+
+Classify the current session's entry using the actual harness context, its
+exact session-and-repository record, and live worker and artifact evidence.
+Use foreign session records only for the collision checks described above:
+
+| Evidence                                                                                                                                                                                                                                                                                                        | Verdict and next action                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The harness supplies an existing valid root with no prior record or reservation on first entry before claims or dispatch; a complete worker listing and artifact evidence show no prior start, and all session records show no canonical root collision                                                         | Verify the root, reserve it, create and verify the record exclusively, then reuse it                                                                                                               |
+| There is no supplied root, record, reservation, or fallback directory, and harness context identifies a first entry before claims or dispatch; the complete live worker listing and session artifacts show no prior start, and all session records show no canonical root collision                             | Allocate the private fallback root and record before Discover                                                                                                                                      |
+| The live worker listing is unavailable or incomplete                                                                                                                                                                                                                                                            | Treat prior-worker state as uncertain and hold for reconciliation before reuse, allocation, or dispatch                                                                                            |
+| A root reservation exists without an exact valid record for this session, does not match that record, or cannot be read or verified                                                                                                                                                                             | Hold and preserve it; do not accept or allocate the root                                                                                                                                           |
+| A scanned session record is unreadable, malformed, unsafe, or its canonical root identity cannot be compared reliably                                                                                                                                                                                           | Hold and preserve the record; do not skip or delete it                                                                                                                                             |
+| A valid foreign record has an unambiguously distinct canonical root that is missing                                                                                                                                                                                                                             | If exact-session and candidate-root reservation checks pass, proceed with first allocation; preserve the foreign record, with no foreign-runner liveness or worker, artifact, or report inspection |
+| A valid foreign record has an unambiguously distinct canonical root that exists                                                                                                                                                                                                                                 | Use the same first-allocation verdict as for a distinct missing root; preserve the foreign record, with no foreign-runner liveness or worker, artifact, or report inspection                       |
+| Another session records or aliases the canonical candidate root, even when that root is absent                                                                                                                                                                                                                  | Hold and preserve evidence; do not accept or allocate the colliding root                                                                                                                           |
+| The exact record matches this session, repository, and canonical root; the same uninterrupted allocator carries its invocation-local owner token from successful exclusive reservation acquisition; the full collision scan is clear; root and worker, artifact, and report evidence are valid and settled      | Continue this invocation on the recorded root; leave any reservation untouched and recover report locations before refill                                                                          |
+| The exact prior record is valid; the token is absent because this is a restarted or unknown invocation; a trusted maintainer confirms no live same-session orchestrator and grants this resumer sole control in the current operator-run LWR step 2 interaction; all collision and settled-evidence checks pass | During recovery preflight, reuse the recorded root read-only and leave its reservation untouched; after sole control, use the normal brief/report path                                             |
+| The exact record is valid in a restarted or unknown invocation, but the trusted maintainer has not confirmed no live same-session orchestrator and sole-resumer control in the current recovery                                                                                                                 | Hold and preserve the record and any reservation until that operator confirmation                                                                                                                  |
+| Claims already exist, but live evidence establishes that no worker was dispatched                                                                                                                                                                                                                               | Revalidate every claim, winning nonce, worktree lock, and token record first; then bootstrap the root and resume those claims without minting a claim or nonce                                     |
+| A worker dispatch is proven, but no safe root or matching session record can be recovered                                                                                                                                                                                                                       | Hold and preserve briefs and reports; do not allocate or redispatch until ownership and report locations are reconciled                                                                            |
+| The fallback directory already exists without a valid record                                                                                                                                                                                                                                                    | Hold and preserve it; do not reuse or overwrite it                                                                                                                                                 |
+| The exact current-session record is unreadable, invalid, linked unsafely, for another session or repository, or its root is missing, contradictory, or unsafe                                                                                                                                                   | Hold and preserve all evidence; do not allocate a replacement                                                                                                                                      |
+| Worker launch or prior-worker state is uncertain                                                                                                                                                                                                                                                                | Reconcile the live worker list and existing briefs and reports; hold while any dispatch or ownership remains unresolved                                                                            |
+| Allocation succeeded but the durable record cannot be verified                                                                                                                                                                                                                                                  | Keep the directory and known path, start no worker, and hold for reconciliation                                                                                                                    |
+| Stable session identity or a verified writable root cannot be resolved                                                                                                                                                                                                                                          | Hold with the missing prerequisite; do not guess a harness capability or ask for a path that was never issued                                                                                      |
+| A worker receives a missing parent path                                                                                                                                                                                                                                                                         | Hold in the worker, create nothing, and never use `mkdir -p`                                                                                                                                       |
+
+On the already-claimed, never-dispatched recovery route, do not repeat A5 or
+mint another activation nonce. Verify each existing claim against the live
+issue, the winning nonce, the worktree-local lock, and the generated-token
+record. Confirm the harness has no matching started worker and inspect any
+available briefs and report drafts before allocating. If worker state cannot be
+proven absent, stop for reconciliation instead of starting a replacement.
+
+**Resume dispatch.** Resume only claims classified by the no-dispatch route.
+Require an open issue and `already_owned` claim with its winning nonce,
+worktree lock, and token record, plus a complete worker listing and session
+artifacts with no matching worker, brief, or report draft. Reassert ownership
+immediately before dispatch; eligible resumes bypass step 4.
+
+Before fresh Discover, run the profile-selected `idd-worker-budget` with
+`--running <n> --startable <resume-count>`. Add `--harness-limit <limit>` when
+the worker mechanism row gives one. Pass resume IDs to the
+profile-selected `discover-shared-file-overlap` with `--issues <ids> --batch
+<slots> --check-overlap`, each live issue as `--in-flight`, and
+`--desync-token <session-agent-id>` when `discover.selectionDesync` is
+`session-offset`. Start only its picks with the normal brief/report path and
+existing claim, nonce, branch, and worktree; skip A4.5/A5. Repeat on refill
+until no resume remains, then Discover fresh candidates. A zero-slot result
+follows the normal budget wait/stop rule; no pick preserves the claim. If
+ownership changes, dispatch evidence appears, or absence is uncertain, hold;
+never start a second worker for the claim.
+
+Running this variant safely requires:
+
+- **A non-context-inheriting delegation mechanism for the full
+  worker role, from B1 through the merge policy's terminal phase, whenever the
+  calling tool offers one — a
+  strong preference, not merely a suggestion, per
+  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).**
+  A context-inheriting worker (one that receives the orchestrator's
+  complete conversation, such as Claude Code's `fork` subagent) can let
+  the orchestrator's own recent framing compete with, and sometimes
+  override, the delegation brief's own role statement — the same
+  problem [Critique pass invocation](#critique-pass-invocation) already
+  avoids for Claude Code's narrower critique-pass role, since that row
+  also picks a fresh `general-purpose` agent rather than a
+  context-inheriting one. Extend that same preference to this full
+  worker role whenever the tool exposes the choice; a
+  context-inheriting mechanism is a fallback only for when no
+  non-context-inheriting alternative exists, and even careful brief
+  wording (the explicit role-statement text in
+  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation))
+  does not reliably close its residual role-misread risk — a
+  documented known limitation.
+- **A concurrency cap**, set by `orchestrator.maxWorkers` and enforced on
+  each dispatch by `idd-worker-budget` (see the
+  `.github/instructions/idd-orchestrator.instructions.md`),
+  sized against CI-minute cost,
+  shared-file contention, and host capacity rather than raised without
+  bound. The optional `discover-shared-file-overlap` helper (see
+  [IDD helper script evaluation](idd-helper-scripts.md#discover-shared-file-overlap-contract))
+  reports high-contention shared-file overlap evidence to inform both
+  the cap and the delegation order. Neither CI-minute cost nor
+  shared-file contention reflects host capacity: a worker's own build
+  and test children compete for the same cores and memory as every other
+  session on the host, so run a cheap preflight before each dispatch.
+  Compare the host load signal with the core count (`nproc`, or
+  `sysctl -n hw.ncpu` on macOS), and read the available memory
+  (`MemAvailable` in `/proc/meminfo`, or the platform equivalent). On
+  POSIX the load signal is the 1-minute load average (`uptime`). On
+  Windows, `os.loadavg()` is always `[0, 0, 0]`, so `idd-worker-budget`
+  reads `\System\Processor Queue Length` via `typeperf` instead; an
+  unreadable sample stays unavailable and yields zero slots with
+  `host-load`, and a queue at or above the core count is also
+  `host-load` (POSIX loadavg still uses a strict greater-than check).
+  As starting values an operator may tune — this guide's own starting
+  choice, not measured limits — start no new worker while the load
+  signal exceeds the core count (or, on Windows, meets it) or the
+  available memory is under 2 GiB. A `host-load` stop with a readable
+  load and core count is waited out: the orchestrator re-checks every
+  60 seconds and dispatches once
+  `orchestrator.hostLoadClearStreak` (default 3) consecutive readings have a
+  free slot, stopping at `orchestrator.hostLoadWaitCeiling` (default `PT30M`).
+  A memory stop is not waited out; dispatch fewer workers instead. In one
+  orchestrated private downstream adopter's run (reported 2026-09-30,
+  kurone-kito/idd-skill#3677), a delegated worker's tool calls stopped
+  returning and the runtime ended it (`Agent stalled: no progress for
+  600s`) while the 1-minute load average read 90.87 on 24 cores and no
+  memory was available, and full-suite runs failed on timeouts in
+  unrelated specs that all passed alone.
+- **Instruction freshness.** An orchestrator session reads its instruction
+  files once but can run for many hours, so a rule that lands on the base
+  branch mid-run never reaches it. In the 2026-10-14 to 2026-10-15 run, pull
+  request kurone-kito/idd-skill#4290 (merged 2026-10-14T16:36Z) added the
+  host-load wait rule after the session had read its files, and the session
+  kept using a single reading (no issue records the incident). Every
+  `idd-worker-budget` call after the first baseline is set, the host-load
+  re-checks included, therefore passes `--instructions-since` with the
+  baseline, run from the repository root because the helper reads the policy
+  file from the working directory. It reads local refs only and never
+  fetches, so the workers' own `git fetch origin` in B1 and F4 keeps its base
+  ref current, and it needs git 2.28 or newer. Its `instructionsChanged` lists
+  the paths under `.github/instructions/` and `docs/idd-workflow.md` that
+  differ between the baseline and `instructionsTip`, the commit the base ref
+  resolves to. Only a listed file that this session already loaded is re-read.
+  - The first baseline is `git rev-parse HEAD` of the primary checkout when
+    the session reads the orchestrator file; a restarted session takes a new
+    one the same way.
+  - Every later call passes the baseline. The baseline advances to the
+    `instructionsTip` of a call only after every listed file that this session
+    already loaded has been re-read, so a change is reported until it has been
+    read and then not again.
+  - A call that reports an error, including a baseline that is not an
+    ancestor of the tip, leaves the baseline as it is. To recover, when
+    `instructionsTip` is not null, the orchestrator re-reads every file it
+    loaded and then takes that tip as the baseline. If the next call reports
+    an error again, it stops passing `--instructions-since` for the rest of
+    the session and tells the operator once.
+  - A changed file is re-read with `git show <instructionsTip>:<path>`, which
+    does not depend on the state of the checkout; a file the session first
+    loads later is read the same way, because the checkout may lag the tip. A
+    deleted path needs no re-read and counts as removed. `git show` reports
+    such a path as absent from the tip.
+- **Full per-issue gating before every delegation.** The orchestrator
+  runs the complete A4.5/A5 suitability and claim gates (and the A4
+  viability gate that precedes them) for each issue before handing it to
+  a worker; claiming several issues concurrently is never a shortcut
+  around those gates. A pick that fails A4.5, or A5 before or after the claim
+  marker is posted, starts no worker and gets no roster entry, and only a later
+  full Discover run reconsiders the pick; a failure after the marker is
+  contested and keeps its claim and worktree.
+- **A delegation brief that restates the background-wait topology
+  warning and the worker's exit boundary.** Each worker's brief must
+  carry the
+  [wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+  topology-safety condition, so a worker never assumes an unconfirmed
+  background wait resumes its own turn: the worker must wait
+  synchronously or with a confirmed topology-safe wake for any
+  backgrounded command, and must not end its turn until that wait has
+  a confirmed result (kurone-kito/idd-skill#2221,
+  kurone-kito/idd-skill#2624). When the orchestrating session already
+  has a same-session sibling worker that stalled this way, the brief
+  must cite that sibling failure by name. The brief must also state that
+  the worker's execution ends at the merge policy's terminal phase (F4 under
+  `fully_autonomous_merge`, F2.5 otherwise): the worker
+  reports its final result back to the orchestrator instead of
+  independently entering F5's Discover step, so Discover/Claim
+  ownership stays with the orchestrator alone. When the run is scoped to end
+  earlier than that terminal phase, whether by the operator or by the
+  orchestrator (for example, "stop at F2"), the brief must name that boundary
+  and say that finishing that phase and stopping there with no gate or unmet
+  condition blocking is a scope stop, not a hold: the worker's report draft
+  carries `scope-stopped` and not `held`. A gate or unmet condition that
+  blocks the run before or at the boundary is a hold, and a scope relayed after
+  dispatch carries the same statement (see
+  [Worker report outcomes](#worker-report-outcomes)). The
+  [Delegation brief template](#delegation-brief-template) assembles the
+  elements of the brief bullets in this list into one fill-in form.
+- **A delegation brief that requires issue-number-namespaced
+  scratchpad filenames.** Concurrently delegated workers can share
+  the orchestrating session's own scratchpad directory —
+  session-scoped rather than subagent-scoped in at least one harness
+  (e.g. Claude Code) — so a generic filename (`pr-body.md`,
+  `commit-msg.txt`, `plan-draft.md`, etc.) one worker writes under
+  its brief can collide with, and be silently overwritten by, a
+  sibling worker writing the same name under its own brief. Each
+  delegation brief must instruct its worker to prefix every
+  scratchpad file it creates with the issue number (for example
+  `2878-pr-body.md`), or to create and use an issue-numbered
+  scratchpad subdirectory, instead of a generic filename a sibling
+  worker might independently produce too under its own brief
+  (observed 2026-09-10,
+  kurone-kito/idd-skill#2900). This is a separate requirement from
+  the background-wait topology-safety condition above — a
+  namespacing convention for concurrent scratchpad writes, not a
+  wake-up-discipline concern.
+- **The delegation brief carries the claim token verbatim, nonce
+  included — and the worker actively revalidates it.** The worker
+  adopts the orchestrator's already-verified `{agent-id}` / `{claim-id}`
+  pair as its own for the run (mirroring forced-handoff adopt-verbatim),
+  carrying the orchestrator's current activation nonce rather than
+  minting a new one — a minted nonce would collide with the
+  orchestrator's for the same `{claim-id}` and flag legitimate
+  delegation as a second activation. Before each mutation, the worker
+  recomputes the nonce winner and confirms it still matches the carried
+  value, the same safety check a self-posting session performs. See
+  [Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).
+- **Serialized worktree/clone lifecycle operations when workers share
+  one clone.** Concurrent `git fetch` / `git worktree add` / `git
+  worktree remove` / local `{development-branch}` updates from the
+  same primary clone can collide; serialize these specific operations
+  behind the [clone-scoped lock](idd-helper-scripts.md#clone-scoped-lock),
+  or give concurrent workers separate clones, once the concurrency cap
+  allows more than one worker at a time.
+- **Resume-specific recovery when a worker dies mid-turn.** Re-verify
+  claim ownership and worktree state before continuing; treat any
+  uncommitted work found in the worktree as unverified input to check,
+  never as something to trust or silently discard. Also check for a
+  stale clone-scoped lock before redelegating -- skip this check under
+  `instructions-only` running one worker at a time, which never
+  contends for the lock; see
+  [Clone-scoped lock](idd-helper-scripts.md#clone-scoped-lock) for that
+  profile's own multi-worker-one-clone caveat: run
+  `node scripts/clone-lock.mjs --check` (or the profile-selected
+  `idd:clone-lock` command with `--check`, per that same section, for
+  the literal per-profile invocation) and, if it reports the lock
+  present, follow that same section's manual-recovery procedure in
+  full -- by design this lock never auto-recovers a stale holder
+  (observed 2026-09-01, kurone-kito/idd-skill#2223,
+  kurone-kito/idd-skill#2389) -- before delegating a fresh subagent
+  with a resume-specific briefing rather than resuming the dead
+  worker's own
+  context. The exception is a worker the runtime can still message or
+  resume (for example by its agent id), such as one it reported stalled
+  or ended while its claim and worktree were still intact: resuming that
+  same worker with freshly verified facts is an accepted, cheaper path
+  than a fresh subagent, provided the orchestrator first verified the
+  claim, the worktree, and the child processes the worker still has
+  running (for example in the process table). Those children are waited
+  for, by PID, and never duplicated by a second copy — a fresh worker
+  would start a second heavy run on the same host. On an in-place
+  resume, still run the same lock check: a present lock whose
+  `holderAlive` is true is expected and is waited for, never removed; a
+  present lock whose holder is gone is stale and takes the
+  manual-recovery procedure above. A worker that can no longer be
+  messaged keeps the fresh-subagent path above, and the replacement's own
+  start identifier then replaces the roster entry's handle, which is the
+  `workerHandle` of its report. In a downstream
+  adopter's run (reported 2026-09-30, kurone-kito/idd-skill#3677), the
+  orchestrator verified claim routing, `git log`, the pull request list,
+  and the process table, sent one message to the same worker with those
+  facts and one instruction (wait for the child by PID, do not start a
+  second full run), and the worker continued from its own context and
+  reached F2 in about 80 minutes without repeating work.
+- **A delegation brief resuming mid-review at E4 or E9 must run the
+  cold-start reconstruction.** A fresh worker dispatched straight into
+  E4 or E9 without a `ReviewItems_snapshot` from its own E1-E3 pass
+  must not assume `ReviewItems_snapshot` still reflects live state —
+  see the ReviewItems_snapshot lifecycle section's Cold entry outside
+  Resume
+  note above and `idd-review-snapshot.instructions.md`'s cold-start
+  reconstruction section. This covers only those two named entry
+  points; a brief that instead hands a worker into E10, E13, E14, or
+  E15 has no supported cold-entry route yet -- stop and report rather
+  than improvising one.
+- **Independently verify a worker's reported terminal outcome before
+  trusting it.** A worker's final-turn text describes what it
+  _attempted_, not proof of what actually landed on the forge. Before
+  dispatching the next worker or otherwise acting on a reported "merged"
+  outcome, confirm live GitHub state directly — for example
+  `gh pr view <n> --json state,mergedAt` and
+  `gh issue view <n> --json state,closedAt` — rather than trusting the
+  worker's own narrative. A runtime's completed notice that says the
+  worker still has background work of its own running, or that its
+  result may be interim, is not final: check the worktree and the claim,
+  and wait for the worker to resume while there is live evidence of the
+  background work it reported (a running child process, a background
+  task the runtime still lists as running, or new worktree changes),
+  restarting the wait on each new piece of evidence; after one runtime
+  stall interval (the runtime's own no-progress limit) with none and no
+  resume, apply the dangling-state check below. A completed notice with
+  no such statement is a real stop: verify its outcome as above. In a
+  downstream adopter's run (reported 2026-09-30,
+  kurone-kito/idd-skill#3677), one worker ended its turn four times with
+  "still waiting on the review delegate; I will continue when it lands"
+  while a background task of its own was running, the harness reported
+  each stop as completed with an interim note, and each time the worker
+  resumed on its own; a fifth notice carried no such note and was a real
+  stop, so an orchestrator that read "completed" as final would have
+  verified "merged?", found no, and re-delegated.
+- **Check for dangling or broken state after an ambiguous worker
+  dispatch.** When a worker's turn ends without a clean final report
+  (stalled, killed, timed out) — especially if its last visible action
+  was a mutating step such as an F3 merge-execution command — check for
+  a PR left in a failed-merge-attempt state (e.g.
+  `gh pr view <n> --json mergeable,mergeStateStatus`) or an orphaned
+  claim before dispatching further workers, rather than assuming success
+  or failure either way.
+- **Hold marker.** A worker that stops at a hold posts, on the claimed issue,
+  a comment whose first bytes are `<!-- idd-hold: {agent-id} {claim-id}
+  {ISO8601-timestamp} -->`, followed by a short visible note (`_{agent-id}:
+  issue hold — IDD automation marker. Do not edit._`), through
+  `post-idd-marker --type idd-hold --target issue <n> --agent-id <id>
+  --claim-id <id> --timestamp <ISO8601> --apply` or, where no helper runtime
+  exists, the direct JSON `POST` path. Without `--apply` the command only
+  previews the body. The claim parser never reads this marker, so it cannot
+  change who owns the claim; the orchestrator reads it from the issue comments
+  by the trust rule below, which `resolveTrustedHoldMarkers` implements (the
+  Hold marker contract in `idd-helper-scripts.md` covers the helper side). The
+  delegation brief must tell the worker to post it when it stops at a hold. A
+  delegated worker posts it after its last `claimed-by` and posts no
+  `claimed-by` while the hold lasts, because the orchestrator owns the hold
+  heartbeat; this is the fan-out exception to the shared Hold / suspend 12 h
+  re-post. A hold marker is trusted only when the actor that posted the active
+  claim's `claimed-by` also posted it, and its agent id and claim id match
+  both the active claim and the claim this session recorded for that roster
+  entry in section 3 step 4, because the ids alone are public. It also needs
+  an explicit GraphQL `lastEditedAt: null`, resolved for each returned comment
+  by node id; an edited marker, or an edit state that cannot be resolved, is
+  ignored, as the claim-family marker edit-state contract in
+  `idd-helper-scripts.md` requires. A held worker is a roster entry that is
+  not `disposed` whose claim has a trusted hold marker newer than its latest
+  valid `claimed-by`, not counting the orchestrator's own renewals of that
+  claim. The hold starts at the earliest such marker's GitHub `created_at`,
+  not its embedded timestamp. The hold ends when the worker posts any other
+  valid `claimed-by` (one the claim parser recognizes as a heartbeat for this
+  claim, so a trusted, unedited comment with the active claim's ids and
+  branch; an anomalous or invalid one is ignored), when the entry is
+  `disposed` under the ordinary fan-out lifecycle, or when the claim is
+  released or superseded. The verified pre-B1 parent-continuation route is
+  stricter: it disposes the child only after a hold-ending heartbeat is
+  verified or complete trusted history proves that no hold is active. There,
+  disposal records the verified hold state; it does not prove that the hold
+  ended. A resumed worker
+  follows the normal report path. A released or superseded claim cannot be
+  renewed, so the orchestrator marks its entry `stalled` and follows the
+  worker-specific recovery, which re-verifies the claim and reports its state
+  to the operator; the entry leaves `--running` only when that recovery
+  disposes of it. A restarted orchestrator cannot tell its earlier renewals
+  apart, so it treats any valid `claimed-by` newer than the marker as ending
+  the hold and renews nothing.
+- **Held-worker renewal.** A held worker, as the hold marker defines, is
+  renewed at the orchestrator's wake-ups in section 4 of its phase file. A
+  worker that completes while held skips the report and disposal of section 5:
+  its entry stays `reporting`, and the renewal runs at those wake-ups. At or
+  after 72 h from the hold start, the claim revalidation gate confirms the
+  active claim is still this claim; the orchestrator then posts `unclaimed-by`
+  for it and records the hold and cap in
+  [the run report](#orchestrator-run-report). Once that post succeeds,
+  nothing is appended to the worker report store, because a claim released
+  without a merge or handoff has no terminal phase (Orchestrator restart, step
+  4); the release goes in the run report, and the entry is then marked
+  `disposed`. Before the cap, each `claimed-by` re-post, due every 12 h from
+  the latest valid one, first has the claim revalidation gate confirm the
+  active claim's agent id and claim id, then copies its `branch` verbatim. A
+  failed heartbeat is retried once; if the retry also fails, the run report
+  records the hold and the failed post, and the claim is left untouched. A
+  failed 72-hour `unclaimed-by` leaves the claim in place, and the run report
+  records that the cap was reached and the release post failed. In both cases
+  the orchestrator posts no second claim id and starts no new claim.
+
+#### Delegation brief template
+
+The orchestrator fills in this block to write each worker's delegation brief.
+It puts the elements that the brief bullets above,
+[Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation),
+and section 5 of the orchestrator phase file require into one form, and it links
+their rules instead of restating them. Replace each single-brace placeholder
+with its value from the list below, and copy the parts into the brief. The link
+targets are relative to this file, so rewrite each one to a repository-root path
+(for example `docs/idd-workflow.md#worker-delegation`) when you copy it. A "Fill
+note" paragraph addresses the orchestrator, so it is not copied. The incident
+counts in the notes come from the operator's retrospective of the source
+repository's 2026-10-14 to 2026-10-15 orchestrator run, which is kept outside
+the repository.
+
+- `{issue-number}`: the claimed issue.
+- `{agent-id}` and `{claim-id}`: the claim token the orchestrator verified,
+  verbatim.
+- `{nonce}`: the orchestrator's current activation nonce, verbatim and never
+  minted anew.
+- `{branch-name}`: the branch named in the claim marker.
+- `{worktree-path}`: the worktree the orchestrator pre-created for the claim.
+- `{scratchpad-dir}`: an issue-numbered subdirectory of the resolved session
+  scratchpad root (see the Session scratchpad lifecycle and Scratchpad part).
+- `{report-path}`: the worker's report draft, a file whose name starts with the
+  issue number, directly in the resolved session scratchpad root.
+- `{terminal-phase}`: F4 under `fully_autonomous_merge`, F2.5 otherwise, or
+  the earlier phase that the run is scoped to end at (see the Terminal phase
+  part).
+
+**Role.** You are the sole worker for issue `{issue-number}`. No peer worker
+exists for it, so there is nobody to coordinate with or to wait on for a reply;
+a critique agent that the Critique allowance part permits is not a peer. Do
+the implementation yourself and do not re-delegate it. See
+[Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).
+
+**Claim token.** Your claim token is `{agent-id}` / `{claim-id}` and your
+activation nonce is `{nonce}`. Adopt them verbatim and mint neither a new claim
+nor a new nonce. Before each mutation, recompute the nonce winner for
+`{claim-id}` and confirm that it still equals `{nonce}`; a different winner
+means the claim is lost. See
+[Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation).
+
+**Branch and worktree.** Your branch is `{branch-name}` and your worktree is
+`{worktree-path}`, already created: reuse it without B1, running only the
+dependency install and checking that `git rev-parse --abbrev-ref HEAD` returns
+`{branch-name}`, and do your work there. Before any branch-state action, open D1
+in
+[idd-pr-submit.instructions.md](../.github/instructions/idd-pr-submit.instructions.md#d1--sync-development-branch-before-first-push)
+and the "E-phase branch-sync check" section of
+[idd-review-triage.instructions.md](../.github/instructions/idd-review-triage.instructions.md#e-phase-branch-sync-check),
+and do not paraphrase either.
+
+**Wake-up discipline.** Never end your turn while a background wait or a
+background command is unresolved, because a completion notice can reach only the
+orchestrator. Wait synchronously, or with a confirmed topology-safe wake, as the
+topology-safety condition of the
+[wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+says.
+
+Fill note: when a same-session sibling worker has stalled this way, add a line
+that cites that failure by name.
+
+**Execution timeout.** Before a CI watch or a heavy local command, set the
+execution-timeout override that the
+[wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+names, near the calling tool's own ceiling.
+
+**Terminal phase.** You run your whole span through `{terminal-phase}`, then
+report back to the orchestrator and do not enter F5's Discover step. Your
+worktree was pre-created, so it takes the B1 skip of "Already inside a
+host-isolated worktree" in
+[idd-work.instructions.md](../.github/instructions/idd-work.instructions.md#already-inside-a-host-isolated-worktree).
+
+F4 cleanup, for a run that ends at F4. Under `fully_autonomous_merge` that means
+every step of
+[F4](../.github/instructions/idd-merge.instructions.md#f4--cleanup), with the
+[F4 head proof](idd-resume-detail.md#f4-head-proof) reused or captured before
+step 3, ending with step 7's final `unclaimed-by`. The F4 skip of that section
+(skip the primary-worktree steps and the worktree removal, and let the harness
+reclaim the checkout) applies only when the harness itself reclaims the
+worktree. The orchestrator created yours on the shared clone, so you run F4
+steps 4 and 5 yourself, with step 4's fetch and step 5's worktree removal behind
+the [clone-scoped lock](idd-helper-scripts.md#clone-scoped-lock), as the lock
+sentence of F4 step 4 says, and that overrides "let the harness reclaim it".
+Both steps run from the primary worktree, which is the first entry of
+`git worktree list`: change into it before step 4 and stay there for step 5,
+which removes your own worktree and branch. Never remove the checkout that you
+are standing in.
+
+Fill note: when the run is scoped to end before the merge policy's terminal
+phase, name that earlier phase as `{terminal-phase}` and add that finishing it
+and stopping there, with no gate or unmet condition blocking, is a scope stop
+and not a hold: the report draft carries `scope-stopped` and not `held`. When
+`{terminal-phase}` is not F4 (F2.5 or an earlier phase), delete the whole
+paragraph that begins "F4 cleanup, for a run that ends at F4" and keep the rest
+of this part, because no cleanup runs before a merge. When the worker has its
+own clone, rewrite the sentence about the shared clone and drop the clone-scoped
+lock clause from that paragraph. A brief line
+that forbids edits in the primary worktree must exempt F4 steps 4 to 6, which
+run from the primary worktree. The shared-clone override and this exemption are
+preventive; no observed incident yet. Observed in the source repository's
+2026-10-14 to 2026-10-15 orchestrator run (no issue records the incident
+itself): most briefs drew the worker's span too narrowly, so the orchestrator
+finished the F4 steps by hand for most workers.
+
+**Scratchpad.** Your scratch files go only in `{scratchpad-dir}`, an
+issue-numbered subdirectory of the session scratchpad, with these exceptions:
+your report draft at `{report-path}`, and the critique scratch directory that
+Critique pass invocation names, if you start a critique agent. Never write
+scratch files in `{worktree-path}`, the pre-created worktree that you reuse.
+Concurrently delegated workers share the scratchpad, so the issue-numbered
+directory keeps your files apart from theirs, as the
+[fan-out variant](#orchestrator-fan-out-variant) requires. Before you create it,
+confirm that its parent path already exists. When the parent path is missing,
+create nothing and end the run as a hold: post the hold marker of the Hold
+marker part, and let your report draft carry `held`, as for any hold; if
+`{report-path}` cannot be written because the parent path is missing, the hold
+marker alone is the report. Create the issue directory exclusively with private
+permissions (POSIX mode `0700`; equivalent current-user-only ACL on Windows),
+using a plain mkdir and never `mkdir -p`. Before reusing an existing issue
+directory, inspect it without following links (`lstat`); require a real
+directory owned by the current user with private permissions, then verify its
+canonical path remains beneath the verified session root. Hold and preserve an
+entry that is a symlink, non-directory, owned by another user, too broadly
+accessible, or outside that root. If safe creation fails for another reason
+while the parent exists, fall back to prefixing each scratch file written in
+that parent path with the issue number, for example `2878-pr-body.md`.
+
+Fill note: run the Session scratchpad lifecycle preflight and use its verified
+root to derive `{scratchpad-dir}`. Treat a harness-reported path as input to
+verify, never as a path to copy without checking the session record. Do not
+invent a path or ask for a harness setting when the harness did not issue one;
+issues `#4668` and `#4675` had no prior allocation to recover. Observed in the
+source repository's 2026-10-14 to 2026-10-15 orchestrator run (no issue records
+the incident itself): one brief went out with a mistyped scratchpad path and
+needed a correction message to the running worker.
+
+**Critique allowance.** For the critique pass only, you may start a
+non-context-inheriting agent, as a carve-out from the Role part. Follow
+[Critique pass invocation](#critique-pass-invocation) in full, including the
+rules that its critique brief states, for the wait ceiling, the stop tool, the
+wake-up, the scratch directory, and the scratch check. If you cannot confirm
+that you can arm a wake-up and stop the agent, as the pre-launch check in that
+section requires, start no agent and run an inline self-critique instead. Never
+end your turn while a critique agent is still running.
+
+Fill note: keep this part only when the Limits column of the
+[Worker delegation](#worker-delegation) table allows it. The worker sits at
+nesting depth 1 and its critique agent at depth 2, so the limit must be at least
+depth 2 for the worker's harness: Claude Code lists a nesting depth of 3, and
+Grok Build lists one level, so there the critique stays an inline self-critique,
+as it does for a Limits cell that is `unverified` or gives no depth. Keep it
+only when the worker is not a context-inheriting fork either, because the
+Known limitation in `claim-orchestrator.instructions.md`, which
+[Orchestrator delegation](../.github/instructions/idd-claim.instructions.md#orchestrator-delegation)
+points at, records that fallback's
+[residual role-misread risk](idd-design-rationale.md#context-inheriting-delegation-residual-risk).
+Otherwise replace the body of this part with one line that tells the worker to
+run each critique pass as an inline self-critique, and remove the clause about a
+critique agent from the Role part and the "and the critique scratch directory"
+exception from the Scratchpad part. The Limits gating is
+preventive; no observed incident yet. Observed in the source repository's
+2026-10-14 to 2026-10-15 orchestrator run (no issue records the incident
+itself): none of about 25 briefs allowed the critique agent, so the workers'
+critiques ran inline.
+
+**Hold marker.** When you stop at a hold, post the `idd-hold` marker on the
+claimed issue after your last `claimed-by`, as the Hold marker bullet of the
+[fan-out variant](#orchestrator-fan-out-variant) says, and post no `claimed-by`
+while the hold lasts: the orchestrator owns the hold heartbeat. Your report
+draft then carries `held`.
+
+**Review cold start.** Do not assume that `ReviewItems_snapshot` still reflects
+live state. Run the
+[cold-start reconstruction](../.github/instructions/idd-review-snapshot.instructions.md#cold-start-reviewitems_snapshot-reconstruction)
+and the Cold entry outside Resume note of the
+[ReviewItems_snapshot lifecycle](#reviewitems_snapshot-lifecycle).
+
+Fill note: include this part only when the brief hands the worker into E4 or E9
+without a `ReviewItems_snapshot` from the worker's own E1 to E3 pass. A brief
+that hands a worker into E10, E13, E14, or E15 has no supported cold-entry route
+yet, so stop and report instead.
+
+**Worker report.** Write your final report as a draft to `{report-path}`,
+outside the worktree. Fill the worker-supplied fields of
+`schemas/worker-report.schema.json`:
+`schemaVersion`, `issue`, `pullRequest`, `claimId`, `harness`, `workerHandle`,
+`terminalPhase`, `outcome`, and the optional `stalls`,
+`deviations`, `frictions`, `followUps`, and `unfiledFollowUps`. Use
+`followUps` only for issues you filed; put textual follow-ups you identified but
+did not file in `unfiledFollowUps`. Give `workerHandle` any non-empty
+value, such as `{agent-id}`, which the orchestrator overwrites from its roster
+entry. Leave `verifiedAt`, `recordedAt`, and `reviewRounds` out: after
+checking the outcome against live GitHub, the orchestrator sets `verifiedAt`
+to that check, sets `recordedAt` immediately before append, and derives
+`reviewRounds` from the complete review list for a non-null pull request.
+The orchestrator validates the completed record against the schema after
+filling the required fields and before appending it. Do not append the draft
+to the
+[worker final report store](idd-helper-scripts.md#worker-final-report-store),
+because the orchestrator checks it against live GitHub state first. The
+`outcome` that the draft proposes follows
+[Worker report outcomes](#worker-report-outcomes).
+
+Fill note: set `{report-path}` to a file whose name starts with the issue number,
+for example `2878-worker-report.json`, directly under the resolved session
+scratchpad root. Before dispatch, the orchestrator uses `lstat` to require
+`{report-path}` to be absent; hold and preserve any existing entry. The worker,
+as the eventual writer, must create its final report draft atomically as a new
+regular file without following links, with current-user-only permissions
+(POSIX `O_CREAT | O_EXCL`, mode `0600`; equivalent create-new, current-user-only
+access on Windows). If a symlink, non-regular entry, or conflicting draft
+appears before creation, or exclusive creation fails, hold and preserve it;
+never truncate, replace, or rename it.
+
+On restart, enumerate direct-child JSON drafts with that issue number prefix
+and select only the unique draft matching both `issue` and `claimId`; hold on
+unreadable or ambiguous matches. The orchestrator reads only that unique
+regular draft and never rewrites an existing one. The durable record lets an
+orchestrator restart rediscover this same root and report draft without
+depending on a fresh harness path. At verification, the orchestrator computes
+`reviewRounds` from the complete review list for a non-null `pullRequest`:
+
+```bash
+set -o pipefail
+if gh api --help | grep -F -- '--slurp' >/dev/null; then
+  gh api "repos/<owner>/<repo>/pulls/<n>/reviews" --paginate --slurp |
+    jq '[.[][] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length'
+else
+  gh api "repos/<owner>/<repo>/pulls/<n>/reviews" --paginate |
+    jq -s '[.[][] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length'
+fi
+```
+
+Replace the placeholders before running the command. It uses `--slurp`
+when the installed `gh` supports it. Older versions emit one JSON page per
+line, so the fallback uses `jq -s` to wrap those pages into the same array
+shape. Both paths require `jq`. The command counts all review states, across
+all pages and claims. A worker or older draft value is never used. Use the
+printed value only when the full command exits with status 0; discard all
+output on a nonzero exit. Omit the field when `pullRequest` is null, `jq` is
+unavailable, or the command cannot read the complete count; never record a
+partial count. The orchestrator completes the rest of the draft, as section 5
+of the orchestrator phase file says.
+
+### Orchestrator run report
+
+The **run report** is the orchestrator's end-of-run report to its operator. The
+orchestrator writes it as a message in its session each time it stops
+(including the stops in section 4 of the orchestrator phase file) or pauses to
+wait for the operator (its turn ends awaiting an operator reply), and the
+operator reads it there. Each report lists the whole state, not only what
+changed since the last one. Waiting for a worker's completion, a host-load
+re-check, or a renewal due time is neither a stop nor a pause.
+A session that considered fan-out but selected single-agent still uses this
+report when it stops or pauses.
+
+At minimum it lists:
+
+- **Execution mode.** `fan-out` or `single-agent`, plus the evidence-based
+  reason for the initial choice or later switch. Required in every report.
+- **Roster.** Each roster entry, with its issue number and its final state, the
+  state it is in when the report is written: `running`, `reporting`,
+  `disposed`, or `stalled`, as section 2 of the orchestrator phase file lists
+  them.
+- **Pre-B1 parent continuation.** When used, report the child's actual stop,
+  its `disposed` roster entry and historical handle, and the separate active
+  `parent-continuation` entry and its final state. Report the parent's later
+  issue result separately. The child gets no terminal worker report or F4
+  result.
+- **Holds.** Each hold, with its issue number, its start as the hold marker
+  defines it, its cap time (72 h after the start, per the held-worker renewal
+  rule), the GitHub `created_at` of the latest valid `claimed-by` on its claim,
+  and how it stands: still held, released at the cap, or ended by a cause the
+  hold marker defines (the worker's valid `claimed-by` or, after a restart, any
+  valid `claimed-by` newer than the marker, which can be the earlier run's own
+  renewal; a release other than the cap release; a supersession; or the
+  entry's disposal under the ordinary fan-out lifecycle). For the verified
+  pre-B1 parent-continuation route, report an active hold as ended only after
+  its hold-ending heartbeat is verified. When complete trusted history proves
+  no hold is active, report that no active hold exists; do not attribute that
+  state to disposal. Once no living orchestrator renews a hold, the stale clock
+  (`claim-stale-age`, 24 h by default) counts from the latest valid
+  `claimed-by`.
+- **Failures.** Each renewal or release that failed since the run began, even
+  if a later wake-up's attempt succeeded, with its issue number, its claim id,
+  and which post failed and when (the 12 h `claimed-by` re-post, once its one
+  retry has also failed, or the 72-hour `unclaimed-by`) and, for the
+  `unclaimed-by`, that the cap was reached. A failed post leaves its entry
+  where it stands, not `disposed`, and the failure stays listed in every later
+  report.
+
+It also carries any gap the Discover pass says to name in "the run report" (for
+example an incomplete parked-issue listing) and the `limitingFactor` that
+section 4 of the orchestrator phase file has the orchestrator report when a
+limit stops it. Any other report to the operator that the IDD instructions or
+this guide require is made at the step that requires it; this report neither
+defers nor replaces it.
+
+The orchestrator notes each item when it happens and writes them out together,
+so an entry can be `disposed` before the report is written. The report is a
+message, not a store: it is not a file, an issue comment, or a record in the
+worker final report store, which holds per-worker records and receives nothing
+from a cap release, and no helper reads it. A session that ends without writing
+it leaves no report (preventive; no observed incident yet). A restart that can
+recover (see [Orchestrator restart](#orchestrator-restart)) rebuilds the roster
+from the forge, the worktrees, and the harness's agent listing, never from a run
+report, and the new run writes its own.
+
+### Worker report outcomes
+
+A worker writes its final report as a draft. Once the orchestrator has checked
+the draft, it becomes one record in the
+[worker final report store](idd-helper-scripts.md#worker-final-report-store),
+and its `outcome` says how the run ended; a held worker is the exception, as the
+`held` bullet below says. The report is the worker's own, not the
+orchestrator's [run report](#orchestrator-run-report). The store and
+`schemas/worker-report.schema.json` list the values and define `scope-stopped`.
+This subsection says which value each way of ending a run carries. The draft
+proposes the value, and the orchestrator checks it against live GitHub state
+before it appends the record, as section 5 of the orchestrator phase file and
+the "Independently verify a worker's reported terminal outcome before trusting
+it" bullet of the [fan-out variant](#orchestrator-fan-out-variant) require. For
+`scope-stopped`, live state can only rule out the other values; the paragraph
+after the list says what supplies the rest.
+
+- `merged`: the worker's pull request merged and no trusted handoff summary was
+  posted.
+- `handed-off`: a trusted handoff summary carrying the worker's claim id is on
+  the issue, whatever its pull request has done since.
+- `held`: a gate or an unmet condition stopped the run. A worker held on a
+  trusted hold marker is not reported or disposed of while the hold lasts, so no
+  record is appended then. The Hold marker and Held-worker renewal bullets of
+  the [fan-out variant](#orchestrator-fan-out-variant) say what the
+  orchestrator does instead, and the [run report](#orchestrator-run-report)
+  lists the hold.
+- `scope-stopped`: the run finished the phase it was scoped to end at, earlier
+  than the merge policy's terminal phase, and stopped there with no gate or
+  unmet condition blocking it.
+- `abandoned`: the worker's pull request was closed without merging and no
+  trusted handoff summary was posted.
+- `failed`: none of the above fits.
+
+Live GitHub state cannot confirm a scope stop: all it shows is a claim still
+held with no handoff summary and no trusted hold marker, which a stop at a gate
+can also leave. So the orchestrator checks a `scope-stopped` draft against the
+boundary that the brief, or an instruction the orchestrator later relayed to the
+worker, named. The draft's `terminalPhase` must be that phase, and live state
+must show none of the other values above. When it shows one, that value is
+recorded instead, except that a worker held on a trusted hold marker gets no
+record while the hold lasts, as the `held` bullet says. When the brief is not
+available or names no such boundary, no `scope-stopped` record is appended and
+the claim is reported to the operator. A phase is finished when its normal exit
+is met, so a run still waiting inside it, for example on pending CI, has not
+reached the boundary. Storing a scope stop as `held` inflated the `held` count
+(observed 2026-10-13 on the worker records of kurone-kito/idd-skill#3974,
+decided on kurone-kito/idd-skill#4213, requested in kurone-kito/idd-skill#4348,
+added by kurone-kito/idd-skill#4354).
+
+[Orchestrator restart](#orchestrator-restart) has no `scope-stopped` case: step
+4 maps a claim still held to `held` and appends nothing for it when no draft is
+found, and step 3 sends a finished worker whose claim is still held with no
+handoff summary to worker-death recovery. How a restart treats a scope stop is
+not defined here.
+
+### Orchestrator restart
+
+This subsection covers an orchestrating session that restarts with its
+session-suffixed agent id, as the 2026-10-11 session did (issue
+`kurone-kito/idd-skill#4014`). The shared `{agent-id}` convention below is
+historical and applies only to active claims created before source issue
+`kurone-kito/idd-skill#4936`;
+new claims require a session-qualified ID, which the session must persist and
+reuse across a restart. Use this session's persisted `--agent-id` in owner
+checks and compare it with the trusted marker; the marker is evidence to
+compare, not caller identity. If a session-qualified marker has no matching
+session-local ID, stop and report the claim. The compatibility path may omit
+`--agent-id` only for an active pre-rule claim whose trusted marker has a
+legacy bare family ID. The session's exact recorded claim-id must match the
+trusted marker. Apply lock, branch,
+and occupancy checks where a worktree exists; a worktree-less claim is not
+rejected for lacking worktree evidence. A bare ID alone cannot distinguish
+sessions; when the session
+cannot verify which legacy claim it owns, it reports the claim to the operator
+and does not refill. A post-rule claim requires this session's matching
+session-qualified ID, so a session with a different ID cannot identify it. The
+roster is not stored anywhere locally, so the steps below rebuild it from the
+forge, the worktrees, and the harness's agent listing. Start with the
+orchestrator phase's session scratchpad preflight to discover the durable
+record from the session identity and recover the exact report-draft root.
+
+Before roster reconstruction or any Discover/refill step, follow the
+[orchestrator restart scan](idd-helper-scripts.md#orchestrator-restart-scan)
+contract for continuation records.
+
+1. **Find own claims.** For each worktree in `git worktree list --porcelain`,
+   list `idd-generated-tokens-*.json` in that worktree's private admin directory
+   (`git -C <worktree> rev-parse --absolute-git-dir`). A `prunable` entry, or
+   one whose path no longer exists, is not read: it is noted, and a claim whose
+   branch or lock it still names is reported to the operator. The scan then goes
+   on with the readable entries. Each file holds `agentId` and `claimId`, and a
+   `nonce` when one was recorded. One worktree can hold several files. A
+   post-rule claim is own only when its `agentId` equals this session's
+   persisted session-suffixed agent-id and its `agentId` and `claimId` both
+   match the trusted `claimed-by` marker for the same issue. For an active
+   pre-rule claim whose trusted marker has a legacy bare family ID, the
+   compatibility route may omit `--agent-id`. If that marker is already
+   session-qualified, compare it with this session's persisted agent-id; do
+   not substitute the marker's public ID. If the local ID is absent or does
+   not match, report the claim as not owned. In every case, this session's
+   exact recorded claim-id must match the trusted marker.
+   Apply the lock, branch, and occupancy checks where a worktree exists; a
+   worktree-less claim is not rejected for lacking worktree evidence. The
+   agent-id alone never proves
+   ownership, because
+   the claim id is the authoritative token. A session with no unique session
+   identity cannot recover post-rule claims: it reports them to the operator
+   and does not refill. Claims that are not own are not dispatched again,
+   and they are reported to the operator. A worktree that has claim evidence,
+   such as a claim
+   lock or an `issue/<number>-<slug>` branch, but no readable token record is
+   reported to the operator rather than skipped, because the claim contract
+   treats that state as fail-closed. A worktree with no claim evidence, such as
+   the primary checkout, is not reported. F4 removes the linked worktree, with
+   its admin directory and this token file, before it posts the final
+   `unclaimed-by` marker. So a claim whose F4 removed its linked worktree has no
+   token file there. A record in the primary worktree's directory can survive
+   F4. Keep at most one record per claim-id: prefer the linked worktree's
+   record. A primary-directory record makes a claim worktree-less only when no
+   linked worktree carries that claim's branch or lock, and it is a hint only:
+   the trusted claimed-by marker for its issue must also match this session's
+   recorded agent-id and the same claim id. For a pre-rule claim, the marker
+   may carry a bare agent-id, but that ID alone cannot identify the session;
+   the compatibility route still requires this session's recorded claim-id
+   to match the trusted marker. A linked worktree that does carry it,
+   but has no readable token record, is reported to the operator as unreadable
+   and is not treated as worktree-less. A readable linked record stays
+   authoritative. For a worktree-less claim, take the issue number from the
+   worker's brief in the agent listing, or from the issue-number prefix of its
+   report draft in the session scratchpad, and never from the default branch. Then
+   read that issue's trusted `claimed-by` and `unclaimed-by` markers for the
+   agent-id and claim-id, and apply the same test, so that both the agent id and
+   the claim id must match the marker. Also enumerate the candidates for
+   worktree-less claims from the report drafts in the session scratchpad, the
+   finished entries in the agent listing, and the running entries whose worktree
+   is gone, and read each such issue the same way. An issue whose trusted
+   markers name another agent-id, or no claim, is not own. If neither source
+   gives an issue number, report the claim to the operator and take no further
+   action on it.
+2. **Verify each own claim.** For a claim with a linked worktree, take `--issue`
+   from its branch, `issue/<number>-<slug>`, and confirm it against the trusted
+   `claimed-by` marker that carries the same claim-id, because the token record
+   holds no issue number. Run the profile-selected `resume-claim-routing`
+   command (see `docs/idd-helper-scripts.md`) with `--assert`, `--issue`,
+   `--claim-id`, `--nonce` (when the file holds one), and `--worktree <path>`.
+   Pass `--agent-id <this session's persisted ID>`, never a value copied
+   from the public marker. The marker is comparison evidence only; if the
+   local ID is missing or does not match a session-qualified marker, stop
+   and report the claim. Omit `--agent-id` only for a pre-rule claim whose
+   trusted marker has the legacy bare family ID. The same compatibility
+   path applies when checking a worktree-less claim without `--assert`.
+   Continue to step 3 only when the command exits 0, which means the state is
+   `already_owned` with action `keep`. A claim that a worker released with its
+   `unclaimed-by` marker, as F4 does as its last mutation before returning the
+   final report, is the one exception. Its `--assert` run exits 1 by design, so
+   read its verdict from stdout: when `evidence.released_claim.claim_id` equals
+   this claim-id and either the state is `unclaimed`, or the state is
+   `local_worktree_occupied` with the reason
+   `released-claim-local-worktree-occupied`, the claim goes to step 3 for worker
+   matching only, where its running worker, if any, is counted and sent no
+   message, and then to step 4. `stale` goes to the takeover path in
+   `idd-resume.instructions.md`. A claim with no worktree needs no `--worktree`:
+   run the command without `--assert` and read its `state`. The released-claim
+   result above applies to it as written, and so does `already_owned` with
+   action `keep`, which the helper reports when F4 has removed the worktree but
+   the worker has not yet posted `unclaimed-by`, so its running worker, if any,
+   still holds a slot. A `stale` result goes to the takeover path in
+   `idd-resume.instructions.md`, as it does for a claim with a worktree. Any
+   other result, including an unreadable worktree, is reported to the operator
+   with its state, and no further action is taken on that issue.
+3. **Re-attach workers.** Read the live worker list from the harness's agent
+   listing, and match each entry, by the issue number and claim id in the
+   worker's brief, to an own claim. Count every matched own worker not yet
+   disposed in `--running`, a running worker or a finished one still awaiting
+   step 4, including the running worker of a released claim, and pass each
+   counted worker's issue as an `--in-flight` value below when its brief gives
+   one. A matched finished worker goes to step 4 before any refill below, once
+   the checks in step 4 pass, and no new worker starts until step 4 has run for
+   every matched finished worker, unless its claim is still held with no handoff
+   summary on the issue. Such a worker stopped before its terminal phase, so it
+   takes the same worker-death recovery as a running worker, under the bullet
+   named above. A matched running worker of an own claim that step 2 verified as
+   `already_owned` is handled as follows: if the runtime can still message it,
+   apply the existing worker-death rules by reference, under the bullet titled
+   "Resume-specific recovery when a worker dies mid-turn" in the
+   [fan-out variant](#orchestrator-fan-out-variant); if it cannot be messaged,
+   it is treated as live and is never replaced while the listing still shows it
+   running, because its agent may still be executing when no child process is
+   visible. Wait for any running child process by PID. Then hold the claim, with
+   no replacement while the listing still shows the worker running, and report
+   the worker to the operator in step 5. A worker that matches no own claim is
+   neither messaged nor replaced. A running worker of a released claim is
+   counted and sent no message. If the harness offers no agent listing, no
+   worker is matched, every own claim that reached this step goes to step 5, and
+   the rest of this step is skipped, including the Discover pass, the budget
+   call, the overlap check, and every worker start, because the running workers
+   are unknown. An own claim that matches no worker is an unmatched claim unless
+   the session-scratchpad lifecycle has positively classified it as an eligible
+   never-dispatched resume. Only such a resume skips step 4 before dispatch;
+   all other unmatched own claims go to step 4 for report recovery and then
+   step 5. A released claim with no linked worktree is never resumed. A listed
+   live worker that matches no own claim also skips refill, because it may still
+   be running and hold a slot the budget cannot see; report it in step 5. A
+   session without a unique session-suffixed agent id also skips the rest of
+   this step, because it cannot tell its workers from another session's. Only
+   when a listing exists, the session has a unique session-suffixed agent id,
+   and no unmatched claim outside the eligible resume set or unmatched live
+   worker remains, recount the roster. If the resume set is non-empty, use the
+   lifecycle's budgeted resume route before fresh candidates and do not run step
+   4 on those claims before dispatch. Once it is empty, run a fresh Discover
+   pass as section 3 of the orchestrator phase file describes, and count its
+   candidates (0 when none); the cached graph is discarded and cannot supply
+   that count. Then run the
+   profile-selected `idd-worker-budget` command with `--running <n> --startable
+   <n>`, where `--running` is the count above and `--startable` is the count
+   just taken. Add `--harness-limit <limit>` when this harness's row in the
+   worker mechanism table gives a numeric limit, and omit it otherwise. When
+   `--startable` is at least 1 and the budget's `slots` is at least 1, run the
+   profile-selected `discover-shared-file-overlap` command with `--issues
+   <n,...>` (the startable candidates), `--batch <k>` (the `slots` value),
+   `--check-overlap`, one `--in-flight <n>` for each counted worker's issue, and
+   `--desync-token` set to this session's session-suffixed agent-id whenever
+   `discover.selectionDesync` is `session-offset`. Otherwise skip it: the helper
+   rejects an empty candidate list and a zero batch. Each selected candidate
+   then goes through section 3, steps 4 to 6 (A4.5, the fresh-claim order
+   through claim verification, and the worker start), and its started worker is
+   recorded as a running roster entry before section 4 resumes.
+4. **Recover reports.** Run this step for each matched finished worker, once its
+   worktree, claim, and child processes show no live background work, and for
+   each unmatched own claim whose handoff or merge live state shows it finished,
+   with or without a draft. The fan-out variant's completed-notice rule names
+   these live-evidence checks, and this step applies them to every finished
+   worker, under that worker's own listed handle. A worker with live work is
+   treated as running in step 3. A claim with no matched worker and no draft is
+   recorded under the claim id as its handle, released or not, because the
+   listing supplies no handle for it. Before that append, read the worker report
+   store file read-only, as the
+   [worker final report store](idd-helper-scripts.md#worker-final-report-store)
+   describes, and, if a line already carries this claim id under another handle,
+   do not append: the store cannot tell whether that record is this worker's or
+   an earlier replacement's, so step 5 reports the claim to the operator. The
+   store dedupes on claimId, workerHandle, and terminalPhase, so a retry is
+   safe. A matched running worker gets no record. A released claim whose only
+   matched worker is still running gets no record and is reported in step 5.
+   In the verified root from the session record, enumerate direct-child report
+   drafts whose filename starts with the issue number and ends in `.json`;
+   other issue-numbered scratch files remain in that root's matching issue
+   directory.
+   If a candidate is a symlink or non-regular file, hold and preserve it without
+   following it. Read each regular candidate and use only one whose `issue` and
+   `claimId` match the claim. If a candidate is unreadable, or multiple
+   candidates match, hold and preserve them for reconciliation. If no candidate
+   matches, use the no-draft route below; never append a draft for another
+   claim. When
+   the claim has a matched worker, set the draft's `workerHandle` to the listed
+   handle, whatever value the draft holds, as section 5 of the orchestrator
+   phase file does at the append. A draft that matches the claim but has no
+   listed worker is
+   appended under its own `workerHandle`, because the store dedupes on that
+   handle with the claim id and terminal phase, so a record already appended
+   under it is not counted twice. The listing matches workers only and never
+   names a draft handle. An unmatched claim appended in this step, from a draft
+   or from live state, has no running worker, so once it is appended it no
+   longer blocks refill: the restart then runs step 3 recount and refill gate
+   again, if no other unmatched own claim or unmatched live worker remains. Do
+   not append a draft that does not match. Then verify its outcome,
+   `pullRequest`, and `terminalPhase` against live GitHub state, set
+   `verifiedAt` to that check and `recordedAt` immediately before append.
+   Recompute `reviewRounds` from the complete paginated review list using the
+   Worker report Fill note above, replacing any draft value. Omit the field if
+   `pullRequest` is null or the complete count cannot be read. Then append it.
+   If no draft is found, verify the terminal outcome from live GitHub
+   state, build the record as the
+   [worker final report store](idd-helper-scripts.md#worker-final-report-store)
+   describes, with `harness` set to the slug the store lists for this session's
+   own harness, or `other` when none matches, and append it the same way, unless
+   its outcome is `held` or it has no terminal phase from live state: a held
+   claim, or a claim released without a merge or handoff, has no live source for
+   a terminal phase, so nothing is appended and step 5 reports it. Before any
+   append, validate the record against `schemas/worker-report.schema.json`
+   first, then append it with the profile-selected `idd-worker-report append
+   --file <path>` command. After a successful append for a matched worker,
+   dispose of the worker as the table's row says and mark its roster entry
+   `disposed`, as section 5 of the orchestrator phase file describes. Map
+   `outcome` as the store describes: `handed-off` when a trusted handoff summary
+   carrying this claim id was posted, whatever the pull request has since done
+   and whether or not the claim has since been released; otherwise `merged` for
+   a merged pull request, `abandoned` for a closed unmerged one, `held` for a
+   claim still held, and `failed` otherwise. A handoff summary is trusted only
+   when a trusted marker actor posted it, because the claim id alone is a public
+   token. Set `terminalPhase` to `F4` only for a claim released after a merge
+   under `fully_autonomous_merge`, since F4 is complete only after its final
+   `unclaimed-by`, and to `F2.5` when a trusted handoff summary carrying this
+   claim id is posted on the issue, under either merge policy. A merged pull
+   request that still shows an active claim has no terminal phase, so step 5
+   reports it. Record the recovery in `frictions`, with its `phase` (F4 or
+   F2.5), a non-empty `summary`, and `docs/idd-workflow.md` in `file`, because
+   that is the instruction path the recovery followed. If verification or the
+   append fails for a matched worker, keep it addressable, mark it `stalled`,
+   and follow the worker-specific recovery in the fan-out variant, as section 5
+   of the orchestrator phase file describes. A failed append for a released
+   claim is reported in step 5.
+5. **Report the remainder.** An own claim that reached step 3, other than a
+   released claim, and has no matching worker is reported to the operator, and
+   so is a matched finished worker that step 4 did not append because its
+   outcome is `held`. A listed live worker that matches no own claim is reported
+   to the operator too, because it blocks refill until the operator resolves it.
+   A matched running worker that cannot be messaged is reported too. A released
+   claim is reported here when step 4 left it with a running worker, when its
+   verification or append failed, or when the harness offers no agent listing,
+   so step 4 did not run for it, or when step 4 appended nothing for want of a
+   terminal phase, or because the store already holds a record for the claim
+   under another handle. Otherwise step 4 handles it. Its worktree is not
+   removed.
+
+### Discover re-run cadence
+
+Re-running the full Discover enumeration this session established
+(`discover-roadmap-graph`, and `discover-orphan-filter` when A0/A0-O
+routes there) after every delegated-worker completion is too
+expensive; a 2026-09-09 hearing decided to document a re-run cadence
+instead (kurone-kito/idd-skill#2706). A re-run always repeats the mode
+and routing already in force for this session — A1's single-root or
+cross-roadmap choice, and A0/A0-O's own `issue-scope` and
+`orphan-first-policy` routing — refreshing the same search, never
+widening it to a broader mode this session never selected.
+
+- **Do not re-run** Discover after every delegated-worker completion.
+  Dispatch the next worker from the previously enumerated graph
+  instead, after a fresh target-local A3 readiness check for that
+  specific candidate (the configured authoring label, and any
+  newly-added open dependency) — the per-delegation A4/A4.5/A5 gates
+  above do not repeat A3's own exclusions, so a candidate that became
+  blocked only after the graph was built would otherwise slip through
+  uncaught.
+- **Do re-run** on any of the following: a worker reports exhaustion
+  or no startable candidate remains in the graph already in hand, or
+  that graph is stale enough that the orchestrator no longer trusts it
+  for the next dispatch — for example when a completed issue may have
+  unblocked a dependent still listed as not-ready. A worker merely
+  finishing the issue it was dispatched for is not by itself a reason
+  to re-run: that happens on every successful dispatch, so treating it
+  as a trigger would collapse straight back into the every-completion
+  cadence the first bullet rules out. Wait for the helper's own
+  process exit before parsing its output — never a mid-run stdout
+  read — per
+  [A2's helper read timing note](../.github/instructions/idd-discover.instructions.md#a2--enumerate-sub-issues).
+- **On a caller-side tool timeout** during the Discover invocation —
+  the orchestrator's own tool-invocation wrapper (for example a
+  bounded Bash-tool or subprocess timeout) elapsing while the helper
+  process may still be running to completion, not the helper itself
+  erroring or exiting non-zero — give that same invocation one more
+  attempt with a longer time budget (re-attach to the still-running
+  process when the tool only stopped waiting rather than killing it;
+  otherwise reissue the command) before concluding anything failed.
+  Only a second timeout under the longer budget counts as an A2
+  enumeration failure, unchanged from today's A2 rule; a helper that
+  actually errors or exits non-zero is already an A2 enumeration
+  failure on the first occurrence.
+- **An exhausted pool** (Discover returned no startable candidate and no
+  worker is running). This applies only when no worker is running, and
+  only to an orchestrator that stays alive by design, for example one
+  re-invoked by a loop runner: A4's exhaustion exit still reports the
+  discarded issues and stops, and this bullet changes that for no
+  session — the report-and-stop still happens first, and this bullet
+  governs only how an orchestrator that its runner keeps alive waits
+  afterward. It complements the first bullet above, never overrides it:
+  that bullet rules out re-running after every completion, and the **Do
+  re-run** bullet's no-startable-candidate trigger is spent by the
+  Discover run that returned this empty pool, so it does not recur on a
+  timer. Wait for an external change instead of re-running Discover on a
+  timer: poll with one GraphQL query shape, paginated by cursor until
+  every page is read, for the open issues' number, state, labels, last
+  edit time, sub-issue total and parent (not per-issue REST reads), about
+  every 2 minutes, and re-run Discover only on the events below, not on
+  a timer. Those events, not elapsed time, are what make the graph stale
+  here, apart from the changes listed under unobserved below. An
+  exhausted orchestrator therefore sees a released or expired claim only
+  at its next event.
+
+  ```graphql
+  query($owner: String!, $name: String!, $cursor: String) {
+    repository(owner: $owner, name: $name) {
+      issues(first: 100, after: $cursor, states: OPEN) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          number
+          state
+          labels(first: 100) { nodes { name } }
+          lastEditedAt
+          subIssuesSummary { total }
+          parent { number }
+        }
+      }
+    }
+  }
+  ```
+
+  An orchestrator that stays alive polls before each Discover run it
+  starts. Each poll is compared with the last complete poll, and a failed
+  or refused poll replaces nothing. An event is any of these: no complete
+  poll before a run, in which case the next complete poll re-runs Discover
+  once; an open issue that the last complete poll lacked, which is a new or
+  reopened issue (the poll cannot tell them apart) without an authoring or
+  blocking label (by default `status:authoring`, `status:blocked-by-human`
+  or `status:needs-decision`); an open issue that the poll no longer
+  returns, which is normally a closed issue; an authoring or blocking label
+  removed from an open issue; the ready label (`idd:ready` by default) added
+  to or removed from an open issue; or a changed `lastEditedAt`, sub-issue
+  total or parent on an issue present in both polls, graph member or not.
+  The comparison uses only GitHub's own values, so no clock is involved.
+  Every body edit to an open issue present in both polls is therefore
+  expected to re-run a full Discover, which is the cost of seeing
+  relationship edits without polling comments. The observed case that moves
+  `lastEditedAt` is a roadmap body edit (kurone-kito/idd-skill#3878); other
+  body edits, such as a task-list, marker or `Blocked by` line edit, are
+  expected to move it too. A native sub-issue link is expected to move the
+  sub-issue total or the parent.
+  `updatedAt` is not polled, because comments (claim markers included) and
+  label changes are expected to move it (see kurone-kito/idd-skill#3878).
+  The following stay unobserved (each preventive; no observed incident yet):
+  approval comments such as `IDD ready`; changes made through comments,
+  including claim releases; the stale-claim threshold, which is time-based;
+  body or label changes to closed issues that the graph still traverses;
+  sub-issue links between closed issues; an unlinked issue opened and closed
+  between two polls, or an issue closed and reopened between two polls; a
+  body edit to an issue absent from the last complete poll (new or reopened)
+  with an authoring or blocking label, made before the next complete poll
+  (it has no earlier `lastEditedAt` to compare; its label removal is itself
+  an event); changes to configured label names; and title edits, which the
+  poll sees only if they also move `lastEditedAt`. Reported 2026-10-05 and
+  replayed on
+  `origin/main` at `c9d082386` on 2026-10-08 (kurone-kito/idd-skill#3878):
+  with the earlier fields (number, state and labels), the poll values stayed
+  identical while the graph changed.
+
+  The poll interval is deliberately shorter than the roughly 4-minute race seen
+  in a downstream adopter's run (reported 2026-09-30,
+  kurone-kito/idd-skill#3677): a second orchestrator claimed the next serial
+  issue about 4 minutes after its blocker closed, so the wait also decides
+  who wins. A helper for the query is optional and not part of this
+  guidance.
+- **Optional hint cache**: this section decides _when_ to re-run.
+  With `githubApi.readCache.enabled`, a re-run inside `maxAge` is served
+  from a hint instead (see the helper-script
+  [Discover hint cache](idd-helper-scripts.md#discover-hint-cache)),
+  which changes only what a re-run costs, never when one is owed.
+
+## Live Status Digests
+
+Use the live status digest contract in
+[IDD comment minimization](idd-comment-minimization.md) when an active
+run needs one human-facing current-status comment. Digest text is never
+workflow evidence by itself: claim parsing, review currency, advisory
+waits, CI, merge readiness, and roadmap audits still read trusted
+operational markers and GitHub state.
+
+During resume, repair a missing or stale digest only after the route and
+claim state are known. Duplicate marked digests are preserved as audit
+history and reported for repair; unattended agents must continue from
+the authoritative markers and GitHub state rather than picking a digest
+arbitrarily.
+
+Phase files now define digest update points rather than leaving them to
+agent judgment. Issue digests are refreshed after claim verification,
+planning, meaningful C-loop decisions, hold, abort, and resume route
+selection. PR digests are refreshed for review-fix progress, advisory
+wait or CI holds, pre-merge blockers, merge failures, and post-merge
+cleanup.
+
+Agents deliberately avoid editing a PR digest between a valid E1 review
+watermark and a successful F3 merge path. A digest edit can be PR
+activity, so successful F2 passes carry their activity snapshot forward
+without touching the digest; blocked reroutes and hold paths may update
+the digest because they stop or leave merge intent anyway, and so may
+an F2 pass blocked only on `secondaryQuietWindow`, since that wait no
+longer perturbs review currency. The F3 awaiting-reviewer restart-F2
+path is the exception: it skips digest updates so the restarted F2 pass
+does not self-invalidate review currency.
+
+### Roadmap-claim contention playbook
+
+Use this playbook when multiple sessions are active:
+
+- **Do continue child execution** when a roadmap claim is present, unless
+  a normal readiness gate blocks the child issue. Claims are per issue.
+- **Do treat `roadmap-audit/*` as coordination-only** for roadmap
+  side-effects (comment/edit/label/follow-up/close), not as a global
+  execution lock.
+- **Do stop and defer on fresh non-owned claims**. If a claim is active,
+  non-stale, and not yours, treat it as not inheritable.
+- **Do take over only stale non-owned claims** according to shared stale
+  thresholds and `supersedes` rules; do not force ownership changes.
+- **Do heartbeat only for owned active claims**, and release
+  roadmap-audit claims promptly after roadmap-side effects finish.
+- **Do not bypass blocker labels, dependency checks, or claim
+  revalidation gates** while resolving contention.
+
+## Roadmap Claim Guardrails
+
+Roadmap-audit claims are coordination-only. Use them only while the
+roadmap issue itself is being mutated, then release them once that
+roadmap-side effect is complete. They are not a proxy lock for child
+claims.
+
+Recursive roadmap hierarchies still follow that rule. Leaf execution
+issues finish first, then the deepest completed nested roadmap is
+audited and closed under its own `roadmap-audit/*` claim, and only then
+is the parent roadmap re-evaluated. Bottom-up closure keeps roadmap
+claims scoped to the exact roadmap issue being mutated instead of
+turning one parent claim into a lock over child or sibling work.
+
+If the roadmap claim remains open after the roadmap-side effect is done,
+or if it appears to serialize child execution, treat that as a misuse
+signal: revalidate ownership and stale timing before continuing, then
+heartbeat, release, or take over rather than holding the claim open.
+
+The docs audit keeps this guidance synchronized with the exported
+template so unattended runs can spot drift.
+
+## Copilot review instruction scope
+
+The heavy shared overview keeps `applyTo: "**"` so GitHub Copilot
+execution surfaces can receive the IDD entry context automatically.
+However, it also sets `excludeAgent: "code-review"` so Copilot code
+review does not ingest the full operational workflow as reviewer-side
+context.
+
+This is an intentional middle path between the evaluated alternatives:
+keeping review coupled to the full overview, narrowing `applyTo` and
+risking execution-agent discoverability, or splitting a separate
+reviewer-only instruction file. Copilot code review may still use the
+lightweight repository-wide `.github/copilot-instructions.md`; only the
+heavier `idd-overview-core.instructions.md` is excluded from review.
+
+## F2 merge-readiness evidence checklist
+
+Before executing F3 merge, F2 must record concrete evidence for merge
+readiness rather than relying on a single reviewer signal.
+
+Required evidence fields:
+
+1. Activity-universe snapshot values:
+   `{head-SHA}`, `{max-activity-updatedAt|none}`,
+   `{total-item-count}`, `{latest-ci-completed-at|none}`.
+2. Unresolved-thread evidence: total unresolved threads, actionable
+   unresolved count (non-awaiting-reviewer), and AMD thread presence.
+3. Unreplied regular-comment evidence: count of non-IDD-agent comments
+   without a later IDD-agent reply.
+4. Reviewer-state evidence: latest `CHANGES_REQUESTED` states for human,
+   required, and CODEOWNER reviewers, plus required approval/CODEOWNER
+   satisfaction.
+5. Advisory-wait evidence: AW outcome for the current HEAD, marker
+   coverage (`EARLIEST_SAME_HEAD_AT`), and merge-gate satisfaction.
+6. CI evidence: required-check generation and pass status for all
+   required checks on the current HEAD.
+
+Mixed reviewer ecosystems are expected. The same checklist applies
+across human reviews and advisory bot surfaces (Copilot, CodeRabbit,
+Codex connectors, CI bots); "one bot says clean" is never sufficient by
+itself.
+
+**Authoritative source for the final-merge fields.** Bind every CI and
+activity value in this checklist to the **live `pre-merge-readiness` run on
+the current HEAD** — that helper is the authoritative source for the
+F2/F3 merge decision. The `review-activity-snapshot` helper builds the
+**E-phase** activity universe (E1) and must **not** be reused as the
+F-phase merge decision: the two can disagree in the window just before
+merge ("ci-pass-drift"), so reading CI/activity from the E-phase snapshot
+instead of the live pre-merge run risks merging on stale evidence. See
+[IDD helper script evaluation](idd-helper-scripts.md#merge-gate-evidence)
+for each helper's phase role.
+
+## Review Policy Profiles
+
+The execution loop is cross-agent, while PR review policy is a
+repository choice. See
+[IDD review policy profiles](idd-review-policy-profiles.md) before
+customizing the default Copilot advisory behavior.
+
+## Default PR policy: Copilot advisory review
+
+The core IDD flow is cross-agent, but the distributed default PR policy
+still includes a GitHub Copilot advisory review step in later PR
+phases.
+
+- `idd-review-fix.instructions.md` can request a GitHub Copilot
+  re-review for the current PR head.
+- `idd-merge.instructions.md` can wait or hold based on that GitHub
+  review state.
+- This dependency is on GitHub's review integration, not on every local
+  agent using Copilot as its CLI.
+- Adopters who do not want that default PR policy should choose another
+  review policy profile, apply the matching
+  `profiles/<profile>/README.md` artifact, and follow the PR review
+  profile edit-surface checklist in
+  [IDD review policy profiles](idd-review-policy-profiles.md).
+- Expect non-default profile changes to cover review-fix, advisory-wait,
+  pre-merge, merge, review-snapshot, and review-triage surfaces; the
+  exact edits vary by profile.
+
+Non-Copilot agents can still drive the workflow end to end, but they
+should expect those later phases to interact with Copilot as a GitHub
+reviewer because that is part of this repository's current PR policy.
+
+## Maintainer-Authorized External-Check Waivers
+
+Some repositories classify a small set of repo-external checks as
+waivable so IDD can recover when a third-party integration becomes
+stuck, unavailable, or rate-limited even though repository-owned
+validation is already healthy. This is a human-authorized escape hatch,
+not an automatic merge bypass.
+
+High-level maintainer flow:
+
+1. Let IDD reach an F2 hold and confirm that the blocker is a
+   configured external check rather than a repository-owned or
+   GitHub-required gate.
+2. Run the optional waiver facade in dry-run mode to inspect the exact
+   comment body, matched check, active claim, current PR HEAD, and
+   expiry before any mutation.
+3. Post the canonical waiver comment only through the helper's apply
+   path, then resume IDD on the same PR head.
+4. Keep every other gate intact: review currency, unresolved threads,
+   unreplied comments, required reviews, claim ownership, and GitHub
+   merge topology still have to pass normally.
+
+Normal PR approvals or casual maintainer comments such as "continue" are
+not sufficient waiver evidence. In solo-maintainer repositories, this
+helper-generated comment is the auditable authorization surface because
+self-approval cannot express the required claim, head, check, and expiry
+proof.
+
+A waiver posted before its own effectiveness precondition is met is
+valid but inert until then; see
+[`idd-pr-submit.instructions.md`'s D4](../.github/instructions/idd-pr-submit.instructions.md)
+for the mechanical check.
+
+## Optional helper scripts
+
+The idd-skill source repository that ships this template currently includes the
+following optional helper scripts:
+
+- `scripts/resume-claim-routing.mjs` (read-only Resume Step 1 claim
+  routing evidence)
+- `scripts/resume-route-selection.mjs` (read-only Resume Step 3 route
+  selection evidence)
+- `scripts/review-activity-snapshot.mjs` (read-only E/F activity and CI
+  snapshot metrics)
+- `scripts/advisory-wait-state.mjs` (read-only advisory-wait evidence
+  and AW outcome reporting)
+- `scripts/external-check-waiver.mjs` (maintainer dry-run/apply facade
+  for canonical external-check waiver comments on the current PR head;
+  added in 0.2.0)
+- `scripts/pre-merge-readiness.mjs` (read-only F2/F3 readiness evidence
+  collection)
+- `scripts/review-disposition-verify.mjs` (read-only E7 disposition
+  verification evidence)
+- `scripts/live-status-digest.mjs` (issue or PR live status digest
+  dry-run and claim-checked upsert)
+- `scripts/audit-pr-cleanup.mjs` (post-merge cleanup audit and optional
+  apply mode)
+- `scripts/merged-pr-feedback-sweep.mjs` (read-only, manually-invoked
+  post-merge sweep that scans merged PRs for unresolved review threads
+  and undispositioned advisory feedback, handing JSON to the
+  issue-authoring skill; a date-window run also lists open PRs that pass
+  pre-merge readiness but have not been merged)
+
+Shell / `gh` / `jq` snippets in
+`.github/instructions/*.instructions.md` remain the canonical portable
+path for repositories that stay on `instructions-only`. When helper
+runtime is enabled, these shipped helpers are the preferred evidence
+collection path, while live GitHub checks and written gate rules remain
+authoritative.
+
+See [IDD helper script evaluation](idd-helper-scripts.md) for the
+current inventory of high-friction query patterns, the adopted helper
+scope in the idd-skill source repository, and the criteria for future helper
+changes.
+
+See [IDD comment minimization](idd-comment-minimization.md) for the live
+status digest helper, post-merge cleanup helper, GraphQL fallback command
+shape, and merged-PR experiment for hiding completed feedback and stale
+operational markers without deleting the audit trail.
+
+## Worker delegation
+
+This section maps how each harness named in `AGENTS.md` starts a
+delegated worker (a subagent, or a background session that runs one
+issue to completion), waits for it, addresses it again, and stops it.
+It supports the [Orchestrator fan-out variant](#orchestrator-fan-out-variant).
+
+Every filled cell carries a reference to a vendor page, listed below
+the table, and the date that page was checked. A cell that the vendor's
+own docs or source do not confirm reads `unverified`, and it still cites
+the reference that shows the gap, so a reader can check the gap for
+themselves.
+
+The eligibility column sets how a session may use the harness:
+
+- `orchestrator`: the start mechanism and the wait model are both
+  confirmed, and no documented lifetime cap ends before a multi-hour
+  worker run. The session may run several workers at once, up to the
+  cap below.
+- `one issue per session`: anything else. The session runs one issue
+  only, and the row gives the reason.
+
+A wait model counts as confirmed when the vendor's own docs or source
+show it. A mode that needs a setting counts only when that setting
+appears in the vendor's official docs, because an orchestrator cannot
+rely on a switch that only the source names.
+
+A worker runs for hours. In this repository, pull requests took a
+median of 0.8 hours and a 90th percentile of 8.3 hours from opening to
+merging over the 100 pull requests merged from 2026-09-29 to 2026-10-07.
+
+The effective worker cap is the smaller of `orchestrator.maxWorkers`
+(default `2`) and the harness's own concurrency limit. `idd-worker-budget`
+reports the slots left after the running workers, the harness limit, and the
+startable candidates, and it reports zero slots when host load, host memory,
+or the GitHub API quota is unknown or too low.
+
+| Harness                     | Start and fresh context                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Wait model                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Re-address                                                                                                                                                                                                                                                                                                                                              | Stop or dispose                                                                                                                                                                                                                                                   | Limits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Eligibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code                 | `Agent` tool (renamed from `Task` in v2.1.63; existing `Task(...)` references in settings and agent definitions still work as aliases). Fresh context: yes for a non-fork subagent, which starts with a fresh, isolated context window; a `fork` inherits the entire conversation. [CC1] 2026-10-15                                                                                                                                                                                                                                                                                             | `streaming` (default interactive session, v2.1.232 or later, fork mode on): Agent-tool subagents, forks and non-fork alike, run in the background, and Claude cannot ask for the foreground; a result arrives as a completion notification in a later turn. Claude Code picks foreground or background from the first case that applies; three cases run a subagent in the foreground, and foreground subagents block the main conversation until complete: an in-process agent-team teammate spawning the subagent; `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, which disables all background task functionality (background Bash and auto-backgrounding included) in every kind of session, whether or not fork mode is on; and fork mode off with Claude needing the result before continuing, unless the subagent's frontmatter sets `background: true`. Fork mode is off under `-p` and in the Agent SDK unless `CLAUDE_CODE_FORK_SUBAGENT=1` turns it on; `CLAUDE_CODE_FORK_SUBAGENT=0` turns it off in every session, and before v2.1.232 interactive sessions also need `CLAUDE_CODE_FORK_SUBAGENT=1`. With fork mode off, a subagent otherwise runs in the background, and how a `-p` run collects its result is not described here. Skills with `context: fork` follow their own rules. The Eligibility verdict assumes the default case, and this cell does not confirm it for `-p`, SDK or DISABLE sessions. [CC1], [CC3] 2026-10-15 | `SendMessage` to the agent ID or name resumes it with its history; Explore and Plan agents cannot be resumed. [CC1] 2026-10-08                                                                                                                                                                                                                          | `TaskStop`, or `x` in `/tasks`; a finished subagent needs no close. [CC2] 2026-10-08                                                                                                                                                                              | 20 concurrent subagents by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`); nesting depth 3; no wall-clock subagent timeout documented. The 2-hour cap covers a background Bash command, not a subagent: 30 minutes by default, 2 hours at most, unattended sessions only. [CC1], [CC2], [CC3] 2026-10-08                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `orchestrator`: start and wait model confirmed, and no subagent lifetime cap documented. [CC1], [CC3] 2026-10-08                                                                                                                                                                                                                                                                                                                                                                                      |
+| Codex CLI                   | `spawn_agent` is the V1 surface, and it is the default: `multi_agent` is on by default and `multi_agent_v2` is off by default [CX4]. The docs say Codex "can run subagent workflows by spawning specialized agents in parallel" and that `agents.enabled` defaults to `true` [CX1]. Fresh context: V1 defaults `fork_context` to false, so the agent starts with only its initial prompt [CX2]; V2 defaults `fork_turns` to `all`, and `none` starts a fresh agent [CX2]. `unverified` in the docs: they do not say which surface a session gets [CX1]. Checked 2026-10-15 [CX1], [CX2], [CX4]. | Docs: "Codex waits until all requested results are available, then returns a consolidated response" (a wave) [CX1], which the docs do not tie to a surface. That wave alone confirms the wait model. The V1 `wait_agent` description adds a completion notice: "Once the agent reaches a final status, a notification message will be received containing the same completed status" [CX2]. That notice applies while `multi_agent_v2` is off, the default [CX4]. Subagent workflows are enabled by default [CX1]. Checked 2026-10-15 [CX1], [CX2], [CX4].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | V1 `send_input` sends a message to an existing agent; `interrupt=true` redirects it at once, and the default queues it [CX2]. `resume_agent` resumes a closed agent by id [CX2]. V2 has `send_message` and `followup_task` [CX2]. The docs say a running subagent can be steered, stopped, or closed on request [CX1]. Checked 2026-10-15 [CX1], [CX2]. | V1 `close_agent`: "Completed agents remain open and count toward the concurrency limit until closed" [CX2]. V2 has `interrupt_agent`, which interrupts the current turn and leaves the agent available, and it has no close tool [CX2]. Checked 2026-10-15 [CX2]. | `unverified` in the docs: no concurrency number, lifetime, or depth [CX1]. The source defaults to six V1 threads (`DEFAULT_AGENT_MAX_THREADS`), used when `agents.max_concurrent_threads_per_session` is unset [CX3]. Under V1, spawns reserve against that configured value with no subtraction [CX3], [CX8], and the registry counter does not count the root thread [CX6]. Under V2 the source defaults to four threads per session, and `effective_agent_max_threads` subtracts one, which leaves three at the default [CX3]. V2 sub-agent spawns take a residency slot at the default residency capacity of three [CX3], [CX7], [CX8]. Before reserving a V2 residency slot, `spawn_agent_internal` calls `ensure_execution_capacity` [CX8] as a separate execution gate; residency capacity is therefore not the only spawn gate. The spawn path passes no registry cap for those spawns, so the registry counts them without capping [CX6], [CX8]. Only sub-agent sessions are resident candidates [CX7]. V1 max depth defaults to 1, and the source's field comment says V2 ignores it [CX3]. The source sets the default V2 wait timeout minimum to 10 s and maximum to 3600 s, and `DEFAULT_WAIT_TIMEOUT_MS` is 30 s [CX3], [CX5]. Checked 2026-10-15 [CX1], [CX3], [CX5], [CX6], [CX7], [CX8]. | `orchestrator`: start confirmed by the docs ("spawning specialized agents in parallel", enabled by default [CX1]) and by the spec's `spawn_agent` [CX2]; wait confirmed by the docs' wave [CX1]; no lifetime cap is documented [CX1]. The thread defaults include V1 six spawned children (root excluded [CX6]) and V2 four threads per session, with a residency capacity of three [CX3], [CX7]; they do not enter this verdict [CX3]. Checked 2026-10-15 [CX1], [CX2], [CX3], [CX7].                |
+| OpenCode                    | The `subagent` tool, which the v2 docs say "runs only in a child session" [OC1]. The current source defines `name = "subagent"` [OC3], so the earlier `task` name is gone. Fresh context: "Subagents run with fresh context in foreground or background child sessions" [OC1]. Checked 2026-10-15 [OC1], [OC3].                                                                                                                                                                                                                                                                                 | `unverified` in the docs: they mention background child sessions without naming the option, the foreground behavior, or a completion notice [OC1], [OC2]. Source: the default foreground call returns the child's completed output [OC3], and a per-call `background` parameter returns at once with `status: "running"` and notifies the parent when the child finishes [OC3], [OC4]. The subagent source read on 2026-10-15 names no environment variable for it; the earlier source read named one [OC3]. The docs' only parallel statement covers the General agent, which can "run multiple units of work in parallel" [OC2]. `unverified`: neither the docs nor the subagent source shows several foreground calls running at once [OC1], [OC2], [OC3]. Checked 2026-10-15 [OC1], [OC2], [OC3], [OC4].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `sessionID` continues a previous subagent conversation [OC3]. `unverified` in the docs: resuming a child is not described [OC1]. Checked 2026-10-15 [OC1], [OC3].                                                                                                                                                                                       | `unverified` in the docs: no stop control is documented [OC1], [OC2]. The source's completion path handles a cancelled run ("Subagent cancelled") [OC4], but the excerpt does not show the control that stops one. Checked 2026-10-15 [OC1], [OC2], [OC4].        | The source's depth default is 1, set by `experimental.subagent_depth` [OC3]. The docs say the General agent "cannot launch more subagents" [OC2]. `unverified`: the docs and source name no concurrency cap or timeout [OC2], [OC3]. Checked 2026-10-15 [OC2], [OC3].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `one issue per session`: the failed condition is concurrency. The default foreground call that blocks until its child returns is shown in source [OC3], but neither the docs nor the source confirms that several OpenCode workers can run at once [OC1], [OC2], [OC3], and an orchestrator verdict means several workers may run at once. The per-call `background` parameter is not relied on [OC4]. The row holds until a concurrent path is shown. Checked 2026-10-15 [OC1], [OC2], [OC3], [OC4]. |
+| Grok Build                  | `spawn_subagent`, confirmed in the xAI source-repo user guide but not on docs.x.ai. Fresh context: yes, its own context window. [GB1] 2026-10-08 A background run (default) returns a subagent ID for `resume_from` (section Spawning Subagents); no field name or format is shown. [GB1] 2026-10-15                                                                                                                                                                                                                                                                                            | `streaming`: the parent receives the child's output when the child finishes, and a background run appends a completion block to the parent's scrollback. The result can also be pulled with `get_command_or_subagent_output`. [GB1] 2026-10-08                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `resume_from` continues a completed child; `send_subagent_message` reaches a running child and is off by default. [GB1] 2026-10-08                                                                                                                                                                                                                      | Ctrl+C cancels that child's turn only, and the tasks pane offers a kill action. No agent-callable stop is documented. [GB1] 2026-10-08                                                                                                                            | No timeout or concurrency cap documented; nesting is one level. [GB1] 2026-10-08                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `orchestrator`: a background start returns a subagent ID; the wait model is documented; no lifetime cap is documented. [GB1] 2026-10-15                                                                                                                                                                                                                                                                                                                                                               |
+| Cursor CLI                  | The Task tool. Its function name and parameters are not documented, and the `generalPurpose` type value is `unverified`; the docs name the built-in `explore` and `browser` types [CU1]. Each execution returns an agent ID [CU1]. Fresh context: yes, "Subagents start with a clean context" [CU1]. Checked 2026-10-15 [CU1].                                                                                                                                                                                                                                                                  | Foreground: "Blocks until the subagent completes. Returns the result immediately." Background: "Returns immediately. The subagent works independently" [CU1]. The custom-subagent field table gives `is_background` a default of `false` [CU1], so foreground is the documented default for custom subagents; the default for a built-in Task call is `unverified`. "Agent sends multiple Task tool calls in a single message, so subagents run simultaneously" [CU1], which makes parallel foreground calls a wave. Background output goes to `~/.cursor/subagents/`, with no completion notice [CU1]. Checked 2026-10-15 [CU1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Resume with the agent ID that each execution returns, to "resume the subagent with full context preserved" [CU1]. `unverified`: messaging a running subagent is not documented [CU1]. Checked 2026-10-15 [CU1].                                                                                                                                         | `unverified`: no stop control is documented [CU1]. Checked 2026-10-15 [CU1].                                                                                                                                                                                      | `unverified`: no numeric concurrency cap is documented. The docs advise "Start with 2-3 focused subagents" as guidance and show examples of five and ten parallel runs [CU1]. `unverified`: no timeout is documented, and the nesting limit has no number [CU1]. Checked 2026-10-15 [CU1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `one issue per session`: the wait model is confirmed only for custom subagents, whose default `is_background` `false` blocks until completion [CU1]. The built-in Task call's default is not documented [CU1], and the harness verdict cannot require the custom-subagent path. Checked 2026-10-15 [CU1].                                                                                                                                                                                             |
+| GitHub Copilot CLI          | `/delegate` hands work to the Copilot cloud agent, which "opens a draft pull request" and works in the background [CP1]. Local subagents start when the main agent delegates work, which "triggers the `task` tool," or from a custom agent chosen with `/agent` [CP2], [CP4]. Fresh context: a subagent has "their own context window" [CP2], [CP3]; `unverified`: whether it starts fresh [CP2]. Checked 2026-10-15 [CP1], [CP2], [CP3], [CP4].                                                                                                                                               | `unverified`. Subagents can run in parallel "by running certain tasks in the background" [CP2]. The docs do not say whether the parent blocks or is notified [CP2], [CP4], and `/delegate` does not say whether the CLI session waits or is notified [CP1]. The `subagentStop` hook runs "When a subagent completes" [CP2], which is a hook event, not a parent notice. Checked 2026-10-15 [CP1], [CP2], [CP4].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `unverified`: resuming a local subagent or messaging a running one is not documented [CP2], [CP3]. Checked 2026-10-15 [CP2], [CP3].                                                                                                                                                                                                                     | `unverified`: the `subagentStop` hook runs on completion [CP2], but no cancel for a subagent is documented [CP3]. Checked 2026-10-15 [CP2], [CP3].                                                                                                                | `unverified`: no timeout or concurrency value is documented for local subagents [CP2], [CP3]. `/delegate` hands work to a cloud agent session, which has a maximum execution time of 59 minutes [CP1], [CA1]. Checked 2026-10-15 [CA1], [CP1], [CP2], [CP3].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `one issue per session`: the local wait model is undocumented; the docs do not say whether the parent blocks or is notified [CP2], [CP4]. The `/delegate` route is a cloud agent session capped at 59 minutes [CA1]. Checked 2026-10-15 [CA1], [CP2], [CP4].                                                                                                                                                                                                                                          |
+| GitHub Copilot coding agent | Sessions start from GitHub surfaces, including issues, the agents tab, and Copilot Chat, and from automations [CA2]. A session "can edit files and run tests and linters in an ephemeral cloud development environment" [CA1]. Copilot "remembers context from previous sessions on the same pull request" [CA4]; `unverified`: whether a first session on a new pull request starts fresh [CA1], [CA2]. Checked 2026-10-15 [CA1], [CA2], [CA4].                                                                                                                                                | The output arrives as a pull request [CA1]; `unverified`: no completion notification to a parent is documented [CA1]. Checked 2026-10-15 [CA1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Mention `@copilot` in a pull request comment. "Copilot only responds to comments from people who have write access" [CA4]. `unverified`: whether steering applies after the current tool call [CA4]. Checked 2026-10-15 [CA4].                                                                                                                          | "Stopping a session ends the GitHub Actions run and preserves any commits already pushed" [CA3]. `unverified`: no agent-callable stop is documented [CA3]. "Copilot cloud agent sessions can be archived but not deleted" [CA3]. Checked 2026-10-15 [CA3].        | "Each Copilot cloud agent session has a maximum execution time of 59 minutes," and "This limit cannot be extended or bypassed" [CA1]. `timeout-minutes` in `copilot-setup-steps.yml` configures a shorter timeout [CA1]. Checked 2026-10-15 [CA1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `one issue per session`: the wait model is `unverified` (no completion notice to a parent is documented), and the 59-minute cap, which cannot be extended [CA1], ends before a multi-hour worker run. Checked 2026-10-15 [CA1].                                                                                                                                                                                                                                                                       |
+| GitHub Copilot Chat         | `runSubagent` in agent mode (VS Code): after a natural-language request, "the main agent invokes the subagent tool" [VS1]. A Local subagent "doesn't inherit the main conversation history" [VS1]. github.com Copilot Chat starts cloud sessions [CA2]; the IDE subagent page covers VS Code, JetBrains, Xcode, and Eclipse only, so it says nothing about github.com [VS2]. Checked 2026-10-15 [CA2], [VS1], [VS2].                                                                                                                                                                            | `unverified`. The subagent "returns a focused result to the main agent" [VS1], and its results "appear back in the main chat session" [VS2]. Whether the parent blocks or is notified is "not documented" [VS1] and "not explicitly documented" [VS2]; those sentences name only where the result goes. Parallel runs are supported: "Subagents can now run in parallel" [VS3]. Checked 2026-10-15 [VS1], [VS2], [VS3].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | "Each Local invocation is stateless: the main agent can't send follow-up messages to the same subagent" [VS1]. Checked 2026-10-15 [VS1].                                                                                                                                                                                                                | `unverified`: no stop control is documented [VS1]. Checked 2026-10-15 [VS1].                                                                                                                                                                                      | Nesting is off by default (`chat.subagents.allowInvocationsFromSubagents`, default `false`); when on, the maximum depth is 5 [VS1]. `unverified`: no timeout or concurrency value is documented for IDE subagents [VS1], [VS2]. Cloud sessions started from github.com Copilot Chat have the 59-minute maximum [CA1], [CA2]. Checked 2026-10-15 [CA1], [CA2], [VS1], [VS2].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `one issue per session`: the wait model is undocumented; neither VS1 nor VS2 says whether the parent blocks or is notified [VS1], [VS2]. The github.com cloud route has the 59-minute cap [CA1]. Checked 2026-10-15 [CA1], [VS1], [VS2].                                                                                                                                                                                                                                                              |
+| Antigravity CLI             | `invoke_subagent` spawns "a new concurrent session with a dedicated role and initial prompt"; `define_subagent` creates a transient one [AG1]. Fresh context: yes, the subagent "does not inherit the parent's existing conversation history," starting "with a clean slate" [AG1]. Checked 2026-10-15 [AG1].                                                                                                                                                                                                                                                                                   | Asynchronous: "Subagents run asynchronously in the background" [AG1]. A completed subagent "sent a result message to its parent agent, and paused execution" [AG1]. The docs name no setting for background subagents [AG1]. Checked 2026-10-15 [AG1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | "An idle agent automatically re-awakens to the Running state upon receiving a message from another agent" [AG1]. "The parent agent can interrupt a subagent by sending a message or terminating it" [AG1]. A killed subagent cannot be re-awakened [AG1]. Checked 2026-10-15 [AG1].                                                                     | "Stop Subagent" in the subagent panel, or `k` in the CLI [AG1]. `/agents` has "Kill Active Subagent" (`K`), which terminates the active subagent and its child threads [AG2]. Checked 2026-10-15 [AG1], [AG2].                                                    | `unverified`: no timeout, turn limit, or lifetime limit is documented [AG1]. `unverified`: no numeric concurrency limit is stated [AG1]. The nesting depth is at most 10 [AG1]. Checked 2026-10-15 [AG1].                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `orchestrator`: start confirmed by `invoke_subagent` [AG1]; wait confirmed by asynchronous background runs and the result message a completed subagent sends to its parent, with no setting named [AG1]; no lifetime cap is documented [AG1]. Checked 2026-10-15 [AG1].                                                                                                                                                                                                                               |
+
+Antigravity CLI is the former Gemini CLI, which was replaced on
+2026-06-18. The Gemini CLI page [GM1] (last updated 2026-06-08) gives a
+10-minute default `timeout_mins` and says subagents cannot call other
+subagents. Those facts describe the predecessor only. The Antigravity
+row cites its own docs and does not inherit them.
+
+[AG1]: https://antigravity.google/docs/subagents?tab=cli
+[AG2]: https://antigravity.google/docs/cli/commands/agents?hl=en
+[CA1]: https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent
+[CA2]: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/start-copilot-sessions
+[CA3]: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/manage-agents
+[CA4]: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-on-github
+[CC1]: https://code.claude.com/docs/en/subagents
+[CC2]: https://code.claude.com/docs/en/tools-reference
+[CC3]: https://code.claude.com/docs/en/env-vars
+[CP1]: https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/delegate-tasks-to-cca
+[CP2]: https://docs.github.com/en/copilot/concepts/agents/copilot-cli/comparing-cli-features
+[CP3]: https://docs.github.com/en/enterprise-cloud@latest/copilot/concepts/agents/copilot-cli/about-custom-agents
+[CP4]: https://github.blog/changelog/2025-10-28-github-copilot-cli-use-custom-agents-and-delegate-to-copilot-coding-agent/
+[CU1]: https://cursor.com/docs/subagents
+[CX1]: https://learn.chatgpt.com/docs/agent-configuration/subagents
+[CX2]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/tools/handlers/multi_agents_spec.rs
+[CX3]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/config/mod.rs
+[CX4]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/features/src/lib.rs
+[CX5]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/tools/handlers/multi_agents_common.rs
+[CX6]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/agent/registry.rs
+[CX7]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/agent/control/residency.rs
+[CX8]: https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/src/agent/control/spawn.rs
+[GB1]: https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/16-subagents.md
+[GM1]: https://geminicli.com/docs/core/subagents/
+[OC1]: https://opencode.ai/v2/docs/agents/
+[OC2]: https://opencode.ai/docs/agents/
+[OC3]: https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/core/src/tool/plugin/subagent.ts
+[OC4]: https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/core/src/session/subagent-completion.ts
+[VS1]: https://code.visualstudio.com/docs/copilot/agents/subagents
+[VS2]: https://docs.github.com/en/copilot/how-tos/copilot-in-your-ide/use-copilot-agents/use-subagents
+[VS3]: https://code.visualstudio.com/updates/v1_109
+
+## Critique pass invocation
+
+A **critique pass** is an independent review of a plan or diff that
+produces a list of issues with severity, correctness, and coverage
+assessment. The goal and expected output are the same regardless of
+agent; only the mechanism differs.
+
+| Agent           | How to run a critique pass                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Copilot         | Launch a subagent in Agent mode; use the calling phase's critique checklist as the prompt                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Claude Code     | `Agent(subagent_type="general-purpose")` with the calling phase's critique checklist                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Codex CLI       | Use one bounded read-only native subagent review when supported and suitable; parent waits for and collects the result. Fallback: structured self-critique when delegation is unavailable, disabled, unsuitable, or fails.                                                                                                                                                                                                                                                                                               |
+| OpenCode        | Launch a subagent via OpenCode's subagent tool (e.g. the built-in `general` subagent, or a `subtask: true` command) — an independent mechanism                                                                                                                                                                                                                                                                                                                                                                           |
+| Grok Build      | Independent `spawn_subagent` (name confirmed in the xAI source-repo user guide, checked 2026-10-08; see [Worker delegation](#worker-delegation)) with the calling phase's critique checklist. Fallback: structured self-critique when delegation is unavailable, unsuitable, or fails (unsuitable: the subagent returns no findings list, or its search beyond the named scope is open-ended rather than a targeted trace of code the change depends on or affects).                                                     |
+| Cursor CLI      | Launch an independent Cursor `Task` tool subagent with a general-purpose subagent type (`generalPurpose` is not in the Cursor docs as of 2026-10-08, so use the nearest general-purpose type the Task tool lists; see [Worker delegation](#worker-delegation)) using the calling phase's critique checklist; parent waits for and collects the result. Fallback: structured self-critique when delegation is unavailable, unsuitable, or fails. Do not substitute Cursor product review skills for IDD E-phase critique. |
+| Antigravity CLI | Self-critique or use Antigravity's native multi-step task mechanism if available                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+The brief given to a delegated per-agent critique subagent states the
+five rules below, each followed here by its citation per
+[Cite the observed incident](idd-design-rationale.md#cite-the-observed-incident).
+These rules apply to the brief for a delegated per-agent critique
+subagent only; structured self-critique and `critiqueLoop.delegate`
+commands are unchanged. The brief is a prospective constraint, not an
+enforced sandbox, like the trust-based contract the
+[Completed-draft adversarial review](#completed-draft-adversarial-review)
+subsection describes for the issue-authoring reviewer.
+
+1. **Read-only.** Apart from creating and writing in its own scratch
+   directory (see the scratch-directory rule), the pass writes nothing
+   to the worktree or the git directory and leaves no file elsewhere,
+   changes no branch, posts no marker or comment, and runs no `gh`
+   command other than a read-only query. For example it may read files
+   and run `git log`, `show`, `diff` and `grep`; any other command,
+   apart from creating and filling its own scratch directory, runs only
+   when the brief names it, and that includes a test run (invoked
+   directly, for example `node --test <file>` for a Node project, not
+   through a package-manager script, with its temporary and cache
+   output directed into the scratch directory) and a helper script.
+   Observed 2026-10-01, during the E2 critique of
+   `kurone-kito/idd-skill#3648`; no issue records the incident itself.
+   The issue-authoring analogue is `kurone-kito/idd-skill#3448`.
+2. **No package manager or hook installer, no `node_modules` writes.**
+   No package-manager command that can install, link or run a script
+   (for example `pnpm`, `npm`, `npx`), no other command that installs
+   hooks or links packages (for example `husky`), and no copying,
+   linking or writing of the worktree's `node_modules`. Observed
+   2026-10-01, during the E2 critique of `kurone-kito/idd-skill#3648`
+   (no issue records the incident itself), and 2026-09-30 in an
+   issue-authoring draft review (no issue filed).
+3. **Scratch files only in its own directory.** Scratch files go only
+   in a directory the subagent creates (for example with `mktemp -d`
+   inside a per-user parent directory, never directly in `/tmp`)
+   outside the repository and the session scratchpad. When the parent
+   has already created a scratch directory outside the repository and
+   the session scratchpad and named it in the brief (the Claude Code
+   recipe below has the parent create a scratch directory and name it
+   in the launch prompt), the subagent uses only that directory and
+   creates none. It never deletes an entry it did not create. The
+   subagent ends its reply with every absolute path it created, wrote or
+   deleted, each labeled with that action, including any directory it
+   created itself. Observed 2026-10-09, in
+   E10 critique rounds 5 and 6 for `kurone-kito/idd-skill#3872`: one
+   subagent wrote a bare file under `/tmp`, another left a `mktemp`
+   directory under `/tmp`, and one reported its scratch file deleted
+   while it was still present (the run notes do not record whether
+   those briefs named a directory). Observed again 2026-10-10, in an E10
+   critique round for `kurone-kito/idd-skill#3752` (pull request
+   `kurone-kito/idd-skill#3851`): a subagent deleted five entries in a
+   shared scratch directory that it had not created. Both are recorded
+   in the "Incident record" comments on `kurone-kito/idd-skill#3961`
+   ([first](https://github.com/kurone-kito/idd-skill/issues/3961#issuecomment-6085458916),
+   [second](https://github.com/kurone-kito/idd-skill/issues/3961#issuecomment-6096199282)).
+   The parent checks this rule with the post-round scratch check below
+   instead of trusting the subagent's own report.
+4. **No reading of session-private state.** The subagent does not read
+   the claim lock file `idd-claim.lock`, the `idd-generated-*` files in
+   the git directory, the session scratchpad (except a file the brief
+   names), the parent session's transcript, or the operator's notes and
+   per-user agent memory files. Observed 2026-09-24, during work on
+   `kurone-kito/idd-skill#3253` (no issue records the incident itself),
+   for the session scratchpad; observed 2026-10-01 (no issue filed), for
+   the operator's notes and per-user agent memory files; for the claim
+   lock file, the `idd-generated-*` files and the parent session's
+   transcript: preventive; no observed incident yet.
+5. **No background process left running.** The subagent ends every
+   background process the subagent itself started before it returns.
+   Observed 2026-10-01, during the plan critique for
+   `kurone-kito/idd-skill#3705` (no issue records the incident itself).
+
+**Post-round scratch check.** The parent names a scratch directory in
+the brief whenever it can create one, so a subagent-created directory
+is only a fallback. Around each delegated per-agent critique round
+(step 1 before the launch, the rest after the round and any process
+cleanup), the parent checks rule 3 itself. The check catches accidental
+violations by a cooperating subagent, the shape of every incident rule
+3 cites. Like the brief, it is not a sandbox, and it does not prove
+that rule 3 held:
+
+1. Before the launch, it creates the named directory empty inside a
+   dedicated per-user parent directory outside the repository and the
+   session scratchpad, never directly in `/tmp`, so every entry in it
+   after the round belongs to the round. It also lists the immediate
+   entries of that parent directory (for example `ls -A <parent>/`).
+2. After the round, it lists the named directory recursively by its
+   literal path without following symbolic links (for example
+   `find <dir> -mindepth 1`) and lists the parent directory again.
+3. It resolves the named directory and each reported path with
+   `realpath -m` (GNU coreutils) or an equivalent that follows symbolic
+   links without requiring the path to exist, so the comparison is not
+   only lexical; a path that cannot be resolved is flagged. It flags,
+   in the critique result and in its final message, any reported path
+   that resolves outside the named directory, any symbolic link
+   anywhere under the named directory, any entry in the named directory
+   the subagent did not report as created or written, any path reported
+   as deleted that is still present, and any entry of the parent
+   directory that appeared or vanished during the round. It records the
+   listings in the critique result before the named directory is
+   removed. For a pass stopped before it returned, the subagent
+   reported nothing, so the parent lists every entry as residual risk
+   rather than as a violation.
+4. It does not scan all of `/tmp` or any other shared directory beyond
+   the parent directory's own entries, and it deletes nothing it
+   cannot attribute to the round. Other sessions under the same OS user
+   write to these locations too, so a flagged entry there is a lead to
+   check, not proof of a violation; that includes the directories of
+   other passes the parent runs at the same time. A write outside the
+   named directory and the parent directory that the subagent does not
+   report stays unverified; the parent records that limit rather than
+   claiming that rule 3 held.
+
+When the subagent created its own directory instead (the fallback),
+there is no pre-launch listing. The parent then checks only the paths
+the subagent reported. It treats the directory the subagent reported
+creating as the named directory for steps 2 and 3 (the recursive
+listing, the resolution, and every step-3 flag), never lists `/tmp`
+itself, and records that the round had no named directory as residual
+risk.
+
+The parent bounds its wait for each delegated per-agent critique pass by
+the resolved `critiqueLoop.subagentWaitCeiling`. Enforce that ceiling
+through the harness's own per-invocation timeout control, never through a
+timeout utility wrapped inside the delegated command, following the
+principle from issue `kurone-kito/idd-skill#3449`. Where the harness supports
+it, launching in
+the background and applying a bounded wait is an equivalent way to enforce
+the same ceiling only when the harness also cancels or cleans up the timed-out
+subagent and ignores any late output. Otherwise the background process may
+continue consuming resources or race with the structured fallback, so do not
+use that pattern as an equivalent implementation.
+
+Reaching the ceiling without a findings list is a delegation failure. A
+wait that ends through cancellation, interruption, or error without a
+findings list is also a delegation failure. Either outcome routes to the
+row's structured self-critique fallback, or to "perform the critique as a
+structured self-review step" for a row without an explicit fallback, and
+the critique result records that the delegated pass did not return.
+
+A harness whose delegation primitive offers no way to bound the wait
+cannot honor the ceiling. Record that residual risk explicitly and use
+structured self-critique as the unattended-safe path for that harness.
+
+For Claude Code, whose `Agent` tool has no timeout parameter, the
+following recipe is conditional on `Agent` launching asynchronously, as it
+does today: it returns at once, and only a later notification reports that
+the pass ended, which may never come if the subagent stalls. Where a
+harness call blocks until the subagent ends, nothing can interrupt it and
+the "cannot honor the ceiling" paragraph above applies instead. A Claude
+Code session:
+
+1. Checks, before launching, that it can arm a wake-up with one of the
+   mechanisms the
+   [wake-up discipline](../.github/instructions/idd-ci.instructions.md#wake-up-discipline)
+   section names (that section also notes that a bare `sleep` may be
+   refused) and that `TaskStop` is available (a tool listed only as
+   deferred counts once it has been loaded, which must happen before the
+   launch). When it cannot confirm both, it does not launch, records the
+   residual risk as the "cannot honor the ceiling" paragraph above
+   requires, and uses structured self-critique.
+2. Creates, before the launch, a unique scratch directory placed as
+   step 1 of the post-round scratch check above requires, names it in
+   the launch prompt, and tells the subagent to put any scratch file
+   only under it, to start any background job with a working directory
+   under it, and to end its reply with every absolute path it created,
+   wrote or deleted, each labeled with that action. It takes the
+   step-1 listings of the post-round scratch check above.
+3. Launches the pass with `Agent`, notes the launch time, and arms the
+   wake-up for the ceiling, deliberately the ceiling and not the expected
+   completion because the ceiling is the only moment a decision is
+   needed, cancelling or ignoring that wake once that pass has returned.
+4. When the ceiling is reached and no findings list has arrived, stops the
+   subagent with `TaskStop` and the agent id the launch returned. That is
+   the delegation failure defined above, so the structured self-critique
+   fallback runs, the critique result records that the delegated pass did
+   not return, and a result that arrives later is discarded even if it is
+   usable (a repository whose passes legitimately run longer sets a larger
+   `critiqueLoop.subagentWaitCeiling`). A findings list that has already
+   arrived when the session acts is used. If the launch returned no agent
+   id or `TaskStop` fails, the session records the residual risk and takes
+   the same fallback, because it cannot confirm the stop.
+5. Once the pass has returned, been stopped, or the stop could not be
+   confirmed, lists the processes left running and ends by process id only
+   those whose working directory or command line is under the scratch
+   directory, never the session's own shell or the listing command itself.
+   It reports any other leftover as residual risk, without ending it, and
+   it never ends processes by a name pattern. It then runs the
+   post-round scratch check above. It removes the scratch
+   directory by its exact literal path (never a possibly unset shell
+   variable) only after that cleanup and only when no process under it
+   remains; otherwise it leaves the directory and records the residual
+   risk.
+
+In a session that passed the check in item 1, stopping with `TaskStop` and
+this cleanup are how the Claude Code pattern meets the equivalence
+condition above. Whether a background job survives `TaskStop` was not
+replayed. The observations behind this recipe follow; none was recorded in
+an issue or pull request before this recipe:
+
+- On 2026-10-01, during the plan critique for kurone-kito/idd-skill#3705
+  (later pull request kurone-kito/idd-skill#3712), a delegated pass
+  returned after about 33 minutes against the 20-minute ceiling and the
+  session waited it out, neither stopping the subagent nor recording a
+  delegation failure. After that subagent's result was delivered, an
+  enumeration it had started in the background was still using about 108%
+  of a CPU on the shared host until the parent ended it by process id.
+  Neither is recorded in that issue or pull request.
+- In a replay on 2026-10-02 (no issue), `TaskStop` with the agent id the
+  launch returned stopped a running subagent, and the foreground process
+  it had been running was gone eight seconds later.
+- On 2026-09-30, in an operator session during the work on pull request
+  kurone-kito/idd-skill#3605, a name-pattern kill ended the session's own
+  shell, which is why step 5 never ends processes by a name pattern. No
+  issue or pull request records that incident itself.
+
+For Codex delegation, the parent collects the reviewer result before
+continuing; if delegation fails, use the structured fallback.
+
+For Grok Build, the critique brief must give the subagent the actual
+artifact under review (file references by their sibling-worktree
+absolute paths, never a relative path or a bare `cd`; a diff by an
+absolute-worktree diff command or revision range; or a plan by its
+literal text), the issue's requirements or acceptance criteria in
+every case — even when the calling phase's own checklist wording
+does not name them explicitly, since a correctness assessment is
+meaningless without them — and any other checklist input the calling
+phase names, such as the E9 findings under verification for E10.
+Instruct the subagent to stay within that scope except for a targeted
+trace of code the change depends on or affects — `spawn_subagent`'s
+working-directory parameter does not rebind Grok's
+file tools (that rebind gap is kurone-kito/idd-skill#2819). This
+constrains the pass prospectively but does not guarantee compliance —
+the unsuitable fallback above still applies when the subagent wanders
+past it
+anyway.
+
+When a phase file says "run a critique pass", apply the row for your
+agent above. If no subagent mechanism is available, perform the critique
+as a structured self-review step within the same response.
+
+### Repository-configurable critique delegate
+
+A repository may point C1 or E10 at a reviewer other than the
+per-agent mechanism above by setting `critiqueLoop.delegate` in
+`.github/idd/config.json` (see
+[Customization Surfaces](customization.md#customization-surfaces) and
+[Configuration Authority Hierarchy](policy-constants.md#configuration-authority-hierarchy)):
+a `command` string is a shell command run against the branch's current
+diff, and `mode` selects **when the per-agent mechanism above also
+runs**:
+
+<!-- dprint-ignore-start -->
+| `mode` | delegate succeeded | delegate failed |
+| --- | --- | --- |
+| `combined` | per-agent pass runs | per-agent pass runs |
+| `fallback` (default) | no per-agent pass | per-agent pass runs |
+| `on-success` | per-agent pass runs | no per-agent pass |
+| `never` | no per-agent pass | no per-agent pass |
+<!-- dprint-ignore-end -->
+
+`combined` is the one value that does not consult the delegate's
+outcome — it runs both mechanisms on every pass. The other three
+observe that outcome first. Wherever both mechanisms run in the same
+pass (always under `combined`, and after a successful delegate under
+`on-success`), their reported issues are unioned.
+
+**Delegate failed** means the same set of conditions in every mode: the
+command is absent, exits non-zero, times out, or its output cannot be
+read as a findings list. It is never narrowed to the process exit
+status alone, so a delegate that exits `0` but returns unreadable
+output counts as failed under `fallback` and `on-success` alike.
+Exit-code conventions differ between reviewers — a lint-style tool
+signals _findings exist_ with a non-zero exit rather than _the tool
+broke_ — which is why `on-success` exists at all.
+
+**Fail-closed hold.** Under `on-success` and `never`, a failed delegate
+can leave C1 with no critique findings at all. The hold condition is
+that state itself, not the failure classification: when the mechanisms
+that actually ran produced no readable findings list, C1 records a hold
+rather than a clean "zero issues reported" verdict, and C2 does not
+advance to PR submission on that vacuous result. A delegate that trips
+one of the conditions above but still emitted a readable findings list
+has produced critique — those findings are the pass's output and C1
+continues to C3 scoring on them. `fallback`'s fall-through to the
+per-agent mechanism is unchanged. (Written here in C1's own step
+vocabulary — `C2`/`C3`; see "E10 delegate support" below for the same
+hold applied in E10's own vocabulary.)
+
+The hold turns on a **missing or unreadable** findings list, never on
+an empty one. A delegate that succeeded and reported no issues has
+produced a readable findings list that happens to be empty: that is a
+genuine clean verdict, and C2 proceeds to the objective diff validation
+floor exactly as it would with no delegate configured. Only the
+no-readable-list state is vacuous.
+
+Delegate output is read the same way a subagent's critique response is
+read today — free-form findings scored through the existing C3
+High/Medium/Low process; no new machine-readable output schema is
+introduced. Absent `critiqueLoop.delegate` entirely keeps today's
+per-agent-only behavior with zero change.
+
+Configuration-time fail-safe (distinct from the runtime behavior
+above): a non-object `critiqueLoop.delegate`, one whose `command` is
+missing, empty, whitespace-only, non-string, or supplied through the
+prototype chain rather than as an own property, or one carrying any key
+beyond `command`/`mode`, is treated the same as an absent delegate —
+the calling pass (C1 or E10) uses the per-agent mechanism, never
+attempting the delegate at all. A present but non-object
+**`critiqueLoop`** parent (a string, array, or `null`) is a
+repository-local configuration error rather than an absent key: it
+fails closed to the per-agent mechanism and, like a malformed
+`delegate`, blocks user-global inheritance instead of letting a global
+delegate stand in for it. A present but **unrecognized `mode`** is
+unusable the same way: effective delegate resolution reports a
+repository-local one as malformed, so it neither runs nor inherits the
+user-global layer, and reports an unusable user-global fragment as
+absent. Either way the calling pass falls back to the per-agent
+mechanism rather than running the delegate under an assumed default.
+(A direct `normalizePolicyConfig` caller — a different consumer, not
+the delegate resolution path used by C1 or E10 — still collapses such
+a value to the `fallback` default, which is why both behaviors have
+their own regression tests.) `.github/idd/config.json` schema
+validation separately rejects an unsupported `mode` value or any key
+other than `command`/`mode` before the file is accepted, so this state
+normally reaches C1 or E10 only through the unvalidated user-global
+file.
+
+The C-phase's objective diff validation floor described below applies
+**uniformly** whether a delegate is configured or not, in every mode,
+and regardless of what the delegate reports — this surface changes
+which mechanism produces critique findings, never the load-bearing
+`fix-validate` gate. That holds for the fail-closed hold above too: the
+hold stops a vacuous clean verdict from advancing, it never lets one
+through.
+
+When a runtime falls back to structured same-response self-review
+instead of an independent subagent mechanism (see the table above; a
+runtime's own native multi-step mechanism, such as Antigravity's when
+available, counts as independent), treat that self-critique verdict as
+**advisory only** — it is not sufficient by itself to let the C-phase
+skip to PR submission. The C-phase's objective diff validation floor (the
+**fix-validate** command set that C5 also runs; see
+`.github/instructions/idd-work.instructions.md` C1/C2/C4) is the
+**load-bearing** gate instead — independent of D2's own
+**pre-push-validate** gate.
+This floor applies **uniformly** to every runtime — including
+subagent-capable ones — rather than being conditioned on a runtime
+self-classifying as "no-subagent". Uniform application keeps the gate
+deterministic and avoids relying on fragile runtime self-detection that
+a weak model could get wrong.
+
+### User-global critique delegate default
+
+This resolver reads only its own fragment of the user-global file. The
+layered rules for `overrides[]`, the repository-policy field class, and the
+CI off switches are in the
+[user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md).
+
+A local runtime (one that reads the operator's own `$HOME`) may also
+inherit a `critiqueLoop.delegate` from a user-global file when the
+repository leaves the repo-local field genuinely absent — a
+GitHub-hosted or other remote agent surface is not meant to consult this
+layer, but the helper detects only `GITHUB_ACTIONS=true` on its own (pass
+`--no-user-global` on any other remote surface). Resolution order: repo-local
+`critiqueLoop.delegate` (a configured object, an explicit JSON `null`
+disable, or a malformed value) always wins outright and never inherits
+the global layer — an explicit repo-local `null` forces the per-agent
+mechanism even when a global delegate exists, and a malformed
+repo-local value fails closed to the per-agent mechanism the same way;
+only when repo-local is entirely absent does the global file apply;
+absent both, the per-agent mechanism above runs unchanged. A malformed
+or explicit-`null` **global** fragment is treated the same as a
+missing one — silently falls back to the per-agent mechanism — which
+is distinct from repo-local `null`'s stronger role of actively
+disabling any inherited delegate.
+
+The global file lives at `$XDG_CONFIG_HOME/idd-skill/config.json`, falling back
+to `$HOME/.config/idd-skill/config.json` when `XDG_CONFIG_HOME` is unset or not
+a **qualified root**. A qualified root is judged against the **running
+platform**, not accepted in any form: on Windows only a drive-letter root
+(`C:\…` or `C:/…`) or a UNC root (`\\server\…`) qualifies, and on POSIX only a
+`/…` path does — `//…` is excluded there, as is a Windows-shaped value, and a
+current-drive root such as `\config` is excluded on Windows even though
+`path.isAbsolute` calls it absolute. A relative or otherwise unqualified value
+is ignored rather than joined against the process's working directory, so the
+global config can never resolve inside the checkout under review. A missing,
+unreadable, invalid-JSON, or non-object global file is silently treated as
+absent — this layer is opt-in and never required for OSS adopters. Only the
+`critiqueLoop.delegate` fragment is read by this resolver. The same file can
+also carry `critiqueLoop.telemetryHook` (read only by the telemetry hook
+resolver) and `issueAuthoring.adversarialReview.delegate` (read only by the
+issue-authoring delegate resolver); every other key is ignored by all three.
+Other policy fields can still come from the repository-local
+`.github/idd/config.json` or from the user-global layers, under the rules in the
+[user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md).
+
+Example (a generic local reviewer, not a specific product):
+
+```json
+{ "critiqueLoop": { "delegate": { "command": "my-local-reviewer --diff" } } }
+```
+
+Any configured delegate command — repo-local or user-global — is
+executable configuration: it may transmit source code or other data
+available to its process to an external service, so enabling one is a
+deliberate operator/repository choice, and neither config file should
+hold secrets. This surface changes only which mechanism supplies
+critique findings; the C-phase objective diff validation floor above,
+the E-phase Copilot advisory-convergence policy, required checks, and
+merge gates are all unchanged.
+
+The critique content passed to a configured delegate is the branch diff
+only — never the two lenses below or the rest of the per-agent
+checklist. (This is about what the delegate invocation sends as
+critique input, not a sandboxing guarantee on what the command can
+otherwise access — see the executable-configuration warning above.)
+Passing checklist content to an external command is a capability change
+with its own design questions (whether the reviewer accepts input at
+all, what happens if it ignores it) that this surface does not make
+today. Under a successful delegate with `mode: fallback` (the default),
+or under `mode: never`, the per-agent pass does not run at all, so an
+operator relying solely on a delegate should expect the lenses below
+are not applied to that PR's diff.
+
+### Repository-configurable critique telemetry hook
+
+A repository may also configure a per-round C-phase telemetry
+notification by setting `critiqueLoop.telemetryHook` in
+`.github/idd/config.json` (see
+[Customization Surfaces](customization.md#customization-surfaces) and
+[Configuration Authority Hierarchy](policy-constants.md#configuration-authority-hierarchy)):
+a `command` string is a shell command invoked once per C-phase round,
+with a JSON payload written to its stdin. Unlike `critiqueLoop.delegate`
+above, this hook never supplies critique findings and never gates
+C-phase control flow — it is a pure observability side channel.
+
+The hook is invoked at two points in the C-phase loop, documented in
+both the full-profile work file (C2 and C4) and the lite work file
+(`lite/idd-work-lite.instructions.md`, matching steps): at the end of
+C4, once the round's Accept/Reject decision is final (before C5, PR
+submission, or a hold); and at C2's zero-issue exit, so a clean round
+that skips C3/C4 entirely still emits a record (with zero
+findings/accepted/rejected counts).
+
+The JSON payload written to the hook command's stdin:
+
+```json
+{
+  "phase": "C",
+  "round": 2,
+  "repo": "owner/repo",
+  "issue": 123,
+  "pr": null,
+  "findingsCount": 3,
+  "severityBreakdown": { "high": 1, "medium": 1, "low": 1 },
+  "acceptedCount": 2,
+  "rejectedCount": 1,
+  "delegateUsed": true,
+  "delegateCommand": "coderabbit-critique",
+  "timestamp": "2026-09-08T12:00:00Z"
+}
+```
+
+`pr` is `null` before a PR exists for this issue; `delegateCommand` is
+present only when `delegateUsed` is `true`.
+
+**Fire-and-forget.** A missing command, non-zero exit, timeout, or any
+other failure invoking the hook is silently ignored and never blocks,
+holds, delays, or otherwise changes C-phase control flow — unlike
+`critiqueLoop.delegate`'s fail-closed hold semantics described above,
+this is a pure side channel. The C-phase objective diff validation
+floor and every other C-phase gate apply identically whether the hook
+is configured, missing, or failing.
+
+### User-global critique telemetry hook default
+
+This resolver reads only its own fragment of the user-global file. The
+layered rules for `overrides[]`, the repository-policy field class, and the
+CI off switches are in the
+[user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md).
+
+A local runtime (one that reads the operator's own `$HOME`) may also
+inherit a `critiqueLoop.telemetryHook` from a user-global file when the
+repository leaves the repo-local field genuinely absent — a
+GitHub-hosted or other remote agent surface is not meant to consult this
+layer, but the helper detects only `GITHUB_ACTIONS=true` on its own (pass
+`--no-user-global` on any other remote surface). Resolution order: repo-local
+`critiqueLoop.telemetryHook` (a configured object, an explicit JSON
+`null` disable, or a malformed value) always wins outright and never
+inherits the global layer — an explicit repo-local `null` disables the
+hook entirely even when a global hook exists, and a malformed
+repo-local value fails closed to "no hook" the same way; only when
+repo-local is entirely absent does the global file apply; absent both,
+no hook runs. A malformed or explicit-`null` **global** fragment is
+treated the same as a missing one — silently falls back to "no hook" —
+which is distinct from repo-local `null`'s stronger role of actively
+disabling any inherited hook.
+
+The global file lives at the same path, and under the same qualified-root rules,
+as the critique delegate's own user-global file above
+(`$XDG_CONFIG_HOME/idd-skill/config.json`, falling back to
+`$HOME/.config/idd-skill/config.json`). Only the `critiqueLoop.telemetryHook`
+fragment is read by this resolver. The same file can also carry
+`critiqueLoop.delegate` (read only by the critique delegate resolver) and
+`issueAuthoring.adversarialReview.delegate` (read only by the issue-authoring
+delegate resolver); every other key is ignored by all three. Other policy fields
+can still come from the repository-local `.github/idd/config.json` or from the
+user-global layers, under the rules in the [user-global installation guide](https://github.com/kurone-kito/idd-skill/blob/main/docs/user-global-install.md).
+
+Example (a generic local notifier, not a specific product):
+
+```json
+{ "critiqueLoop": { "telemetryHook": { "command": "my-critique-notifier" } } }
+```
+
+Any configured hook command — repo-local or user-global — is executable
+configuration: it may transmit source code or other data available to
+its process to an external service, so enabling one is a deliberate
+operator/repository choice, and neither config file should hold
+secrets. This surface only emits a per-round observability record; it
+never changes which mechanism supplies critique findings, the C-phase
+objective diff validation floor, the E-phase Copilot
+advisory-convergence policy, required checks, or merge gates.
+
+### E10 delegate support; telemetry hook stays C1-only
+
+`idd-review-fix.instructions.md`'s own critique pass (E10) also
+consults `critiqueLoop.delegate`, using the exact same resolution
+chain, `mode` semantics, and fail-closed hold behavior described above
+for C1 — including the `idd-critique-delegate` helper and the
+`instructions-only` resolution order. E10 states the fail-closed hold
+in its own vocabulary: when the mechanisms that actually ran under
+`on-success`/`never` leave no readable findings list, that is a hold
+(the shared Hold / suspend rules in
+`idd-overview-appendix.instructions.md` apply), never a clean "zero
+issues, proceed to E11" round.
+
+`critiqueLoop.telemetryHook` remains scoped to the C1 critique pass
+only; E10 never consults it, regardless of configuration. Extending
+the telemetry hook to E10 remains a separate, not-yet-scoped change.
+
+### E2 after a clean C1 on the same HEAD
+
+E2's first pass (`idd-review-snapshot.instructions.md`) is kept even
+when C1 ran clean on the tree that became the pull request's head: C1
+having reviewed that head is not a reason to skip it. What E2 must not
+do is repeat C1. C1's rounds already ran the configured mechanism (for
+example the delegate plus the per-agent pass under `combined`), while
+E2's incremental scope keys off a same-claim `review-baseline` that
+neither C nor D posts, so a first E2 pass scopes to the full branch diff
+(and does so again after a takeover). Briefed like C1, it asks for the
+same review a second time.
+
+Name C1's lens and its finding count in the E2 brief and ask for a
+different lens, for example an **adversarial** one: try to break the
+change, and run the new tests against mutants of it (small deliberate
+defects in the code under test) so each mutant must fail a named test. A
+takeover successor that cannot recover C1's lens or count says so in the
+brief and picks a lens the C1 checklist did not use. Reported 2026-09-30
+by an adopter (kurone-kito/idd-skill#3678): on a small guard-plus-tests
+change, C1 with a checklist lens reported three Low items, while E2 with
+an adversarial lens ran the new specs against five mutants of the guard,
+reported one Low item, and showed every mutant failing a named test.
+That is evidence C1 could not produce, and it let the session reject the
+Low item without another push. The
+[mutation / write-side helper lens](#mutation--write-side-helper-lens)
+and the [gate-mirroring helper lens](#gate-mirroring-helper-lens) below
+apply at E2 exactly as at C1, on top of the lens chosen here; the first
+concerns helpers that mutate GitHub or git state, not mutation testing.
+
+### Mutation / write-side helper lens
+
+When the diff under critique implements a helper that **mutates GitHub
+state, mutates git state, or performs a merge** (read-only helpers are
+out of scope), also apply this lens — each check below targets a gap
+class that a clean general critique repeatedly missed and that later
+review then surfaced one finding per round:
+
+- **Fail-closed inputs**: guards use strict checks (`=== true`, explicit
+  pattern/enum validation) so a non-boolean, empty, missing, or malformed
+  value blocks the mutation rather than passing it.
+- **Validate/execute scope parity**: the repo, identity, and HEAD the
+  gate validates are the same ones the mutation runs against — no split
+  between a read-side collector's scope and the executed `gh` / git
+  command; reject ambiguous partial scoping.
+- **Unsafe-output suppression**: a not-ready or invalid verdict never
+  emits a copy-pasteable command bound to an unvalidated value.
+- **Schema strictness parity**: output schemas match the values the
+  helper actually produces and mirror sibling-helper strictness (SHA
+  patterns, enums), so the published contract is no looser than the
+  runtime.
+
+### Gate-mirroring helper lens
+
+When the diff under critique implements a helper whose purpose is to
+**predict, mirror, or pre-check a decision some other gate makes** —
+where "agrees with that gate" is the whole contract — also apply this
+lens. It is orthogonal to the write-side lens above rather than an
+alternative to it: a helper that both mutates state and mirrors a gate
+gets both, and their checks do not overlap.
+
+Extracting the shared decision into one function is the right first
+move and does not finish the job, because **sharing a function
+equalizes the computation, not the arguments**. Two callers still
+diverge whenever one passes fewer inputs, a laxer validation path, an
+older snapshot, or a stale point in time. Enumerate the gate's inputs
+once, against this list, rather than discovering them one per review
+round:
+
+- **Validation-path parity**: the helper reads configuration through the
+  same validating reader the gate uses, not a rawer resolver that skips
+  a schema or subtree check. A gate that rejects a whole config section
+  when any sibling key is invalid, and falls back to a default, must not
+  be mirrored by a helper that reads the one key directly.
+- **Input completeness**: every optional argument that widens or narrows
+  the gate's own verdict is passed, not just the ones the happy path
+  needs. An omitted exception parameter silently removes the exception.
+- **Whole-identity comparison**: every field the gate binds on is
+  compared — both the fields the shared value carries and the ones it
+  does not, which the caller must then supply itself. A shared record
+  that omits an identity field is not evidence that the field does not
+  matter.
+- **Snapshot identity**: all inputs to one verdict come from a single
+  read. Two reads that can straddle a change produce a verdict about no
+  state that ever existed.
+- **Point-in-time parity**: state re-read after a mutation is
+  re-resolved rather than reused from before it, whenever the gate would
+  see the newer state.
+
+Each check names a way a mirror can disagree with its gate while the
+shared code is itself correct, so a passing unit test on the shared
+function is not evidence for any of them. The gap class was observed on
+[kurone-kito/idd-skill#2330](https://github.com/kurone-kito/idd-skill/pull/2330),
+where a correct extraction still took seven advisory rounds, five of
+them this one shape.
+
+[issue-authoring-review-input-schema]: https://kurone-kito.github.io/idd-skill/schemas/issue-authoring-review-input.schema.json

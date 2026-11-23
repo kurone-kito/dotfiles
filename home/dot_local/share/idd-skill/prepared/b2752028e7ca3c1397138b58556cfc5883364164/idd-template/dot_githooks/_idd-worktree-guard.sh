@@ -1,0 +1,209 @@
+# shellcheck shell=sh
+# IDD disposable-worktree guard — shared check for the pre-commit and
+# pre-push hooks. Pure POSIX sh: no node, jq, python, or other runtime
+# dependency, so it works in any repository that adopts the IDD template.
+#
+# The guard is opt-in. It does nothing unless worktreeGuard.enabled is
+# true in .github/idd/config.json. When enabled, it refuses a commit or
+# push made from the PRIMARY worktree while HEAD is on an implementation
+# branch (issue/* or roadmap-audit/*), because B1 requires that work to
+# live in a sibling worktree. Run git with --no-verify to bypass it
+# intentionally.
+#
+# By default the guard does NOT refuse a commit/push made from the
+# primary worktree while HEAD is on the repository's own base branch
+# (e.g. a session that skips B1 entirely and commits directly on
+# `developmentBranch`) -- only the implementation-branch patterns above
+# are covered. Set the separate opt-in
+# `worktreeGuard.refuseBaseBranchCommits: true` to also refuse that
+# case (#2801). It compares HEAD against the configured
+# `developmentBranch` only -- this pure-POSIX-sh hook has no network
+# access to resolve the live GitHub default branch the way
+# `idd-work.instructions.md`'s B1 does, so an absent `developmentBranch`
+# leaves this stricter check a no-op even when the opt-in is set.
+#
+# For a push, that opt-in refuses unless every ref line on stdin deletes a
+# ref other than the development branch (#3854). Git passes those lines to
+# pre-push on stdin as `<local ref> <local sha> <remote ref> <remote sha>`,
+# and a deletion has the local ref `(delete)`. So a merged feature branch can
+# be deleted from the primary worktree, while a push that creates or updates
+# any ref, or that touches the development branch, is refused. A push with no
+# ref lines (an up-to-date push) or with no readable stdin keeps the HEAD-based
+# refusal.
+#
+# Stdin can be read once. Chaining the guard after a hook manager has two
+# shapes (see idd-template/docs/onboarding/optional-host-setup.md):
+#   - `exec ".../pre-push" "$@"` as the last line: if an earlier command in
+#     the chain (for example `git lfs pre-push`) already read stdin, the
+#     guard sees EOF and falls back to the HEAD-based refusal, so F4 step 6
+#     still fails for that adopter.
+#   - `".../pre-push" "$@" || exit $?` before the manager's own command:
+#     the guard reads stdin first, so a later reader gets no ref lines. Only a
+#     deletion of another ref gets through, and a deletion transfers no objects,
+#     so such a reader has nothing to upload. The guard reads only after the
+#     checks that put the push in scope.
+
+idd_worktree_guard_check() {
+  # $1: human-readable action word ("commit" or "push").
+  action="$1"
+
+  # Single combined `git rev-parse` replaces three separate forked
+  # pipelines (--show-toplevel; `git worktree list --porcelain | sed |
+  # head` to find the primary worktree; --abbrev-ref HEAD), leaving
+  # exactly two external-process forks -- this call and the `tr` below
+  # -- on the common "enabled, not on a guarded branch" path with the
+  # default worktreeGuard.branchPatterns; a configured override adds
+  # two more `tr` forks in the patterns= block further down. A later
+  # change must not silently regress either count.
+  #
+  # This must not gate on exit status: an unborn HEAD makes the
+  # trailing --abbrev-ref HEAD resolution fail (git exits 128), but git
+  # still prints the three preceding values, plus the literal token
+  # "HEAD" it could not resolve, to stdout -- confirmed locally. That
+  # "HEAD" line is indistinguishable from an actual detached HEAD's
+  # --abbrev-ref output, so both already fall through the existing
+  # branch != HEAD check below without special-casing. Whenever the
+  # first value (toplevel) fails outright -- outside a work tree, or
+  # inside a bare .git directory -- git prints nothing at all, so the
+  # loop below leaves repo_root empty and the guard returns 0. The
+  # trailing `|| true` keeps that non-zero exit from tripping a caller
+  # that sources this file under `set -e`, matching the old code's own
+  # `|| return 0` short-circuit.
+  info=$(git rev-parse --show-toplevel --git-dir --git-common-dir --abbrev-ref HEAD 2>/dev/null) || true
+  repo_root='' git_dir='' git_common_dir='' branch=''
+  i=0
+  while IFS= read -r line; do
+    i=$((i + 1))
+    case $i in
+      1) repo_root=$line ;;
+      2) git_dir=$line ;;
+      3) git_common_dir=$line ;;
+      4) branch=$line ;;
+    esac
+  done <<_IDD_WTG_EOF_
+$info
+_IDD_WTG_EOF_
+  [ -n "$repo_root" ] || return 0
+
+  config="$repo_root/.github/idd/config.json"
+  [ -f "$config" ] || return 0
+
+  # Opt-in gate: worktreeGuard.enabled must be true. Collapse whitespace
+  # so both pretty-printed and minified JSON parse, then inspect only the
+  # worktreeGuard object body so key order does not matter.
+  compact=$(tr -d ' \t\r\n' < "$config")
+  case "$compact" in
+    *'"worktreeGuard":{'*) ;;
+    *) return 0 ;;
+  esac
+  guard_body=${compact#*'"worktreeGuard":{'}
+  guard_body=${guard_body%%\}*}
+  case "$guard_body" in
+    *'"enabled":true'*) ;;
+    *) return 0 ;;
+  esac
+
+  # Only the primary worktree is guarded. In the primary worktree
+  # --git-dir and --git-common-dir refer to the same directory (both
+  # print ".git", or the same absolute path); in a linked worktree
+  # --git-dir points at ".../worktrees/<name>" while --git-common-dir
+  # still points at the shared repository -- confirmed locally. Sibling
+  # worktrees are exactly where implementation branches are supposed to
+  # live, so this is equivalent to the old primary-vs-repo_root check.
+  [ "$git_dir" = "$git_common_dir" ] || return 0
+
+  # Only implementation branches are guarded. The globs come from
+  # worktreeGuard.branchPatterns, defaulting to issue/* and
+  # roadmap-audit/* when the key is absent. (A detached HEAD, or an
+  # unborn HEAD, reports "HEAD" here and never matches.)
+  [ -n "$branch" ] && [ "$branch" != "HEAD" ] || return 0
+
+  # Opt-in stricter mode (#2801): also refuse a commit/push while HEAD
+  # is on the configured base branch itself. `developmentBranch` is a
+  # top-level config key, not nested under worktreeGuard, so it is
+  # read from the full compact document, not guard_body.
+  case "$guard_body" in
+    *'"refuseBaseBranchCommits":true'*)
+      development_branch=''
+      case "$compact" in
+        *'"developmentBranch":"'*)
+          dev_raw=${compact#*'"developmentBranch":"'}
+          development_branch=${dev_raw%%\"*}
+          ;;
+      esac
+      if [ -n "$development_branch" ] && [ "$branch" = "$development_branch" ]; then
+        # For a push, refuse unless every ref line on stdin deletes a ref other
+        # than the base branch (#3854). The lines are read here, once the checks
+        # above have put the push in scope. A terminal, an empty stream (an
+        # up-to-date push) or a closed stdin leaves refuse at 1, so those keep the
+        # HEAD-based refusal.
+        refuse=1
+        if [ "$action" = push ] && [ ! -t 0 ]; then
+          ref_lines=$(cat 2>/dev/null) || ref_lines=''
+          if [ -n "$ref_lines" ]; then
+            refuse=0
+            while IFS=' ' read -r local_ref _local_sha remote_ref _remote_sha; do
+              if [ "$local_ref" != "(delete)" ] ||
+                [ "$remote_ref" = "refs/heads/$development_branch" ]; then
+                refuse=1
+                break
+              fi
+            done <<_IDD_WTG_REFS_
+$ref_lines
+_IDD_WTG_REFS_
+          fi
+        fi
+        if [ "$refuse" = 1 ]; then
+          printf 'IDD worktree guard: refusing to %s directly on "%s" from the primary worktree (%s).\n' \
+            "$action" "$branch" "$repo_root" >&2
+          printf 'worktreeGuard.refuseBaseBranchCommits is enabled: implementation work must go\n' >&2
+          printf 'through B1 (create a sibling worktree on an implementation branch) first.\n' >&2
+          printf 'See B1 in .github/instructions/idd-work.instructions.md.\n' >&2
+          printf '(To bypass intentionally, re-run the git command with --no-verify.)\n' >&2
+          return 1
+        fi
+        # An accepted deletion (refuse=0) is final. Return before the
+        # implementation-branch pattern check below, so a developmentBranch that
+        # also matches branchPatterns, such as issue/main, still allows it.
+        return 0
+      fi
+      ;;
+  esac
+
+  patterns='issue/* roadmap-audit/*'
+  case "$guard_body" in
+    *'"branchPatterns":['*)
+      raw=${guard_body#*'"branchPatterns":['}
+      raw=${raw%%]*}
+      patterns=$(printf '%s' "$raw" | tr ',' ' ' | tr -d '"')
+      ;;
+  esac
+
+  matched=0
+  # This file is sourced by both hooks, so preserve the caller's shell
+  # option state while preventing pathname expansion of the pattern list.
+  noglob_was_set=0
+  case $- in
+    *f*) noglob_was_set=1 ;;
+    *) set -f ;;
+  esac
+  for pattern in $patterns; do
+    # Unquoted $pattern is intentional: it enables glob matching of the
+    # configured branch pattern against the branch name.
+    # shellcheck disable=SC2254
+    case "$branch" in
+      $pattern) matched=1; break ;;
+    esac
+  done
+  [ "$noglob_was_set" = 1 ] || set +f
+  [ "$matched" = 1 ] || return 0
+
+  printf 'IDD worktree guard: refusing to %s on "%s" from the primary worktree (%s).\n' \
+    "$action" "$branch" "$repo_root" >&2
+  printf 'B1 requires implementation branches to live in a sibling worktree, not the primary worktree.\n' >&2
+  printf 'Create one, e.g.:  git worktree add ../<repo>.%s %s\n' \
+    "$(printf '%s' "$branch" | tr '/' '-')" "$branch" >&2
+  printf 'See B1 in .github/instructions/idd-work.instructions.md.\n' >&2
+  printf '(To bypass intentionally, re-run the git command with --no-verify.)\n' >&2
+  return 1
+}

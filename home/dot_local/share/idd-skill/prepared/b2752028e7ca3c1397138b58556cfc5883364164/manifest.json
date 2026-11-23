@@ -1,0 +1,640 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "b2752028e7ca3c1397138b58556cfc5883364164",
+  "components": {
+    "instructions": {
+      "location": "https://github.com/kurone-kito/idd-skill/tree/b2752028e7ca3c1397138b58556cfc5883364164/idd-template",
+      "provenance": {
+        "kind": "checkout",
+        "commit": "b2752028e7ca3c1397138b58556cfc5883364164"
+      },
+      "files": [
+        {
+          "path": ".cspell.config.yml",
+          "sha256": "36765b0a51fc23d484dfde5b0ec2e09b281f2dcbc72afa8d749226b5e1b99ebf"
+        },
+        {
+          "path": ".githooks/_idd-worktree-guard.sh",
+          "sha256": "4784448cda6215a1287ec8594b05cb2f7eb54068d8284ae5164b6422b535d726"
+        },
+        {
+          "path": ".githooks/pre-commit",
+          "sha256": "9225f14d4314eb557a4cb5b9ca0616dbe750e007f79c38974afac785879ac480"
+        },
+        {
+          "path": ".githooks/pre-push",
+          "sha256": "e01b710bfcde46ac932b4a4b41e054c05a780cc4f8344bed16b3275ff434ac98"
+        },
+        {
+          "path": ".github/idd/config.example.jsonc",
+          "sha256": "2e9a8bc2a63408a83ba922fa9a9d0e46dc5d0ab7cf3f0e988753f0a8d07195a6"
+        },
+        {
+          "path": ".github/idd/config.json",
+          "sha256": "6974de22f77a3990d67f67a430aaa9c49f7e6b6441d158f6b7b37fd925968405"
+        },
+        {
+          "path": ".github/instructions/idd-advisory-wait.instructions.md",
+          "sha256": "f521275d04dd37b2573331b1e3126c2f3c467b2870582ef943f4320ab2aac04c"
+        },
+        {
+          "path": ".github/instructions/idd-ci.instructions.md",
+          "sha256": "20ae9026792c412503916d0f87b83ea091d5a10a5cd63641aa736d17e1373e98"
+        },
+        {
+          "path": ".github/instructions/idd-claim.instructions.md",
+          "sha256": "88af8f85399d2d0a6e4d60860c854d8e40d59b93f135602ac41d19df69465491"
+        },
+        {
+          "path": ".github/instructions/idd-discover.instructions.md",
+          "sha256": "565f24b880f0cc55404e1d8889750b55a6d89cb16de75a7b7c558a9f5b3539c3"
+        },
+        {
+          "path": ".github/instructions/idd-merge-handoff.instructions.md",
+          "sha256": "97c11cc83aa3833b8fa90766569f7d1ef377b6900cb153470f074b2f03042880"
+        },
+        {
+          "path": ".github/instructions/idd-merge.instructions.md",
+          "sha256": "ceb0a7dc3910102cb255adf8a791d4c035081314fcc32f10ac3deefd40a5f6c5"
+        },
+        {
+          "path": ".github/instructions/idd-orchestrator.instructions.md",
+          "sha256": "406412a0200b1e36b03856cfa503666d38681f0a09ba3195094f718ae2f14b3d"
+        },
+        {
+          "path": ".github/instructions/idd-overview-appendix.instructions.md",
+          "sha256": "9f18308f78e3dd6bae14609e3b9a8be6636dc6f7d6ed2f955f64a71681f67a06"
+        },
+        {
+          "path": ".github/instructions/idd-overview-core.instructions.md",
+          "sha256": "c1f57d588dd5b7ab98f506744eebedb87dcfff021cafc6f7fb34df910dc0f46f"
+        },
+        {
+          "path": ".github/instructions/idd-pr-submit.instructions.md",
+          "sha256": "4fb8b01b64c3a991e377ab3787aacff73eb127ca6758d0f3e6c3c70aeb5ece7b"
+        },
+        {
+          "path": ".github/instructions/idd-pre-merge.instructions.md",
+          "sha256": "51ad1078df340b56283ed790568192803bc4cdbdaabdb1b8974c4b3be3b9b307"
+        },
+        {
+          "path": ".github/instructions/idd-resume-stall.instructions.md",
+          "sha256": "b00598e3edae4837632cfd3968d840c03eb644399595baeed01fcebeccaefce1"
+        },
+        {
+          "path": ".github/instructions/idd-resume.instructions.md",
+          "sha256": "6c62490d05eca1f1ca08bc4b8ce7778e1d5480677779150754d6dad48590a00b"
+        },
+        {
+          "path": ".github/instructions/idd-review-fix.instructions.md",
+          "sha256": "92e2bed8a65b0a42de92899caf2865d909918c82e5065b6a6d3d014586f31c04"
+        },
+        {
+          "path": ".github/instructions/idd-review-snapshot.instructions.md",
+          "sha256": "6c29696d883d4999cbc4c22d4fe92d7780c73394cbe0b079d7e1d2d8a1247250"
+        },
+        {
+          "path": ".github/instructions/idd-review-triage.instructions.md",
+          "sha256": "1548100513b5cdac33892b70528e4ce646e93cdfc7f094eec56156b9a0400add"
+        },
+        {
+          "path": ".github/instructions/idd-roadmap-audit.instructions.md",
+          "sha256": "24c2616f3a016180e7940f4c24ec6eb7851b9f0e30bea18d45fc46d9c0805085"
+        },
+        {
+          "path": ".github/instructions/idd-suitability.instructions.md",
+          "sha256": "be515b4d2997dee5750e7619e3ce67f28672c10328894ad9321c9d7153451a7f"
+        },
+        {
+          "path": ".github/instructions/idd-work.instructions.md",
+          "sha256": "109a6779ef3b86e4ce5763a87181854d417822b03bd3db342a47c25ec02d8b31"
+        },
+        {
+          "path": ".github/instructions/lite/idd-advisory-wait-lite.instructions.md",
+          "sha256": "ca1472cbcd33f35b599af8879079414e7238ad4b4c7d318ed5d06771b188694d"
+        },
+        {
+          "path": ".github/instructions/lite/idd-ci-lite.instructions.md",
+          "sha256": "2559a45ca0b227b96e575a359db24ac674637387d0ba6df4dd4ad474de175548"
+        },
+        {
+          "path": ".github/instructions/lite/idd-claim-lite.instructions.md",
+          "sha256": "d4154a0c02a445725069aec9d507de9fda556b4ad444d938561f84f00594a983"
+        },
+        {
+          "path": ".github/instructions/lite/idd-merge-handoff-lite.instructions.md",
+          "sha256": "d578afe1c048c1a509885a3450f86844548b791f57bea50580e2ae7a7929a010"
+        },
+        {
+          "path": ".github/instructions/lite/idd-pr-submit-lite.instructions.md",
+          "sha256": "d3ae5294f990cb1fa9d9ec76462ed011a85b9f0a685971975d483be2ebff020c"
+        },
+        {
+          "path": ".github/instructions/lite/idd-pre-merge-lite.instructions.md",
+          "sha256": "a829b09152905a11fefa07e7f1246e6090175b765f0abc3ec17f174a3782b410"
+        },
+        {
+          "path": ".github/instructions/lite/idd-resume-lite.instructions.md",
+          "sha256": "52bc7a47924adeb5a5cc88d7e97dcd2e7e29385a17466fd097f8a69acb33cfcc"
+        },
+        {
+          "path": ".github/instructions/lite/idd-resume-stall-lite.instructions.md",
+          "sha256": "72be730987919989c83913975ce24dcf31b330d1d30e9c8bb3e2ee81441898da"
+        },
+        {
+          "path": ".github/instructions/lite/idd-review-fix-lite.instructions.md",
+          "sha256": "40597666df55955bc9021234dcf67087a9618ff9a7fede3b2a997610b69ad629"
+        },
+        {
+          "path": ".github/instructions/lite/idd-review-snapshot-lite.instructions.md",
+          "sha256": "cfdfda9952423ab7fa44a73101814209d7fc2d4353e7523cecc6ba8f242d2d22"
+        },
+        {
+          "path": ".github/instructions/lite/idd-work-lite.instructions.md",
+          "sha256": "0bb3a48bab74725599bcfbe4d12a60549ac77e8684f3d533a7eb7abe2afab350"
+        },
+        {
+          "path": ".github/workflows/post-merge-cleanup.yml",
+          "sha256": "8a8043d5f63dd6785e862427e04a1e01fc03af862fe461a08a8fdb4e5fab69a3"
+        },
+        {
+          "path": ".markdownlint-cli2.yaml",
+          "sha256": "2dece4acf37085e1c852c4acca4be7ea0bdbf8c6d2a1d9467b85fb462ee60692"
+        },
+        {
+          "path": ".markdownlint.yml",
+          "sha256": "8c4850f487d897ac03a4d8b33363a7451ae667c2e34cd8c0cca1a3a91cd3bdd7"
+        },
+        {
+          "path": "docs/concepts.md",
+          "sha256": "8ee6a733f67374bf547c3a6b88bc0074d9dbeb350694eb3e15c030aa9c4fa1ed"
+        },
+        {
+          "path": "docs/customization.md",
+          "sha256": "f4f6d7f04782303144d4743038b29b5263ec7715218c88637b57c2ba3c79e34a"
+        },
+        {
+          "path": "docs/getting-started.md",
+          "sha256": "e20734d3672042b607d9f6dc46e21276989cbcd17c87fd68a9b0bc81fa53c1de"
+        },
+        {
+          "path": "docs/global-only-profile.md",
+          "sha256": "14aab1b594f4a0d8f07fd60e3e56dca0b5168afd42898ae762914befe2dd9e77"
+        },
+        {
+          "path": "docs/idd-advisory-wait-shell-fallback.md",
+          "sha256": "583b147243afaf3caed355cfc51d074bf6fe2e0af4947e33e49b739d46f9e9a0"
+        },
+        {
+          "path": "docs/idd-autonomy-contract.md",
+          "sha256": "22339b3cf4d202d6e886d169adec27b1e23de1500ff2ddc4e62763e3659677d3"
+        },
+        {
+          "path": "docs/idd-comment-minimization.md",
+          "sha256": "1abba6727dc0bc5550f784cf853db8efb267aefcecc4f8a2b84025700f665e65"
+        },
+        {
+          "path": "docs/idd-concept-ownership.md",
+          "sha256": "a866adf2b1c596eb7321f8a1db0425dbb9b15dfc9c63421e6347dfd6f1439e3d"
+        },
+        {
+          "path": "docs/idd-design-rationale.md",
+          "sha256": "e55f5946285314bcbbe84e31823593b5bcc5b5200419ec07e9bffedefc8fa36f"
+        },
+        {
+          "path": "docs/idd-helper-scripts.md",
+          "sha256": "1509ffa3dee1147eed838174a5567713a9574ae85cfad79b888762dc887eed4a"
+        },
+        {
+          "path": "docs/idd-resume-detail.md",
+          "sha256": "110f15bb110b6fdbd050b6c822b79afec45b00ecdd64d0e28c51e0e0d91834ef"
+        },
+        {
+          "path": "docs/idd-review-policy-profiles.md",
+          "sha256": "5c7f2148db0e895dd4b39aae306b379d8bf6d860dcff5b92f6406311e2a9b3e1"
+        },
+        {
+          "path": "docs/idd-workflow.md",
+          "sha256": "e9f307011d22b6f204cf85e65767b50a46cc38c3e1a50b063580af776c479ecd"
+        },
+        {
+          "path": "docs/idd-worktree-setup.md",
+          "sha256": "df3f33413cd4c0c7e33f24ba677d3401118cae9e4da0c23947bd88dac1e13ede"
+        },
+        {
+          "path": "docs/index.md",
+          "sha256": "07368ba2ebaa0fd298e89767a77479af5c6faf3394ffa5a9cee9a04b64cafb72"
+        },
+        {
+          "path": "docs/onboarding/agent-entry-and-verification.md",
+          "sha256": "71db3eb2a96e7caf808731724fee01d2ebe6e58ff5a9bd12f4c41a77a48c5eb1"
+        },
+        {
+          "path": "docs/onboarding/issue-mediated-bootstrap.md",
+          "sha256": "36c5c695e83036aa32f867084b4b81f95f1ee3e29744dfe9858380c8d06473e3"
+        },
+        {
+          "path": "docs/onboarding/optional-host-setup.md",
+          "sha256": "1d21936a820d993448aea0a5845eeee5f980983bfc3b0ae6cf35f87ea3ae7d63"
+        },
+        {
+          "path": "docs/onboarding/placeholders.md",
+          "sha256": "3a29efe0fc2ba86a0dda71dc5e96f1ec4828f1af540aa32026901039747ef934"
+        },
+        {
+          "path": "docs/onboarding/policy-decisions.md",
+          "sha256": "c554961b73f16fb16cdee55d569b5a6ece6b21cef2db1523555bf77046b852ce"
+        },
+        {
+          "path": "docs/onboarding/project-tuning.md",
+          "sha256": "5fb4a882fe9795265e0e0147117f53b3e82f725c86833705526d890382d2fd82"
+        },
+        {
+          "path": "docs/onboarding/template-distribution.md",
+          "sha256": "52b043e26a26bb611a56030df18b5225ebe8330db4791a753d1d57ed43e40c03"
+        },
+        {
+          "path": "docs/permissions.md",
+          "sha256": "18403c679e6a47d1910820251669980c492277327dee01282b0167a712a239b1"
+        },
+        {
+          "path": "docs/policy-constants.md",
+          "sha256": "9b27c2a3d5b66e2f8e942828c7d74aa3a0f231c96cb153e30f67ecd5bceedd49"
+        },
+        {
+          "path": "docs/reference.md",
+          "sha256": "1dc1d309eb7bd4a2622c9cfa0a14c2a670dfa395b552610495c527123f921e4f"
+        },
+        {
+          "path": "profiles/README.md",
+          "sha256": "54cfe6330442841c8dfa7812e9085d907e5d40a5e7312932edef358705177c96"
+        },
+        {
+          "path": "profiles/external-bot/README.md",
+          "sha256": "5a586b4859953e6776491fcd00ad41d4863611fa9408dc89bcf77d01af789c6b"
+        },
+        {
+          "path": "profiles/human-required/README.md",
+          "sha256": "6d657f530b6ae5c48ea0a0fe7b4d46a3bd94dbfb132dec87be38a8ead8cc5ffa"
+        },
+        {
+          "path": "profiles/no-advisory/README.md",
+          "sha256": "19aed0f7f77de10906899f51f946ecbdd59ff2b45f09ecb486263ae8c49a1e22"
+        },
+        {
+          "path": "user-global/entry.md",
+          "sha256": "a02586923d9b4c122a1b32f1ef40cbd16dca6ea7369af6771e7cb2af8f6fd434"
+        },
+        {
+          "path": "user-global/skill-entry.md",
+          "sha256": "3e7a03d22fad7a9f09c7873d1edc2eb45e0ac91840b9e1ba5e53bfc279f36789"
+        }
+      ],
+      "digest": "sha256:7f49464262aae8430e6adeda65c79a4abea8556278e8a3f4d39946d7b5adb14a"
+    },
+    "skillBundles": {
+      "issue-authoring": {
+        "location": "https://github.com/kurone-kito/idd-skill/tree/b2752028e7ca3c1397138b58556cfc5883364164/skills/issue-authoring",
+        "provenance": {
+          "kind": "checkout",
+          "commit": "b2752028e7ca3c1397138b58556cfc5883364164"
+        },
+        "files": [
+          {
+            "path": "SKILL.md",
+            "sha256": "62eccd22f9e596e287e5f79701bd6a8d326b501739104a9eabb56fc6daf14958"
+          },
+          {
+            "path": "references/contract.md",
+            "sha256": "4378e1cadc507e5dcb23d6ae6e297aec2953131595497cea9cb670d00aba7caa"
+          },
+          {
+            "path": "references/draft-patterns.md",
+            "sha256": "b10c9406d334d74b68c08e7afb8aebfd70875138ca78c028d7d05bfed91de1c2"
+          },
+          {
+            "path": "references/workflow-boundary.md",
+            "sha256": "cdb3a5ee6e638a8491149be51708dc20f5a1f26211ce3ff146951dd58a49729a"
+          }
+        ],
+        "digest": "sha256:8ce0d935c498c28268c6fe7d05881315dac6a62b1dbd52e030700f9b40756ea2"
+      },
+      "idd-spec-audit": {
+        "location": "https://github.com/kurone-kito/idd-skill/tree/b2752028e7ca3c1397138b58556cfc5883364164/skills/idd-spec-audit",
+        "provenance": {
+          "kind": "checkout",
+          "commit": "b2752028e7ca3c1397138b58556cfc5883364164"
+        },
+        "files": [
+          {
+            "path": "SKILL.md",
+            "sha256": "bb820aa57018e342f5272398fec2575b4461b7478a4ce2135a02ade401ec3a5b"
+          },
+          {
+            "path": "references/report-template.md",
+            "sha256": "21c6bad2feb1d59e88464ea83a63599c213c136f7ab6296b868867b31bc53f5e"
+          }
+        ],
+        "digest": "sha256:35c96bdb09d81f944c7daa88f7633f6a32450b0b7066ae9afcbd2be2e406ae60"
+      }
+    },
+    "helper": {
+      "location": "https://github.com/kurone-kito/idd-skill/tree/b2752028e7ca3c1397138b58556cfc5883364164",
+      "provenance": {
+        "kind": "checkout",
+        "commit": "b2752028e7ca3c1397138b58556cfc5883364164"
+      },
+      "files": [
+        {
+          "path": "bin/idd-activation.mjs",
+          "sha256": "30a024235210845f36e1ec6e43b4d042a750beb20b6f0c24b611c2d1bd5bf144"
+        },
+        {
+          "path": "bin/run-helper.mjs",
+          "sha256": "d219c755817226b4ae4d0b8c0376044169a1053401a4c0807fc6e725e0c3e0b5"
+        },
+        {
+          "path": "fixtures/schemas/advisory-wait-state.invalid.json",
+          "sha256": "18824288d2b32f752fbc0955f60a68242f548aae86a3492728d3e91f93ef43b8"
+        },
+        {
+          "path": "fixtures/schemas/advisory-wait-state.valid.json",
+          "sha256": "efc020ae1b49e6d294bcac07e667b54e8bb57728c6da0f00c311797ea739f747"
+        },
+        {
+          "path": "fixtures/schemas/claim-marker.invalid.json",
+          "sha256": "4644f5470e6d4cd33765bd2acf4cdcee883ac7fbeb955470453e8b51fbed59a9"
+        },
+        {
+          "path": "fixtures/schemas/claim-marker.valid.json",
+          "sha256": "7b62d4074484925eb00ea898d622ec523b83773fff9c11bf009933b1f38f8c1b"
+        },
+        {
+          "path": "fixtures/schemas/forced-handoff-marker.invalid.json",
+          "sha256": "6c93fb4c6addf2470c7077c21733e7d5255b1c2dd8ed3070302abc83e8164fc6"
+        },
+        {
+          "path": "fixtures/schemas/forced-handoff-marker.valid.json",
+          "sha256": "0bfddb3a552511b8428fc388bda609b81e3316913f9a3792e658967b3afcaca2"
+        },
+        {
+          "path": "fixtures/schemas/idd-merge-execute.invalid.json",
+          "sha256": "cdb6894980dc5c496260f8c45dd1253670f895bd983ae5eb44ef7eee2c7d3a5f"
+        },
+        {
+          "path": "fixtures/schemas/idd-merge-execute.valid.json",
+          "sha256": "c71b9ba27b95246056abfc938c692f3ddace95d058bc8447734b4703fcb589b1"
+        },
+        {
+          "path": "fixtures/schemas/live-status-digest.invalid.json",
+          "sha256": "2c3d7132b89261135ed76ab8cc81d11cbc108dca7aada0b3222602b220eefb2f"
+        },
+        {
+          "path": "fixtures/schemas/live-status-digest.valid.json",
+          "sha256": "18102320120444353b9115e897c48563c5df06b920ef362179c6097810e5127b"
+        },
+        {
+          "path": "fixtures/schemas/onboarding-hearing-catalog.invalid.json",
+          "sha256": "9c1cbafd11105f9e02113cd128aa5fcda9d66dcee206074f458249b4e636c5e9"
+        },
+        {
+          "path": "fixtures/schemas/onboarding-hearing-catalog.valid.json",
+          "sha256": "eaf31a5f46d38ba0d332a00f667f206aee4729c1e1b2f4c5ec44ff79f130e297"
+        },
+        {
+          "path": "fixtures/schemas/onboarding-hearing-transcript.invalid.json",
+          "sha256": "028e204b98b07f8c5004cb99b9a35c7a72cf45429299b487ba9f5ff1770b2b26"
+        },
+        {
+          "path": "fixtures/schemas/onboarding-hearing-transcript.valid.json",
+          "sha256": "1cf51e51a570849f452149fe8e23549c2ee44ce1144df49142c52f28449f4c2e"
+        },
+        {
+          "path": "fixtures/schemas/phase-graph.invalid.json",
+          "sha256": "e96830715d8f1aa90cddaa7010e7924ef220c85f88e3d974bd32f26dde7ee70a"
+        },
+        {
+          "path": "fixtures/schemas/phase-graph.valid.json",
+          "sha256": "e2dfdf301426d369428120d2ea5f2e74c128bae3e1a0168409b8705680caf953"
+        },
+        {
+          "path": "fixtures/schemas/policy.invalid.json",
+          "sha256": "dbf1b332d1b6377cab9597ab825c1e4527d57f47d170ad7b542edd9b126c5fb3"
+        },
+        {
+          "path": "fixtures/schemas/policy.valid.json",
+          "sha256": "02c7e3c5286fd2676e4aed3f36798f585cd3c1de9d8587b6a9379e081bde1d98"
+        },
+        {
+          "path": "fixtures/schemas/pre-merge-readiness.invalid.json",
+          "sha256": "4e9307c61b27742e4b992c406898ea200ae440fb0f8f8d76efebab35b8585737"
+        },
+        {
+          "path": "fixtures/schemas/pre-merge-readiness.valid.json",
+          "sha256": "e1832bd3628c06406ee3d446469d952a73b5e45a7524952b26d6a26ac3161ee6"
+        },
+        {
+          "path": "fixtures/schemas/provisional-decision-record.invalid.json",
+          "sha256": "68d023fb29dadd0fc9a913c7453bf0b3050634f429e103018e87ad808c7301e9"
+        },
+        {
+          "path": "fixtures/schemas/provisional-decision-record.valid.json",
+          "sha256": "f3d991a0ce109913b20e19a65d3a0140b30f211eec7c95fb120301ab48a1f713"
+        },
+        {
+          "path": "fixtures/schemas/user-global-config.invalid.json",
+          "sha256": "0d91a0f57474b87444b92047999e3c4254d6930cabce092ff3e504c25867279f"
+        },
+        {
+          "path": "fixtures/schemas/user-global-config.valid.json",
+          "sha256": "5e536c16a6cd1eebc5b3cbb394cd67ff221aab9f480827a74877e793777c974c"
+        },
+        {
+          "path": "schemas/advisory-wait-state.schema.json",
+          "sha256": "3bdc93532de1db8f57c3a788199cebb64bf12c1eb9d81d417e50d3f46a8f391c"
+        },
+        {
+          "path": "schemas/claim-marker.schema.json",
+          "sha256": "8ee947faad5b5dfdd44223889f8e821f45dea063995730deb41b57214a6eb53a"
+        },
+        {
+          "path": "schemas/distribution-manifest.schema.json",
+          "sha256": "46467be641e0e9730f69687a3718cdbfb3443e8449995a8facaf6ac842d3fdc7"
+        },
+        {
+          "path": "schemas/distribution-selection.schema.json",
+          "sha256": "5433722a92cf0250728385ab6ce30b5cabfca527e9e7ca9ebd1e38ddb8d85c40"
+        },
+        {
+          "path": "schemas/forced-handoff-marker.schema.json",
+          "sha256": "a40663d23aa1f70a6fad2ffe5184a208da707ec206737bc5e3b089da3609cfaa"
+        },
+        {
+          "path": "schemas/idd-merge-execute.schema.json",
+          "sha256": "c9be4903dbfa75a8c0fbc6b95989f89a8c9f8b48f81fc8ab206eeccb55c1df8a"
+        },
+        {
+          "path": "schemas/live-status-digest.schema.json",
+          "sha256": "d56dd39db745395fbdfbbccf7694c733d63aabdd5b56fb2f7633a5883e17824e"
+        },
+        {
+          "path": "schemas/onboarding-hearing-catalog.schema.json",
+          "sha256": "c3ed04e0e387d6546789264d54539e226a2758d031a89a8fa2328b7a1d498fca"
+        },
+        {
+          "path": "schemas/onboarding-hearing-transcript.schema.json",
+          "sha256": "d381dd139308616b984f85cc261b5e3c0cb7e8b15dfcaa7ebcf6b1de3a4193b8"
+        },
+        {
+          "path": "schemas/phase-graph.json",
+          "sha256": "7d3c6d3ad91934821301932df40c52a3b429c0c4c0ad2c34f08f94947c045b19"
+        },
+        {
+          "path": "schemas/phase-graph.schema.json",
+          "sha256": "6f04fa173323d59d427b0553f1c37221d9ebf47fbb65794bce55a34a65dd2b80"
+        },
+        {
+          "path": "schemas/policy.schema.json",
+          "sha256": "4e2271f02c47dd0aac6020fc79eff0eef7e46a1e6f7a637d3fe2dc02887651bc"
+        },
+        {
+          "path": "schemas/pre-merge-readiness.schema.json",
+          "sha256": "7028cbe7fa62c45813f9b0433a82ae0eac50700bb23d6b8502442d1d54619c1a"
+        },
+        {
+          "path": "schemas/provisional-decision-record.schema.json",
+          "sha256": "09c52e063b3b689c6914c3ff4a383118fbfe11f20ccc73c54dca374d100da248"
+        },
+        {
+          "path": "schemas/user-global-config.schema.json",
+          "sha256": "3c3c2b2a565dd9ca0845fa4b3ad64711f7f81edb37affc58218c00af7c0cbfbd"
+        },
+        {
+          "path": "scripts/advisory-wait-policy.mjs",
+          "sha256": "e1d7a2cd1f4211cecc49ed9f0bab5f384331216bfad3de8c392aee374754ebc3"
+        },
+        {
+          "path": "scripts/bundle-root.mjs",
+          "sha256": "7cf13e5801384c3d4c744594fa6d3466582fda0004480a302b2548418ef3460b"
+        },
+        {
+          "path": "scripts/cli-args.mjs",
+          "sha256": "93254cad782ea1b248b105c8838a2f309b11f0e901de498a5b3e16c519f202a5"
+        },
+        {
+          "path": "scripts/copilot-review-body.mjs",
+          "sha256": "054e8ef963b9852b01084b5ea1c76bdb8effd39c2d75bf12f73fadd4e91ff347"
+        },
+        {
+          "path": "scripts/distribution-selection.mjs",
+          "sha256": "d66ea33b9dbe326d31dc4c05e9c1fda7e949b7bf42189d7e5b1513cea6041cb4"
+        },
+        {
+          "path": "scripts/f4-head-proof.mjs",
+          "sha256": "99cf401075d811647e44d872eabbf006050dd6c43d9aa7c574cb3bd796f0e9bb"
+        },
+        {
+          "path": "scripts/gh-exec.mjs",
+          "sha256": "70cc3bc51f89be8f2738ff4522a0094d3d88b15ae47942f87f34fe8a6d7a02bb"
+        },
+        {
+          "path": "scripts/gh-http-status.mjs",
+          "sha256": "43f2666c5ca766048327947ae74bd6379538a491c5ca03b05e4065f42a0cf2a8"
+        },
+        {
+          "path": "scripts/github-api-load-control.mjs",
+          "sha256": "cd3a207cf5cf90722ec1e27fe8339a458e96febb28226116b8b452a21b76eb48"
+        },
+        {
+          "path": "scripts/github-api-observation.mjs",
+          "sha256": "30d8fd6773fc937820411042959b51663ab0a5ef5b5c27916d73cbec56b4f27f"
+        },
+        {
+          "path": "scripts/github-api-read-cache.mjs",
+          "sha256": "45bae6a9217467cd74483996562075ec0011e9db66a743d5e577c03891a1381f"
+        },
+        {
+          "path": "scripts/github-api-refusal.mjs",
+          "sha256": "9ca4980c7a347bf6b7b1ef1d77164f1f2b4afe33252fe33e3dd9b4e94815e3d8"
+        },
+        {
+          "path": "scripts/github-api-request-class.mjs",
+          "sha256": "1bb9f4c7efd5cee9acee4643d2e94a554ced196486d083e80b6718d21fc932c7"
+        },
+        {
+          "path": "scripts/helper-cli-runner.mjs",
+          "sha256": "3ee2f9f23b09ba0a0c54c789cfc1cacec1b7e967e210ba323050ba4cf5c1d3dc"
+        },
+        {
+          "path": "scripts/idd-activation.mjs",
+          "sha256": "c1f56f9cfd94e9af2d8d8045db4d586000d7ef30c1e72e5d1f35ec2943cc97b9"
+        },
+        {
+          "path": "scripts/idd-config.mjs",
+          "sha256": "87bd17c0e776580c5703e50d1b4be20cd268575e00aec96eec1181935d067a40"
+        },
+        {
+          "path": "scripts/layered-policy.mjs",
+          "sha256": "377331e54a2eb11db2aef1ad1e921c7cafb816af39a45b5dd74ca1633d32cd31"
+        },
+        {
+          "path": "scripts/markdown-code.mjs",
+          "sha256": "b567516cd07fb9f0bd888d8eb175519282752bd122be729f56e136c9dc05f962"
+        },
+        {
+          "path": "scripts/marker-helpers.mjs",
+          "sha256": "15ef7b5a647816ef3760ae5bb2fbce5f5c53436d4bb0b0e139ce2a798ff1d522"
+        },
+        {
+          "path": "scripts/marker-regex.mjs",
+          "sha256": "6f5883dfdccaa9273ca8755de1dc0ec039140715476eb09ebc5b496fb4ef0b4a"
+        },
+        {
+          "path": "scripts/node-runtime-guard.mjs",
+          "sha256": "0b8845a73ab89de272cf9ed43e9884a53c44090c8ddaed53d348cade43169615"
+        },
+        {
+          "path": "scripts/policy-helpers.mjs",
+          "sha256": "f9eb0627076203533f2015210f5b72a106181c42d73ea6ccd836dd0de30ed0a9"
+        },
+        {
+          "path": "scripts/protocol-helpers.mjs",
+          "sha256": "541de72130c8dad0b72cb34192acbd28ff390ed2074e122f2f38f1c296e59c4d"
+        },
+        {
+          "path": "scripts/provider-contract.mjs",
+          "sha256": "328af6b82ec6a2cb4dbb268eb10d239f693fdb34c5e8858da8c792f03328ded5"
+        },
+        {
+          "path": "scripts/user-global-paths.mjs",
+          "sha256": "407fe65b88145e52c0c1f6097de647fbec9662470665b70c2ec5d518e7cef3ae"
+        },
+        {
+          "path": "scripts/user-global-receipt.mjs",
+          "sha256": "3dde9add0f60c5217c796c578880f3de97e52c74f30057cb348603206326f33c"
+        },
+        {
+          "path": "scripts/validate-schemas.mjs",
+          "sha256": "58b6e84622052bb578df8bcc9d8446ebf978d7313f1e4872288f54ecc132a4c2"
+        },
+        {
+          "path": "scripts/windows-acl.mjs",
+          "sha256": "02a5aca1c372e3580c93e5b22d07963bd603dd1acef7ed41c4e825196cff21b4"
+        },
+        {
+          "path": "scripts/windows-nofollow.mjs",
+          "sha256": "0ae6fdfda74dda05d7a12839d3a383944c9aef3a808c8c339e90af8b05c92af8"
+        },
+        {
+          "path": "src/scripts/windows-nofollow.ps1",
+          "sha256": "5e45732aeb2689d9fbf031d135c86b740f6329a2c5935c6cab48763b66de6037"
+        }
+      ],
+      "digest": "sha256:3a030b0fe73555ee0a2b899b6a740a4825c26f42244111950502433b4fdc5e5f",
+      "invocation": {
+        "command": "bin/idd-activation.mjs",
+        "argv": []
+      }
+    }
+  }
+}

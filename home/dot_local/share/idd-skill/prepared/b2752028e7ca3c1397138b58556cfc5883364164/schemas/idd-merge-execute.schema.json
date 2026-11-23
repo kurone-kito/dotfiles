@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kurone-kito.github.io/idd-skill/schemas/idd-merge-execute.schema.json",
+  "title": "IDD Merge Execute",
+  "description": "F3 merge-gate verdict and (under --apply) execution result for a PR head.",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "decisionAuthority",
+    "mode",
+    "prNumber",
+    "prHeadSha",
+    "ready",
+    "blockers",
+    "mergeCommand",
+    "merged",
+    "mergeResult",
+    "adminFallbackUsed",
+    "localHeadDrift"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "pattern": "^1$",
+      "description": "Protocol version of the F3 merge-execution verdict."
+    },
+    "decisionAuthority": {
+      "type": "string",
+      "enum": ["instructions"],
+      "description": "Source of the merge decision represented by this verdict."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["dry-run", "apply"],
+      "description": "Whether the helper produced a merge plan or attempted execution."
+    },
+    "prNumber": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pull request evaluated by the F3 merge gate."
+    },
+    "prHeadSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "PR head SHA bound to the readiness check and merge command."
+    },
+    "ready": {
+      "type": "boolean",
+      "description": "Whether the merge-gate checklist has no blocking conditions."
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Merge-gate conditions that prevented readiness, if any.",
+      "items": {
+        "type": "object",
+        "required": ["gate", "detail"],
+        "properties": {
+          "gate": {
+            "type": "string",
+            "description": "Name of the merge gate that blocked readiness."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Evidence or explanation for the blocking gate."
+          },
+          "hint": {
+            "type": "string",
+            "description": "Optional next-step text, present only when the blocking gate can name one (currently review-currency with a missing watermark or with same-timestamp-count-growth, and ci when ci.status is missing on a head whose branchCurrency.mergeStateStatus is DIRTY). Diagnostic only; detail is unchanged and no routing decision reads it."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "mergeCommand": {
+      "type": "string",
+      "description": "Head-bound merge command planned or used by the helper."
+    },
+    "merged": {
+      "type": "boolean",
+      "description": "Whether apply mode completed a successful merge."
+    },
+    "mergeResult": {
+      "type": "string",
+      "description": "Human-readable result or error from merge execution."
+    },
+    "adminFallbackUsed": {
+      "type": "boolean",
+      "description": "#1521: true only when the plain merge command failed with the self-CODEOWNER \"base branch policy prohibits the merge\" error and this run retried with --admin (successfully or not). False for every other path, including a successful plain merge and a merge failure not eligible for the fallback."
+    },
+    "localHeadDrift": {
+      "type": ["object", "null"],
+      "description": "#2453: non-fatal advisory. Set only when the invoking process's local git branch equals the PR's own headRefName AND its local HEAD differs from prHeadSha -- the signature of an unpushed commit about to be silently left behind. Null whenever the check cannot run or finds no divergence. Never gates ready or blocks the merge.",
+      "required": ["localHeadSha", "remoteHeadSha"],
+      "properties": {
+        "localHeadSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Local HEAD SHA read from the invoking worktree."
+        },
+        "remoteHeadSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "PR head SHA about to be merged (same value as prHeadSha)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "postFailureState": {
+      "type": "object",
+      "description": "#3681: the pull request read back once after a failed merge attempt (the plain merge, the --admin retry, or an aborted admin fallback), so a gh call cut off by its timeout that completed server-side is not misread as an unmerged pull request. Absent (never null) on every other path, including a failed or empty read-back and a run without a read-back dependency. Diagnostic only: merged, adminFallbackUsed and the exit code never depend on it.",
+      "required": ["state", "mergedAt", "headRefOid"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "description": "The pull request state word, upper-cased (for example OPEN, CLOSED or MERGED); empty when the provider returned none."
+        },
+        "mergedAt": {
+          "type": ["string", "null"],
+          "description": "ISO timestamp of the merge, or null when the pull request has not been merged."
+        },
+        "headRefOid": {
+          "type": "string",
+          "description": "Head commit SHA of the pull request; empty when the provider returned none."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
