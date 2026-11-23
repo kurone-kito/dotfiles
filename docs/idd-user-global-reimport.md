@@ -546,3 +546,24 @@ The status reads `verified` only when all three of these hold: the readiness at
 the final head is `ready: true` before cleanup (item 1), the F4 outcome is present
 (item 7), and the F4 helper completes (item 8). Item 3 does not count toward this
 rule.
+
+## Supersession note
+
+Roadmap #674 is replaced by roadmap #738. The audit at
+<https://github.com/kurone-kito/dotfiles/issues/674#issuecomment-7075733572>
+(2026-11-22, master `9a38658a767e1483a54fc0ecfd71cea8a1d188e8`) found
+success criteria 1 to 6 of #674 met. Criterion 7 is the requirement that the
+F4 helper completes the worktree removal, and it was not met. Issue #744
+records that the v0.18.0 commit `b2752028e7ca3c1397138b58556cfc5883364164`
+still returns the `worktree-remove-refused` refusal, so the status stays
+`partially verified`.
+
+The remaining wait is now issue #740, which stays open. Issue #736, which
+tracked criterion 7, is closed as not planned.
+
+The procedure above still documents the v0.17.0 pin. The pin switch to v0.18.0
+is a separate change under #738 and does not update this page, so the procedure
+stays in place until a later docs child of #738 rewrites it. This is a
+deliberate exception to two rules in the procedure: the "Pinned upstream
+commit" section, and step 5, which say that a pin change updates this page in
+the same change.
