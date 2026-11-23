@@ -130,12 +130,12 @@ from v0.17.0 at the pinned source path
 ## Unmarked advisory-wait outcome delta
 
 The repo-local full and lite advisory-wait files list five helper
-outcomes. The v0.17.0 instructions add `DISPOSITION_NEEDED` and route
+outcomes. The v0.18.0 instructions add `DISPOSITION_NEEDED` and route
 E14 back to E6 for cited-item dispositions or a review acknowledgement
 for an unreadable review. This is separate from the 24-field
 `advisory-response-schema` divergence below. Do not preserve the narrower
 local outcome list as repository policy; the active instruction root
-must resolve to the v0.17.0 payload before the legacy local instruction
+must resolve to the v0.18.0 payload before the legacy local instruction
 tree is retired.
 
 ## Divergence disposition crosswalk
@@ -302,7 +302,7 @@ report validation as incomplete and stop for guidance; do not substitute
 
 ### Upstream texts and scope of the conflict
 
-The pinned v0.17.0 helper documentation describes the populated-submodule
+The pinned v0.18.0 helper documentation describes the populated-submodule
 hold in `docs/idd-helper-scripts.md`, section **F4 worktree and branch cleanup
 (steps 4 to 6)**, `submodule-worktree` row:
 
@@ -330,7 +330,7 @@ The F4-specific `docs/idd-resume-detail.md`, section **F4 Head Proof**, says:
 > dry run and this helper cannot finish afterward. The F4 session never runs
 > `git worktree remove --force`.
 
-The pinned v0.17.0 `.github/instructions/idd-merge.instructions.md`, section
+The pinned v0.18.0 `.github/instructions/idd-merge.instructions.md`, section
 **F4 — Cleanup**, step 5, further says:
 
 > The helper never passes `--force`, and the F4 session never runs `git
@@ -484,7 +484,7 @@ by a trusted marker actor, is unedited, and has no malformed or conflicting
 proof for this claim. Require its `claim=` value to match the active claim ID.
 Require a reusable proof to match the active claim ID, the PR matched to the
 claimed issue, the active branch, and all four SHA values (`f2`, `branch-tip`,
-`merge`, and `head`). Apply the pinned v0.17.0 `docs/idd-resume-detail.md`
+`merge`, and `head`). Apply the pinned v0.18.0 `docs/idd-resume-detail.md`
 section **F4 Head Proof** rules for trusted author, claim activation time,
 `created_at`/`updated_at`, duplicates, malformed fields, and conflicts. Parse
 its `branch=` and `branch-tip=` fields into `PROOF_BRANCH` and
@@ -709,7 +709,7 @@ local-branch parts of step 5; do not repeat either removal. For step 6, after
 cleanup, re-read the matched PR and its merge commit through GitHub's REST API.
 Require the live PR number, branch, closed/merged state, merge commit SHA, and
 derived merged head SHA to match the reusable proof's `pr`, `branch`, `merge`,
-and `head` fields. Apply the pinned v0.17.0 **F4 Head Proof** post-cleanup
+and `head` fields. Apply the pinned v0.18.0 **F4 Head Proof** post-cleanup
 validation: stop on any failed or inconclusive read, invalid SHA, wrong PR
 state, commit-object shape failure, or mismatch. For a two-parent merge, derive
 `PR_HEAD_SHA_F3` from parent 2 and require it to equal the live PR head; for a
