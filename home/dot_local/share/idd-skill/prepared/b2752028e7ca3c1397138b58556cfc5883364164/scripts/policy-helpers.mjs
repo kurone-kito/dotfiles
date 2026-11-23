@@ -1,0 +1,2652 @@
+// idd-generated-from: src/scripts/policy-helpers.mts
+//
+// The scripts/policy-helpers.mjs copy is generated from the .mts source
+// named above by `pnpm run build`. Edit the .mts source, never the
+// generated .mjs. See docs/typescript-sources.md.
+import { PROVIDER_IDS } from './provider-contract.mjs';
+
+/**
+ * A qualified branch name: a conservative safe charset (letters, digits,
+ * `.`, `_`, `/`, `-` only), with the first character excluding `-`, so
+ * every unquoted `{development-branch}` substitution in the IDD
+ * instruction files' shell command examples is safe by construction.
+ * #2273 review findings this closes: a value like `release/$next` or
+ * `release;stable` would otherwise be a valid, non-whitespace string
+ * that breaks or hijacks an unquoted shell expansion, and a
+ * leading-hyphen value like `-q` would be parsed as an option rather
+ * than a positional argument in a command such as
+ * `git fetch origin {development-branch}` -- disallowing only the
+ * *leading* `-` (mid-string and trailing hyphens remain valid, e.g.
+ * `release-2.0`) keeps that specific ambiguity closed without
+ * rejecting ordinary hyphenated branch names. Checked separately
+ * below: no `refs/heads/` prefix (this policy stores the short branch
+ * name IDD's own claim `branch:` field and `git worktree add <branch>`
+ * already expect, not a full ref).
+ */
+const DEVELOPMENT_BRANCH_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
+const DEVELOPMENT_BRANCH_REFS_HEADS_PREFIX = 'refs/heads/';
+/**
+ * Inspect `developmentBranch` on a raw policy document without applying
+ * `normalizePolicyConfig`'s fail-safe-to-absent collapse -- mirrors
+ * {@link inspectCritiqueLoopDelegateLayer}'s absent/configured/malformed
+ * shape. Onboarding (and any future consumer) uses this to distinguish
+ * "no opinion, use the live default branch" from "operator configured an
+ * invalid value, fail closed" rather than treating both alike.
+ */
+export function inspectDevelopmentBranch(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'absent' };
+  }
+  if (!Object.hasOwn(config, 'developmentBranch')) {
+    return { status: 'absent' };
+  }
+  const value = config.developmentBranch;
+  if (typeof value !== 'string') {
+    return { status: 'invalid', reason: 'developmentBranch must be a string' };
+  }
+  if (!DEVELOPMENT_BRANCH_PATTERN.test(value)) {
+    return {
+      status: 'invalid',
+      reason:
+        'developmentBranch must be non-empty, contain only letters, digits, ".", "_", "/", or "-", and not start with "-"',
+    };
+  }
+  if (value.startsWith(DEVELOPMENT_BRANCH_REFS_HEADS_PREFIX)) {
+    return {
+      status: 'invalid',
+      reason: 'developmentBranch must be a branch name, not a refs/heads/ ref',
+    };
+  }
+  return { status: 'configured', branch: value };
+}
+/** The three standing-approval classes, in the order roadmap #4883 lists them. */
+export const STANDING_APPROVAL_CLASSES = ['budgetRaise', 'split', 'release'];
+const STANDING_APPROVAL_KEYS = {
+  budgetRaise: ['enabled', 'maxRaisePct'],
+  split: ['enabled', 'maxCandidateFiles'],
+  release: ['enabled', 'requireChecklistPass'],
+};
+function isStandingObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function inspectStandingApprovalClass(cls, raw) {
+  if (raw === undefined) {
+    return { class: cls, status: 'absent' };
+  }
+  const invalid = (reason) => ({
+    class: cls,
+    status: 'invalid',
+    reason,
+  });
+  if (!isStandingObject(raw)) {
+    return invalid(`standingApprovals.${cls} must be an object`);
+  }
+  for (const key of Object.keys(raw)) {
+    if (!STANDING_APPROVAL_KEYS[cls].includes(key)) {
+      return invalid(`standingApprovals.${cls} has an unknown key ${key}`);
+    }
+  }
+  if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') {
+    return invalid(`standingApprovals.${cls}.enabled must be a boolean`);
+  }
+  if (cls === 'budgetRaise' && raw.maxRaisePct !== undefined) {
+    const v = raw.maxRaisePct;
+    if (!(Number.isInteger(v) && v >= 0 && v <= 10)) {
+      return invalid(
+        'standingApprovals.budgetRaise.maxRaisePct must be an integer from 0 to 10',
+      );
+    }
+  }
+  if (cls === 'split' && raw.maxCandidateFiles !== undefined) {
+    const v = raw.maxCandidateFiles;
+    if (!(Number.isInteger(v) && v >= 1)) {
+      return invalid(
+        'standingApprovals.split.maxCandidateFiles must be a positive integer',
+      );
+    }
+  }
+  if (
+    cls === 'release' &&
+    raw.requireChecklistPass !== undefined &&
+    raw.requireChecklistPass !== true
+  ) {
+    return invalid(
+      'standingApprovals.release.requireChecklistPass must be true',
+    );
+  }
+  return { class: cls, status: raw.enabled === true ? 'enabled' : 'disabled' };
+}
+/**
+ * Inspect the three standing-approval classes on a raw policy document. A
+ * class is enabled only by an explicit `enabled: true` with valid ceilings;
+ * anything else is disabled, and a malformed class is reported as
+ * `invalid` so a test (or an operator) can read the reason.
+ */
+export function inspectStandingApprovals(config) {
+  const root = isStandingObject(config) ? config.standingApprovals : undefined;
+  if (root === undefined) {
+    return STANDING_APPROVAL_CLASSES.map((cls) => ({
+      class: cls,
+      status: 'absent',
+    }));
+  }
+  if (!isStandingObject(root)) {
+    return STANDING_APPROVAL_CLASSES.map((cls) => ({
+      class: cls,
+      status: 'invalid',
+      reason: 'standingApprovals must be an object',
+    }));
+  }
+  const unknownRootKey = Object.keys(root).find(
+    (key) => !STANDING_APPROVAL_CLASSES.includes(key),
+  );
+  if (unknownRootKey !== undefined) {
+    return STANDING_APPROVAL_CLASSES.map((cls) => ({
+      class: cls,
+      status: 'invalid',
+      reason: `standingApprovals has an unknown key ${unknownRootKey}`,
+    }));
+  }
+  return STANDING_APPROVAL_CLASSES.map((cls) =>
+    inspectStandingApprovalClass(cls, root[cls]),
+  );
+}
+/** The effective class values that `normalizePolicyConfig` returns. */
+function effectiveStandingApprovals(config) {
+  const status = new Map(
+    inspectStandingApprovals(config).map((d) => [d.class, d.status]),
+  );
+  const root =
+    isStandingObject(config) && isStandingObject(config.standingApprovals)
+      ? config.standingApprovals
+      : {};
+  const budget = isStandingObject(root.budgetRaise) ? root.budgetRaise : {};
+  const split = isStandingObject(root.split) ? root.split : {};
+  return {
+    budgetRaise: {
+      enabled: status.get('budgetRaise') === 'enabled',
+      maxRaisePct:
+        status.get('budgetRaise') !== 'invalid' &&
+        typeof budget.maxRaisePct === 'number'
+          ? budget.maxRaisePct
+          : 10,
+    },
+    split: {
+      enabled: status.get('split') === 'enabled',
+      maxCandidateFiles:
+        status.get('split') !== 'invalid' &&
+        typeof split.maxCandidateFiles === 'number'
+          ? split.maxCandidateFiles
+          : 8,
+    },
+    release: {
+      enabled: status.get('release') === 'enabled',
+      requireChecklistPass: true,
+    },
+  };
+}
+/** The five auto-decide classes, in the order roadmap #4955 lists them. */
+export const AUTO_DECIDE_CLASSES = [
+  'decisionIssue',
+  'runtimeQuestion',
+  'authoringChoice',
+  'worktreeRemnant',
+  'b1Leftover',
+];
+const AUTO_DECIDE_ROOT_KEYS = [
+  ...AUTO_DECIDE_CLASSES,
+  'maxPendingConfirmations',
+  'maxDecisionsPerClaim',
+  'confirmationLabelName',
+];
+const AUTO_DECIDE_CAPS = [
+  { key: 'maxPendingConfirmations', max: 100 },
+  { key: 'maxDecisionsPerClaim', max: 20 },
+];
+const NON_WHITESPACE_RE = /\S/;
+/**
+ * An own property of `record`, or `undefined` when the key is absent or only
+ * inherited. The `autoDecide` readers use it for every value, so an inherited
+ * value counts as absent, as it does for their `Object.keys` unknown-key
+ * checks (issue #4990).
+ */
+function ownAutoDecideField(record, key) {
+  return hasOwn(record, key) ? record[key] : undefined;
+}
+/** The first root-level rejection that makes every class malformed. */
+function inspectAutoDecideRoot(root) {
+  const unknownKey = Object.keys(root).find(
+    (key) => !AUTO_DECIDE_ROOT_KEYS.includes(key),
+  );
+  if (unknownKey !== undefined) {
+    return {
+      field: `autoDecide.${unknownKey}`,
+      reason: `autoDecide has an unknown key ${unknownKey}`,
+    };
+  }
+  for (const { key, max } of AUTO_DECIDE_CAPS) {
+    const value = ownAutoDecideField(root, key);
+    if (
+      value !== undefined &&
+      !(Number.isInteger(value) && value >= 1 && value <= max)
+    ) {
+      return {
+        field: `autoDecide.${key}`,
+        reason: `autoDecide.${key} must be an integer from 1 to ${max}`,
+      };
+    }
+  }
+  const label = ownAutoDecideField(root, 'confirmationLabelName');
+  if (
+    label !== undefined &&
+    !(typeof label === 'string' && NON_WHITESPACE_RE.test(label))
+  ) {
+    return {
+      field: 'autoDecide.confirmationLabelName',
+      reason:
+        'autoDecide.confirmationLabelName must be a string with a non-whitespace character',
+    };
+  }
+  return null;
+}
+function inspectAutoDecideClass(cls, raw) {
+  if (raw === undefined) {
+    return { class: cls, verdict: 'class-off' };
+  }
+  const malformed = (field, reason) => ({
+    class: cls,
+    verdict: 'malformed',
+    field,
+    reason,
+  });
+  const path = `autoDecide.${cls}`;
+  if (!isStandingObject(raw)) {
+    return malformed(path, `${path} must be an object`);
+  }
+  const allowed =
+    cls === 'worktreeRemnant' ? ['enabled', 'quietWindow'] : ['enabled'];
+  const unknownKey = Object.keys(raw).find((key) => !allowed.includes(key));
+  if (unknownKey !== undefined) {
+    return malformed(
+      `${path}.${unknownKey}`,
+      `${path} has an unknown key ${unknownKey}`,
+    );
+  }
+  const enabled = ownAutoDecideField(raw, 'enabled');
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    return malformed(`${path}.enabled`, `${path}.enabled must be a boolean`);
+  }
+  const quietWindow = ownAutoDecideField(raw, 'quietWindow');
+  if (
+    cls === 'worktreeRemnant' &&
+    quietWindow !== undefined &&
+    parsePositiveDuration(quietWindow, '') === ''
+  ) {
+    return malformed(
+      `${path}.quietWindow`,
+      `${path}.quietWindow must be a positive ISO 8601 duration`,
+    );
+  }
+  return {
+    class: cls,
+    verdict: enabled === true ? 'enabled' : 'class-off',
+  };
+}
+/**
+ * Inspect the five auto-decide classes on a raw policy document (roadmap
+ * #4955), for local diagnostics. A class is `enabled` only by an explicit
+ * `enabled: true` with valid values; an absent class or `enabled` is
+ * `class-off`. A malformed value is `malformed` with the first rejected
+ * field, because normalization replaces it with a default and cannot report
+ * it. A malformed root, cap, or label name makes every class `malformed`; a
+ * malformed `quietWindow` makes only `worktreeRemnant` `malformed`. Only own
+ * properties are read; an inherited value counts as absent. The master
+ * switch `dangerouslyAutoDecide` is not read here.
+ */
+export function inspectAutoDecide(config) {
+  const root = isStandingObject(config)
+    ? ownAutoDecideField(config, 'autoDecide')
+    : undefined;
+  if (root === undefined) {
+    return AUTO_DECIDE_CLASSES.map((cls) => ({
+      class: cls,
+      verdict: 'class-off',
+    }));
+  }
+  const rejection = isStandingObject(root)
+    ? inspectAutoDecideRoot(root)
+    : { field: 'autoDecide', reason: 'autoDecide must be an object' };
+  if (rejection !== null) {
+    return AUTO_DECIDE_CLASSES.map((cls) => ({
+      class: cls,
+      verdict: 'malformed',
+      ...rejection,
+    }));
+  }
+  const classes = root;
+  return AUTO_DECIDE_CLASSES.map((cls) =>
+    inspectAutoDecideClass(cls, ownAutoDecideField(classes, cls)),
+  );
+}
+/**
+ * The effective confirmation label name. It is resolved on its own: Discover
+ * filters on it, so a malformed sibling must never change it. A string with a
+ * non-whitespace character is kept; anything else uses the default.
+ */
+function effectiveAutoDecideConfirmationLabelName(config) {
+  const root = isStandingObject(config)
+    ? ownAutoDecideField(config, 'autoDecide')
+    : undefined;
+  const label = isStandingObject(root)
+    ? ownAutoDecideField(root, 'confirmationLabelName')
+    : undefined;
+  return typeof label === 'string' && NON_WHITESPACE_RE.test(label)
+    ? label
+    : POLICY_DEFAULTS.autoDecide.confirmationLabelName;
+}
+/** The effective `autoDecide` values that `normalizePolicyConfig` returns. */
+function effectiveAutoDecide(config) {
+  const verdicts = new Map(
+    inspectAutoDecide(config).map((d) => [d.class, d.verdict]),
+  );
+  const enabled = (cls) => verdicts.get(cls) === 'enabled';
+  const defaults = POLICY_DEFAULTS.autoDecide;
+  const rawRoot = isStandingObject(config)
+    ? ownAutoDecideField(config, 'autoDecide')
+    : undefined;
+  const root = isStandingObject(rawRoot) ? rawRoot : {};
+  // A root-level rejection marks every class malformed, so a cap is kept only
+  // when no class is malformed for a root reason; after that check every
+  // present cap is already valid.
+  const rootValid =
+    isStandingObject(rawRoot) && inspectAutoDecideRoot(rawRoot) === null;
+  const cap = (key) => {
+    const value = ownAutoDecideField(root, key);
+    return rootValid && typeof value === 'number' ? value : defaults[key];
+  };
+  const rawRemnant = ownAutoDecideField(root, 'worktreeRemnant');
+  const remnant = isStandingObject(rawRemnant) ? rawRemnant : {};
+  const quietWindow = ownAutoDecideField(remnant, 'quietWindow');
+  return {
+    decisionIssue: { enabled: enabled('decisionIssue') },
+    runtimeQuestion: { enabled: enabled('runtimeQuestion') },
+    authoringChoice: { enabled: enabled('authoringChoice') },
+    worktreeRemnant: {
+      enabled: enabled('worktreeRemnant'),
+      quietWindow:
+        verdicts.get('worktreeRemnant') !== 'malformed' &&
+        typeof quietWindow === 'string'
+          ? quietWindow
+          : defaults.worktreeRemnant.quietWindow,
+    },
+    b1Leftover: { enabled: enabled('b1Leftover') },
+    maxPendingConfirmations: cap('maxPendingConfirmations'),
+    maxDecisionsPerClaim: cap('maxDecisionsPerClaim'),
+    confirmationLabelName: effectiveAutoDecideConfirmationLabelName(config),
+  };
+}
+/** The label settings a confirmation label name must not reuse (roadmap #4955). */
+const AUTO_DECIDE_COLLISION_SETTINGS = [
+  'issueAuthoring.authoringLabelName',
+  'labels.authoringOnlyLabelName',
+  'labels.needsDecisionLabelName',
+  'labels.blockedByHumanLabelName',
+  'labels.roadmapLabelName',
+  'approvalSignals.readyLabelName',
+];
+/**
+ * Report each label setting whose effective name equals the effective
+ * `autoDecide.confirmationLabelName`, comparing names trimmed and lowercased.
+ * A default label counts as configured. Accepts a raw or an already
+ * normalized policy document, whose compared paths are the same.
+ */
+// audit:ignore-dead-export: roadmap #4955 children add the consumers; tests lock the collision rules until then
+export function findAutoDecideLabelCollisions(config) {
+  const policy = normalizePolicyConfig(config);
+  const comparable = (name) => name.trim().toLowerCase();
+  const confirmation = comparable(policy.autoDecide.confirmationLabelName);
+  const names = {
+    'issueAuthoring.authoringLabelName':
+      policy.issueAuthoring.authoringLabelName,
+    'labels.authoringOnlyLabelName': policy.labels.authoringOnlyLabelName,
+    'labels.needsDecisionLabelName': policy.labels.needsDecisionLabelName,
+    'labels.blockedByHumanLabelName': policy.labels.blockedByHumanLabelName,
+    'labels.roadmapLabelName': policy.labels.roadmapLabelName,
+    'approvalSignals.readyLabelName': policy.approvalSignals.readyLabelName,
+  };
+  return AUTO_DECIDE_COLLISION_SETTINGS.filter(
+    (setting) => comparable(names[setting]) === confirmation,
+  ).map((setting) => ({ setting, labelName: names[setting] }));
+}
+/**
+ * Resolve the effective development-branch target for enforcement
+ * (#2272): a configured `developmentBranch` policy value wins outright;
+ * an absent policy falls back to the caller-supplied live default branch
+ * (`null` when that read failed or was never attempted, yielding
+ * `'unavailable'`); an invalid policy value fails closed regardless of
+ * whether a live default branch is available, since a present-but-broken
+ * policy must never be silently ignored in favor of the fallback.
+ *
+ * Pure and injectable by design -- `policy-helpers.mts` performs no `gh`
+ * I/O itself; every caller resolves `liveDefaultBranch` (or passes `null`
+ * when unread) via its own evidence reader, mirroring the onboarding
+ * `OnboardEvidenceReaders` injection pattern.
+ */
+export function resolveEffectiveDevelopmentBranch(config, liveDefaultBranch) {
+  const inspection = inspectDevelopmentBranch(config);
+  if (inspection.status === 'configured') {
+    return { status: 'configured', branch: inspection.branch };
+  }
+  if (inspection.status === 'invalid') {
+    return { status: 'invalid', reason: inspection.reason };
+  }
+  if (liveDefaultBranch === null || liveDefaultBranch === '') {
+    return { status: 'unavailable' };
+  }
+  return { status: 'default', branch: liveDefaultBranch };
+}
+/** GitHub is the only functional provider until an adapter lands (#2265). */
+export const DEFAULT_PROVIDER = 'github';
+/**
+ * Inspect the top-level `provider` key on a raw policy document without
+ * applying any default (#2265). Mirrors {@link inspectDevelopmentBranch}'s
+ * absent/configured/invalid shape: absent means "no opinion, GitHub stays
+ * the effective provider"; invalid means "an unrecognized provider value
+ * was present and must fail closed rather than be treated as absent or
+ * silently coerced to the default".
+ */
+export function inspectProvider(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'absent' };
+  }
+  if (!Object.hasOwn(config, 'provider')) {
+    return { status: 'absent' };
+  }
+  const value = config.provider;
+  if (typeof value !== 'string' || !PROVIDER_IDS.includes(value)) {
+    return {
+      status: 'invalid',
+      reason: `provider must be one of ${PROVIDER_IDS.join(', ')}`,
+    };
+  }
+  return { status: 'configured', provider: value };
+}
+/**
+ * Resolve the effective provider selection (#2265): a configured
+ * `provider` policy value wins outright; an absent policy resolves to
+ * `DEFAULT_PROVIDER` (`'github'`), producing the same effective policy as
+ * the current, provider-unaware configuration; an invalid value fails
+ * closed rather than silently falling back to the default, since a
+ * present-but-broken policy must never be treated the same as no opinion
+ * at all.
+ *
+ * Pure -- performs no I/O and needs no live evidence, unlike
+ * {@link resolveEffectiveDevelopmentBranch}, because there is no
+ * provider-agnostic "live default" to fall back to.
+ */
+// audit:ignore-dead-export: no production caller found by #3478's first repo-wide run; left for follow-up triage
+export function resolveEffectiveProvider(config) {
+  const inspection = inspectProvider(config);
+  if (inspection.status === 'configured') {
+    return { status: 'configured', provider: inspection.provider };
+  }
+  if (inspection.status === 'invalid') {
+    return { status: 'invalid', reason: inspection.reason };
+  }
+  return { status: 'default', provider: DEFAULT_PROVIDER };
+}
+const HELPER_RUNTIME_PROFILES = new Set([
+  'package-manager',
+  'vendored-node',
+  'ephemeral-npx',
+  'instructions-only',
+  'user-global',
+]);
+export const HELPER_RUNTIME_KEYS = new Set([
+  'profile',
+  'packageSpec',
+  'launcher',
+]);
+export const HELPER_RUNTIME_LAUNCHERS = new Set(['auto', 'npx', 'pnpm-dlx']);
+const ISSUE_SCOPES = new Set(['roadmap', 'roadmap-first', 'orphan-first']);
+const ORPHAN_FIRST_POLICIES = new Set([
+  'none',
+  'maintainer-approved',
+  'public-disabled',
+]);
+const APPROVAL_ACTOR_POLICIES = new Set([
+  'owners-and-maintainers-only',
+  'all-write-permission-actors',
+]);
+const FORCED_HANDOFF_MODES = new Set(['disabled', 'human-gated']);
+const ADVISORY_CAP_ROUTES = new Set(['phase-specific', 'hold']);
+const ADVISORY_CONVERGENCE_SCOPES = new Set(['all-prs', 'idd-claimed']);
+const SELECTION_DESYNC_MODES = new Set(['off', 'session-offset']);
+const DEFER_BY_URGENCY_MODES = new Set([
+  'off',
+  'low',
+  'low-and-medium',
+  'severity-tiered',
+]);
+const TRIAGE_RECORD_MODES = new Set(['off', 'record', 'enforce']);
+const DEFER_NEEDS_DECISION_MODES = new Set(['on', 'off']);
+const EXTERNAL_CHECK_WAIVER_MODES = new Set([
+  'disabled',
+  'maintainer-authorized',
+]);
+const CHECK_SELECTOR_MATCH_MODES = new Set(['exact', 'glob']);
+const CRITIQUE_LOOP_DELEGATE_MODES = new Set([
+  'fallback',
+  'combined',
+  'on-success',
+  'never',
+]);
+const LEGACY_ADVISORY_CAP_ROUTE_ALIASES = new Map([
+  ['phase-default', 'phase-specific'],
+  ['strict-hold', 'hold'],
+]);
+// Matches the schema enum and ci-wait-policy.mts's own RERUN_POLICIES set
+// (both accept `hold`); this set previously omitted it, silently
+// downgrading a configured `hold` to `rerun-once` for any future consumer
+// of normalizePolicyConfig(...).ciWait (see #1359).
+const CI_RERUN_POLICIES = new Set(['rerun-once', 'hold']);
+const LABEL_FRESHNESS_MODES = new Set(['presence-only', 'event-freshness']);
+// #1521: `auto-admin-retry` is the distributed default (F3 retries once with
+// `--admin` when the Gate checklist is fully green, the only merge-command
+// failure is the self-CODEOWNER "base branch policy prohibits the merge"
+// error, and the topology fact proves the PR author is the sole eligible
+// codeowner). `hold-and-report` opts a repository into the pre-#1521
+// unconditional hold-and-report behavior instead.
+const MERGE_GATE_SOLO_CODEOWNER_ADMIN_FALLBACK_MODES = new Set([
+  'auto-admin-retry',
+  'hold-and-report',
+]);
+const ISO_DURATION_RE =
+  /^P(?=\d|T\d)(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+S)?)?$/;
+const ADVISORY_WHOLE_MINUTE_DURATION_RE =
+  /^P(?=(?:\d+D|T\d+[HM]))(?=.*(?:[1-9]\d*[DHM]))(?:\d+D)?(?:T(?=\d+[HM])(?:\d+H)?(?:\d+M)?)?$/;
+const DURATION_RE =
+  /^P(?:(?<days>\d+)D)?(?:T(?:(?<hours>\d+)H)?(?:(?<minutes>\d+)M)?(?:(?<seconds>\d+)S)?)?$/;
+// Mirrors schemas/policy.schema.json's helperRuntime.packageSpec pattern: a
+// non-empty, shell-safe character allowlist (letters, digits, and
+// `@:/_.+^#%-`), not merely "no whitespace" (idd-skill#1803 review). The
+// value is embedded raw and unquoted into copy-pasteable shell command
+// text (`npx --package <spec> ...`, `<manager> add <spec>`) -- a bare
+// whitespace check still lets shell metacharacters (`;`, `&`, `|`, `$`,
+// backticks, quotes, parens) through, which can corrupt or inject into
+// that command when an operator copies it. The allowlist covers realistic
+// npm specs (`@scope/name@version`, `github:owner/repo#ref`), HTTPS/git+
+// URLs, and tarball paths while excluding every shell metacharacter in
+// that list.
+const PACKAGE_SPEC_RE = /^[A-Za-z0-9@:/_.+^#%-]+$/;
+const GITHUB_API_READ_CACHE_MAX_BYTES = 104857600;
+/** Largest `githubApi.loadControl.maxConcurrent`; a larger value falls back to serial. */
+export const GITHUB_API_LOAD_CONTROL_MAX_CONCURRENT = 8;
+/** Longest `githubApi.loadControl.maxWait`, ten minutes; a longer value falls back to the default. */
+export const GITHUB_API_LOAD_CONTROL_MAX_WAIT_MS = 600_000;
+const SECOND_MS = 1000;
+const MINUTE_MS = 60 * SECOND_MS;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+/** Largest `localExec.admission.maxConcurrent`; a larger value falls back to serial. */
+export const LOCAL_EXEC_ADMISSION_MAX_CONCURRENT = 8;
+/** Longest `localExec.admission.maxWait`, six hours; a longer value falls back to the default. */
+export const LOCAL_EXEC_ADMISSION_MAX_WAIT_MS = 6 * HOUR_MS;
+const LOCAL_EXEC_BACKENDS = new Set(['flock', 'pueue']);
+/**
+ * The merge-policy values `mergePolicy` and `mergePolicyAck` accept, either
+ * as one string for every model tier or as each tier's value in the
+ * per-tier object (#5208).
+ */
+export const MERGE_POLICY_VALUES = Object.freeze([
+  'fully_autonomous_merge',
+  'human_merge',
+  'separate_merge_agent',
+]);
+/** The three model-tier keys of the per-tier `mergePolicy` object. */
+export const MERGE_POLICY_TIERS = Object.freeze([
+  'frontier',
+  'middle-tier',
+  'lightweight',
+]);
+function isMergePolicyValue(value) {
+  return typeof value === 'string' && MERGE_POLICY_VALUES.includes(value);
+}
+function isMergePolicyTier(value) {
+  return MERGE_POLICY_TIERS.includes(value);
+}
+/**
+ * Resolves the one merge policy that applies to `tier` (#5210). A string
+ * applies to every tier, and an absent value is the `human_merge` default.
+ * An object must hold exactly the three tier keys, each a known value, and
+ * `tier` must name one of them. Any other input fails with a reason and no
+ * policy. Never throws.
+ */
+export function resolveMergePolicy(mergePolicy, tier) {
+  if (mergePolicy === undefined) {
+    return { ok: true, policy: 'human_merge' };
+  }
+  if (isMergePolicyValue(mergePolicy)) {
+    return { ok: true, policy: mergePolicy };
+  }
+  if (
+    typeof mergePolicy !== 'object' ||
+    mergePolicy === null ||
+    Array.isArray(mergePolicy)
+  ) {
+    return {
+      ok: false,
+      reason:
+        'mergePolicy is neither a known policy string nor a per-tier object',
+    };
+  }
+  const record = mergePolicy;
+  const keys = Object.keys(record).sort();
+  const expected = [...MERGE_POLICY_TIERS].sort();
+  if (
+    keys.length !== expected.length ||
+    keys.some((key, index) => key !== expected[index])
+  ) {
+    return {
+      ok: false,
+      reason: `mergePolicy object must have exactly the keys ${MERGE_POLICY_TIERS.join(', ')}`,
+    };
+  }
+  for (const key of MERGE_POLICY_TIERS) {
+    if (!isMergePolicyValue(record[key])) {
+      return {
+        ok: false,
+        reason: `mergePolicy.${key} is not one of ${MERGE_POLICY_VALUES.join(', ')}`,
+      };
+    }
+  }
+  if (tier === null) {
+    return {
+      ok: false,
+      reason:
+        'mergePolicy is a per-tier object; name the tier with --model-tier or IDD_MODEL_TIER',
+    };
+  }
+  if (!isMergePolicyTier(tier)) {
+    return {
+      ok: false,
+      reason: `tier "${tier}" is not one of ${MERGE_POLICY_TIERS.join(', ')}`,
+    };
+  }
+  const value = record[tier];
+  if (!isMergePolicyValue(value)) {
+    // Unreachable after the key loop above; kept so the narrowing is local.
+    return { ok: false, reason: `mergePolicy.${tier} is not a known value` };
+  }
+  return { ok: true, policy: value };
+}
+export const POLICY_DEFAULTS = Object.freeze({
+  issueScope: 'roadmap-first',
+  orphanFirstPolicy: 'none',
+  skipIssueAuthorApprovalGate: false,
+  // Standing approval classes (issue #4886, roadmap #4883). Every class is
+  // off by default, so an absent key keeps today's per-request approval.
+  standingApprovals: Object.freeze({
+    budgetRaise: Object.freeze({ enabled: false, maxRaisePct: 10 }),
+    split: Object.freeze({ enabled: false, maxCandidateFiles: 8 }),
+    release: Object.freeze({ enabled: false, requireChecklistPass: true }),
+  }),
+  // Auto-decide classes (issue #4956, roadmap #4955). Every class is off by
+  // default; a class acts only when dangerouslyAutoDecide is also true.
+  autoDecide: Object.freeze({
+    decisionIssue: Object.freeze({ enabled: false }),
+    runtimeQuestion: Object.freeze({ enabled: false }),
+    authoringChoice: Object.freeze({ enabled: false }),
+    worktreeRemnant: Object.freeze({ enabled: false, quietWindow: 'PT2H' }),
+    b1Leftover: Object.freeze({ enabled: false }),
+    maxPendingConfirmations: 10,
+    maxDecisionsPerClaim: 3,
+    confirmationLabelName: 'status:needs-confirmation',
+  }),
+  dangerouslyAutoDecide: false,
+  maintainerApprovalActorPolicy: 'owners-and-maintainers-only',
+  stallRecovery: Object.freeze({
+    quietWindow: 'PT30M',
+  }),
+  // The write-gate claim-staleness window (#1310). isStaleAt's hardcoded 24h
+  // literal remains the fallback baked into protocol-helpers.mts; this is the
+  // one canonical config parse point every write-gate caller should read
+  // instead of hand-rolling `config?.claimTiming?.staleAge` access.
+  claimTiming: Object.freeze({
+    staleAge: 'PT24H',
+  }),
+  forcedHandoff: Object.freeze({
+    mode: 'disabled',
+    authorityPolicy: 'owners-and-maintainers-only',
+  }),
+  markerTrust: Object.freeze({
+    allowCollaboratorMarkers: false,
+  }),
+  advisoryWait: Object.freeze({
+    requestCap: 30,
+    pendingWindow: 'PT30M',
+    settledWindow: 'PT10M',
+    pollInterval: 'PT2M',
+    capExhaustedRoute: 'phase-specific',
+    convergenceScope: 'all-prs',
+    // #1906: opt-in, off by default -- no behavior change for a
+    // repository that does not explicitly set this to `true`.
+    exemptBotAuthoredPrs: false,
+  }),
+  ciWait: Object.freeze({
+    runningTimeout: 'PT30M',
+    generationTimeout: 'PT10M',
+    rerunPolicy: 'rerun-once',
+  }),
+  ciGate: Object.freeze({
+    externalChecks: Object.freeze({
+      advisory: Object.freeze([]),
+      waivable: Object.freeze([]),
+    }),
+    externalCheckWaivers: Object.freeze({
+      mode: 'disabled',
+      authorityPolicy: 'owners-and-maintainers-only',
+      maxValidity: 'PT24H',
+    }),
+    // #1377: default false fails closed on a masked-403-as-404 branch-
+    // protection/ruleset read instead of trusting it as genuinely empty.
+    trustEmptyProtectionReads: false,
+    // #1689: default false fails closed on a required check whose ruleset
+    // entry carries an `app_id`/`integration_id` (source-pinned) -- this
+    // repository has no way to verify the live check-run instance actually
+    // came from that pinned integration (see the option's own doc comment
+    // on `summarizeRequiredChecks` in protocol-helpers.mts), so a pinned
+    // check's green state stays untrusted by default rather than silently
+    // treated as passing.
+    trustSourcePinnedRequiredChecks: false,
+    // Option A (issue #4011): default false keeps the CI gate fail-closed for a
+    // global-only run with zero required checks. Only an explicit operator
+    // opt-in lets that run pass, and only while the global-only profile is
+    // active (see pre-merge-readiness.mts and protocol-helpers.mts).
+    allowNoRequiredChecksInGlobalOnly: false,
+  }),
+  discover: Object.freeze({
+    activeClaimPreScanBatchSize: 10,
+    selectionDesync: 'off',
+    legacyRoots: Object.freeze([]),
+    // Empty string is the off state: A4 Step 2's milestone preference is
+    // disabled and ranking is unchanged, matching an absent key.
+    milestoneScope: '',
+  }),
+  // #3835: per-session worker cap used by the read-only dispatch budget
+  // helper. One still permits one worker; it does not disable activation.
+  // #4258: host-load wait after a `host-load` budget stop. The 60-second
+  // re-check interval is an instruction constant, not a key.
+  orchestrator: Object.freeze({
+    maxWorkers: 2,
+    hostLoadClearStreak: 3,
+    hostLoadWaitCeiling: 'PT30M',
+  }),
+  claim: Object.freeze({
+    verifySettleDelay: 'PT5S',
+  }),
+  // Cast (not a literal `delegate` field) so this shares one declared type
+  // with the resolver's `critiqueLoop` below -- without it, TypeScript
+  // infers a two-branch union across normalizePolicyConfig's early
+  // `clone(POLICY_DEFAULTS)` return and its main return, and rejects
+  // `.critiqueLoop.delegate` on every caller. The runtime object still has
+  // no `delegate` key at all -- see the clone() doc comment's invariant.
+  critiqueLoop: Object.freeze({
+    cPhaseLowSeveritySkipAfter: 2,
+    e10NoProgressHoldAfter: 3,
+    e10MaxPasses: 2,
+    deferAfterRounds: 12,
+    deferByUrgency: 'severity-tiered',
+    triageRecord: 'record',
+    deferRelaxAtRounds: Object.freeze([4]),
+    deferAllAfterRounds: 5,
+    deferNeedsDecision: 'on',
+    subagentWaitCeiling: 'PT20M',
+  }),
+  reviewEscalation: Object.freeze({
+    changesRequestedFirstEscalation: 'PT24H',
+    changesRequestedSecondEscalation: 'PT48H',
+  }),
+  approvalSignals: Object.freeze({
+    readyLabelName: 'idd:ready',
+    labelFreshnessMode: 'presence-only',
+  }),
+  // Cast so the optional `adversarialReview.delegate` key shares one
+  // declared type with normalizePolicyConfig's return. The runtime object
+  // still has no `delegate` key until a repository-local object parses.
+  issueAuthoring: Object.freeze({
+    maxClarificationRounds: 3,
+    authoringLabelName: 'status:authoring',
+    authoringStaleAge: 'PT4H',
+    adversarialReview: Object.freeze({
+      waitCeiling: 'PT20M',
+    }),
+  }),
+  // Added in #1272; the discover-roadmap-graph, discover-orphan-filter,
+  // discover-readiness-check, idd-roadmap-audit-execute,
+  // suitability-triage, and idd-doctor label lookups were wired to this
+  // namespace in #1273.
+  labels: Object.freeze({
+    roadmapLabelName: 'roadmap',
+    blockedByHumanLabelName: 'status:blocked-by-human',
+    needsDecisionLabelName: 'status:needs-decision',
+    authoringOnlyLabelName: 'status:authoring-only',
+    // Added in #2669: string array default, resolved like the four
+    // sibling label-name fields above but via parseNonEmptyStringArray
+    // (fail-closed to [] on a non-array, an empty array, or any entry
+    // that isn't a non-empty string) instead of parseNonEmptyString.
+    untrustedLabelerLogins: Object.freeze([]),
+  }),
+  // Added in #1521 (solo-CODEOWNER autonomous `--admin` merge fallback).
+  mergeGate: Object.freeze({
+    soloCodeownerAdminFallback: 'auto-admin-retry',
+  }),
+  // Added in #2320. `declarationTarget` cast the same way as
+  // `critiqueLoop.delegate` above -- see that field's comment; the runtime
+  // object carries no `declarationTarget` key at all until configured.
+  providerOutage: Object.freeze({
+    maxValidity: 'PT24H',
+    // Added in #2321. Once this many pull requests are parked, sessions
+    // stop claiming new issues rather than manufacturing more unmergeable
+    // pull requests during a sustained outage.
+    maxParkedChanges: 10,
+  }),
+  // Added in #2323. Deliberately shorter than providerOutage.maxValidity
+  // (PT24H): a local validation run only stays representative of the
+  // working tree for a bounded window, not the whole outage window.
+  localValidationEvidence: Object.freeze({
+    maxAge: 'PT4H',
+  }),
+  // Added in #2319. `minCorroboratingPrs: 2` means a single pull request's
+  // failure burst always caps at `degraded`, never `unavailable`.
+  providerHealth: Object.freeze({
+    minCorroboratingPrs: 2,
+    samplingWindow: 'PT24H',
+  }),
+  // #3585 / #3587: `telemetry` and `readCache` are both disabled unless
+  // `enabled` is exactly true, so absent or false leaves the GitHub transport
+  // wrappers unchanged. `readCache.directory` is not an own key until an
+  // operator sets a non-empty string.
+  githubApi: Object.freeze({
+    telemetry: Object.freeze({
+      enabled: false,
+      maxRecords: 100,
+      path: null,
+    }),
+    readCache: Object.freeze({
+      enabled: false,
+      maxAge: 'PT5M',
+      maxBytes: GITHUB_API_READ_CACHE_MAX_BYTES,
+      retention: 'PT24H',
+    }),
+    // #3586: off unless `enabled` is exactly true. Serial admission is the
+    // conservative default; the bounded override is validated below.
+    loadControl: Object.freeze({
+      enabled: false,
+      maxConcurrent: 1,
+      maxWait: 'PT30S',
+    }),
+  }),
+  // #4427: on by default, unlike githubApi.loadControl. The test command is
+  // deliberately absent here: it is an own key only when an operator sets one.
+  localExec: Object.freeze({
+    admission: Object.freeze({
+      enabled: true,
+      maxConcurrent: 1,
+      maxWait: 'PT2H',
+      backend: 'flock',
+      pueueGroup: 'idd-validate',
+    }),
+  }),
+});
+export function parseProjectCommandRows(text) {
+  const commands = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const match = /^\|\s*\*\*([^*]+)\*\*\s*\|\s*`([^`]+)`\s*\|/.exec(line);
+    if (!match) {
+      continue;
+    }
+    commands.set(match[1].trim(), match[2].trim());
+  }
+  return commands;
+}
+export function inspectHelperRuntimeConfig(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'invalid', reason: 'config must be a non-null object' };
+  }
+  if (!hasOwn(config, 'helperRuntime')) {
+    return { status: 'absent' };
+  }
+  const helperRuntime = config.helperRuntime;
+  if (
+    typeof helperRuntime !== 'object' ||
+    helperRuntime === null ||
+    Array.isArray(helperRuntime)
+  ) {
+    return {
+      status: 'invalid',
+      reason: 'helperRuntime must be an object when present',
+    };
+  }
+  const unexpectedKeys = Object.keys(helperRuntime).filter(
+    (key) => !HELPER_RUNTIME_KEYS.has(key),
+  );
+  if (unexpectedKeys.length > 0) {
+    return {
+      status: 'invalid',
+      reason: `unsupported helperRuntime keys: ${unexpectedKeys.join(', ')}`,
+    };
+  }
+  const profile = helperRuntime.profile;
+  if (typeof profile !== 'string' || profile.length === 0) {
+    return {
+      status: 'invalid',
+      reason: 'helperRuntime.profile must be a non-empty string',
+    };
+  }
+  if (!HELPER_RUNTIME_PROFILES.has(profile)) {
+    return {
+      status: 'invalid',
+      reason: `unsupported helperRuntime.profile "${profile}"`,
+    };
+  }
+  // Optional launcher for the ephemeral-npx profile. Absent keeps the result
+  // shape unchanged, so the key is returned only when it is configured.
+  let launcher;
+  if (hasOwn(helperRuntime, 'launcher')) {
+    const value = helperRuntime.launcher;
+    if (typeof value !== 'string' || !HELPER_RUNTIME_LAUNCHERS.has(value)) {
+      return {
+        status: 'invalid',
+        reason:
+          'helperRuntime.launcher must be one of "auto", "npx", or "pnpm-dlx"',
+      };
+    }
+    launcher = value;
+  }
+  // Optional: absent by default (existing behavior, existing profile-only
+  // callers/tests are unaffected). When present, it must be a non-empty
+  // string in the shell-safe character allowlist -- mirrors
+  // schemas/policy.schema.json's pattern so the JSON Schema validator and
+  // this runtime guard never disagree.
+  if (hasOwn(helperRuntime, 'packageSpec')) {
+    const packageSpec = helperRuntime.packageSpec;
+    if (typeof packageSpec !== 'string' || !PACKAGE_SPEC_RE.test(packageSpec)) {
+      return {
+        status: 'invalid',
+        reason:
+          'helperRuntime.packageSpec must be a non-empty string using only shell-safe characters (letters, digits, and @:/_.+^#%-)',
+      };
+    }
+    return {
+      status: 'ok',
+      profile,
+      packageSpec,
+      ...(launcher === undefined ? {} : { launcher }),
+    };
+  }
+  return {
+    status: 'ok',
+    profile,
+    ...(launcher === undefined ? {} : { launcher }),
+  };
+}
+export function normalizePolicyConfig(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    // Cast so this early-return branch structurally unifies with the main
+    // return below on the optional `developmentBranch` key -- otherwise
+    // the function's inferred return type is a union where one member
+    // lacks the key entirely, and every call site reading
+    // `.developmentBranch` fails to typecheck regardless of which branch
+    // its own arguments would actually take.
+    return clone(POLICY_DEFAULTS);
+  }
+  const c = config;
+  const rawOrchestratorMaxWorkers = parsePositiveInteger(
+    c?.orchestrator?.maxWorkers,
+    POLICY_DEFAULTS.orchestrator.maxWorkers,
+  );
+  const rawOrchestratorHostLoadClearStreak = parsePositiveInteger(
+    c?.orchestrator?.hostLoadClearStreak,
+    POLICY_DEFAULTS.orchestrator.hostLoadClearStreak,
+  );
+  const rawOrchestratorHostLoadWaitCeiling = parsePositiveDuration(
+    c?.orchestrator?.hostLoadWaitCeiling,
+    POLICY_DEFAULTS.orchestrator.hostLoadWaitCeiling,
+  );
+  const forcedHandoffAuthorityAlias = firstAcceptedString(
+    APPROVAL_ACTOR_POLICIES,
+    c?.forcedHandoff?.authorityPolicy,
+    c?.['forced-handoff']?.authorityPolicy,
+    c?.forcedHandoffAuthority,
+    c?.['forced-handoff-authority'],
+  );
+  const forcedHandoffModeAlias = firstAcceptedString(
+    FORCED_HANDOFF_MODES,
+    c?.forcedHandoff?.mode,
+    c?.['forced-handoff']?.mode,
+    c?.forcedHandoffMode,
+    c?.['forced-handoff-mode'],
+  );
+  const markerTrustAlias = firstBoolean(
+    c?.markerTrust?.allowCollaboratorMarkers,
+    c?.markerTrustAllowCollaboratorMarkers,
+    c?.allowCollaboratorMarkers,
+  );
+  const critiqueLoopDelegate = parseCritiqueLoopDelegate(
+    c?.critiqueLoop?.delegate,
+  );
+  // Explicitly typed so the optional `delegate` key is part of one stable
+  // object type rather than a conditional-spread union TypeScript can't
+  // narrow -- see the Own-property-omitted comment below for why the key
+  // itself is conditionally present.
+  const critiqueLoop = {
+    cPhaseLowSeveritySkipAfter: parsePositiveInteger(
+      c?.critiqueLoop?.cPhaseLowSeveritySkipAfter,
+      POLICY_DEFAULTS.critiqueLoop.cPhaseLowSeveritySkipAfter,
+    ),
+    e10NoProgressHoldAfter: parsePositiveInteger(
+      c?.critiqueLoop?.e10NoProgressHoldAfter,
+      POLICY_DEFAULTS.critiqueLoop.e10NoProgressHoldAfter,
+    ),
+    e10MaxPasses: parsePositiveInteger(
+      c?.critiqueLoop?.e10MaxPasses,
+      POLICY_DEFAULTS.critiqueLoop.e10MaxPasses,
+    ),
+    deferAfterRounds: parsePositiveInteger(
+      c?.critiqueLoop?.deferAfterRounds,
+      POLICY_DEFAULTS.critiqueLoop.deferAfterRounds,
+    ),
+    deferByUrgency: parseEnum(
+      c?.critiqueLoop?.deferByUrgency,
+      DEFER_BY_URGENCY_MODES,
+      POLICY_DEFAULTS.critiqueLoop.deferByUrgency,
+    ),
+    triageRecord: parseEnum(
+      c?.critiqueLoop?.triageRecord,
+      TRIAGE_RECORD_MODES,
+      POLICY_DEFAULTS.critiqueLoop.triageRecord,
+    ),
+    // Absent takes the distributed default; JSON `null` is off (an empty list).
+    deferRelaxAtRounds:
+      c?.critiqueLoop?.deferRelaxAtRounds === undefined
+        ? [...POLICY_DEFAULTS.critiqueLoop.deferRelaxAtRounds]
+        : parseDeferRelaxAtRounds(c?.critiqueLoop?.deferRelaxAtRounds),
+    deferNeedsDecision: parseDeferNeedsDecision(
+      c?.critiqueLoop?.deferNeedsDecision,
+    ),
+    subagentWaitCeiling: parsePositiveDuration(
+      c?.critiqueLoop?.subagentWaitCeiling,
+      POLICY_DEFAULTS.critiqueLoop.subagentWaitCeiling,
+    ),
+  };
+  // Own-property omitted (not set to `undefined`) when no delegate is
+  // configured, matching POLICY_DEFAULTS -- see the clone() doc comment on
+  // why POLICY_DEFAULTS itself never carries an undefined-valued key.
+  if (critiqueLoopDelegate) {
+    critiqueLoop.delegate = critiqueLoopDelegate;
+  }
+  // #4750: the review-count cap is off unless the raw value is an integer of
+  // at least 1. Any other value leaves the own property out, the same shape
+  // `critiqueLoop.delegate` uses above.
+  // An absent key takes the distributed default. JSON `null` (or any other
+  // non-integer) leaves the cap off, so only an integer of at least 1 sets it.
+  const rawDeferAllAfterRounds = c?.critiqueLoop?.deferAllAfterRounds;
+  const defaultDeferAllAfterRounds =
+    POLICY_DEFAULTS.critiqueLoop.deferAllAfterRounds;
+  if (rawDeferAllAfterRounds === undefined) {
+    if (defaultDeferAllAfterRounds !== undefined) {
+      critiqueLoop.deferAllAfterRounds = defaultDeferAllAfterRounds;
+    }
+  } else if (
+    typeof rawDeferAllAfterRounds === 'number' &&
+    Number.isInteger(rawDeferAllAfterRounds) &&
+    rawDeferAllAfterRounds >= 1
+  ) {
+    critiqueLoop.deferAllAfterRounds = rawDeferAllAfterRounds;
+  }
+  // #2320: `declarationTarget` is a positive integer issue number, or
+  // absent -- absence disables the outage-relief declaration path
+  // entirely rather than falling back to some issue number. Same
+  // own-property-omitted shape as `critiqueLoop.delegate` above.
+  const rawDeclarationTarget = c?.providerOutage?.declarationTarget;
+  const providerOutage = {
+    maxValidity: parsePositiveDuration(
+      c?.providerOutage?.maxValidity,
+      POLICY_DEFAULTS.providerOutage.maxValidity,
+    ),
+    // #2321: an invalid or absent value falls back to the documented
+    // default deterministically -- see parsePositiveInteger above.
+    maxParkedChanges: parsePositiveInteger(
+      c?.providerOutage?.maxParkedChanges,
+      POLICY_DEFAULTS.providerOutage.maxParkedChanges,
+    ),
+  };
+  if (
+    typeof rawDeclarationTarget === 'number' &&
+    Number.isInteger(rawDeclarationTarget) &&
+    rawDeclarationTarget >= 1
+  ) {
+    providerOutage.declarationTarget = rawDeclarationTarget;
+  }
+  const localValidationEvidence = {
+    maxAge: parsePositiveDuration(
+      c?.localValidationEvidence?.maxAge,
+      POLICY_DEFAULTS.localValidationEvidence.maxAge,
+    ),
+  };
+  // #2319: read-only classifier tuning, never a gate. `minCorroboratingPrs`
+  // floors at 2 unconditionally -- the issue's own invariant ("a single
+  // pull request's failure burst can never resolve stronger than degraded")
+  // must hold regardless of configuration, so a configured `1` (or any
+  // value `parsePositiveInteger` would otherwise accept) falls back to the
+  // default rather than silently disabling the corroboration requirement.
+  const rawMinCorroboratingPrs = parsePositiveInteger(
+    c?.providerHealth?.minCorroboratingPrs,
+    POLICY_DEFAULTS.providerHealth.minCorroboratingPrs,
+  );
+  const telemetryPath = c?.githubApi?.telemetry?.path;
+  const telemetry = {
+    enabled: c?.githubApi?.telemetry?.enabled === true,
+    maxRecords: parsePositiveInteger(
+      c?.githubApi?.telemetry?.maxRecords,
+      POLICY_DEFAULTS.githubApi.telemetry.maxRecords,
+    ),
+    path:
+      typeof telemetryPath === 'string' && telemetryPath.trim().length > 0
+        ? telemetryPath.trim()
+        : null,
+  };
+  const providerHealth = {
+    minCorroboratingPrs:
+      rawMinCorroboratingPrs >= 2
+        ? rawMinCorroboratingPrs
+        : POLICY_DEFAULTS.providerHealth.minCorroboratingPrs,
+    samplingWindow: parsePositiveDuration(
+      c?.providerHealth?.samplingWindow,
+      POLICY_DEFAULTS.providerHealth.samplingWindow,
+    ),
+  };
+  const rawReadCacheMaxBytes = parsePositiveInteger(
+    c?.githubApi?.readCache?.maxBytes,
+    POLICY_DEFAULTS.githubApi.readCache.maxBytes,
+  );
+  const readCache = {
+    enabled: c?.githubApi?.readCache?.enabled === true,
+    maxAge: parsePositiveDuration(
+      c?.githubApi?.readCache?.maxAge,
+      POLICY_DEFAULTS.githubApi.readCache.maxAge,
+    ),
+    maxBytes:
+      rawReadCacheMaxBytes <= GITHUB_API_READ_CACHE_MAX_BYTES
+        ? rawReadCacheMaxBytes
+        : POLICY_DEFAULTS.githubApi.readCache.maxBytes,
+    retention: parsePositiveDuration(
+      c?.githubApi?.readCache?.retention,
+      POLICY_DEFAULTS.githubApi.readCache.retention,
+    ),
+  };
+  const rawReadCacheDirectory = c?.githubApi?.readCache?.directory;
+  if (
+    typeof rawReadCacheDirectory === 'string' &&
+    rawReadCacheDirectory.trim().length > 0
+  ) {
+    readCache.directory = rawReadCacheDirectory.trim();
+  }
+  const rawLoadControlMaxConcurrent = c?.githubApi?.loadControl?.maxConcurrent;
+  const rawLoadControlMaxWait = parsePositiveDuration(
+    c?.githubApi?.loadControl?.maxWait,
+    POLICY_DEFAULTS.githubApi.loadControl.maxWait,
+  );
+  const loadControl = {
+    enabled: c?.githubApi?.loadControl?.enabled === true,
+    maxConcurrent:
+      typeof rawLoadControlMaxConcurrent === 'number' &&
+      Number.isInteger(rawLoadControlMaxConcurrent) &&
+      rawLoadControlMaxConcurrent >= 1 &&
+      rawLoadControlMaxConcurrent <= GITHUB_API_LOAD_CONTROL_MAX_CONCURRENT
+        ? rawLoadControlMaxConcurrent
+        : POLICY_DEFAULTS.githubApi.loadControl.maxConcurrent,
+    maxWait:
+      (parseIsoDurationToMs(rawLoadControlMaxWait) ??
+        Number.POSITIVE_INFINITY) <= GITHUB_API_LOAD_CONTROL_MAX_WAIT_MS
+        ? rawLoadControlMaxWait
+        : POLICY_DEFAULTS.githubApi.loadControl.maxWait,
+  };
+  const githubApi = { telemetry, readCache, loadControl };
+  const standingApprovals = effectiveStandingApprovals(config);
+  const autoDecide = effectiveAutoDecide(config);
+  // #4427: only a literal `false` disables admission; every other value keeps
+  // it on. The helper, not this parser, rejects `flock` with a cap above 1, so
+  // the stored value stays visible here.
+  const localExecRaw = c?.localExec?.admission;
+  const rawLocalExecMaxConcurrent = localExecRaw?.maxConcurrent;
+  const rawLocalExecMaxWait = parsePositiveDuration(
+    localExecRaw?.maxWait,
+    POLICY_DEFAULTS.localExec.admission.maxWait,
+  );
+  const localExecAdmission = {
+    enabled: localExecRaw?.enabled !== false,
+    maxConcurrent:
+      typeof rawLocalExecMaxConcurrent === 'number' &&
+      Number.isInteger(rawLocalExecMaxConcurrent) &&
+      rawLocalExecMaxConcurrent >= 1 &&
+      rawLocalExecMaxConcurrent <= LOCAL_EXEC_ADMISSION_MAX_CONCURRENT
+        ? rawLocalExecMaxConcurrent
+        : POLICY_DEFAULTS.localExec.admission.maxConcurrent,
+    maxWait:
+      (parseIsoDurationToMs(rawLocalExecMaxWait) ?? Number.POSITIVE_INFINITY) <=
+      LOCAL_EXEC_ADMISSION_MAX_WAIT_MS
+        ? rawLocalExecMaxWait
+        : POLICY_DEFAULTS.localExec.admission.maxWait,
+    backend: parseEnum(
+      localExecRaw?.backend,
+      LOCAL_EXEC_BACKENDS,
+      POLICY_DEFAULTS.localExec.admission.backend,
+    ),
+    pueueGroup:
+      typeof localExecRaw?.pueueGroup === 'string' &&
+      localExecRaw.pueueGroup.trim().length > 0
+        ? localExecRaw.pueueGroup.trim()
+        : POLICY_DEFAULTS.localExec.admission.pueueGroup,
+  };
+  const rawLocalExecTestCommand = localExecRaw?.testCommand;
+  if (
+    typeof rawLocalExecTestCommand === 'string' &&
+    rawLocalExecTestCommand.trim().length > 0
+  ) {
+    localExecAdmission.testCommand = rawLocalExecTestCommand.trim();
+  }
+  const localExec = { admission: localExecAdmission };
+  // #2271: own-property-omitted on both 'absent' and 'invalid' -- mirrors
+  // `providerOutage.declarationTarget` above. Normalization never throws;
+  // a caller that must distinguish "no opinion" from "operator configured
+  // an invalid value" (fail closed rather than silently inheriting the
+  // live default) uses inspectDevelopmentBranch() directly on the raw
+  // config instead of this collapsed result.
+  const developmentBranchInspection = inspectDevelopmentBranch(config);
+  // Explicitly typed for the same reason as the `critiqueLoop`/`delegate`
+  // comment above: a conditional spread's own literal-object branches
+  // don't narrow into one stable optional-key type, so a caller reading
+  // `.developmentBranch` off the inferred return type sees it as missing
+  // on the "absent" union member instead of merely optional.
+  const developmentBranchField =
+    developmentBranchInspection.status === 'configured'
+      ? { developmentBranch: developmentBranchInspection.branch }
+      : {};
+  return {
+    ...developmentBranchField,
+    issueScope: parseEnum(
+      c?.issueScope,
+      ISSUE_SCOPES,
+      POLICY_DEFAULTS.issueScope,
+    ),
+    orphanFirstPolicy: parseEnum(
+      c?.orphanFirstPolicy,
+      ORPHAN_FIRST_POLICIES,
+      POLICY_DEFAULTS.orphanFirstPolicy,
+    ),
+    skipIssueAuthorApprovalGate: c?.skipIssueAuthorApprovalGate === true,
+    dangerouslyAutoDecide: c?.dangerouslyAutoDecide === true,
+    maintainerApprovalActorPolicy: parseEnum(
+      c?.maintainerApprovalActorPolicy,
+      APPROVAL_ACTOR_POLICIES,
+      POLICY_DEFAULTS.maintainerApprovalActorPolicy,
+    ),
+    stallRecovery: {
+      quietWindow: parseDuration(
+        c?.stallRecovery?.quietWindow,
+        POLICY_DEFAULTS.stallRecovery.quietWindow,
+      ),
+    },
+    claimTiming: {
+      staleAge: parsePositiveDuration(
+        c?.claimTiming?.staleAge,
+        POLICY_DEFAULTS.claimTiming.staleAge,
+      ),
+    },
+    forcedHandoff: {
+      mode: parseEnum(
+        forcedHandoffModeAlias,
+        FORCED_HANDOFF_MODES,
+        POLICY_DEFAULTS.forcedHandoff.mode,
+      ),
+      authorityPolicy: parseEnum(
+        forcedHandoffAuthorityAlias,
+        APPROVAL_ACTOR_POLICIES,
+        POLICY_DEFAULTS.forcedHandoff.authorityPolicy,
+      ),
+    },
+    markerTrust: {
+      allowCollaboratorMarkers:
+        markerTrustAlias ??
+        POLICY_DEFAULTS.markerTrust.allowCollaboratorMarkers,
+    },
+    advisoryWait: {
+      requestCap: parsePositiveInteger(
+        c?.advisoryWait?.requestCap,
+        POLICY_DEFAULTS.advisoryWait.requestCap,
+      ),
+      pendingWindow: parseAdvisoryWholeMinuteDuration(
+        c?.advisoryWait?.pendingWindow,
+        POLICY_DEFAULTS.advisoryWait.pendingWindow,
+      ),
+      settledWindow: parseAdvisoryWholeMinuteDuration(
+        c?.advisoryWait?.settledWindow,
+        POLICY_DEFAULTS.advisoryWait.settledWindow,
+      ),
+      pollInterval: parseAdvisoryWholeMinuteDuration(
+        c?.advisoryWait?.pollInterval,
+        POLICY_DEFAULTS.advisoryWait.pollInterval,
+      ),
+      capExhaustedRoute: parseAdvisoryCapRoute(
+        c?.advisoryWait?.capExhaustedRoute,
+        POLICY_DEFAULTS.advisoryWait.capExhaustedRoute,
+      ),
+      convergenceScope: parseEnum(
+        c?.advisoryWait?.convergenceScope,
+        ADVISORY_CONVERGENCE_SCOPES,
+        POLICY_DEFAULTS.advisoryWait.convergenceScope,
+      ),
+      // #1906: same simple-boolean coercion style as
+      // `skipIssueAuthorApprovalGate` above -- only a literal `true`
+      // opts in, everything else (including a malformed value) keeps
+      // the conservative `false` default.
+      exemptBotAuthoredPrs: c?.advisoryWait?.exemptBotAuthoredPrs === true,
+    },
+    ciWait: {
+      runningTimeout: parseDuration(
+        c?.ciWait?.runningTimeout,
+        POLICY_DEFAULTS.ciWait.runningTimeout,
+      ),
+      generationTimeout: parseDuration(
+        c?.ciWait?.generationTimeout,
+        POLICY_DEFAULTS.ciWait.generationTimeout,
+      ),
+      rerunPolicy: parseEnum(
+        c?.ciWait?.rerunPolicy,
+        CI_RERUN_POLICIES,
+        POLICY_DEFAULTS.ciWait.rerunPolicy,
+      ),
+    },
+    ciGate: {
+      externalChecks: {
+        advisory: parseCheckSelectors(
+          c?.ciGate?.externalChecks?.advisory,
+          POLICY_DEFAULTS.ciGate.externalChecks.advisory,
+        ),
+        waivable: parseCheckSelectors(
+          c?.ciGate?.externalChecks?.waivable,
+          POLICY_DEFAULTS.ciGate.externalChecks.waivable,
+        ),
+      },
+      externalCheckWaivers: {
+        mode: parseEnum(
+          c?.ciGate?.externalCheckWaivers?.mode,
+          EXTERNAL_CHECK_WAIVER_MODES,
+          POLICY_DEFAULTS.ciGate.externalCheckWaivers.mode,
+        ),
+        authorityPolicy: parseEnum(
+          c?.ciGate?.externalCheckWaivers?.authorityPolicy,
+          APPROVAL_ACTOR_POLICIES,
+          POLICY_DEFAULTS.ciGate.externalCheckWaivers.authorityPolicy,
+        ),
+        maxValidity: parsePositiveDuration(
+          c?.ciGate?.externalCheckWaivers?.maxValidity,
+          POLICY_DEFAULTS.ciGate.externalCheckWaivers.maxValidity,
+        ),
+      },
+      trustEmptyProtectionReads: c?.ciGate?.trustEmptyProtectionReads === true,
+      trustSourcePinnedRequiredChecks:
+        c?.ciGate?.trustSourcePinnedRequiredChecks === true,
+      allowNoRequiredChecksInGlobalOnly:
+        c?.ciGate?.allowNoRequiredChecksInGlobalOnly === true,
+    },
+    discover: {
+      activeClaimPreScanBatchSize: parsePositiveInteger(
+        c?.discover?.activeClaimPreScanBatchSize,
+        POLICY_DEFAULTS.discover.activeClaimPreScanBatchSize,
+      ),
+      selectionDesync: parseEnum(
+        c?.discover?.selectionDesync,
+        SELECTION_DESYNC_MODES,
+        POLICY_DEFAULTS.discover.selectionDesync,
+      ),
+      legacyRoots: parsePositiveIntegerArray(
+        c?.discover?.legacyRoots,
+        POLICY_DEFAULTS.discover.legacyRoots,
+      ),
+      // parseNonEmptyString collapses absent, wrong-type, and empty-string
+      // input to the same '' (off) fallback -- schema validation (`type:
+      // "string"`) is what rejects a non-string config value with a named
+      // reason; this resolver only needs to fail safe to neutral.
+      milestoneScope: parseNonEmptyString(
+        c?.discover?.milestoneScope,
+        POLICY_DEFAULTS.discover.milestoneScope,
+      ),
+    },
+    orchestrator: {
+      maxWorkers:
+        rawOrchestratorMaxWorkers <= 8
+          ? rawOrchestratorMaxWorkers
+          : POLICY_DEFAULTS.orchestrator.maxWorkers,
+      hostLoadClearStreak: rawOrchestratorHostLoadClearStreak,
+      hostLoadWaitCeiling: rawOrchestratorHostLoadWaitCeiling,
+    },
+    claim: {
+      verifySettleDelay: parseDuration(
+        c?.claim?.verifySettleDelay,
+        POLICY_DEFAULTS.claim.verifySettleDelay,
+      ),
+    },
+    critiqueLoop,
+    reviewEscalation: {
+      changesRequestedFirstEscalation: parseDuration(
+        c?.reviewEscalation?.changesRequestedFirstEscalation,
+        POLICY_DEFAULTS.reviewEscalation.changesRequestedFirstEscalation,
+      ),
+      changesRequestedSecondEscalation: parseDuration(
+        c?.reviewEscalation?.changesRequestedSecondEscalation,
+        POLICY_DEFAULTS.reviewEscalation.changesRequestedSecondEscalation,
+      ),
+    },
+    approvalSignals: {
+      readyLabelName: parseNonEmptyString(
+        c?.approvalSignals?.readyLabelName,
+        POLICY_DEFAULTS.approvalSignals.readyLabelName,
+      ),
+      labelFreshnessMode: parseEnum(
+        c?.approvalSignals?.labelFreshnessMode,
+        LABEL_FRESHNESS_MODES,
+        POLICY_DEFAULTS.approvalSignals.labelFreshnessMode,
+      ),
+    },
+    issueAuthoring: normalizeIssueAuthoringPolicy(c),
+    // Added in #1272 for shape parity with the clone(POLICY_DEFAULTS)
+    // early-return branch above (non-object input); wired to the
+    // consuming helpers' label lookups in #1273 (see the POLICY_DEFAULTS
+    // comment above for the exact file list).
+    labels: {
+      roadmapLabelName: parseNonEmptyString(
+        c?.labels?.roadmapLabelName,
+        POLICY_DEFAULTS.labels.roadmapLabelName,
+      ),
+      blockedByHumanLabelName: parseNonEmptyString(
+        c?.labels?.blockedByHumanLabelName,
+        POLICY_DEFAULTS.labels.blockedByHumanLabelName,
+      ),
+      needsDecisionLabelName: parseNonEmptyString(
+        c?.labels?.needsDecisionLabelName,
+        POLICY_DEFAULTS.labels.needsDecisionLabelName,
+      ),
+      authoringOnlyLabelName: parseNonEmptyString(
+        c?.labels?.authoringOnlyLabelName,
+        POLICY_DEFAULTS.labels.authoringOnlyLabelName,
+      ),
+      // #2669 PR review (Codex): this resolves to [] (trust everyone) on
+      // any malformed entry, including a mix of valid + invalid logins --
+      // fail-open for this denylist field, unlike an allowlist field's
+      // fail-to-[] (fail-closed). Kept matching the sibling label-name
+      // fields' resolution pattern per #2669's own acceptance criteria.
+      // idd-onboard --substitute now reads this list to generate the
+      // reserved-label guard workflow (#2671). A malformed entry resolves
+      // to [], which generates no guard, so the fail-open direction is a
+      // live enforcement gap. Reconsider it -- and whether schema validation
+      // alone is a sufficient guarantee for that consumer -- when the guard's
+      // own validation is designed.
+      untrustedLabelerLogins: parseNonEmptyStringArray(
+        c?.labels?.untrustedLabelerLogins,
+        POLICY_DEFAULTS.labels.untrustedLabelerLogins,
+      ),
+    },
+    mergeGate: {
+      soloCodeownerAdminFallback: parseEnum(
+        c?.mergeGate?.soloCodeownerAdminFallback,
+        MERGE_GATE_SOLO_CODEOWNER_ADMIN_FALLBACK_MODES,
+        POLICY_DEFAULTS.mergeGate.soloCodeownerAdminFallback,
+      ),
+    },
+    providerOutage,
+    localValidationEvidence,
+    providerHealth,
+    githubApi,
+    localExec,
+    standingApprovals,
+    autoDecide,
+  };
+}
+export function resolveCollaboratorMarkerTrust(config, envValue = '') {
+  if (hasConfiguredCollaboratorMarkerTrust(config)) {
+    return normalizePolicyConfig(config).markerTrust.allowCollaboratorMarkers;
+  }
+  return isTruthy(envValue);
+}
+export function parseIsoDurationToMs(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const match = DURATION_RE.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  const days = Number.parseInt(match.groups?.days ?? '0', 10);
+  const hours = Number.parseInt(match.groups?.hours ?? '0', 10);
+  const minutes = Number.parseInt(match.groups?.minutes ?? '0', 10);
+  const seconds = Number.parseInt(match.groups?.seconds ?? '0', 10);
+  const totalMs =
+    days * DAY_MS + hours * HOUR_MS + minutes * MINUTE_MS + seconds * SECOND_MS;
+  return totalMs > 0 ? totalMs : null;
+}
+/**
+ * Deterministically pick an index within a same-score tie band for the
+ * Discover A4 Step 2 selection desync (`discover.selectionDesync:
+ * session-offset`). Pure and network-free: the same session token always
+ * maps to the same index, while distinct tokens spread across the band, so
+ * concurrent autopilot sessions stop colliding on the lowest-numbered
+ * candidate. Returns `0` — the lowest-numbered, i.e. the default
+ * deterministic pick — for an empty/singleton band or a non-string/empty
+ * token, so `off`, no-tie, and no-token behavior is unchanged.
+ *
+ * The band is the caller's ascending-issue-number ordering; this only
+ * chooses an offset within it and never reorders across score bands or
+ * affects branch naming.
+ */
+export function selectDesyncedIndex(token, bandSize) {
+  const size =
+    typeof bandSize === 'number' && Number.isInteger(bandSize) && bandSize > 0
+      ? bandSize
+      : 0;
+  if (size <= 1) {
+    return 0;
+  }
+  if (typeof token !== 'string' || token.length === 0) {
+    return 0;
+  }
+  // FNV-1a 32-bit hash — deterministic, dependency-free, well-spread.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < token.length; i += 1) {
+    hash ^= token.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % size;
+}
+/**
+ * Deep-clone helper for this module's own trusted defaults (#1449).
+ *
+ * Exported only so its equivalence can be unit-tested directly; every
+ * production call site stays inside this file. `structuredClone` (global
+ * since Node 17, well below this repo's `engines.node` floor) replaces
+ * the previous `JSON.parse(JSON.stringify(value))` round-trip.
+ * `structuredClone` differs from a JSON round-trip on several axes —
+ * non-exhaustively: it throws on functions; it preserves `Date`, `Map`,
+ * and `undefined`-valued keys that JSON drops or converts; and it also
+ * diverges on `BigInt`, `RegExp`, typed arrays, and `NaN`/`Infinity`/`-0`
+ * normalization. This list is deliberately not treated as exhaustive —
+ * what matters for this swap is not enumerating every divergence axis,
+ * but that `POLICY_DEFAULTS` (below) never contains a value on *any* of
+ * them. All 10 call sites in this file were enumerated before making this
+ * swap: `normalizePolicyConfig`'s `clone(POLICY_DEFAULTS)`, plus 9 calls
+ * across `parsePositiveIntegerArray`, `parseNonEmptyStringArray`, and
+ * `parseCheckSelectors`, which only ever clone `POLICY_DEFAULTS` itself or
+ * one of its own frozen sub-arrays (`discover.legacyRoots`,
+ * `labels.untrustedLabelerLogins`, `ciGate.externalChecks.advisory`,
+ * `.waivable` — all `[]`). `POLICY_DEFAULTS` is a plain, deeply-frozen
+ * literal of strings, finite numbers, booleans, and empty arrays only —
+ * no function, `Date`, `Map`, `BigInt`, `RegExp`, typed array, exotic
+ * number, or `undefined`-valued property appears anywhere in it, so none
+ * of `structuredClone`'s divergences from a JSON round-trip is ever
+ * exercised by a real caller (Copilot review, #1463).
+ */
+export function clone(value) {
+  return structuredClone(value);
+}
+function _firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+  return '';
+}
+function firstAcceptedString(accepted, ...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && accepted.has(value)) {
+      return value;
+    }
+  }
+  return '';
+}
+function firstBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+  }
+  return null;
+}
+function parseEnum(value, accepted, fallback) {
+  if (typeof value === 'string' && accepted.has(value)) {
+    return value;
+  }
+  return fallback;
+}
+/**
+ * `critiqueLoop.deferNeedsDecision` deliberately differs from `parseEnum`:
+ * `parseEnum` falls back to the default for any non-member, but this
+ * field's default (`'on'`) is the permissive value, so a mistyped value
+ * (`'OFF'`, `false`, `null`, ...) must never enable the route against the
+ * operator's evident intent. Only a missing value (key absent or
+ * `undefined`, including a non-object `critiqueLoop` block) resolves to
+ * the default; exactly `'on'` / `'off'` resolve to themselves; any other
+ * present value resolves to `'off'`. This helper only sees parsed data, so
+ * a config file that exists but cannot be parsed is the instruction text's
+ * to handle (it will act as `'off'`; `loadPolicyConfig` rejects such a
+ * file, and a non-object top level too); `normalizePolicyConfig(null)`
+ * means `'on'`.
+ */
+function parseDeferNeedsDecision(value) {
+  if (value === undefined) {
+    return POLICY_DEFAULTS.critiqueLoop.deferNeedsDecision;
+  }
+  return typeof value === 'string' && DEFER_NEEDS_DECISION_MODES.has(value)
+    ? value
+    : 'off';
+}
+function parseDuration(value, fallback) {
+  if (typeof value === 'string' && ISO_DURATION_RE.test(value)) {
+    return value;
+  }
+  return fallback;
+}
+function parseAdvisoryWholeMinuteDuration(value, fallback) {
+  if (
+    typeof value === 'string' &&
+    ADVISORY_WHOLE_MINUTE_DURATION_RE.test(value)
+  ) {
+    return value;
+  }
+  return fallback;
+}
+function parseAdvisoryCapRoute(value, fallback) {
+  if (typeof value === 'string') {
+    if (ADVISORY_CAP_ROUTES.has(value)) {
+      return value;
+    }
+    return LEGACY_ADVISORY_CAP_ROUTE_ALIASES.get(value) ?? fallback;
+  }
+  return fallback;
+}
+function parsePositiveDuration(value, fallback) {
+  return typeof value === 'string' &&
+    ISO_DURATION_RE.test(value) &&
+    parseIsoDurationToMs(value) !== null
+    ? value
+    : fallback;
+}
+function parsePositiveInteger(value, fallback) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : fallback;
+}
+/**
+ * Parse a config array of positive integers (e.g. issue numbers), such as
+ * `discover.legacyRoots`. Mirrors `parseCheckSelectors`'s fail-closed shape:
+ * a non-array, empty array, or any entry that is not a positive integer
+ * falls back to `fallback` as a whole rather than dropping just the bad
+ * entries, so a typo'd issue number cannot silently vanish from the set.
+ */
+function parsePositiveIntegerArray(value, fallback) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return clone(fallback);
+  }
+  const normalized = [];
+  for (const entry of value) {
+    if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1) {
+      return clone(fallback);
+    }
+    normalized.push(entry);
+  }
+  return normalized;
+}
+/**
+ * Parse `critiqueLoop.deferRelaxAtRounds` (#3796): one or two strictly
+ * ascending integers of at least 1, returned as a fresh copy. Anything else
+ * (a non-array, an empty or longer array, a non-integer, zero, a negative, a
+ * duplicate, or a descending pair) is `[]`, which turns the gradient off, so
+ * a mistyped value never relaxes the rule. Unlike `parsePositiveIntegerArray`
+ * it enforces the length and order the schema cannot express.
+ */
+function parseDeferRelaxAtRounds(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 2) {
+    return [];
+  }
+  const thresholds = [];
+  for (const entry of value) {
+    if (typeof entry !== 'number' || !Number.isInteger(entry) || entry < 1) {
+      return [];
+    }
+    if (thresholds.length > 0 && entry <= thresholds[thresholds.length - 1]) {
+      return [];
+    }
+    thresholds.push(entry);
+  }
+  return thresholds;
+}
+function parseNonEmptyString(value, fallback) {
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+/**
+ * Parse a config array of non-blank strings (e.g. GitHub logins), such as
+ * `labels.untrustedLabelerLogins`. Mirrors `parsePositiveIntegerArray`'s
+ * fail-closed shape: a non-array, empty array, or any entry that is empty
+ * or whitespace-only after trimming falls back to `fallback` as a whole
+ * rather than dropping just the bad entries, so a typo'd login cannot
+ * silently vanish from the set. A surviving entry is itself trimmed
+ * (matches `readWorktreeGuardBranchPatterns` in `idd-doctor.mts`): an
+ * entry with incidental surrounding whitespace otherwise passes but never
+ * matches a real login.
+ *
+ * Caution for a denylist-semantics caller (#2669 PR review, Codex): "fail
+ * closed to `fallback`" is directionally safe only when `fallback` is the
+ * maximally *restrictive* value for that field -- true for an allowlist
+ * (`fallback: []` denies everyone) but the opposite for a denylist
+ * (`fallback: []` trusts everyone). `labels.untrustedLabelerLogins` is a
+ * denylist, so one malformed entry alongside otherwise-valid logins
+ * silently drops every previously-declared untrusted login, not just the
+ * bad one. Schema validation (`minItems: 1`, non-empty `items`) is the
+ * actual enforcement boundary before this ever runs; this fallback is
+ * defense-in-depth for callers that bypass it. Partial-preserve filtering
+ * would not fully close this either -- a misspelled-but-non-empty login
+ * still passes this parser and simply matches nothing downstream. See the
+ * call site below for why this is deliberately left unchanged for now.
+ */
+function parseNonEmptyStringArray(value, fallback) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return clone(fallback);
+  }
+  const normalized = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.trim().length === 0) {
+      return clone(fallback);
+    }
+    // Trim surviving entries: matches readWorktreeGuardBranchPatterns's
+    // same rationale (idd-doctor.mts) -- a configured entry with
+    // incidental surrounding whitespace (e.g. "triage-bot ") otherwise
+    // passes validation but never matches a real login, silently
+    // covering nothing.
+    normalized.push(entry.trim());
+  }
+  return normalized;
+}
+function parseCheckSelectors(value, fallback) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return clone(fallback);
+  }
+  const entries = value;
+  const normalized = [];
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      return clone(fallback);
+    }
+    const candidate = entry;
+    const entryKeys = Object.keys(candidate);
+    if (entryKeys.some((key) => key !== 'selector' && key !== 'matchMode')) {
+      return clone(fallback);
+    }
+    const selector = parseNonEmptyString(candidate.selector, '');
+    if (!selector) {
+      return clone(fallback);
+    }
+    if (hasOwn(candidate, 'matchMode')) {
+      if (
+        typeof candidate.matchMode !== 'string' ||
+        !CHECK_SELECTOR_MATCH_MODES.has(candidate.matchMode)
+      ) {
+        return clone(fallback);
+      }
+    }
+    normalized.push({
+      selector,
+      matchMode:
+        typeof candidate.matchMode === 'string' ? candidate.matchMode : 'exact',
+    });
+  }
+  return normalized;
+}
+/**
+ * Parse `critiqueLoop.delegate`. Unlike the other `critiqueLoop` fields,
+ * absence is not defaulted to a concrete value -- a non-object, an unknown
+ * nested key, or a missing/whitespace-only `command` all normalize to
+ * `undefined` (no delegate configured) so a direct `normalizePolicyConfig`
+ * caller can never accept a shape the schema's `additionalProperties: false`
+ * / `command` pattern would reject (#2207 review).
+ */
+function parseCritiqueLoopDelegate(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value;
+  const candidateKeys = Object.keys(candidate);
+  if (candidateKeys.some((key) => key !== 'command' && key !== 'mode')) {
+    return undefined;
+  }
+  // Object.keys() above already excludes inherited keys, but a plain
+  // property read (candidate.command) still walks the prototype chain --
+  // require command/mode to be own properties so a crafted object (e.g.
+  // Object.create({ command: '...' })) can't supply either through
+  // inheritance instead of being rejected as absent (#2207 review).
+  if (!Object.hasOwn(candidate, 'command')) {
+    return undefined;
+  }
+  const command = parseNonEmptyString(candidate.command, '');
+  if (!command || command.trim() === '') {
+    return undefined;
+  }
+  return {
+    command,
+    mode: Object.hasOwn(candidate, 'mode')
+      ? parseEnum(candidate.mode, CRITIQUE_LOOP_DELEGATE_MODES, 'fallback')
+      : 'fallback',
+  };
+}
+const INVALID_LOCAL_DELEGATE_REASON = 'invalid-repository-local-delegate';
+/**
+ * Inspect `critiqueLoop.delegate` on a raw policy document without applying
+ * `normalizePolicyConfig`'s fail-safe-to-undefined collapse. Distinguishes
+ * absence, the explicit JSON `null` disable sentinel, a configured object,
+ * and a present-but-malformed value.
+ */
+export function inspectCritiqueLoopDelegateLayer(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'absent' };
+  }
+  if (!Object.hasOwn(config, 'critiqueLoop')) {
+    return { status: 'absent' };
+  }
+  const critiqueLoop = config.critiqueLoop;
+  if (
+    typeof critiqueLoop !== 'object' ||
+    critiqueLoop === null ||
+    Array.isArray(critiqueLoop)
+  ) {
+    // A present non-object `critiqueLoop` is a local configuration error:
+    // fail closed rather than treating it as "no delegate" and inheriting
+    // a user-global object.
+    return { status: 'malformed', reason: INVALID_LOCAL_DELEGATE_REASON };
+  }
+  if (!Object.hasOwn(critiqueLoop, 'delegate')) {
+    return { status: 'absent' };
+  }
+  const value = critiqueLoop.delegate;
+  if (value === null) {
+    return { status: 'disabled' };
+  }
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const candidate = value;
+    if (Object.hasOwn(candidate, 'mode')) {
+      const mode = candidate.mode;
+      if (typeof mode !== 'string' || !CRITIQUE_LOOP_DELEGATE_MODES.has(mode)) {
+        return {
+          status: 'malformed',
+          reason: INVALID_LOCAL_DELEGATE_REASON,
+        };
+      }
+    }
+  }
+  const parsed = parseCritiqueLoopDelegate(value);
+  if (parsed) {
+    return { status: 'configured', delegate: parsed };
+  }
+  return { status: 'malformed', reason: INVALID_LOCAL_DELEGATE_REASON };
+}
+/**
+ * Resolve the effective C1 delegate from a repository-local document and an
+ * optional user-global document. Pure: callers supply already-loaded JSON
+ * (or `undefined` for an absent global file). Never reads the filesystem.
+ *
+ * Order: local object, local `null` disable, global object, then none.
+ * A malformed local delegate is fail-closed and does not inherit global.
+ * A malformed or disabled global fragment is treated as absent.
+ */
+export function resolveEffectiveCritiqueLoopDelegate(input) {
+  const local = inspectCritiqueLoopDelegateLayer(input.localConfig);
+  if (local.status === 'configured' && local.delegate) {
+    return {
+      status: 'local',
+      source: 'repository-local',
+      delegate: local.delegate,
+    };
+  }
+  if (local.status === 'disabled') {
+    return { status: 'disabled', source: 'repository-local' };
+  }
+  if (local.status === 'malformed') {
+    return {
+      status: 'local-malformed',
+      source: 'repository-local',
+      reason: local.reason ?? INVALID_LOCAL_DELEGATE_REASON,
+    };
+  }
+  if (input.globalConfig === undefined || input.globalConfig === null) {
+    return { status: 'none', source: 'none' };
+  }
+  const global = inspectCritiqueLoopDelegateLayer(input.globalConfig);
+  if (global.status === 'configured' && global.delegate) {
+    return {
+      status: 'global',
+      source: 'user-global',
+      delegate: global.delegate,
+    };
+  }
+  return { status: 'none', source: 'none' };
+}
+const ISSUE_AUTHORING_DELEGATE_KEYS = new Set(['waitCeiling', 'delegate']);
+const INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON =
+  'invalid-repository-local-delegate';
+/**
+ * Parse `issueAuthoring.adversarialReview.delegate`. Absence is not
+ * defaulted to a command. A non-object, an unknown nested key, or a
+ * missing/whitespace-only `command` normalizes to `undefined`.
+ */
+function parseIssueAuthoringDelegate(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value;
+  const candidateKeys = Object.keys(candidate);
+  if (candidateKeys.some((key) => key !== 'command' && key !== 'mode')) {
+    return undefined;
+  }
+  if (!Object.hasOwn(candidate, 'command')) {
+    return undefined;
+  }
+  const command = parseNonEmptyString(candidate.command, '');
+  if (!command || command.trim() === '') {
+    return undefined;
+  }
+  return {
+    command,
+    mode: Object.hasOwn(candidate, 'mode')
+      ? parseEnum(candidate.mode, CRITIQUE_LOOP_DELEGATE_MODES, 'fallback')
+      : 'fallback',
+  };
+}
+/**
+ * Read `issueAuthoring.adversarialReview.waitCeiling` from one raw policy
+ * document. Never reads `critiqueLoop.subagentWaitCeiling`. A missing or
+ * non-positive value falls back to `PT20M`. A user-global document is not
+ * consulted: callers pass the repository-local document only.
+ */
+export function resolveIssueAuthoringAdversarialWaitCeiling(config) {
+  const fallback = POLICY_DEFAULTS.issueAuthoring.adversarialReview.waitCeiling;
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return fallback;
+  }
+  if (!Object.hasOwn(config, 'issueAuthoring')) {
+    return fallback;
+  }
+  const issueAuthoring = config.issueAuthoring;
+  if (
+    typeof issueAuthoring !== 'object' ||
+    issueAuthoring === null ||
+    Array.isArray(issueAuthoring) ||
+    !Object.hasOwn(issueAuthoring, 'adversarialReview')
+  ) {
+    return fallback;
+  }
+  const review = issueAuthoring.adversarialReview;
+  if (
+    typeof review !== 'object' ||
+    review === null ||
+    Array.isArray(review) ||
+    !Object.hasOwn(review, 'waitCeiling')
+  ) {
+    return fallback;
+  }
+  return parsePositiveDuration(review.waitCeiling, fallback);
+}
+function normalizeIssueAuthoringPolicy(config) {
+  const delegate = parseIssueAuthoringDelegate(
+    config.issueAuthoring?.adversarialReview?.delegate,
+  );
+  const adversarialReview = {
+    waitCeiling: resolveIssueAuthoringAdversarialWaitCeiling(config),
+  };
+  if (delegate) {
+    adversarialReview.delegate = delegate;
+  }
+  return {
+    maxClarificationRounds: parsePositiveInteger(
+      config.issueAuthoring?.maxClarificationRounds,
+      POLICY_DEFAULTS.issueAuthoring.maxClarificationRounds,
+    ),
+    authoringLabelName: parseNonEmptyString(
+      config.issueAuthoring?.authoringLabelName,
+      POLICY_DEFAULTS.issueAuthoring.authoringLabelName,
+    ),
+    authoringStaleAge: parseDuration(
+      config.issueAuthoring?.authoringStaleAge,
+      POLICY_DEFAULTS.issueAuthoring.authoringStaleAge,
+    ),
+    adversarialReview,
+  };
+}
+/**
+ * `issueAuthoring.journalIssue` grammar (#4115): `owner/repo#N`, the shape
+ * `schemas/policy.schema.json` pins. The capture groups exist only for
+ * parsing. tests/policy-helpers.test.mts compares this grammar to the schema,
+ * so the two cannot drift apart silently.
+ */
+export const AUTHORING_JOURNAL_REFERENCE_PATTERN =
+  /^([\w.-]+)\/([\w.-]+)#([1-9][0-9]*)$/;
+/**
+ * Resolve the configured durable records that Discover must never offer as
+ * work (#4115). Inputs are raw config values, so a non-string or malformed
+ * journal reference, a journal in another repository, or an unknown current
+ * repository all yield `null` rather than throwing. The outage target (#2800)
+ * passes through only as a positive integer.
+ */
+export function resolveDurableRecordTargets(input) {
+  const outage = input.providerOutageTarget;
+  const providerOutageTarget =
+    typeof outage === 'number' && Number.isInteger(outage) && outage >= 1
+      ? outage
+      : null;
+  let authoringJournalTarget = null;
+  const reference = input.journalReference;
+  const current = input.currentRepo?.split('/') ?? [];
+  if (typeof reference === 'string' && current.length === 2) {
+    const match = AUTHORING_JOURNAL_REFERENCE_PATTERN.exec(reference);
+    const owner = match?.[1];
+    const name = match?.[2];
+    const number = match?.[3];
+    if (
+      owner !== undefined &&
+      name !== undefined &&
+      number !== undefined &&
+      owner.toLowerCase() === (current[0] ?? '').toLowerCase() &&
+      name.toLowerCase() === (current[1] ?? '').toLowerCase()
+    ) {
+      // A digit run beyond the safe-integer range cannot round-trip to the
+      // issue number it spells, so it fails closed instead of being stored.
+      const parsed = Number(number);
+      authoringJournalTarget = Number.isSafeInteger(parsed) ? parsed : null;
+    }
+  }
+  return { providerOutageTarget, authoringJournalTarget };
+}
+/**
+ * Inspect `issueAuthoring.adversarialReview.delegate` without collapsing a
+ * malformed value into "absent". Unknown keys on `adversarialReview` fail
+ * closed so a typo cannot inherit a user-global command. Does not read
+ * `critiqueLoop`.
+ */
+export function inspectIssueAuthoringDelegateLayer(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'absent' };
+  }
+  if (!Object.hasOwn(config, 'issueAuthoring')) {
+    return { status: 'absent' };
+  }
+  const issueAuthoring = config.issueAuthoring;
+  if (
+    typeof issueAuthoring !== 'object' ||
+    issueAuthoring === null ||
+    Array.isArray(issueAuthoring)
+  ) {
+    return {
+      status: 'malformed',
+      reason: INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+    };
+  }
+  if (!Object.hasOwn(issueAuthoring, 'adversarialReview')) {
+    return { status: 'absent' };
+  }
+  const review = issueAuthoring.adversarialReview;
+  if (typeof review !== 'object' || review === null || Array.isArray(review)) {
+    return {
+      status: 'malformed',
+      reason: INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+    };
+  }
+  if (
+    Object.keys(review).some((key) => !ISSUE_AUTHORING_DELEGATE_KEYS.has(key))
+  ) {
+    return {
+      status: 'malformed',
+      reason: INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+    };
+  }
+  if (!Object.hasOwn(review, 'delegate')) {
+    return { status: 'absent' };
+  }
+  const value = review.delegate;
+  if (value === null) {
+    return { status: 'disabled' };
+  }
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const candidate = value;
+    if (Object.hasOwn(candidate, 'mode')) {
+      const mode = candidate.mode;
+      if (typeof mode !== 'string' || !CRITIQUE_LOOP_DELEGATE_MODES.has(mode)) {
+        return {
+          status: 'malformed',
+          reason: INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+        };
+      }
+    }
+  }
+  const parsed = parseIssueAuthoringDelegate(value);
+  if (parsed) {
+    return { status: 'configured', delegate: parsed };
+  }
+  return {
+    status: 'malformed',
+    reason: INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+  };
+}
+/**
+ * Resolve the effective issue-authoring delegate from a repository-local
+ * document and an optional user-global document. Pure: callers supply
+ * already-loaded JSON. Never reads the filesystem or `critiqueLoop`.
+ *
+ * Order: local object, local `null` disable, global object, then none.
+ * A malformed local delegate is fail-closed and does not inherit global.
+ * A malformed or disabled global fragment is treated as absent.
+ */
+export function resolveEffectiveIssueAuthoringDelegate(input) {
+  const local = inspectIssueAuthoringDelegateLayer(input.localConfig);
+  if (local.status === 'configured' && local.delegate) {
+    return {
+      status: 'local',
+      source: 'repository-local',
+      delegate: local.delegate,
+    };
+  }
+  if (local.status === 'disabled') {
+    return { status: 'disabled', source: 'repository-local' };
+  }
+  if (local.status === 'malformed') {
+    return {
+      status: 'local-malformed',
+      source: 'repository-local',
+      reason: local.reason ?? INVALID_LOCAL_ISSUE_AUTHORING_DELEGATE_REASON,
+    };
+  }
+  if (input.globalConfig === undefined || input.globalConfig === null) {
+    return { status: 'none', source: 'none' };
+  }
+  const global = inspectIssueAuthoringDelegateLayer(input.globalConfig);
+  if (global.status === 'configured' && global.delegate) {
+    return {
+      status: 'global',
+      source: 'user-global',
+      delegate: global.delegate,
+    };
+  }
+  return { status: 'none', source: 'none' };
+}
+/**
+ * Parse `critiqueLoop.telemetryHook`. Mirrors {@link parseCritiqueLoopDelegate}
+ * but for the simpler `{ command }`-only shape (#2679): a non-object, an
+ * unknown nested key (anything beyond `command`), or a missing/whitespace-only
+ * `command` all normalize to `undefined` (no hook configured), matching the
+ * schema's `additionalProperties: false` / `command`-only shape.
+ */
+function parseCritiqueLoopTelemetryHook(value) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value;
+  const candidateKeys = Object.keys(candidate);
+  if (candidateKeys.some((key) => key !== 'command')) {
+    return undefined;
+  }
+  // Object.keys() above already excludes inherited keys, but a plain
+  // property read (candidate.command) still walks the prototype chain --
+  // require command to be an own property, mirroring
+  // parseCritiqueLoopDelegate's own-property guard (#2207 review).
+  if (!Object.hasOwn(candidate, 'command')) {
+    return undefined;
+  }
+  const command = parseNonEmptyString(candidate.command, '');
+  if (!command || command.trim() === '') {
+    return undefined;
+  }
+  return { command };
+}
+const INVALID_LOCAL_TELEMETRY_HOOK_REASON =
+  'invalid-repository-local-telemetry-hook';
+/**
+ * Inspect `critiqueLoop.telemetryHook` on a raw policy document without
+ * applying `normalizePolicyConfig`'s fail-safe collapse. Mirrors
+ * {@link inspectCritiqueLoopDelegateLayer}'s absent / disabled / configured /
+ * malformed shape.
+ */
+export function inspectCritiqueLoopTelemetryHookLayer(config) {
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    return { status: 'absent' };
+  }
+  if (!Object.hasOwn(config, 'critiqueLoop')) {
+    return { status: 'absent' };
+  }
+  const critiqueLoop = config.critiqueLoop;
+  if (
+    typeof critiqueLoop !== 'object' ||
+    critiqueLoop === null ||
+    Array.isArray(critiqueLoop)
+  ) {
+    // A present non-object `critiqueLoop` is a local configuration error:
+    // fail closed rather than treating it as "no hook" and inheriting a
+    // user-global object.
+    return { status: 'malformed', reason: INVALID_LOCAL_TELEMETRY_HOOK_REASON };
+  }
+  if (!Object.hasOwn(critiqueLoop, 'telemetryHook')) {
+    return { status: 'absent' };
+  }
+  const value = critiqueLoop.telemetryHook;
+  if (value === null) {
+    return { status: 'disabled' };
+  }
+  const parsed = parseCritiqueLoopTelemetryHook(value);
+  if (parsed) {
+    return { status: 'configured', hook: parsed };
+  }
+  return { status: 'malformed', reason: INVALID_LOCAL_TELEMETRY_HOOK_REASON };
+}
+/**
+ * Resolve the effective C-phase telemetry hook from a repository-local
+ * document and an optional user-global document. Pure: callers supply
+ * already-loaded JSON (or `undefined` for an absent global file). Never
+ * reads the filesystem.
+ *
+ * Order: local object, local `null` disable, global object, then none --
+ * identical to {@link resolveEffectiveCritiqueLoopDelegate}'s resolution
+ * order. A malformed local hook is fail-closed and does not inherit global.
+ * A malformed or disabled global fragment is treated as absent.
+ */
+export function resolveEffectiveCritiqueLoopTelemetryHook(input) {
+  const local = inspectCritiqueLoopTelemetryHookLayer(input.localConfig);
+  if (local.status === 'configured' && local.hook) {
+    return {
+      status: 'local',
+      source: 'repository-local',
+      hook: local.hook,
+    };
+  }
+  if (local.status === 'disabled') {
+    return { status: 'disabled', source: 'repository-local' };
+  }
+  if (local.status === 'malformed') {
+    return {
+      status: 'local-malformed',
+      source: 'repository-local',
+      reason: local.reason ?? INVALID_LOCAL_TELEMETRY_HOOK_REASON,
+    };
+  }
+  if (input.globalConfig === undefined || input.globalConfig === null) {
+    return { status: 'none', source: 'none' };
+  }
+  const global = inspectCritiqueLoopTelemetryHookLayer(input.globalConfig);
+  if (global.status === 'configured' && global.hook) {
+    return {
+      status: 'global',
+      source: 'user-global',
+      hook: global.hook,
+    };
+  }
+  return { status: 'none', source: 'none' };
+}
+function hasConfiguredCollaboratorMarkerTrust(config) {
+  const c = config;
+  return (
+    typeof c?.markerTrust?.allowCollaboratorMarkers === 'boolean' ||
+    typeof c?.markerTrustAllowCollaboratorMarkers === 'boolean' ||
+    typeof c?.allowCollaboratorMarkers === 'boolean'
+  );
+}
+function isTruthy(value) {
+  return /^(1|true|yes)$/i.test(String(value ?? '').trim());
+}
+const SEVERITY_RANK = {
+  low: 0,
+  medium: 1,
+  high: 2,
+};
+function knownSeverity(value) {
+  if (value === 'low' || value === 'medium' || value === 'high') {
+    return value;
+  }
+  return null;
+}
+function knownUrgency(value) {
+  if (
+    value === 'very-low' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high'
+  ) {
+    return value;
+  }
+  return null;
+}
+function higherSeverity(left, right) {
+  if (left === null) {
+    return right;
+  }
+  if (right === null) {
+    return left;
+  }
+  return SEVERITY_RANK[left] >= SEVERITY_RANK[right] ? left : right;
+}
+function denyUrgencyDefer(blockedBy, eligibility = null) {
+  return { defer: false, eligibility, blockedBy };
+}
+const URGENCY_RANK = {
+  'very-low': 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+/**
+ * Highest urgency at which each eligibility tier may still defer under
+ * `severity-tiered`, indexed by relax step (#3796). Step 0 is the rule
+ * before the gradient existed: Low at every scored urgency, Medium unless
+ * `high`, High only at `very-low`.
+ */
+const SEVERITY_TIERED_CEILING = {
+  low: ['high', 'high', 'high'],
+  medium: ['medium', 'high', 'high'],
+  high: ['very-low', 'low', 'medium'],
+};
+function normalizeRelaxStep(value) {
+  return value === 1 || value === 2 ? value : 0;
+}
+/**
+ * The relax step for a pull request's PR-wide Copilot review count (#3796,
+ * #3797): the number of configured thresholds less than or equal to the
+ * count, plus one when `advisoryConverged` is true and the thresholds
+ * pass `parseDeferRelaxAtRounds`, never above 2. An empty array is the
+ * normalized form of an unset value. A one- or two-entry array that fails
+ * that parser, such as `[7, 4]`, is off, so the step stays 0. A longer
+ * raw list still counts toward the cap of 2, and convergence cannot raise
+ * it. With `[4, 7]`, counts 0 to 3 give 0 or 1, counts 4 to 6 give 1 or 2,
+ * and counts 7 or more give 2 either way.
+ */
+export function relaxStepForReviewCount(
+  reviewCount,
+  thresholds,
+  advisoryConverged = false,
+) {
+  const valid = parseDeferRelaxAtRounds(thresholds);
+  // Config rejects a one- or two-entry array that is not strictly
+  // ascending positive integers, and that value is off. A longer raw
+  // list is the un-normalized #3796 case: it still counts, capped at 2.
+  const countable = valid.length > 0 || thresholds.length > 2 ? thresholds : [];
+  let counted = 0;
+  for (const threshold of countable) {
+    if (reviewCount >= threshold) {
+      counted += 1;
+    }
+  }
+  const countStep = counted >= 2 ? 2 : counted;
+  const extra =
+    advisoryConverged === true && valid.length > 0 && countStep < 2 ? 1 : 0;
+  const sum = countStep + extra;
+  const step = sum >= 2 ? 2 : sum;
+  return {
+    step,
+    raisedByConvergence: step > countStep,
+  };
+}
+/**
+ * Clause pieces after the urgency and severity text (#3796, #3797).
+ * `step <k>` is present above step 0. `converged <short-sha>` is present
+ * only when convergence raised the step. The short SHA is the first 7
+ * characters of the verdict's `prHeadSha`.
+ */
+// audit:ignore-dead-export: E5 appends these pieces from instruction text; tests lock the token condition and there is no helper caller
+export function relaxStepClauseParts(result, prHeadSha) {
+  const parts = [];
+  if (result.step > 0) {
+    parts.push(`step ${result.step}`);
+  }
+  if (result.raisedByConvergence) {
+    parts.push(`converged ${prHeadSha.slice(0, 7)}`);
+  }
+  return parts;
+}
+const TRIAGE_TIER_VALUES = ['low', 'medium', 'high'];
+const TRIAGE_VERDICT_VALUES = ['defer', 'keep'];
+const TRIAGE_LINE_PATTERN =
+  /^Triage: tier (low|medium|high); urgency (very-low|low|medium|high); step ([012])(.*)$/u;
+const TRIAGE_OVERRIDE_SEPARATOR = '; override: ';
+export const TRIAGE_LINE_BREAK_PATTERN = /[\r\n\u2028\u2029]/u;
+/**
+ * Format the `Triage:` line (#4186). The layout is fixed: `step` is always
+ * present, and each optional part appears only when it is set, in the order
+ * below. `override` comes last, so its reason may contain `; `. A `blocked`
+ * reason must not contain `; `, and no reason may contain a line break, so
+ * the line stays parseable. Throws on such input.
+ */
+export function formatTriageLine(record) {
+  const { blocked, override } = record;
+  // JavaScript's `.` does not match U+2028 or U+2029, so a reason containing
+  // either one would not parse back.
+  if (
+    blocked !== null &&
+    (blocked.includes('; ') || TRIAGE_LINE_BREAK_PATTERN.test(blocked))
+  ) {
+    throw new Error(
+      'triage blocked reason must not contain "; " or a line break',
+    );
+  }
+  if (
+    record.convergedHead !== null &&
+    !/^[0-9a-f]{7}$/u.test(record.convergedHead)
+  ) {
+    throw new Error(
+      'triage converged head must be seven lowercase hexadecimal characters',
+    );
+  }
+  if (override !== null && TRIAGE_LINE_BREAK_PATTERN.test(override)) {
+    throw new Error('triage override reason must not contain a line break');
+  }
+  const parts = [
+    `tier ${record.tier}`,
+    `urgency ${record.urgency}`,
+    `step ${record.step}`,
+  ];
+  if (record.convergedHead !== null) {
+    parts.push(`converged ${record.convergedHead}`);
+  }
+  if (record.copilotLabel !== null) {
+    parts.push(`Copilot ${record.copilotLabel}`);
+  }
+  if (record.safety) {
+    parts.push('safety');
+  }
+  if (record.verdict !== null) {
+    parts.push(`verdict ${record.verdict}`);
+  }
+  if (blocked !== null) {
+    parts.push(`blocked ${blocked}`);
+  }
+  const line = `Triage: ${parts.join('; ')}`;
+  return override === null
+    ? line
+    : `${line}${TRIAGE_OVERRIDE_SEPARATOR}${override}`;
+}
+/**
+ * Read the first `Triage:` line in `text` (#4186), or return `null` when no
+ * line matches or the line has a malformed part. The inverse of
+ * `formatTriageLine`.
+ */
+export function parseTriageLine(text) {
+  for (const line of text.split(/\r?\n/u)) {
+    const match = TRIAGE_LINE_PATTERN.exec(line);
+    if (match !== null) {
+      return parseTriageRest(
+        match[1],
+        match[2],
+        Number(match[3]),
+        match[4] ?? '',
+      );
+    }
+  }
+  return null;
+}
+/** Position of an optional part in the fixed `Triage:` order, or -1 (#4186). */
+function triagePartRank(part) {
+  if (part.startsWith('converged ')) {
+    return 0;
+  }
+  if (part.startsWith('Copilot ')) {
+    return 1;
+  }
+  if (part === 'safety') {
+    return 2;
+  }
+  if (part.startsWith('verdict ')) {
+    return 3;
+  }
+  if (part.startsWith('blocked ')) {
+    return 4;
+  }
+  return -1;
+}
+function parseTriageRest(tier, urgency, step, rest) {
+  const overrideAt = rest.indexOf(TRIAGE_OVERRIDE_SEPARATOR);
+  const parts = overrideAt === -1 ? rest : rest.slice(0, overrideAt);
+  const record = {
+    tier,
+    urgency,
+    step,
+    convergedHead: null,
+    copilotLabel: null,
+    safety: false,
+    verdict: null,
+    blocked: null,
+    override:
+      overrideAt === -1
+        ? null
+        : rest.slice(overrideAt + TRIAGE_OVERRIDE_SEPARATOR.length),
+  };
+  if (parts === '') {
+    return record;
+  }
+  if (!parts.startsWith('; ')) {
+    return null;
+  }
+  // The format fixes the order of these parts, so each must come after the one
+  // before it. An unknown part ranks -1 and fails the same check.
+  let lastRank = -1;
+  for (const part of parts.slice(2).split('; ')) {
+    const rank = triagePartRank(part);
+    if (rank <= lastRank) {
+      return null;
+    }
+    lastRank = rank;
+    if (rank === 0) {
+      const sha = part.slice('converged '.length);
+      if (!/^[0-9a-f]{7}$/u.test(sha)) {
+        return null;
+      }
+      record.convergedHead = sha;
+    } else if (rank === 1) {
+      const label = part.slice('Copilot '.length);
+      if (!TRIAGE_TIER_VALUES.includes(label)) {
+        return null;
+      }
+      record.copilotLabel = label;
+    } else if (rank === 2) {
+      record.safety = true;
+    } else if (rank === 3) {
+      const verdict = part.slice('verdict '.length);
+      if (!TRIAGE_VERDICT_VALUES.includes(verdict)) {
+        return null;
+      }
+      record.verdict = verdict;
+    } else {
+      record.blocked = part.slice('blocked '.length);
+    }
+  }
+  return record;
+}
+function severityTieredDefers(eligibility, urgency, step) {
+  return (
+    URGENCY_RANK[urgency] <=
+    URGENCY_RANK[SEVERITY_TIERED_CEILING[eligibility][step]]
+  );
+}
+/**
+ * Pure specification of the E4/E5 urgency-defer matrix. The E5 Triage line
+ * applies it through `computeTriageVerdict` in `resolve-review-thread.mts`
+ * (#4187). Check order fails closed toward not deferring.
+ * `severity-tiered` ignores `adoptNow` and treats an unknown E4 tier as
+ * Medium before the Copilot floor, which
+ * only raises eligibility. `low` and `low-and-medium` do not: they need
+ * a known E4 tier, and the floor never stands in for it. `relaxStep` and
+ * `safetyClass` apply to `severity-tiered` only (#3796): from step 1 a
+ * safety-class finding never defers (nor, once the cap is reached, at any
+ * step), and each step raises the highest urgency a tier may defer at; the
+ * other modes ignore both.
+ */
+export function decideUrgencyDefer(input) {
+  if (input.mode === 'off') {
+    return denyUrgencyDefer('mode-off');
+  }
+  if (input.path !== 'A') {
+    return denyUrgencyDefer('path-b');
+  }
+  if (input.scopeFence) {
+    return denyUrgencyDefer('scope-fence');
+  }
+  if (input.protectedAuthority) {
+    return denyUrgencyDefer('protected-authority');
+  }
+  if (input.awaitingMaintainerDecision) {
+    return denyUrgencyDefer('awaiting-maintainer-decision');
+  }
+  if (input.acceptedMidFix) {
+    return denyUrgencyDefer('accepted-mid-fix');
+  }
+  const e4 = knownSeverity(input.e4Severity);
+  const copilot = knownSeverity(input.copilotLabel);
+  if (input.mode === 'severity-tiered') {
+    const eligibility = higherSeverity(e4 ?? 'medium', copilot) ?? 'medium';
+    const step = normalizeRelaxStep(input.relaxStep);
+    const capReached = input.capReached === true;
+    if ((step >= 1 || capReached) && input.safetyClass === true) {
+      return denyUrgencyDefer('safety-class', eligibility);
+    }
+    const urgency = knownUrgency(input.urgency);
+    if (urgency === null) {
+      return denyUrgencyDefer('unknown-urgency', eligibility);
+    }
+    if (capReached) {
+      return { defer: true, eligibility, blockedBy: null };
+    }
+    if (!severityTieredDefers(eligibility, urgency, step)) {
+      return denyUrgencyDefer('matrix', eligibility);
+    }
+    return { defer: true, eligibility, blockedBy: null };
+  }
+  if (e4 === null) {
+    return denyUrgencyDefer('unknown-severity');
+  }
+  const eligibility = higherSeverity(e4, copilot) ?? e4;
+  if (eligibility === 'high') {
+    return denyUrgencyDefer('above-ceiling', eligibility);
+  }
+  if (input.adoptNow) {
+    return denyUrgencyDefer('adopt-now', eligibility);
+  }
+  if (input.mode === 'low' && eligibility !== 'low') {
+    return denyUrgencyDefer('above-ceiling', eligibility);
+  }
+  return { defer: true, eligibility, blockedBy: null };
+}
+function hasOwn(value, key) {
+  return Object.hasOwn(value ?? {}, key);
+}

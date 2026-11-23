@@ -1,0 +1,112 @@
+# IDD — Orchestrator Phase (fan-out)
+
+Read this for a fresh session with static fan-out eligibility, active fan-out,
+or restart.
+Requirements: [fan-out variant][fv] and
+[delegation](idd-claim.instructions.md#orchestrator-delegation).
+
+## 1. Mode selection and activation
+
+A unique session-suffixed agent id skips activation on restart; all other
+restarts use section 2 recovery without refill.
+
+Use the [live execution-mode decision](../../docs/idd-workflow.md#live-capability-decision)
+and its static requirements in that table before fan-out setup, A5, claim,
+launch, or refill.
+Static support or missing tools do not prove live capability;
+use fan-out only when permitted. Cap is per session, not host.
+
+## 2. Session scratchpad preflight and roster
+
+Select fan-out first. Before Discover, A5,
+[restart scan](../../docs/idd-helper-scripts.md#orchestrator-restart-scan),
+refill, or dispatch, follow the
+[session scratchpad lifecycle](../../docs/idd-workflow.md#session-scratchpad-lifecycle)
+for fan-out; stop on holds. Ordinary single-agent mode skips fan-out scratch
+provisioning; a verified parent continuation retains its proven scratchpad
+root instead, under the same no-overwrite and fail-closed allocation rules.
+Derive worker paths from the verified root; keep the worker missing-parent
+guard.
+
+Track workers by issue, claim, branch, handle, report path, and state. A pre-B1
+stop may use the
+[parent-continuation route](../../docs/idd-workflow.md#verified-pre-b1-parent-continuation)
+only after its complete proof passes; otherwise use existing recovery/hold.
+
+## 3. Dispatch
+
+1. Use the lifecycle's budgeted route for eligible already-claimed/no-dispatch
+   resumes; run Discover A0 through A4 Step 1.5 only after that set is empty.
+   A0-C runs once before first dispatch per Discover run, never during refills.
+   Survivors are startable.
+2. Call profile-selected `idd-worker-budget` with `--running <count not
+   disposed>` and `--startable <candidate count>`. Add `--harness-limit
+   <limit>` if the worker table sets one. Start its `slots`.
+3. If `slots` is `0`, go to section 4. Otherwise, pick that many survivors
+   with `discover-shared-file-overlap`, passing them as `--issues`,
+   `--batch <slots>`, one `--in-flight` per entry not `disposed`, and
+   `--check-overlap`. For `session-offset`, pass the Discover-entry
+   `--desync-token` on every refill.
+4. For each pick in batch order, run A4.5, then the fresh-claim order in
+   idd-claim.instructions.md through verification only (worktree first; the
+   worker runs B1). Start it with the delegation brief, a section 5 report
+   request naming its report path, and the pre-created worktree it reuses
+   without B1. Record a `running` entry with the returned handle.
+5. A pre-marker A4.5/A5 failure keeps its worktree, branch, and lock: with no
+   trusted marker there is no lineage for cleanup (`lost-claim-cleanup` in
+   idd-claim.instructions.md). A post-marker failure is contested: follow
+   idd-claim.instructions.md and keep its claim and worktree. Neither failure
+   starts a worker or creates an entry.
+6. Dispatched and failed picks leave `--issues` before a refill.
+
+## 4. Waiting and refill
+
+- Streaming harnesses handle each completion on arrival; wave harnesses wait for
+  the batch. Set a finished worker's entry to `reporting` before verification.
+- After each completion or wave, process `reporting` entries (§5), then re-run
+  `idd-worker-budget` with `--instructions-since`, re-read changed files
+  ([fv]), and refill from the cached graph, on the Discover re-run cadence.
+- Before a refill claim or launch, recheck the live decision. Keep fan-out
+  refills while its capability remains usable, even with known workers running.
+  Switch to single-agent only when that capability is lost, every prior worker
+  is disposed, and no launch, own claim, or writer is unresolved; otherwise
+  recover and hold.
+- When `slots` is `0` but candidates remain: apply stalled recovery to
+  `stalled` entries first. If an entry is not `disposed`, wait for a `running`
+  completion, or repeat recovery when none is running. Otherwise, if
+  `limitingFactor` is `host-load` with non-null `load1m` and `coreCount`,
+  re-run `idd-worker-budget` every 60 seconds until
+  the effective `orchestrator.hostLoadClearStreak` (default `3`)
+  consecutive readings have `slots` above 0; a `host-load` reading resets the
+  streak. Stop with the factor of any other zero-slot reading. Stop with
+  `host-load` at once if a reading lacks `load1m` or `coreCount`, or once the
+  effective `orchestrator.hostLoadWaitCeiling` (default `PT30M`) elapses from
+  that first reading. A failed
+  call stops with the factor it returned, or `api-unavailable`. Post no claim
+  while waiting. After the streak, run the target-local A3 recheck, not a
+  full Discover run. Otherwise, report the `limitingFactor` and stop.
+- If the graph has nothing startable, re-run Discover on that cadence; stop only
+  if it still finds nothing and every entry is `disposed`.
+- Held workers skip §5 (variant).
+
+## 5. Report and disposal
+
+Verify outcome on live GitHub outside the worktree; copy the roster's
+`workerHandle` into the report, then set `verifiedAt`, append-time
+`recordedAt`, and applicable `reviewRounds`. Validate and append with the profile-selected
+`idd-worker-report append --file <path>`, then dispose per table and mark the
+roster entry `disposed`.
+Without a start handle or after verification/append failure, append nothing,
+mark `stalled`, and follow [fan-out recovery][fv].
+
+## 6. Worker span
+
+A worker runs from B1 to the terminal phase of the merge policy that F2.5
+resolves for its session, not the literal `mergePolicy` value: F4 when the
+resolved enum is `fully_autonomous_merge`, else F2.5. A verified pre-B1 parent
+continuation is the one exception: its owning parent runs that span with a
+`parent-continuation` roster entry. The continuation keeps the scope-stop rule
+of the [delegation brief](../../docs/idd-workflow.md#delegation-brief-template):
+a run scoped to stop earlier ends in a scope stop, not a hold.
+
+[fv]: ../../docs/idd-workflow.md#orchestrator-fan-out-variant

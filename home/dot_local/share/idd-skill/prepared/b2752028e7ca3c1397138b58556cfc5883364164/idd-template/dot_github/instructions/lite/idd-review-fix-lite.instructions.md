@@ -1,0 +1,528 @@
+# IDD — Review Fix Phase (Lite) (E9–E15)
+
+`{default-branch}`: the GitHub default branch. `{development-branch}`: the base
+branch (`developmentBranch`, or the default branch when absent).
+
+Lite helper profile; claimed open PRs only. `instructions-only` uses the
+standard file. Digest steps here apply only while a digest is in use
+(`docs/idd-comment-minimization.md`).
+
+## Helper runtime contract
+
+- Use every named helper/command set; missing, failing, or conflicting
+  state means stop and ask (no prose fallback).
+- `instructions-only` uses `idd-review-fix.instructions.md`.
+- **Command sets**: `fix-validate` (E9) and `post-fix-validate` (E12) are
+  read from `.github/idd/config.json`'s `commands` mapping; if unreadable,
+  stop and ask.
+- Judge each run by exit status (Bash `${PIPESTATUS[0]}` or
+  `set -o pipefail`); filtered output cannot prove success (#3139).
+- Resolve active-profile `idd-local-admission` via manifest/docs; pass
+  each configured string once as `-- <shell> -c <string>` (one argument).
+- If set in repo policy, admit `localExec.admission.testCommand` likewise.
+- These exit/stderr pairs mean no start: `75` with
+  `local-admission: expired`, or `69` with
+  `local-admission: pueue daemon is not accepting commands`. Report; do not
+  rerun, push manually, or mark as pass/flaky (not a test rerun or Discover
+  incomplete-result retry). Bare `69`/`75`: command statuses.
+
+## Upstream-triage boundary
+
+This file executes only prior E4-E8 dispositions; it never classifies
+severity or decides Accept/Reject.
+
+1. Before fixing, confirm every acted-on ReviewItems_snapshot item has an
+   `**Accepted**` or `**Rejected**` disposition from E4-E8.
+2. An undispositioned item is stop-and-ask; do not triage or guess it.
+3. Act only on `**Accepted**` items and leave `**Rejected**` items alone.
+4. This boundary covers E9 fixes and E13 replies only. E10 critique
+   findings and E12's bounded cross-round batching follow their own rules.
+
+## Stop-and-ask conditions
+
+- A ReviewItems_snapshot item with no recorded E4-E8 disposition is in
+  scope for this round (see Upstream-triage boundary).
+- The active claim is ambiguous, disputed, or lost.
+- A required helper is missing, fails, or disagrees with live state.
+- E10's critique loop repeats the same Accepted findings for
+  `critiqueLoop.e10NoProgressHoldAfter` (default 3) passes without
+  meaningful progress, and a recurring family is Medium or High or the
+  helper could not run (step 6).
+- E10's `critiqueLoop.delegate` under `on-success` or `never` left no
+  readable findings list (vacuous verdict, not a clean zero-issue round).
+- a conflict without confirmation, or a confirmed conflict that cannot be
+  resolved cleanly (abort, report, and stop without pushing; observed on
+  2026-10-28 in PR #4774 comment #4396449367); or any failed E11 read, fetch,
+  probe, or merge.
+- A CI failure is neither clearly code-caused nor recognized
+  infra-flaky/pre-existing, **except** the sole-failing
+  `idd-advisory-convergence` check with `pending: false` and outstanding
+  review reasons — that case routes to E1 per E15 step 9, not
+  stop-and-ask.
+- Advisory-wait reaches `HOLD`, `CAP_EXHAUSTED` with a `hold` route, or a
+  pending-refresh-failed state.
+- The claim-lock helper reports a collision (a different claim id
+  already holds the worktree lock).
+
+## Pre-mutation guard
+
+Before any commit, push, merge, reply, resolve, reviewer request, or
+other GitHub side effect, confirm all of the following:
+
+1. The active claim still uses this session's claim id.
+2. If this session posted an activation nonce for the current claim,
+   confirm it still wins (no later trusted marker for this claim id
+   won the tie-break instead).
+3. The current directory is the sibling worktree for the claimed branch.
+4. `git branch --show-current` equals the claimed branch.
+5. Acquire the worktree-local claim lock with the profile-selected
+   `claim-lock` helper (`node scripts/claim-lock.mjs --acquire
+   --worktree <this-worktree-path> --agent-id <id> --claim-id <id>`, or
+   the package-manager-profile `idd:claim-lock` command with the same
+   arguments — resolve the exact command from
+   `docs/idd-helper-scripts.md` if unsure). A `collision` result is
+   fail-closed: stop rather than proceed. Then, separately, run
+   `--read-tokens --worktree <this-worktree-path> --claim-id <id>`
+   and require `present: true` with no `malformed`; otherwise recover
+   per `docs/idd-helper-scripts.md` (gated: each step succeeds,
+   `reacquired: true` both ends), else stop.
+6. If any check fails, stop.
+
+## E9 — Fix accepted issues
+
+1. PATH A/PATH B (from `idd-review-triage.instructions.md` E4): PATH A
+   is actionable feedback: human reviewer threads, regular comments,
+   `CHANGES_REQUESTED` bodies, critique-pass findings needing a code change
+   or maintainer decision, Copilot inline threads, and body items naming a
+   file or line; PATH B is advisory: Copilot's and CI bots' remarks naming
+   no file or line, and regular comments, kept for traceability even when no
+   change is needed.
+2. Fix every Accepted PATH A item from the current ReviewItems_snapshot.
+3. Run `fix-validate`.
+4. Commit fixes atomically — one logical change per commit.
+5. When an accepted finding is one instance of a systemic class, sweep
+   the current diff and adjacent touched sections and fix every
+   instance in the same commit.
+6. When a fix introduces a precision (a name, value, path, or described
+   behavior) to satisfy a reviewer, verify it against the actual
+   implementation before committing.
+7. If an Accepted PATH A item is already fixed by an earlier commit --
+   this round's own prior fix, or a previous round's E12 push --
+   confirm the commit addresses it, applying the same file-path-touch
+   check as
+   `idd-review-snapshot-lite.instructions.md`'s Cold-start edge case 1.
+   Do not duplicate the fix; let E13 cite that SHA.
+8. Do not push yet. All of this round's fixes push together at E12.
+
+## E10 — Validate fixes with critique pass
+
+Per-agent pass: resolve `critiqueLoop.subagentWaitCeiling` (`PT20M` default)
+with harness timeout, not wrapper (#3449). Applies only to per-agent
+subagents; shell-delegate rules unchanged. Background waits require cleanup;
+suppress late output. `mode` only decides whether per-agent starts from
+delegate. Started timeout/cancel/interruption/error passes without findings use
+self-critique and record no return in every mode. Unbounded: skip delegation;
+self-critique and record risk.
+
+1. Resolve `critiqueLoop.delegate` the same way
+   `idd-work-lite.instructions.md` C1 does: helper-first
+   `critique-delegate` (`node scripts/idd-critique-delegate.mjs` or
+   `idd:critique-delegate`). `usable: false` → per-agent only; only
+   `usable: true` uses `command`/`mode`. Then run delegate and/or
+   per-agent per `mode` (`fallback` default, `combined`, `on-success`,
+   `never`) and union when both ran. Never assume they stack. Stop
+   and ask if that helper is missing, fails, or disagrees.
+   `critiqueLoop.telemetryHook` remains C1-only and is never consulted
+   here. That resolve-and-run is the critique pass verifying E9
+   fixes; not a second pass. Apply these lenses only within a
+   per-agent pass, composing when both fit: **Mutation / write-side**
+   (the diff implements a helper that mutates GitHub state, mutates git
+   state, or performs a merge) — Fail-closed inputs; Validate/execute
+   scope parity; Unsafe-output suppression; Schema strictness parity.
+   **Gate-mirroring** (the diff implements a helper that predicts,
+   mirrors, or pre-checks another gate's decision) — Validation-path
+   parity; Input completeness; Whole-identity comparison; Snapshot
+   identity; Point-in-time parity.
+2. If no mechanism produced a readable findings list — a
+   `critiqueLoop.delegate` `mode` of `on-success` or `never` whose
+   delegate failed without emitting one — post a hold comment and
+   stop; do not treat it as zero issues and do not continue to E11. A
+   successful empty list, or a failed delegate that still emitted a
+   readable list, is a genuine result.
+3. If the critique pass reports zero issues, continue to E11.
+4. If it reports additional issues, first check the step 8 cap. If it
+   applies, take its close-out route instead of fixing. Otherwise fix them,
+   run `fix-validate`, commit atomically, and run E10 again.
+5. Count "meaningful progress" as a pass whose Accepted findings are
+   not all among the prior pass's (compared by the E5 fingerprint
+   `file`, `rule`, `construct`), or a narrowed root cause or scope that
+   changes a finding's `construct`. Removing some findings while the
+   rest recur is not progress, and a reworded duplicate finding does not
+   count. A pass whose Accepted findings are all Low does
+   not count as progress through the narrowing prong alone.
+6. If the same Accepted findings recur for
+   `critiqueLoop.e10NoProgressHoldAfter` (default 3) consecutive E10
+   passes without meaningful progress, stop the loop, post a hold
+   comment summarizing the repeated findings and attempted fixes, and
+   wait for a maintainer decision. Count this with the `e10-recurrence`
+   helper over a scratch passes file of each pass's E5 records, as
+   `idd-review-fix.instructions.md` E10 describes: `hold` (a recurring
+   Medium or High family) is this hold; `defer` (only Low families
+   recur) takes the step 8 close-out route for those families once no
+   High or Medium Accepted finding is open and `fix-validate` has passed
+   on the current HEAD (until then, fix the open ones and rerun), with
+   `e10NoProgressHoldAfter` as the clause, also an explicit exception to
+   the Defer rule's exclusion of an Accepted item mid-fix; `continue`
+   fixes and reruns; `e11` goes to E11. If the passes file is lost or
+   the helper cannot run, judge by step 5 and hold on any recurrence.
+7. Do not use step 6 to bypass a serious issue: unresolved High or
+   Medium findings stay blockers until fixed or explicitly redirected
+   by a maintainer.
+8. **No confidence exception.** A fix's scope, or your own confidence in it,
+   never excuses skipping this pass — E10 must run for every E9 fix batch before
+   E11. Pushed a skipped round? Disclose it, name the round(s), run E10 against
+   the accumulated diff to a clean pass, then return to E1 before F1 — see
+   `idd-review-fix.instructions.md`'s E10 repair path for the full procedure.
+   Exception: once `critiqueLoop.e10MaxPasses` (default 2) E10 passes have run
+   on the issue, no High or Medium Accepted finding is open, and `fix-validate`
+   has passed on the current HEAD, the per-issue cap in
+   `idd-review-fix.instructions.md` applies: file one follow-up issue (do not
+   append) with one AC bullet per residual Low finding, exactly one
+   `Refs #<originating-issue>` line, and the defer-source marker that E6 uses
+   for `review-fix-loop-cutoff` (`idd-review-triage.instructions.md`). That
+   follow-up takes issue-authoring's Stage 2 narrow auto-release, not the Stage
+   1 hold. Re-run this file's Pre-mutation guard immediately before filing. Each
+   residual Low finding takes the defer disposition in
+   `idd-review-triage.instructions.md` (a `**Rejected**` reply that names the
+   follow-up issue, with `e10MaxPasses` as its clause), not an `Accepted —
+   fixed` reply. This is an explicit exception to that Defer rule's exclusion of
+   an Accepted item mid-fix. Then go to E11. An unestablished count does not
+   reach the cap.
+9. Heuristic: several new, non-repeated same-area findings across
+   rounds (3-4) may mean one structural fix converges faster than
+   another patch. If that fix keeps drawing new findings, prefer
+   simplifying/removing the mechanism over a second redesign -- only
+   once confirmed non-required by the issue's acceptance criteria or
+   contract; if required, stop for a maintainer decision.
+10. Third tier: when each new finding is instead a genuine, distinct gap
+    against an open-ended external correctness domain (a grammar,
+    protocol, or wire format) rather than a symptom of one mechanism,
+    tiers 1-2 do not apply -- there is no mechanism to simplify, since
+    coverage of that domain is itself the acceptance criterion. Once
+    several rounds each surface a genuinely new in-scope gap rather than
+    repeating one, list every outstanding gap with evidence and the
+    round count in a hold comment and stop for a maintainer decision
+    (`#2865`).
+
+## E11 — Sync with {development-branch} before every push
+
+Immediately before each E12 push, read the PR base:
+`gh pr view {pr-number} --json baseRefName --jq .baseRefName`. A failed read
+or base other than `{development-branch}` is stop-and-ask under D3; do not
+merge, push, or retarget.
+
+Fetch with this exact refspec:
+
+```sh
+git fetch origin +refs/heads/{development-branch}:refs/remotes/origin/{development-branch}
+```
+
+On failure, stop-and-ask. After the fetch, capture the fetched commit once
+in `target_sha`:
+
+```sh
+target_sha=$(git rev-parse --verify 'origin/{development-branch}^{commit}')
+```
+
+If that command fails, stop-and-ask. Compare `git merge-base HEAD
+"$target_sha"` with `"$target_sha"`.
+If equal, the branch is current: do not merge and continue to E12.
+On a comparison command error, stop-and-ask.
+
+When behind, run `git merge-tree --write-tree HEAD "$target_sha"` (Git 2.38+).
+Exit 0 means no conflict; 1 means conflict. An unsupported-option error or
+other exit is unknown: stop-and-ask without merge or push. Preventive finding:
+PR #4774 comment #4396614924 (2026-10-28); no older-Git failure observed.
+With no conflict, run `git merge --no-ff` with the same
+`"$target_sha"` and the conventional `-m` subject documented in the
+[signed-commit merge wrapper](../../../docs/idd-helper-scripts.md#signed-commit-merge-wrapper-shared-git-procedure).
+Do not fetch or resolve the branch ref again between the probe and merge.
+For non-interactive-hostile primary signing, use that wrapper.
+With no conflict, do not ask, even with open review threads. For a conflict,
+require explicit confirmation before merging or resolving; without it, leave
+the branch unchanged and stop-and-ask. If a confirmed conflict cannot be
+resolved cleanly, run `git merge --abort`, report failure, and stop-and-ask
+without pushing. Observed on 2026-10-28: PR #4774, comment #4396449367. Sign
+the merge and its `--continue` at the tiers below.
+
+Signing is best-effort: a missing signature never stops E11. Sign at the
+first usable tier: the repository's configured signing, then a configured
+fallback signer such as that wrapper, then unsigned. Skip a signer known to
+be unable to run without a terminal, such as GPG with a pinentry prompt or a
+hardware-touch key (issue #2844). When a signed merge or `--continue` fails,
+do not read its error text. If `git diff --name-only --diff-filter=U` lists
+a path, apply the conflict rule above. Otherwise take the next tier. A
+`--continue` after a resolved conflict finishes with that tier's
+`--continue` form (`git -c commit.gpgsign=false merge --continue` when
+unsigned). A clean merge reruns at that tier instead, so its
+`pre-merge-commit` hook runs again (`--continue` would skip it): if
+`MERGE_HEAD` exists, run `git merge --abort`; without it, run the wrapper
+section's no-state check, and if it verifies the merge, skip the rerun and
+continue to E12. Otherwise rerun the merge (`git merge --no-gpg-sign --no-ff`
+with the same `-m` subject and `"$target_sha"` when unsigned). Record any non-default
+signing outcome in a PR comment. Only a failure at the unsigned tier runs
+`git merge --abort` and stop-and-ask. After a wrapper timeout, terminate and
+wait for its full process tree; once it is gone, verify per the wrapper
+section and take the next tier; if it is live or unconfirmed, hold without
+aborting or pushing. Continue to E12 after a successful merge so validation
+covers the merged tree.
+
+## E12 — Lint, test, push
+
+1. Run `post-fix-validate`.
+2. With helper runtime, inspect and commit any validation or formatter
+   output so the tree is clean. Then run the profile-selected
+   `claimed-push` (see `docs/idd-helper-scripts.md`, Claimed push) from
+   the claimed worktree with `--issue {issue-number} --claim-id
+   {claim-id}`, plus `--nonce {nonce}` when one is recorded. Its dry run
+   (no `--apply`) must pass before `--apply`, which must report
+   `pushed: true`. Under `instructions-only`, verify the active claim,
+   location, and scope, run **pre-push-validate**, then push normally.
+   E11's merge commit needs no force push. Files changed only by E11's
+   merge do not widen E12's fold-in scope.
+3. Before this push, fold a small batch of out-of-scope comments awaiting
+   triage into the same push, each as its own atomic commit, only if
+   steps 4-7 all hold.
+4. Every comment since the last push is by the primary advisory bot
+   (`copilot` or `copilot-pull-request-reviewer*`, via
+   `isCopilotReviewerLogin`) or `advisoryBotLogins`; configured
+   `advisoryWait.secondaryBotLogin` also qualifies, on either PATH.
+5. Each is a small, confirmable fix verified against live evidence;
+   never fold in a bot-asserted-only finding.
+6. The result touches only files already touched by this round's fixes,
+   and `post-fix-validate` is rerun first.
+7. No E15 CI-wait poll is in flight for this branch.
+8. Stop accumulating and push at once when a human/CODEOWNER PATH A
+   item arrives, an item needs a substantive change or an out-of-scope
+   file, 3 extra commits accumulate, or 10 minutes pass.
+9. This changes only push timing: do not delay or interrupt E15 or
+   change PATH routing/triage timing. Folded comments keep their PATH
+   and E6 reply for the next E1/E4-E7 pass; E14 re-review and
+   `review-watermark` invalidation still apply.
+
+10. A cross-round commit invalidates E11; repeat it before pushing, then rerun
+    `post-fix-validate` if it merged. Apply
+    the pre-mutation guard immediately before this push.
+11. Re-apply the pre-mutation guard immediately before this edit —
+    it is a separate mutation after the already-guarded push. If this
+    round's fix changes a claim the PR body makes (round count, a
+    residual limitation, a scope statement — wherever it appears),
+    fetch the current full body, edit only that claim in the fetched
+    copy, and post the full result back:
+
+    ```sh
+    gh pr edit {pr-number} --body-file <path>
+    ```
+
+    `--body-file` replaces the whole body, so never pass a partial
+    file (it would drop the closing-keyword line). After posting,
+    repeat the lite pr-submit doc's step 5 closing-set check — edited
+    prose can introduce a stray keyword-adjacent reference.
+
+## E13 — Reply to feedback
+
+1. For each Accepted PATH A item whose source is reviewer feedback
+   (review thread, review body, or regular comment), reply describing
+   which commits fixed it and how.
+2. Start every reply with: `**Accepted** — fixed in {commit-sha or
+   comma-separated list}: {brief explanation}`,
+   followed by the reply-identity stamp `<!-- {markerPrefix}-review-reply -->`
+   (`idd-review-triage.instructions.md` E6). Citing a commit that did not fix
+   this item in the current round requires it to have already passed the
+   file-path-touch check (E9 item 7, or
+   `idd-review-snapshot-lite.instructions.md`'s Cold-start edge case 1).
+   If part of the item still needs a maintainer, follow E6's partly
+   settled rule (`idd-review-triage.instructions.md`) instead.
+3. For a review thread, post the reply and resolve it in one call with
+   the profile-selected `resolve-review-thread` helper (`--pr`,
+   `--comment-id`, `--body`, `--claim-issue`, `--claim-id`, `--apply`;
+   with `triageRecord` on, also the E5 triage flags (without
+   `--advisory-converged`) and `--lite`;
+   package-manager / ephemeral-npx / user-global equivalent in
+   `docs/idd-helper-scripts.md`), which appends the stamp and replies
+   before resolving, so a failed reply never leaves a silently-resolved
+   thread.
+4. For a regular comment, reply only and append the stamp yourself and,
+   when `triageRecord` is on, the E5 `Triage:` line before it; do
+   not resolve. Any reply posted another way (the manual fallback)
+   must append the stamp itself too.
+5. If a non-review notice (rate-limit / usage-limit / review-limit) was
+   already dispositioned `**Rejected** — {bot} did not review HEAD …` in
+   a prior pass, carry that rejection forward. Do not re-post an
+   identical rejection just because the notice's timestamp bumped or the
+   bot re-posted the same summary. Only disposition it again if the bot
+   replaced the notice with an actual completed review of the current
+   HEAD.
+6. After all replies and resolutions complete, update the PR live
+   status digest if the next route is still review-fix or CI wait:
+   `Phase` to `E13 feedback replied`, `Open blockers` to any
+   remaining reviewer, advisory, or CI wait, `Next action` to E14 or
+   E15, and `Authoritative by` to the replies, resolved threads,
+   current HEAD, and verified claim.
+
+## E14 — Re-review request
+
+1. For each human reviewer whose latest state is `CHANGES_REQUESTED` and
+   whose items are all addressed, request a re-review:
+   `gh pr edit {pr-number} --add-reviewer {reviewer-login}`.
+2. Fetch the current head:
+   `PR_HEAD_SHA=$(gh pr view {pr-number} --json headRefOid --jq '.headRefOid')`.
+3. Run the profile-selected `advisory-wait-state` helper — the
+   canonical evidence collector per
+   `idd-advisory-wait-lite.instructions.md`'s helper-first path (`node
+   scripts/advisory-wait-state.mjs --pr {pr-number}
+   --claim-id {claim-id} --agent-id {agent-id}
+   --trusted-marker-logins "<trusted-login-1>,<trusted-login-2>"` in
+   the source/vendored profile; resolve the profile-selected equivalent from
+   `docs/idd-helper-scripts.md`). If it fails, returns invalid JSON, or is
+   missing any field from `idd-advisory-wait-lite.instructions.md`'s own
+   Required fields list, stop and ask — do not fall back to a manual
+   per-field fetch.
+4. Read the helper's `outcome` field and apply this decision table, top
+   to bottom, first match wins:
+   - Off-head `SATISFIED` with `staleRequestRecovery.action ==
+     "attempt"` → hand off for AW3-S; never E15.
+   - Off-head `SATISFIED` with recovery `cap-exhausted` → follow
+     `capExhaustedRoute`: `phase-specific` → E15; `hold` → stop/ask.
+   - `SATISFIED`, `copilotPending` `false`,
+     `copilotPendingCoversHead` `false` (elapsed-only, `#2327`) → apply
+     step 10, then E15.
+   - `SATISFIED` (otherwise) → apply step 10 first, then continue to
+     E15.
+   - `DISPOSITION_NEEDED` (#4070): not satisfied. Stop and ask a full session
+     to answer the cited items (E6). For an unreadable same-head review,
+     post a trusted review-ack, then rerun the helper. Do not go to E15.
+   - `RECOVERY_NEEDED`: post the recovery marker
+     `advisory-wait-recovery: {agent-id} {PR_HEAD_SHA}
+     {ISO8601-recovery-time}` as plain text. Do not request another
+     review. Then go to the polling loop below.
+   - `REQUEST_NEEDED`, `copilotPending` `false`: try add-reviewer and REST. Post
+     `advisory-wait: {agent-id} {PR_HEAD_SHA} {ISO8601-requested-at}` as plain
+     text only after current-attempt evidence: a newer event after HEAD or a
+     fresh node absent from the pre-request snapshot; exit status is not
+     evidence (issue `#3500`). If absent, see [AW3-S fallback](../../../docs/idd-advisory-wait-shell-fallback.md#registration-proven-review-request);
+     use its account-typed fallback; never hard-code ids. Still absent: stop and
+     ask; poll only after success. Status `3` means claim/HEAD guard failure:
+     stop and return to E1. Status `1`/`2` means primary registration is
+     unproven/unreadable: stop/ask, not poll.
+   - `REQUEST_NEEDED`, `copilotPending` `true` (a request is already
+     pending but unproven for current HEAD, no same-head marker to
+     anchor polling): lite does not track the claim-id/agent-id the
+     full protocol's bounded `AW3-S` remove/re-request cycle requires —
+     stop and ask rather than remove, re-request, or enter the
+     marker-based polling loop below with no marker.
+   - `CAP_EXHAUSTED`: apply step 10 first — it is a non-gating
+     supplement that fires on cap exhaustion independent of the
+     cap-exhausted route. Then, if the helper's `capExhaustedRoute` is
+     `hold`, post a hold comment and stop; otherwise (`phase-specific`,
+     the default) continue to E15.
+   - `WAIT`: go to (or stay in) the polling loop below.
+5. The default primary advisory bot is Copilot: use `copilot` for
+   `{primary-advisory-bot}` (the add/remove-reviewer login) and
+   `copilot-pull-request-reviewer[bot]` for
+   `{primary-advisory-bot-rest-login}` (the REST fallback login). A
+   repository may configure a different bot in
+   `advisoryWait.primaryBotLogin` — when it does, use that configured
+   login for **both** placeholders, since a configured login is already
+   the real account login.
+6. Whenever this step posts an advisory request marker, recovery
+   marker, or hold comment, update the digest with the current advisory
+   state, that marker or comment as `Authoritative by`, and the next
+   polling or maintainer action in `Next action`.
+7. **Active polling loop.** Do not post a new marker if a same-head
+   marker already exists; reuse the one with the earliest `createdAt`
+   (the helper's `earliestSameHeadAt` already gives you this). Take a
+   fresh activity snapshot (same scope as E1 Step 1) and record its
+   highest `updatedAt` as a temporary polling watermark. If a deferred
+   baseline exists and this is newer, return to E1; otherwise use the fresh
+   maximum as the watermark. Never post it. For an empty snapshot, use the
+   latest trusted same-claim watermark `createdAt`, then the deferred E1
+   baseline, then the same-claim `review-baseline` `createdAt`; never use
+   a marker-shaped comment as that baseline. If none exists, return E1.
+8. Poll on the interval from the helper's `pollIntervalMinutes`. Each
+   cycle: re-fetch the current head; if it differs from `PR_HEAD_SHA`,
+   stop polling and return to `idd-review-snapshot-lite.instructions.md`
+   (E1). Otherwise re-read threads, review bodies, and regular comments
+   (excluding trusted operational markers); if anything has `updatedAt`
+   newer than the polling watermark, stop polling and return to E1.
+   Otherwise re-run the step-3 helper. If it fails, returns invalid
+   JSON, or is missing required fields, stop and ask — do not fall back
+   to a manual per-field fetch. If `earliestSameHeadAt` is now empty,
+   post a hold comment noting the advisory-wait marker for
+   `PR_HEAD_SHA` disappeared during polling and stop. Before a terminal
+   result, reapply step 4's first-match table: off-head `SATISFIED` with
+   `attempt` hands off for AW3-S; `cap-exhausted` follows
+   `capExhaustedRoute`. Only then may `SATISFIED` apply step 10 and go E15.
+9. Otherwise keep polling — the helper already folds
+   `pendingWindowMinutes`/`settledWindowMinutes` into `outcome` on
+   every call, so a stalled or silent advisory bot still ends the loop
+   as `SATISFIED` without a hand-derived check.
+10. **Optional secondary advisory bot(s) (non-gating).** Use the most
+    recent step-3/step-8 helper output's `secondaryRequestNeeded` and
+    `secondaryRequestLogins` fields directly — do not re-derive the
+    request/already-requested condition manually.
+    `advisoryWait.secondaryBotLogin` accepts one login or a list. When
+    `secondaryRequestNeeded` is `true`, request **every** login in
+    `secondaryRequestLogins` once each (never only the first), using
+    the guarded procedure, replacing primary placeholders and
+    `BOT_REST_LOGIN`/bare form; type selects `botIds`/`userIds`;
+    `1`/`2` skip and `3` stops. No marker.
+    Each review is ordinary advisory input, picked up by the next E1
+    snapshot if it lands before merge. Skip this step entirely when
+    `secondaryRequestNeeded` is `false`.
+11. Advisory feedback is advisory: you are not obligated to accept
+    every suggestion, but you must still wait for a primary-bot review
+    you explicitly requested; a secondary bot requested in step 10 is
+    never waited for. A human `CHANGES_REQUESTED` reviewer is not
+    advisory and stays under the hold/escalation path in the standard
+    file.
+
+## E15 — Wait for CI
+
+1. Schedule a wake, or background this wait only if the topology-safety
+   condition is confirmed to route completion back to this turn;
+   otherwise wait synchronously.
+2. Use `idd-ci-lite.instructions.md` for the polling mechanics and
+   timing (required-check discovery, state normalization, and the
+   shared `ciWait.runningTimeout` / `ciWait.generationTimeout` /
+   `ciWait.rerunPolicy` values). The outcomes below override its generic
+   routing for this phase.
+3. If new review threads/comments arrive, return to E1 immediately;
+   otherwise continue waiting for CI.
+4. On success: return to `idd-review-snapshot-lite.instructions.md`
+   (E1) — do not skip triage.
+5. On failure that is code-caused: fix it, run `fix-validate`, commit
+   atomically, then return to E11.
+6. On failure that is infra-flaky or pre-existing (also failing on
+   `{development-branch}`, unrelated to this branch): apply
+   `ciWait.rerunPolicy`. If it authorizes a rerun, rerun once and resume
+   polling. If the failure persists after that rerun, or the policy is `hold`,
+   post a hold comment documenting the pre-existing failure and stop for a
+   maintainer.
+7. On cancelled or timed-out that is code-caused: fix it, run
+   `fix-validate`, commit, return to E11.
+8. On cancelled or timed-out that is infra-caused: apply
+   `ciWait.rerunPolicy`. Re-push or rerun only when the policy
+   authorizes the current rerun; if the same outcome recurs after that
+   rerun, or the policy is `hold`, post a hold comment and stop. On
+   success after the rerun, return to E1.
+9. If `idd-advisory-convergence` is the sole failing required check and
+   its own verdict reports `pending: false` with outstanding review
+   reasons, return to E1, not E11 — this is neither code-caused nor
+   infra. Unless a maintainer has posted a valid external-check waiver
+   for this HEAD, in which case apply `ciWait.rerunPolicy` instead so
+   the rerun reflects the waiver.
+10. When this step stops on a CI hold, update the digest: `Phase` to
+    `E15 hold`, the failing or missing checks in `Open blockers`, and
+    the maintainer or rerun expectation in `Next action`. On success, do
+    not edit the digest before returning to E1.

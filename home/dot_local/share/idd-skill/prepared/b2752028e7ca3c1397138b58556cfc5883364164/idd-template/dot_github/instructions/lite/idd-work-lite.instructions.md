@@ -1,0 +1,574 @@
+# IDD — Work and Self-Review Phase (Lite)
+
+`{default-branch}`: the GitHub default branch. `{development-branch}`: the base
+branch (`developmentBranch`, or the default branch when absent).
+
+Lite profile for helper-enabled weak/local models; same as
+`idd-work.instructions.md`. For one claimed issue only. Digest steps here
+apply only while a digest is in use (`docs/idd-comment-minimization.md`).
+
+## Helper runtime contract
+
+- Use named helpers; missing, failing, or state-conflicting helpers mean
+  stop and ask (no prose fallback).
+- `instructions-only`: use `idd-work.instructions.md`.
+- A mismatch with the standard work phase is a bug.
+- Resolve active-profile `idd-local-admission` via manifest/docs; pass
+  each configured string once as `-- <shell> -c <string>` (one argument).
+- If set in repo policy, admit `localExec.admission.testCommand` likewise.
+- These exit/stderr pairs mean no start: `75` with
+  `local-admission: expired`, or `69` with
+  `local-admission: pueue daemon is not accepting commands`. Report; do not
+  rerun, push manually, or mark as pass/flaky (not a test rerun or Discover
+  incomplete-result retry). Bare `69`/`75`: command statuses.
+
+## Stop-and-ask conditions
+
+B1 setup runs on the primary worktree by design. The sibling-worktree and
+current-branch bullets apply from B2, once B1 step 30 passes.
+
+- The active claim is ambiguous, disputed, or lost.
+- The current directory is not the sibling worktree for the claimed branch.
+- The claimed branch is not the current branch.
+- A required helper or validation command is unavailable, invalid, or disagrees
+  with live state.
+- The claim-lock helper reports a collision (a different claim id already
+  holds the worktree lock).
+- The worktree is dirty and ownership is unclear.
+- Multiple PRs match the claim branch.
+
+## Pre-mutation guard
+
+Before any commit, push, rebase, claim heartbeat, reply, resolve, reviewer
+request, or other GitHub side effect, confirm all of the following.
+
+Every B1 step — including the step 10 and step 31 hold-comment posts — runs with
+checks 1-2 only; checks 3-5 start at B2, once B1 step 30 passes. A step 28 or 29
+failure that routes to step 31's hold also stays on checks 1-2. Never relax
+checks 1-2. B1's lock steps stay mandatory: step 7's takeover lock and collision
+check, and steps 19 and 26's lock acquisition and token recording.
+
+1. The active claim still uses this session's claim id.
+2. If this session posted an activation nonce for the current claim,
+   confirm it still wins (no later trusted marker for this claim id
+   won the tie-break instead).
+3. The current directory is the sibling worktree for the claimed branch.
+   Launch-bound file tools (Grok Build observed) use its absolute path, not
+   `cd`/`pwd`.
+4. `git branch --show-current` equals the claimed branch.
+5. Acquire the worktree-local claim lock with the profile-selected
+   `claim-lock` helper (`node scripts/claim-lock.mjs --acquire
+   --worktree <this-worktree-path> --agent-id <id> --claim-id <id>`; the
+   `idd:claim-lock` (package-manager profiles); other forms in
+   `docs/idd-helper-scripts.md`). A `collision` is
+   fail-closed: stop. Then, separately, run `--read-tokens --worktree
+   <this-worktree-path> --claim-id <id>` and require `present: true` with no
+   `malformed`; otherwise recover per `docs/idd-helper-scripts.md` (gated: each
+   step succeeds, `reacquired: true` both ends), else stop.
+6. If any check fails, stop.
+
+## B1 — Create worktree
+
+Under the [clone-scoped lock](../../../docs/idd-helper-scripts.md#clone-scoped-lock),
+serialize shared-clone `fetch`, `merge --ff-only`, and worktree add/remove,
+including F4 cleanup.
+
+Before step 1, resolve `{development-branch}`, failing closed. Run
+profile-selected `idd-effective-config` without `--key` (in the vendored
+profile, `node scripts/idd-effective-config.mjs`). Stop if it fails or
+`repository.policyDiagnostic` is not `null`. Use `config.developmentBranch`
+when set; only when it is absent, use `gh repo view --json
+defaultBranchRef --jq .defaultBranchRef.name`. Stop unless the name matches
+`^(?!refs/heads/)[A-Za-z0-9._/][A-Za-z0-9._/-]*$` (see
+`docs/policy-constants.md`) and `git ls-remote --exit-code --heads origin
+<name>` lists it. Steps 15, 16, 21, and 25 use only this value.
+
+1. On the primary worktree, run `git fetch origin`.
+2. Run `git log origin/{default-branch}..{default-branch} --oneline`.
+3. Any output means `{default-branch}` has unpushed commits. Stop and
+   report; never force-reset it.
+4. Fast-forward with `git -c merge.autoStash=false merge --ff-only
+   origin/{default-branch}`. If dirty paths block it, report
+   `primary-worktree-dirty` and paths; stop before creating a worktree.
+   For staged or unmerged paths, ask the operator to preserve staged and
+   unstaged content and resolve the index before retrying. Otherwise move
+   only this session's unstaged paths outside the repository; ask before
+   moving others. Rerun step 1. Never stash, discard, or remove a worktree
+   (`#5058`).
+5. Keep the primary worktree on `{default-branch}` throughout B1. Never use
+   `git switch -c <branch-name>`, `git checkout -b <branch-name>`, or a
+   standalone `git branch <branch-name>` followed by in-place commits there.
+6. Keep the claimed branch name verbatim.
+7. Run `git worktree list --porcelain`. Before reusing or removing a sibling,
+   acquire its worktree-local lock except for an absent prunable entry in step
+   8. On `collision`, stop and follow `idd-claim.instructions.md`'s Claim-state
+   rule; remove only when authorized. For the claim phase's fresh worktree,
+   skip steps 8-26, run step 27; continue at step 28. Never delete or
+   recreate that branch.
+8. If `git worktree list --porcelain` marks the entry `prunable` and its path
+   is already absent, remove that stale entry with
+   `git worktree remove --force <path-from-list>` and continue.
+9. Run `git branch --list {branch-name}`. If the branch exists locally, reuse it
+   only when it is an inheritable takeover branch; otherwise delete it with
+   `git branch -d {branch-name}`.
+10. If deletion is refused, check whether a remote branch or open PR exists for
+    this branch. If so, treat it as inheritable and reuse it. If not, post a
+    hold comment and stop for manual cleanup.
+11. If the target path exists but is not listed in `git worktree list`, stop
+    and report for manual cleanup.
+12. Create the sibling worktree at `../<repo-name>.<normalized-branch>`.
+13. `normalized-branch` is the branch name with each `/` replaced by `-`.
+14. Use WorkTrunk if available.
+15. In automation, use `wt switch --create -b {development-branch} <branch-name>
+    -x true`.
+16. On Windows, use `git-wt switch --create -b {development-branch}
+    <branch-name> -x true`, or the same `wt switch` form if `git-wt` is
+    unavailable.
+17. If the `[pre-start]` hook's install is unapproved, `wt switch --create`
+    hangs non-interactively, even with `-x <noop>`. Before the first one, run
+    `wt config approvals add --yes` once from the primary worktree (issue
+    `#2797`; project-scoped). Never use the global `-y`/`--yes`.
+18. Do not use `wt new`.
+19. If WorkTrunk's pre-start hook installs, its first command acquires the
+    worktree lock, then, as a separate call before any install, runs
+    `--record-tokens --worktree <this-worktree-path> --agent-id <id> --claim-id
+    <id> --nonce <nonce>` (the A5 nonce; omitting it drops the record). After
+    the hook succeeds, `cd` into the sibling (`-x <noop>` keeps the directory;
+    take the path from `git worktree list`) before steps 28-30.
+20. If the hook cannot acquire the lock or record tokens, create the
+    worktree without the hook.
+21. Without WorkTrunk, fresh claim: `git worktree add --no-track <path> -b
+    <branch-name> origin/{development-branch}`.
+22. Without WorkTrunk, takeover with the local branch: `git worktree add <path>
+    <branch-name>`.
+23. Without WorkTrunk, remote-only branch: `git fetch origin <branch-name>`.
+24. Then, without WorkTrunk: `git worktree add <path> -b <branch-name>
+    origin/<branch-name>`.
+25. Without WorkTrunk and with no branch (rare): fresh claim per step 21,
+    keeping the inherited name.
+26. Manual `git worktree add`, or WorkTrunk without a hook: acquire the
+    worktree lock with the profile-selected `claim-lock` helper, then, as a
+    separate call, run `--record-tokens --worktree <this-worktree-path>
+    --agent-id <id> --claim-id <id> --nonce <nonce>` (the A5 nonce) right after
+    creation and before any install or other mutation.
+27. On the manual/no-hook path, `cd` into the sibling first, then run
+    `install-deps` there, never from the primary worktree (its lifecycle hooks
+    would mutate the primary checkout).
+28. Verify the primary worktree's HEAD is still on `{default-branch}`.
+29. Verify `git worktree list` shows the new path.
+30. Verify the current directory is the new sibling worktree. Launch-bound file
+    tools (Grok Build observed) use its absolute path, not `cd`/`pwd`.
+31. If any of steps 28-30 fails, the worktree-creation contract is violated:
+    stop, post a hold note naming the failed check, and do not continue to
+    B2 from the primary worktree.
+32. Repair a contract violation by removing the misplaced branch from the
+    primary worktree, after confirming no work is lost, then recreate the
+    sibling worktree from step 12.
+33. If WorkTrunk reported `Cannot change directory — shell integration
+    installed but not active`, treat every later command's working
+    directory as unverified until confirmed (e.g. `pwd`), not only at
+    steps 28-30.
+
+## B2 — Create and refine plan
+
+1. Run `git fetch origin {development-branch}`.
+2. Re-read the issue and do the cheap supersession check. Treat a title-only
+   match as no hit.
+3. If a merged PR already closed the issue, stop.
+4. If a merged PR since the claim time already touched a scoped candidate file,
+   verify the acceptance criteria on current `{development-branch}`.
+5. If the criteria fully hold, close the issue with a comment referencing the
+   superseding PR.
+6. If the criteria only partly hold, keep the issue open, record the overlap
+   in the plan, and plan only the remaining work.
+7. Draft an issue comment plan for the change set.
+8. For a per-agent plan critique, resolve `critiqueLoop.subagentWaitCeiling`
+   (`PT20M` default). If the harness lacks bound/cleanup, skip delegation and
+   use structured self-critique, recording risk. Otherwise enforce a harness
+   timeout, not a wrapper (#3449); timeout/cancel/interruption/error without
+   findings uses self-critique and records no return. Then run the critique.
+9. Post the refined final plan as a follow-up or update to the same issue
+   comment.
+10. After the final plan comment, update the live status digest to `B2 planned`,
+    `Open blockers: none` unless the plan found a blocker, `Next action: B3
+    implement`, and `Authoritative by` pointing at the claim and plan comment.
+
+## B2.1 — Premise verification
+
+If the issue is a decision-transcription issue (it records or restates a prior
+human decision whose rationale asserts a checkable fact about shipped behavior),
+verify that fact against the prior change's actual code or docs before drafting
+the plan. If the prior change or the fact cannot be verified, stop and hold,
+with the primary-source evidence (file, line, or excerpt, or why it was
+inconclusive) in the hold comment, until a maintainer addendum resolves it.
+
+## B2.2 — Example field-name verification
+
+If the issue's "Proposed change" or "Acceptance criteria" cites an
+existing schema field, config key, or token as an example (not one it
+adds), verify it exists as cited before drafting the plan. Fix or drop
+the citation if it does not exist; stop and hold if unclear (`#2806`).
+
+## B3 — Implement
+
+1. Before the first implementation edit, confirm the final B2 plan comment
+   exists on the issue.
+2. If it does not exist, stop and return to B2 to post it.
+3. If code already landed before that checkpoint was noticed, disclose the
+   ordering deviation on the issue.
+4. Post the plan retroactively.
+5. Implement the plan.
+6. Critique the completed diff.
+7. Run `fix-validate` before each commit, judged by its own exit
+   status (in Bash, check `${PIPESTATUS[0]}` or use `set -o pipefail`)
+   — a `tail`/`head` filter cannot prove success (#3139).
+8. Keep commits atomic.
+9. If `fix-validate` changes files, stage and commit them before continuing.
+10. Verify a commit landed before any push: a `commit-msg` hook can silently
+    reject a long one-line body, and the push then reports "Everything
+    up-to-date". Prefer `git commit -F <file>` with a pre-wrapped body, and
+    compare `git rev-parse HEAD` before and after (or check the reported commit
+    hash) before treating a push as confirmation.
+11. If validation fails in files this diff did not touch, suspect baseline
+    drift or a stale install before blaming the change; verify with a fresh
+    `install-deps` run in a clean worktree or a fresh-vs-stale
+    `node_modules` comparison before assuming the failure traces to this diff.
+12. If a test this diff did not touch fails once locally but passes in
+    isolation while hosted CI is green, trust the hosted result and stop
+    chasing it as a regression. This does not waive the `fix-validate` /
+    `pre-push-validate` requirements.
+13. When consolidating a wrapper function used at multiple call sites into one
+    shared function, check whether any call site's old delegate path added
+    options or behavior the shared function does not replicate.
+14. If B3 or C must stop for a hold, post the hold reason, update the digest,
+    and stop.
+
+**Unplanned follow-up work**: If B–C reveals a separate follow-up, never call
+`gh issue create` or the REST issues API ([B–C design rationale](../../../docs/idd-design-rationale.md#work-and-self-review)).
+If the optional `issue-authoring` companion is installed, invoke its Stage 1
+hold/contract. Its reuse-first check must reject targets under another hold. A
+target with the configured authoring label outside this session's set stays
+unavailable unless this pass explicitly resumes that interrupted set; verify its
+set identity from the companion's durable owner markers, then add its published
+issues to the working set first. Unrelated holds stay unavailable. If the
+companion builds an optional discarded validation probe, run it in a separate
+temporary worktree, never the current issue worktree; otherwise skip it.
+Before every edit, require per-target atomic or append-only owner-marker
+acquisition and a fresh body/label re-read; on conflict, keep the label, stop,
+and use another target or a separate comment.
+
+After Stage 1 publishes and acquires a valid parent roadmap shell as the set
+anchor (or the designated lead when no parent roadmap exists), then publishes or
+acquires every ready child under that anchor and wires real numbers into the
+roadmap, leave the authoring label on every published or updated target (issues
+and roadmaps), and resume B–C. If interrupted, leave those labels, stop B–C, and
+resume only after a later pass completes the set. After anchor acquisition,
+persist and verify exact `anchor`/`set` identities in the originating issue's
+durable Stage 1 hold; resume must recover them, not infer them from the label or
+choose another lead. If Stage 1 publishes nothing (including after clarification
+or a non-ready bucket), comment that outcome before resuming and, once a PR
+exists, list it in the PR's recommended follow-ups. Keep the Stage 1 B–C hold;
+never release a follow-up or start a second loop. If the companion is
+unavailable, record the proposal in a separate comment and PR follow-ups; never
+create it ad hoc or improvise worker-side authoring.
+
+**Read-only S-to-M correction and advisory drift**: a count over the
+estimate is advisory. When `claimed-push` dry-run passes with
+`assessment.correctionApplied: true` or `assessment.disposition:
+"advisory-drift"` (even above eight), reassess once. If the
+change stays one cohesive way to meet the accepted intent, needs no new
+authority or unresolved decision, and has a feasible validation plan, update the
+plan, report S, M (or none), canonical paths/count, claim ID, raw-body SHA-256,
+assessment SHA-256 and a unique attempt ID, and continue the same claim.
+Before posting, revalidate claim, nonce, worktree, lock and tokens; re-read the
+issue and rerun dry-run if the body or assessment changed. Add this complete
+`idd-agent-authored` suffix:
+
+```markdown
+<!-- idd-agent-authored: {agent-id} -->
+
+_{agent-id}: IDD automation comment; attribution is self-reported._
+```
+
+Verify the returned comment ID, author and exact body; reconcile an uncertain
+POST by its attempt ID. If unverified, retain the claim and stop. Do not edit
+or roll back the issue body. Do not apply or push from B3: keep the verified
+assessment SHA through C self-review and D1 synchronization, then pass it with
+`--expected-scope-sha256 <assessment-sha256>` to D2's normal
+`claimed-push --apply` (required after `correctionApplied: true`, else
+optional). If D2's scope check differs, return to B3, reassess
+and report, then repeat C and D1 before applying. Never inherit the report
+across a claim change or resume.
+
+**Scope overrun** (helper runtime only): a number alone never releases, splits,
+labels needs-decision, or needs a waiver. Independent deliverables use the
+follow-up route above; design, ownership, security, resource, or validation
+blockers keep theirs. Start this route only when such a reason (with evidence)
+makes the issue itself need a split, or the dry-run scope step fails
+`effort-candidate-file-limit` with no advisory disposition (unusable effort
+evidence): stop coding without pushing. Comment the reason, estimate, candidate
+files, changed files, and a split proposal. Then revalidate ownership: only if
+the active claim still uses your current `{claim-id}`, update the digest
+(`Phase: aborted/released`, the release in `Next action`, the claim and reason
+in `Authoritative by`) and post `unclaimed-by` for that same `{claim-id}`;
+otherwise post no release. Then run `lost-claim-cleanup`. With the companion,
+hand it that proposal as a held split draft: it holds this issue, publishes a
+held roadmap whose children record `Split out of #<n>`, and comments its link;
+if refused, the comment stands. Never add needs-decision or ask a human.
+
+**Standing split** alone bypasses the worker-side scope-overrun route (never
+for a count alone); keep the parent claim and label held. Resolve policy
+owner/repo from the claimed issue's canonical live URL. For a PR, query
+`gh api repos/<target-owner>/<target-repo>/pulls/<number> --jq '{owner:
+.base.repo.owner.login, repo: .base.repo.name, ref: .base.ref}'` and use its
+base owner/repo/ref; otherwise use the issue repo and live default branch.
+Pass explicit `--owner <owner> --repo <repo>` to
+`idd-effective-config --trusted-auto-decide`; add `--base-ref <base>` only for
+PRs. Require `status: readable`; the helper validates that ref's schema, and
+its auto-decide verdict does not govern split. The helper validates only the
+live base branch, so read the base head commit (`<policy-sha>`), run the check,
+read it again, and continue only when both are equal. Save the decoded
+`.github/idd/config.json` at `<policy-sha>` as `<target-policy>`, or use the
+existing route when they differ. Read the split settings, parent label
+(`issueAuthoring.authoringLabelName`, default `status:authoring`), and
+`markerPrefix` from this snapshot. Pass
+`--owner <owner> --repo <repo> --policy <target-policy>
+--marker-prefix <target-markerPrefix>` to every publisher call. Require
+`enabled: true`; missing `maxCandidateFiles` defaults to `8`; absent,
+malformed, or unreadable policy uses the existing route. Never use checkout
+origin or policy
+([target finding](https://github.com/kurone-kito/idd-skill/pull/5031#discussion_r4505536205)).
+
+Each child fits the trusted ceiling and contains a parent criterion. Each
+checkbox-stripped parent criterion appears whole and verbatim in exactly one
+child. Reuse-first check against open issues and draft carriers, including claim/PR
+state. If a match cannot safely join the held set, stop; issue `#4064`
+duplicated child `#4093`
+([rationale](../../../docs/idd-design-rationale.md#b3--scope-overrun-returns-to-authoring)).
+
+For a roadmap child, check claim/PR/execution state, establish ownership per
+target, add `Split out of #<parent>`, and update/read back each verified child in
+`## Tracks`. Conflicts keep the parent and published children held.
+
+Only orphan-shaped children qualify. A sequential-roadmap `blocked-by` child
+is not an orphan; `--shape child` needs a separately held anchor this parent
+does not provide. Use the existing scope-overrun route for such children, and
+for standalone orphans (parent not under a roadmap's `## Tracks`) when
+`<target-policy>` sets `issueScope` to `roadmap`, which discovers no orphans.
+Other values and an absent key are unchanged.
+
+Use the existing comment/release route only when any standing-split condition
+above fails.
+
+Revalidate the parent claim; add/verify the snapshot's authoring label. An
+existing label resumes only from the same proposal; otherwise stop on the
+unrelated hold. Reconcile mappings. Before release and on record-bearing
+resume, require one trusted exact record line matching class, set, anchor, ceiling,
+and option. Proposal, mappings, and live held children must match one-to-one
+by exact title/body, with no missing, duplicate, extra, or released child. For
+each body, verify its single leading `authoring-publication` line against the
+helper report, journal, and ownership record; remove only that line and its
+blank separator, then compare the rest byte-for-byte with the saved draft.
+Never strip an unmatched marker; the record alone is not proof. If a record
+exists, verify the set without republishing; stop on conflict or unknown
+publication.
+Before publishing, verify material scope/design claims against current sources
+and put file references, GitHub permalinks, or read-only command evidence in the
+review packet's `evidence` array. Correct/qualify/remove unsupported claims
+and route unresolved material claims under the issue-authoring contract.
+Post/read back one ordered parent proposal with current claim ID, estimate,
+candidate/changed files, and each child's exact title and full body. If POST is
+uncertain, page all parent comments and continue only if exactly one exact
+proposal exists and a trusted actor authored it; otherwise keep the hold and
+stop. On resume reconcile
+mappings with helper records/live issues; verify/skip mapped children and
+publish only unmapped proposals. Stop on conflict or unknown publication.
+Keep the parent claim/label and children held.
+Review each final child separately: send exact title/body and the bounded packet
+per the contract's completed-draft mode table. A usable delegate runs; native
+review also runs for `combined`, for `on-success` after a delegate success, and
+for `fallback` (default) after a delegate failure (missing command, non-zero
+exit, timeout, cancel, or unreadable findings), but not for `never`. With no
+usable delegate, use native review or structured self-critique. Union findings.
+Wait for each mechanism that runs, bounded by
+`issueAuthoring.adversarialReview.waitCeiling` (`PT20M` default). Require a
+readable list from each mechanism that ran, except a failed delegate that
+`fallback` replaces with native review; otherwise stop publication of that
+child. Require `"completed": true` and every finding `fixed` or `rejected`; stop
+on an incomplete or unresolved review. A title/body correction invalidates its
+review and the proposal. Update/read back the full ordered proposal and repeat
+both checks for changed children. If uncertain, continue only when the full
+body matches exactly; otherwise keep the hold and stop. Immediately before
+dry-run, recheck the nonempty final set: each child fits the trusted ceiling
+and contains a parent criterion, and each checkbox-stripped parent criterion
+appears whole and verbatim in exactly one child. Any failure blocks dry-run and
+apply. Dry-run only when every final title and normalized body matches the
+read-back proposal and has a completed review. A refused/failed dry-run stops
+before apply. Resolve the profile-selected `idd-publish-authoring-hold` per
+`docs/idd-helper-scripts.md`; without `--apply` it dry-runs. Dry-run only
+unmapped orphans; inspect every result before applying one at a time. The
+invocation is:
+
+```sh
+idd-publish-authoring-hold --shape orphan \
+  --owner <target-owner> --repo <target-repo> --policy <target-policy> \
+  --marker-prefix <target-markerPrefix> \
+  --title <title> --body-file <file> --review-result <file> [--apply]
+```
+
+Verify each child is held and append/read back its parent mapping before the
+next. A mapping is one parent comment that names the child's exact
+`<owner>/<repo>#<number>` and the current claim ID, and only a trusted actor's
+comment counts. If that POST is uncertain, page all parent comments and proceed
+only when each child has exactly one such mapping; otherwise keep the hold and
+stop. Any refusal, failure,
+recovery hold, or unknown result stops publication, even if a matching child is
+found. Do not publish another child, retry, post the record, or release the
+parent. Keep proposal, claim/label, and published children held; inspect the
+report, journal, marker, and live issues. After children/tracks pass the set
+check, post the exact record below. On definite/uncertain POST failure, post a
+hold note naming verified children; keep all holds and stop. For uncertainty,
+proceed only after paginated read-back confirms one trusted exact record and
+the full set; never retry. On success, post the completion note, revalidate
+the claim, update and read back the parent digest (`Phase: aborted/released`,
+the planned release in `Next action`, the verified claim and reason in
+`Authoritative by`), post/verify its exact `unclaimed-by` marker, then clean
+up. Mismatch, unreadable state, or uncertain release keeps the parent held.
+Keep the label until release or completion.
+`instructions-only` keeps the companion route.
+
+```text
+<!-- idd-skill-standing-approval: class=split; set=none; anchor=<owner/repo#n>; ceiling=<maxCandidateFiles>; option=option-a -->
+```
+
+Use the parent issue itself as `anchor` (`<owner>/<repo>#<number>`) and the
+numeric effective `maxCandidateFiles` as `ceiling`.
+
+## C — Self-review
+
+### C1 — Critique pass
+
+#### Delegated critique wait ceiling
+
+Per-agent pass: resolve `critiqueLoop.subagentWaitCeiling` (`PT20M` default)
+with a harness timeout, not a wrapper (#3449). Shell-delegate rules are
+unchanged. Background waits need cleanup and late-output suppression. `mode`
+only decides whether the per-agent pass starts from the delegate's outcome (see
+step 5). Once started, a timeout, cancel, interruption, or error without
+findings routes to structured self-critique and records no delegated return. If
+the harness cannot bound or clean up, skip the per-agent pass, use structured
+self-critique, and record residual risk.
+
+A critique pass asks whether the implementation is correct, whether the issue's
+requirements are satisfied, whether coverage is adequate, and whether any other
+problems exist. Every mechanism below answers those questions. They are what a
+pass asks, never a separate pass to run on top of the one that ran.
+
+1. Resolve the delegate verdict with the profile-selected `critique-delegate`
+   helper (`node scripts/idd-critique-delegate.mjs`, or the package-manager
+   profile's `idd:critique-delegate`; resolve any other form from
+   `docs/idd-helper-scripts.md`). Use its `usable` field as the step 2 verdict
+   as-is; never re-derive it. When `usable` is `true`, use its `source`,
+   `command`, and `mode` fields as the delegate for step 4. An
+   `instructions-only` repository never reaches this step. If the helper is
+   missing, fails, or disagrees with live state, stop and ask per the Helper
+   runtime contract above, not prose.
+2. `usable: false` means no delegate at this layer — go straight to step 3.
+   `usable: true` means the helper already applied every configuration
+   fail-safe (an unusable repository-local value never runs and blocks
+   user-global inheritance; an unusable user-global fragment counts as
+   absent; an unusable delegate never applies `mode`); use its `command`
+   and `mode` as-is in steps 4-5.
+3. If no usable delegate remains, run the per-agent critique pass on the branch
+   diff and go to step 7.
+4. Otherwise run the delegate's `command` against the branch diff. It **failed**
+   if the command is absent, exits non-zero, times out, or its output cannot be
+   read as a findings list. Otherwise it **succeeded** — including when it
+   returns a readable list with no issues in it. Failure only decides whether
+   the per-agent pass runs in step 5; it never discards a readable findings
+   list the delegate did emit, which stays part of this pass's output.
+5. Read `mode` (`fallback` when the key is absent; a present unrecognized value
+   was already routed out by step 2) to decide whether the per-agent pass also
+   runs: `combined`
+   always, without waiting on the delegate's outcome; `fallback` only when the
+   delegate failed; `on-success` only when it succeeded; `never` not at all.
+   Run the per-agent pass when `mode` says to. When `mode` withholds it, do not
+   answer the questions above yourself instead — the delegate's findings are
+   this pass's whole output, which is the duplicate cost `never` exists to
+   avoid.
+6. If both ran, union their reported issues.
+7. These lenses apply only within a per-agent pass (step 3 or step 5) —
+   when only the delegate ran instead (a successful delegate under
+   `fallback`, or any delegate under `never`), it never sees them, and
+   do not apply them yourself in its place. When a per-agent pass did
+   run, also apply, composing when both fit: **Mutation / write-side**
+   (the diff implements a helper that mutates GitHub state, mutates git
+   state, or performs a merge) — Fail-closed inputs; Validate/execute
+   scope parity; Unsafe-output suppression; Schema strictness parity.
+   **Gate-mirroring** (the diff implements a helper that predicts,
+   mirrors, or pre-checks another gate's decision) — Validation-path
+   parity; Input completeness; Whole-identity comparison; Snapshot
+   identity; Point-in-time parity.
+8. The floor (referenced in C2, C4, and C5) is `fix-validate` passing against
+   the branch's current HEAD. Re-run it after every new commit; it does not
+   substitute for D2's `pre-push-validate` gate.
+
+### C2 — Check for issues
+
+1. If the critique pass reports one or more issues, continue to C3.
+2. Otherwise, if zero issues came back because no mechanism produced a readable
+   findings list — a `critiqueLoop.delegate` `mode` of `on-success` or `never`
+   whose delegate failed at C1 step 4 without emitting one — that verdict is
+   vacuous, not clean. Post a hold and stop; do not treat it as zero issues.
+   A delegate that succeeded with a readable list (even an empty one), or one
+   that failed but still emitted a list, is a genuine result, so continue to
+   step 3.
+3. Otherwise, if the critique pass reports zero issues, invoke
+   `critiqueLoop.telemetryHook` (C1) with zero findings/accepted/rejected
+   counts — fire-and-forget — then check the `fix-validate` floor. A round
+   that continues to C5 for the floor only is still a zero-finding round
+   and must not lose its record.
+4. If the floor has not passed, continue to C5 to repair validation.
+5. If the floor has passed, open and follow `idd-pr-submit-lite.instructions.md`
+   now.
+
+### C3 — Score issues
+
+1. Treat high issues as safety, correctness, requirement, or CI blockers.
+2. Treat medium issues by context.
+3. Treat low issues as minor improvements unrelated to PR intent.
+
+### C4 — Accept / Reject and loop check
+
+1. Accept high issues.
+2. If accepted issues remain and the floor has not passed, continue to C5.
+3. Otherwise, if no accepted issues remain and the floor has passed, open and
+   follow `idd-pr-submit-lite.instructions.md` now.
+4. Otherwise, if only low accepted issues remain after more than
+   `critiqueLoop.cPhaseLowSeveritySkipAfter` loops and the floor has passed,
+   open and follow `idd-pr-submit-lite.instructions.md` now.
+5. Otherwise continue to C5.
+
+Once the exit above is chosen (before C5, PR submission, or a C4 hold),
+invoke `critiqueLoop.telemetryHook` (C1) with this round's findings,
+severity, accepted/rejected counts, and delegate usage — fire-and-forget.
+A delegate's own fail-closed hold (C2 step 2) stops before C2 and has no
+telemetry record.
+
+### C5 — Fix accepted issues
+
+1. Run `fix-validate`, judged by its own exit status (in Bash, check
+   `${PIPESTATUS[0]}` or use `set -o pipefail`) — a `tail`/`head`
+   filter cannot prove success (#3139).
+2. If the floor still has not passed and there are no accepted issues, stop
+   and ask.
+3. Fix the accepted issues.
+4. Rerun `fix-validate`, judged the same way.
+5. If anything changed, commit atomically.
+
+### C6 — Return to C1
+
+1. Repeat the critique loop until it is clean.
+2. Treat the low-issue exit from C4 step 4 as clean once the floor has
+   passed.
+3. Do not widen scope into review triage or merge phases from this file.

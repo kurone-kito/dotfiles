@@ -1,0 +1,1291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
+  "title": "IDD Policy Config",
+  "description": "Machine-readable policy baseline for adopter-side IDD configuration. The file .github/idd/config.json is required: idd-doctor reports a missing file as an error, and the overview command rows read commands.<key> from it.",
+  "type": "object",
+  "required": [
+    "iddVersion",
+    "markerPrefix",
+    "mergePolicy",
+    "reviewPolicy",
+    "threadResolutionPolicy",
+    "claimTiming",
+    "trustedMarkerActors",
+    "commands"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The published policy schema `$id` URL this config file validates against, enabling editor hover text and autocomplete. Not in the schema's own `required` list; conventionally present, but no runtime default."
+    },
+    "iddVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Records which distributed IDD release this repository imported, following semantic-versioning intent for template re-sync decisions. Required; no default. `idd-doctor` also runs a content-based staleness check as a backstop."
+    },
+    "markerPrefix": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$",
+      "description": "Prefix embedded in every marker token and generated label name (for example `idd-skill-roadmap-id`). Required when `config.json` exists; no schema default, though helper code falls back to `idd-skill` when the file itself is absent."
+    },
+    "developmentBranch": {
+      "type": "string",
+      "pattern": "^(?!refs/heads/)[A-Za-z0-9._/][A-Za-z0-9._/-]*$",
+      "description": "Long-lived branch that receives IDD feature pull requests, distinct from the repository's trusted GitHub default branch used for workflow/configuration checkout (#2271). A short branch name only, never a `refs/heads/` ref, restricted to a conservative safe charset (letters, digits, `.`, `_`, `/`, `-`, never leading with `-`) so every unquoted shell-command substitution in the instruction files is safe by construction -- a leading `-` would otherwise be parsed as an option rather than a positional argument. Optional; absent resolves the repository's live GitHub default branch, and onboarding records this only after verifying the branch exists on the configured remote. Release, hotfix, and development-to-default promotion flows are outside this field's support boundary."
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["github", "gitlab", "bitbucket"],
+      "description": "Git-hosting provider selection for the future provider adapter boundary (#2265; see docs/provider-boundary.md). Not to be confused with `providerOutage`, which names an unrelated CI/Actions-service outage-relief declaration policy. Optional; absent resolves to `github`, the same effective policy as today. Setting `gitlab` or `bitbucket` only validates and records the selection -- no adapter for either provider exists yet, so every current helper still only speaks to GitHub through `gh`."
+    },
+    "mergePolicy": {
+      "description": "Selects which session is authorized to execute the F3 merge. Required when `config.json` exists; changing it is a workflow behavior change needing matching phase-file updates. An absent `config.json` is treated as the `human_merge` profile. Either one string applies to every model tier, or an object with `frontier`, `middle-tier`, and `lightweight` sets a policy per tier. The object form validates here, and the merge handoff resolves it per tier: on the standard profile an unresolved tier holds as the unknown-policy hold, and on the lite profile a tier resolves only through the fetch and resolver checks in docs/idd-workflow.md.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+          "description": "One merge policy for every model tier."
+        },
+        {
+          "type": "object",
+          "description": "A merge policy per model tier. Exactly the three tier keys; each value is one of the same three policy strings.",
+          "required": ["frontier", "middle-tier", "lightweight"],
+          "additionalProperties": false,
+          "properties": {
+            "frontier": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Merge policy for frontier-class models."
+            },
+            "middle-tier": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Merge policy for middle-tier cloud models."
+            },
+            "lightweight": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Merge policy for lightweight local or compact cloud models."
+            }
+          }
+        }
+      ]
+    },
+    "mergePolicyAck": {
+      "description": "Diagnostics-only confirmation that the operator has explicitly reconsidered the current `mergePolicy` value. Optional; never participates in F2.5/F3 merge-authority resolution and never changes what any `mergePolicy` value authorizes. `idd-doctor` warns when `mergePolicy` is `fully_autonomous_merge` and this field is absent or does not equal that same value; any other value here (including one that does not match the live `mergePolicy`) still validates against this schema. Accepts the same string-or-tier-object union as `mergePolicy`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+          "description": "One confirmation value for every model tier."
+        },
+        {
+          "type": "object",
+          "description": "A confirmation value per model tier. Exactly the three tier keys; each value is one of the same three policy strings.",
+          "required": ["frontier", "middle-tier", "lightweight"],
+          "additionalProperties": false,
+          "properties": {
+            "frontier": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Confirmation value for frontier-class models."
+            },
+            "middle-tier": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Confirmation value for middle-tier cloud models."
+            },
+            "lightweight": {
+              "type": "string",
+              "enum": ["fully_autonomous_merge", "human_merge", "separate_merge_agent"],
+              "description": "Confirmation value for lightweight local or compact cloud models."
+            }
+          }
+        }
+      ]
+    },
+    "reviewPolicy": {
+      "type": "string",
+      "enum": [
+        "copilot-advisory",
+        "human-required",
+        "no-advisory",
+        "external-bot"
+      ],
+      "description": "Selects the PR review-authority profile enforced by the E/F-phase instructions. Required; the distributed default is the Copilot-advisory profile, where CI, branch protection, and claim checks still gate the merge. `advisory-convergence` also reads this field: `human-required` and `no-advisory` make the check `not_applicable` (ready without Copilot clauses); `copilot-advisory`, `external-bot`, absent, or an invalid value keep today's Copilot/`primaryBotLogin` applicability. Do not register `idd-advisory-convergence` as a required check unless this policy actually wants an advisory-bot gate."
+    },
+    "threadResolutionPolicy": {
+      "type": "string",
+      "enum": [
+        "fast-agent-resolve",
+        "hybrid-reviewer-ack",
+        "strict-reviewer-resolve"
+      ],
+      "description": "Records which review-thread-resolution profile is selected. Required; the distributed default (fast-agent-resolve) lets agents resolve after acting on feedback. No enforcement helper or gate reads this value: a non-default profile (hybrid-reviewer-ack or strict-reviewer-resolve) takes effect only through matching edits to the phase files listed in docs/idd-review-policy-profiles.md. idd-doctor reads the value only to warn while a non-default profile is configured -- that diagnostic read never enforces anything. Branch-protection conversation-resolution rules always override this policy."
+    },
+    "authoringLanguage": {
+      "type": "string",
+      "pattern": "^(match-source|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$",
+      "description": "Selects the human-readable prose language for newly-authored issue and PR bodies (Background, Proposed change, Acceptance criteria, PR descriptions, roadmap Goal/Tracks/Success criteria, and similar). Optional; absent behaves as `en` (fail-safe default, matching today's emergent behavior). Either a fixed BCP-47-shaped language tag (for example `en`, `ja`, `fr`, `zh-Hans`, `pt-BR`) makes every newly-authored issue/PR body use that language, or the literal `match-source` matches the operator's live conversational language during an interactive/hearing session (issue-authoring, onboarding) and the implemented issue's language during unattended execution with no live operator (for example PR-submit). Never changes any HTML-comment marker's machine-parsed format, nor a visible-line mirror a mechanical regex parses — concretely, the autopilot-suitability and effort footers' visible lines, which `src/scripts/audit-authored-issue.mts` matches against a fixed English-phrase regex, stay in their exact canonical English wording regardless of this setting. Not currently read by the discover or claim runtime. PR-submit reads it for PR body prose (#1982) and issue-authoring reads it for drafted issue prose (#1983)."
+    },
+    "claimTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["staleAge", "heartbeatInterval"],
+      "properties": {
+        "staleAge": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration after which an active claim's latest valid `claimed-by` comment is considered stale and eligible for takeover. Required; the distributed convention is `PT24H`."
+        },
+        "heartbeatInterval": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration cadence at which an owning session re-posts its claim comment to reset the stale clock. Required; the distributed convention is `PT12H`."
+        }
+      },
+      "description": "Container for the claim ownership timing pair (`staleAge`, `heartbeatInterval`) read by discover, claim, resume, and resume-stall instruction files. Required object; both nested fields are themselves required."
+    },
+    "trustedMarkerActors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "GitHub logins (or bot/App identities) whose `claimed-by`, `unclaimed-by`, review-watermark, and other operational marker comments are trusted for state transitions. Required; at least one entry."
+    },
+    "advisoryBotLogins": {
+      "type": "array",
+      "description": "GitHub logins of advisory review bots whose post-disposition acknowledgement comments may be classified as structurally ack-only by the helper evidence layer. Optional; absence disables the classification (fail-closed).",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "workshop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exampleRepository": {
+          "type": "string",
+          "description": "GitHub <owner>/<repo> slug for the example repository whose README is expected to back-link to docs/workshop/. Empty string disables the doctor cross-check.",
+          "pattern": "^(?:|[^/\\s]+/[^/\\s]+)$"
+        }
+      },
+      "description": "Optional metadata block naming an example repository used by the onboarding workshop's cross-check. Absent by default; omitting it disables the `idd-doctor` cross-check."
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["install-deps", "fix-validate", "pre-push-validate", "post-fix-validate"],
+      "properties": {
+        "install-deps": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shell command that installs project dependencies before implementation work begins. Required; must stay idempotent so reruns in fresh, reused, or recreated worktrees need no manual cleanup."
+        },
+        "fix-validate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shell command that auto-fixes and validates the working tree before each atomic commit. Required; run before committing, then again if `pre-push-validate` reports a fixable failure."
+        },
+        "pre-push-validate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shell command that validates the branch before pushing, without auto-fixing. Required; on failure, run `fix-validate`, commit, then re-run this command."
+        },
+        "post-fix-validate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shell command that re-validates after a review-fix or triage edit, mirroring `fix-validate` without redundant re-fixing already covered elsewhere. Required."
+        }
+      },
+      "description": "Shell command values for the four lifecycle steps. Required object; the overview's Project commands rows reference these entries, so this object is the single source of the command text."
+    },
+    "helperRuntime": {
+      "type": "object",
+      "description": "Optional helper runtime selection. When absent, repositories remain on the instructions-only fallback.",
+      "additionalProperties": false,
+      "required": ["profile"],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": [
+            "package-manager",
+            "vendored-node",
+            "ephemeral-npx",
+            "instructions-only",
+            "user-global"
+          ],
+          "description": "Selects which helper-runtime import surface this repository uses. Required within this object; the whole `helperRuntime` key defaults to the instructions-only fallback when absent. `user-global` expects the helper bins to be installed once per operator on PATH rather than per repository."
+        },
+        "launcher": {
+          "type": "string",
+          "enum": ["auto", "npx", "pnpm-dlx"],
+          "description": "Optional launcher for the ephemeral-npx profile. `npx` (the default) emits `npx --yes --package <spec> <bin>`; `pnpm-dlx` emits `pnpm dlx --package <spec> <bin>`; `auto` picks `pnpm-dlx` when the target repository's pnpm is major 10 or later and `npx` otherwise. Accepted under any profile and ignored outside ephemeral-npx."
+        },
+        "packageSpec": {
+          "type": "string",
+          "description": "Optional pinned npm spec, tarball URL, or reviewed commit archive for ephemeral-npx, package-manager, and user-global helper invocations. Absent falls back to the mutable main archive URL. Restricted to a shell-safe character set (letters, digits, and @:/_.+^#%-) because the value is embedded unquoted into copy-pasteable shell command text; shell metacharacters such as ; & | $ backticks quotes and spaces are rejected to prevent corrupting or injecting into that command.",
+          "pattern": "^[A-Za-z0-9@:/_.+^#%-]+$"
+        }
+      }
+    },
+    "issueScope": {
+      "type": "string",
+      "enum": ["roadmap", "roadmap-first", "orphan-first"],
+      "description": "Selects Discover's candidate scope (roadmap traversal, orphan issues, or both). Optional; defaults to the roadmap-first path with an orphan fallback. Must stay synchronized with the Project commands table's matching row."
+    },
+    "orphanFirstPolicy": {
+      "type": "string",
+      "enum": ["none", "maintainer-approved", "public-disabled"],
+      "description": "Approval gate applied to orphan-issue candidates once Discover's orphan path runs. Optional; defaults to no extra gate beyond the standard A3 readiness checks."
+    },
+    "skipIssueAuthorApprovalGate": {
+      "type": "boolean",
+      "description": "Opt-out for the repository-wide issue-author approval gate. Optional; omitted or `false` (default) keeps the gate enabled, requiring a self-authorizing author or an explicit approval signal."
+    },
+    "dangerouslyAutoDecide": {
+      "type": "boolean",
+      "description": "Repository-only opt-in for provisional decision choices. Optional; defaults to `false`. Only an explicit `true` from the trusted repository baseline grants this authority; user-global values, issue text, and a PR or feature branch never do. This flag alone does not select a decision issue or waive any existing gate."
+    },
+    "critiqueLoopProfile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text record of which critique-loop profile this repository has selected, for onboarding notes and human readers. Optional; not currently read by any discover, claim, or review runtime consumer."
+    },
+    "mergeHandoffActor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text record of the designated merge-capable actor for the separate-merge-agent policy, alongside the documented resume condition. Optional; not currently read by any runtime consumer — informational only."
+    },
+    "externalAdvisoryBot": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-text record naming an external advisory bot for a non-default review policy, kept for onboarding and documentation. Optional; `advisoryWait.primaryBotLogin` is the field the advisory-wait runtime actually reads."
+    },
+    "maintainerApprovalActorPolicy": {
+      "type": "string",
+      "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+      "description": "Selects who counts as a maintainer approval actor for the issue-author approval gate. Optional; defaults to owners plus Maintain/Admin collaborators only, excluding plain Write permission."
+    },
+    "maintainerApprovalActors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Optional explicit allowlist of GitHub logins granted maintainer approval authority. Schema-supported metadata; the distributed discover/claim runtime does not yet enforce this list."
+    },
+    "stallRecovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "quietWindow": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration of no session activity that counts as evidence a claimed issue's session may be stalled, used by the S2/S4 resume-stall checks. Optional; defaults to `PT30M`."
+        }
+      },
+      "description": "Container for stalled-session recovery timing (`quietWindow`). Optional; omitting it keeps the distributed quiet-window default."
+    },
+    "forcedHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["disabled", "human-gated"],
+          "description": "Enables a human-verified exception letting a maintainer transfer a stuck, non-stale claim before the 24-hour stale takeover applies. Legacy alias cluster: this canonical nested-camelCase key wins over `forced-handoff.mode`, `forcedHandoffMode`, then `forced-handoff-mode`, in that order. Optional; the safer state applies by default."
+        },
+        "authorityPolicy": {
+          "type": "string",
+          "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+          "description": "Human approval authority required to authorize a forced handoff. Legacy alias cluster: this canonical nested-camelCase key wins over `forced-handoff.authorityPolicy`, `forcedHandoffAuthority`, then `forced-handoff-authority`, in that order. Optional; defaults to owners and Maintain/Admin collaborators only."
+        }
+      },
+      "description": "Canonical nested-camelCase container for the forced-handoff settings (`mode`, `authorityPolicy`). Optional; wins over the `forced-handoff` nested and flat alias forms whenever a nested value is present and valid."
+    },
+    "forced-handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["disabled", "human-gated"],
+          "description": "Legacy nested-kebab-case alias for `forcedHandoff.mode`. Optional; wins only when the canonical `forcedHandoff.mode` is absent or invalid; `forcedHandoffMode` and `forced-handoff-mode` are tried after this, in that order."
+        },
+        "authorityPolicy": {
+          "type": "string",
+          "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+          "description": "Legacy nested-kebab-case alias for `forcedHandoff.authorityPolicy`. Optional; wins only when the canonical `forcedHandoff.authorityPolicy` is absent or invalid; `forcedHandoffAuthority` and `forced-handoff-authority` are tried after this, in that order."
+        }
+      },
+      "description": "Legacy nested-kebab-case alias for `forcedHandoff` (`mode`, `authorityPolicy`). Optional; the canonical `forcedHandoff` nested-camelCase form wins whenever it carries a valid value instead."
+    },
+    "forcedHandoffMode": {
+      "type": "string",
+      "enum": ["disabled", "human-gated"],
+      "description": "Legacy flat-camelCase alias for `forcedHandoff.mode`. Optional; wins only when neither nested form (`forcedHandoff.mode`, `forced-handoff.mode`) carries a valid value; `forced-handoff-mode` is the final fallback after this."
+    },
+    "forced-handoff-mode": {
+      "type": "string",
+      "enum": ["disabled", "human-gated"],
+      "description": "Legacy flat-kebab-case alias for `forcedHandoff.mode`, and the last-resort form in the four-way precedence order (nested-camelCase, nested-kebab-case, flat-camelCase, then this). Optional."
+    },
+    "forcedHandoffAuthority": {
+      "type": "string",
+      "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+      "description": "Legacy flat-camelCase alias for `forcedHandoff.authorityPolicy`. Optional; wins only when neither nested form carries a valid value; `forced-handoff-authority` is the final fallback after this."
+    },
+    "forced-handoff-authority": {
+      "type": "string",
+      "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+      "description": "Legacy flat-kebab-case alias for `forcedHandoff.authorityPolicy`, and the last-resort form in the four-way precedence order (nested-camelCase, nested-kebab-case, flat-camelCase, then this). Optional."
+    },
+    "markerTrust": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowCollaboratorMarkers": {
+          "type": "boolean",
+          "description": "Whether operational markers authored by Write/Maintain/Admin collaborators, not only the configured trusted actors, are trusted for claim and review state transitions. kurone-kito/idd-skill#3250: collaborator trust admits marker AUTHORS -- it never by itself grants external-check waiver AUTHORITY, which the gates evaluate separately against the configured `ciGate.externalCheckWaivers.authorityPolicy` at consume time. Legacy alias cluster: this canonical nested key wins over `markerTrustAllowCollaboratorMarkers`, then `allowCollaboratorMarkers`. Optional; defaults to the more conservative state."
+        }
+      },
+      "description": "Canonical nested-camelCase container for marker-trust settings (`allowCollaboratorMarkers`). Optional; wins over the flat alias forms whenever it carries a valid value."
+    },
+    "markerTrustAllowCollaboratorMarkers": {
+      "type": "boolean",
+      "description": "Legacy flat-camelCase alias for `markerTrust.allowCollaboratorMarkers`. Optional; wins only when the canonical nested key is absent or invalid; `allowCollaboratorMarkers` is tried after this."
+    },
+    "allowCollaboratorMarkers": {
+      "type": "boolean",
+      "description": "Legacy flat alias for `markerTrust.allowCollaboratorMarkers`, and the last-resort form in the three-way precedence order (nested-camelCase, flat-camelCase, then this). Optional."
+    },
+    "advisoryWait": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "convergenceScope": {
+          "type": "string",
+          "enum": ["all-prs", "idd-claimed"],
+          "description": "Controls whether advisory convergence applies to every PR or only verified IDD-owned PRs. Default: all-prs. Invalid values are rejected by schema."
+        },
+        "exemptBotAuthoredPrs": {
+          "type": "boolean",
+          "description": "Opt-in, off by default. When true AND convergenceScope is all-prs, a PR whose author resolves to a GitHub Bot-typed account (via GraphQL __typename) AND has no claim-marker history at all is classified applicability: not_applicable (reason bot-authored-no-claim-history), letting the check pass without a per-PR maintainer waiver. Has no effect under convergenceScope: idd-claimed, where that same PR shape already resolves not_applicable via the existing idd-claimed-no-verified-linked-issue-claim branch. A Bot-typed author that DOES have claim-marker history, or any human-authored PR, is never exempted regardless of this flag. Default: false."
+        },
+        "requestCap": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of re-review requests the advisory-wait loop may post to the primary bot per PR — a process-level cap, not GitHub-enforced. Optional; defaults to `30`."
+        },
+        "pendingWindow": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Whole-minute ISO 8601 duration to wait once the primary bot review is pending before treating the advisory gate as satisfied. Optional; defaults to `PT30M`."
+        },
+        "settledWindow": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Whole-minute ISO 8601 duration to wait once the primary bot review is submitted or cancelled before treating the advisory gate as satisfied. Optional; defaults to `PT10M`."
+        },
+        "pollInterval": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Whole-minute ISO 8601 duration between polls while actively waiting on primary-bot review state. Optional; defaults to `PT2M`."
+        },
+        "capExhaustedRoute": {
+          "type": "string",
+          "enum": ["phase-specific", "hold"],
+          "description": "Routing once the re-review request cap is exhausted. Optional; defaults to a phase-specific split, where E14 skips the wait while F2/F3 still hold for a maintainer."
+        },
+        "primaryBotLogin": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub login of the advisory bot whose review the advisory-wait gate tracks as the primary signal. Optional; defaults to Copilot, preserving the Copilot-advisory behavior."
+        },
+        "secondaryBotLogin": {
+          "description": "GitHub login(s) of optional, non-gating secondary advisory bot(s) (#3186), each requested once per HEAD only while the primary bot is cap-exhausted or stalled. A single string is equivalent to a one-element array; a non-empty array lists several. Optional; no default -- omitted, blank, or a list that normalizes to empty (for example every entry equal to the primary, or an all-blank list) disables the supplement entirely.",
+          "type": ["string", "array"],
+          "minLength": 1,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "convergenceDeadline": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Whole-minute ISO 8601 duration from when GitHub first recorded the HEAD (its earliest check suite) after which the advisory-convergence check can only turn green via a maintainer waiver, not a fresh review. Optional; defaults to `PT24H`."
+        },
+        "sameHeadRerollCap": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Bounded budget for same-HEAD advisory rerolls once the primary bot's review already covers current HEAD but every remaining item is already dispositioned. Scoped per HEAD; kept separate from `requestCap`. Optional; defaults to `2`."
+        },
+        "recoveryCycleCap": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Bounded per-PR-HEAD Copilot stall-recovery cycle cap (#1572; default 2). A completed cycle is one trusted, claim-bound, current-HEAD-bound advisory-recovery marker. Accounted independently of requestCap and sameHeadRerollCap."
+        },
+        "terminalWindow": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Terminal Copilot-unavailability window (#1572; default PT12H). Once the recovery-cycle cap is exhausted, this window has elapsed since the terminal clock anchor, and no current-HEAD Copilot review exists, the state contract reports COPILOT_UNAVAILABLE -- eligibility for a maintainer waiver, never advisory satisfaction on its own."
+        },
+        "secondaryQuietWindow": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Whole-minute ISO 8601 duration to wait, after the E-phase convergence conditions (no unresolved item, every disposition recorded) are first observed, before the pre-merge readiness verdict treats the review as settled (#2335) -- covers a slower non-primary advisory bot landing a finding after the primary bot's review already converged. The window covers every non-primary advisory bot in the top-level `advisoryBotLogins`, plus the explicit `secondaryBotLogin` entries (#4467); both identities of the primary bot (its GraphQL login, `primaryBotLogin`, and its REST login) are excluded. When no `advisoryBotLogins` is resolved, the window set uses the two distributed review bots, `coderabbitai[bot]` and `chatgpt-codex-connector[bot]`. An empty window set leaves no bot to settle or decline the window, so a configured window runs its full length from the last substantive review activity, and reports elapsed while there is no such activity to anchor on. Optional; off (unchanged behavior) when omitted -- like every other key in this section, there is no explicit off-literal value to set. Distinct from `settledWindow`, which bounds the PRIMARY bot's own pending state, not a late secondary-bot arrival."
+        },
+        "firstFixPushSecondaryWait": {
+          "type": "string",
+          "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+          "description": "Optional whole-minute ISO 8601 duration; standard profile only. When set, the first E12 push of a head is held, before the claim revalidation gate and the push, until each secondary advisory bot (the same set secondaryQuietWindow covers, minus both identities of the primary bot, or the distributed review bots when no advisoryBotLogins resolves) has submitted a review on the PR head before that push, or the duration elapses, whichever comes first. The duration starts when the push is otherwise ready. An empty set holds for the full duration. Inline findings from those reviews that pass the E12 cross-round rules join that push, and reaching the 10-minute accumulation bound ends the hold at once. Omitted means unchanged E12, with no wait. There is no explicit off value."
+        },
+        "providerOutage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "terminalWindow": {
+              "type": "string",
+              "pattern": "^P(?=(?:\\d+D|T\\d+[HM]))(?=.*(?:[1-9]\\d*[DHM]))(?:\\d+D)?(?:T(?=\\d+[HM])(?:\\d+H)?(?:\\d+M)?)?$",
+              "description": "Declaration-scoped override for `terminalWindow` (#2554), used only while a currently-valid outage declaration (top-level `providerOutage.declarationTarget`) is active for the idd-advisory-convergence service; otherwise the unconditional `terminalWindow` value applies unchanged. Clamped to never exceed `terminalWindow` itself, so a configured value longer than the base window has no effect -- this is a shortening mechanism only, and only during a declared outage."
+            }
+          },
+          "description": "Declaration-scoped `advisoryWait` timing overrides (#2554), applied only while an active outage declaration (top-level `providerOutage`) covers the idd-advisory-convergence service. Optional; omitting it keeps `terminalWindow` unconditional."
+        }
+      },
+      "description": "Container for Copilot/primary-bot advisory review timing, caps, and bot identity. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "advisoryConvergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "copilotReviewPollInterval": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration (whole seconds or larger) between re-checks in the idd-advisory-convergence required check's own short bounded poll for a primary-bot review that has not landed yet. Distinct from advisoryWait.pollInterval (a separate, whole-minute-only, longer-horizon E-phase wait). Optional; omitting it keeps the pre-#2333 hardcoded 7500ms interval, which is not itself expressible as a whole-second duration string."
+        },
+        "copilotReviewPollMaxWait": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration ceiling, across all re-checks, for the same bounded poll. Optional; defaults to `PT10M` (#3944: a re-review of a new head needs 3 to 7 minutes, so the former `PT60S` ceiling was raised)."
+        }
+      },
+      "description": "Container for the idd-advisory-convergence required check's own short, bounded Copilot-review poll (#2333). Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "ciWait": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runningTimeout": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Maximum time to poll a running required CI check, measured from its server-reported start time, before stalled-run recovery begins. Optional; defaults to `PT30M`."
+        },
+        "generationTimeout": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Maximum time to wait for required CI checks to appear at all before treating the wait as stalled. Optional; defaults to `PT10M`."
+        },
+        "rerunPolicy": {
+          "type": "string",
+          "enum": ["rerun-once", "hold"],
+          "description": "Rerun budget for infra or stalled CI recovery. Optional; defaults to rerunning the first eligible failure once, then holding if the same route recurs."
+        }
+      },
+      "description": "Container for CI-check polling timing and rerun policy shared by the D, E, and F phases. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "ciGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "externalChecks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "advisory": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["selector"],
+                "properties": {
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name or glob selector for a repo-external check classified as advisory by the local CI gate."
+                  },
+                  "matchMode": {
+                    "type": "string",
+                    "enum": ["exact", "glob"],
+                    "description": "Matching mode used to compare the advisory selector with a check name; defaults to \"exact\" when omitted, so a wildcard selector needs \"glob\"."
+                  }
+                }
+              },
+              "description": "Selectors matching repo-external checks whose non-pass state is tolerated by the local CI gate, informational rather than merge-blocking on its own. Optional; empty by default (no advisory overrides)."
+            },
+            "waivable": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["selector"],
+                "properties": {
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name or glob selector for a repo-external check eligible for a maintainer-authorized waiver."
+                  },
+                  "matchMode": {
+                    "type": "string",
+                    "enum": ["exact", "glob"],
+                    "description": "Matching mode used to compare the waivable selector with a check name; defaults to \"exact\" when omitted, so a wildcard selector needs \"glob\"."
+                  }
+                }
+              },
+              "description": "Selectors matching repo-external checks eligible for a maintainer-authorized external-check waiver via `externalCheckWaivers`. Optional; empty by default (nothing is waivable)."
+            }
+          },
+          "description": "Container for the `advisory` and `waivable` repo-external check-selector lists that this repository's local CI gate classifies. Optional; omitting it applies no external-check overrides."
+        },
+        "externalCheckWaivers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["disabled", "maintainer-authorized"],
+              "description": "Enables the maintainer-authorized external-check waiver escape hatch for repo-external checks. Optional; defaults to the disabled state, so no check is waivable regardless of the `waivable` selector list."
+            },
+            "authorityPolicy": {
+              "type": "string",
+              "enum": ["owners-and-maintainers-only", "all-write-permission-actors"],
+              "description": "Who may author a valid external-check waiver. Optional; defaults to owners and Maintain/Admin collaborators only, excluding plain Write permission."
+            },
+            "maxValidity": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Maximum ISO 8601 duration a single external-check waiver stays valid before it must be renewed. Optional; defaults to `PT24H` — keep waivers short-lived and finite."
+            }
+          },
+          "description": "Container for the maintainer-authorized external-check waiver policy (`mode`, `authorityPolicy`, `maxValidity`). Optional; omitting it keeps waivers unavailable."
+        },
+        "trustEmptyProtectionReads": {
+          "type": "boolean",
+          "description": "Opt-in toggle for trusting a `404` on the branch-protection or ruleset reads as a genuinely empty result (default false; absent means false). GitHub's documented status-code contracts for these reads never include `403`, so a `404` can also mean the token lacks permission to read a real configuration and GitHub is masking that as `404` to avoid confirming the resource's existence. Default `false` fails closed: an unreadable `404` on these reads is treated the same as an explicit `403` (hold) rather than as `noRequiredChecksConfigured`. Set `true` only when the repository operator has verified the automation token is known to carry full read access to these specific endpoints; this is a git-committed, human-authorized decision, not a runtime check of the caller's role or token scope."
+        },
+        "trustSourcePinnedRequiredChecks": {
+          "type": "boolean",
+          "description": "Opt-in toggle for trusting a source-pinned required check (a ruleset or classic branch-protection entry whose `app_id`/`integration_id` names a specific GitHub App/integration as the expected producer) once it is present, matched by name, and pass-equivalent (default false; absent means false). Default `false` fails closed: the CI gate downgrades an otherwise-passing named check to unresolved (`unknown` in `pre-merge-readiness`, `source-pinned` in the ci-wait-state helper) whenever any required-check rule entry is source-pinned, because no producer-identity data (the actual GitHub App that created the check) is fetched anywhere in this codebase's check-run reads, so the pinning cannot be verified at runtime. Set `true` only when the repository operator has verified out-of-band that the pinned integration is the sole producer of the named required check(s); this is a git-committed, human-authorized decision, not a runtime check of actual producer identity. It never relaxes a fully unnamed pinned requirement (e.g. a ruleset `workflows` rule with no enumerable check name), which stays unconditionally conservative."
+        },
+        "allowNoRequiredChecksInGlobalOnly": {
+          "type": "boolean",
+          "description": "Opt-in toggle (issue #4011) that lets a global-only run with zero required checks pass the CI gate (default false; absent means false). Default `false` keeps the gate fail-closed: a repository with no required checks and no present check runs is held as `noRequiredChecksConfigured`. The toggle passes that state only when the global-only profile is active (`pre-merge-readiness --global-only` with the activation and base/head workflow checks of docs/global-only-profile.md) AND no present check run exists (`presentRunConclusion` is `none`). A pending or failing present run still holds the gate, and so does an unprotected run outside the global-only profile. The readiness output names this setting when it is the reason the gate passed. Set `true` only when the repository operator has recorded that this profile may merge with no required check; this is a git-committed, human-authorized decision, not a runtime check."
+        }
+      },
+      "description": "Container for repo-external CI-check classification and the maintainer-authorized external-check waiver policy. Optional; omitting it keeps no external overrides and disabled waivers."
+    },
+    "providerOutage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "declarationTarget": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Issue number read for an active repository-scoped outage-relief declaration. Optional; absence disables the declaration path entirely, so no repository file has to change while an outage is in progress."
+        },
+        "maxValidity": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Maximum ISO 8601 duration a single outage-relief declaration stays valid before it must be renewed. Optional; defaults to `PT24H` — never open-ended."
+        },
+        "maxParkedChanges": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Bound on how many pull requests may be parked at once for an unavailable provider service (#2321). Once reached, sessions stop claiming new issues rather than manufacturing more unmergeable pull requests. Optional; defaults to `10`."
+        }
+      },
+      "description": "Container for the repository-scoped outage-relief declaration policy (`declarationTarget`, `maxValidity`, `maxParkedChanges`). Optional; omitting it keeps the declaration path disabled and the park bound at its default."
+    },
+    "localValidationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxAge": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Maximum ISO 8601 duration a `idd-local-validation-evidence` marker stays readable as fresh evidence, measured from the marker comment's own GitHub `created_at`. Optional; defaults to `PT4H` — never open-ended."
+        }
+      },
+      "description": "Container for the local-validation-evidence marker policy (`maxAge`). Optional; omitting it keeps the default `PT4H` window."
+    },
+    "providerHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minCorroboratingPrs": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Minimum number of distinct pull-request identities that must contribute failure evidence to a service before its verdict may exceed `degraded`. Optional; defaults to `2` — a single pull request's failure burst always caps at `degraded`. Floored at 2 unconditionally: a configured value below 2 falls back to the default rather than disabling the corroboration requirement."
+        },
+        "samplingWindow": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration bounding how far back the evidence-collection read layer looks for provider-health observations. Optional; defaults to `PT24H`."
+        }
+      },
+      "description": "Container for the read-only provider-health classifier's corroboration threshold and sampling window (`minCorroboratingPrs`, `samplingWindow`). Optional; omitting any nested key keeps that key's own distributed default. Never a gate: no field this policy controls is, or is consumed as, a merge-readiness or CI-gate result."
+    },
+    "githubApi": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Opt in to local request-lifecycle observations for the ghApiJson, ghApiJsonWithHeaders, and ghGraphql wrappers; the generic ghText, ghTextUnbounded, and ghTextAsync runners are not observed. Optional; defaults to false, which leaves argv, parsed results, thrown errors, and exit status unchanged."
+            },
+            "maxRecords": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum JSON lines retained in the local telemetry file. Optional; defaults to 100. Older lines are dropped. No outbound upload."
+            },
+            "path": {
+              "type": "string",
+              "description": "Local JSONL file for retained observations. Optional; when enabled and omitted, the file is ~/.local/state/idd-skill/github-api-telemetry.jsonl. A configured path must be absolute or start with ~/ (the home directory); any other non-blank value keeps telemetry off, and a blank value (an empty string or only whitespace) counts as unset and uses the default file. The file is not created while telemetry is disabled. A file that already holds anything other than these records is left untouched and nothing is recorded."
+            }
+          },
+          "description": "Local-only retention for safe request-cost observations. Defaults off. Records omit credentials, request and query text, issue and comment bodies, and environment dumps."
+        },
+        "readCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Opt in to the host-local GitHub REST read cache. Optional; defaults to false. Only a literal true enables it. Enabling it also lets Discover helpers serve a short-lived hint; a hint only ranks and never replaces a live gate."
+            },
+            "maxAge": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Maximum ISO 8601 age of a stored response that hint mode may reuse. Optional; defaults to `PT5M`. Retention is a separate bound."
+            },
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum total size, in bytes, of stored response entries. Optional; defaults to 104857600 (100 MiB). A larger value falls back to that default."
+            },
+            "retention": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Maximum ISO 8601 age of a stored response before it is dropped. Optional; defaults to `PT24H`. Independent of `maxAge`."
+            },
+            "directory": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional absolute override for the per-user OS-local cache directory. A relative path, filesystem root, workspace root, or ancestor of the workspace is not used as a cache root."
+            }
+          },
+          "description": "Host-local read cache for explicitly classified REST reads. Optional; omitting it keeps every read live."
+        },
+        "loadControl": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Opt in to host-local admission and a shared throttle cooldown for the requests that go through the owned gh transport wrappers. Optional; defaults to false, which leaves argv, results, errors, and state files unchanged. Only a literal true enables it. It does not cover a standalone or ad hoc gh command and makes no cross-host or global claim."
+            },
+            "maxConcurrent": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Requests admitted at once across processes of the same OS user. Optional; defaults to 1 (serial). A value above 8 falls back to 1. The effective concurrency across participating repositories is the largest configured value."
+            },
+            "maxWait": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Longest a read waits to be admitted, as an ISO 8601 duration. Optional; defaults to `PT30S`. A value longer than ten minutes falls back to the default. Writes and unclassified requests never wait: they are admitted immediately or refused."
+            }
+          },
+          "description": "Host-local request admission and shared throttle cooldown. Optional; omitting it leaves every request uncoordinated."
+        }
+      },
+      "description": "GitHub API policy. `telemetry` opts in to local request-lifecycle observations, `readCache` opts in to the host-local REST read cache, and `loadControl` opts in to host-local admission and a shared throttle cooldown. Optional; omitting the container keeps telemetry disabled, every read live, and every request uncoordinated. `telemetry` does not wire Discover; an enabled `readCache` lets Discover helpers serve a hint."
+    },
+    "localExec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Host-local admission for this repository's validation commands. Optional; defaults to true. Only a literal false turns it off, and that affects this repository's own commands only; other repositories of the same OS user still take the slot."
+            },
+            "maxConcurrent": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Validation runs admitted at once across processes of the same OS user. Optional; defaults to 1 (serial). A value above 8 falls back to 1."
+            },
+            "maxWait": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Longest a validation run waits to be admitted, as an ISO 8601 duration. Optional; defaults to `PT2H`. A value longer than `PT6H` falls back to the default."
+            },
+            "backend": {
+              "type": "string",
+              "enum": ["flock", "pueue"],
+              "description": "Admission backend. Optional; defaults to `flock`. A `flock` backend with a cap above 1 is kept as written here; the admission helper rejects that combination at run time."
+            },
+            "pueueGroup": {
+              "type": "string",
+              "description": "Pueue group name used when `backend` is `pueue`. Optional; a blank value or an omitted key means `idd-validate`."
+            },
+            "testCommand": {
+              "type": "string",
+              "description": "Optional command string for the repository's test run. A blank value or an omitted key means unset."
+            }
+          },
+          "description": "Admission settings for local validation commands. Optional; omitting it keeps the defaults above."
+        }
+      },
+      "description": "Repository-local execution policy. Repository-owned: a user-global document may not set it (user-global-config.schema.json rejects it). Optional; omitting it enables admission with the defaults above."
+    },
+    "orchestrator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxWorkers": {
+          "type": "integer",
+          "minimum": 1,
+          "enum": [1, 2, 3, 4, 5, 6, 7, 8],
+          "description": "Maximum workers running in one orchestrator session. Optional; defaults to `2`. A value of `1` allows one worker."
+        },
+        "hostLoadClearStreak": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Consecutive `idd-worker-budget` readings with `slots` above 0 that the orchestrator waits for after a `host-load` stop. Optional; defaults to `3`. A value below 1 or not an integer falls back to `3`."
+        },
+        "hostLoadWaitCeiling": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Longest the orchestrator waits for host load to clear, measured from the first `host-load` reading, as an ISO 8601 duration. Optional; defaults to `PT30M`. An unparseable value falls back to `PT30M`."
+        }
+      },
+      "description": "Per-session worker concurrency and host-load wait settings. Optional; omitting it keeps the default cap and the default wait."
+    },
+    "discover": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "activeClaimPreScanBatchSize": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of viable candidates the A4 Step 1.5 active-claim pre-scan checks per batch before moving to the next range. Optional; defaults to `10`."
+        },
+        "selectionDesync": {
+          "type": "string",
+          "enum": ["off", "session-offset"],
+          "description": "A4 Step 2 concurrent-selection desync within a same-score tie band. `off` (default) keeps the deterministic lowest-issue-number tie-break; `session-offset` spreads concurrent autopilot sessions across the tie band by a per-session offset to cut claim races. Never reorders across score bands or affects branch naming."
+        },
+        "legacyRoots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Issue numbers of legacy roadmap roots that predate the `<prefix>-roadmap-id` marker (e.g. an ad-hoc umbrella convention adopted before IDD). Unioned into `--all-roadmaps` root discovery and deduped against marker roots; a missing or invalid value fails safe to no extra roots."
+        },
+        "milestoneScope": {
+          "type": "string",
+          "description": "A4 Step 2 advisory milestone preference within a same-score tie band, applied after selection-desync and before the effort tie-breaker. When set, a candidate whose OPEN milestone title equals this value sorts ahead of other candidates in the same score band. Optional; absence (or an empty string) disables the preference entirely and ranking is unchanged. A closed milestone, a missing milestone, or an API omission is neutral, matching the absent case."
+        }
+      },
+      "description": "Container for Discover-phase concurrency tuning: active-claim pre-scan batch size, selection desync, legacy roadmap roots, and the milestone-scope ranking preference."
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verifySettleDelay": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration to wait after posting a `claimed-by` comment, letting GitHub eventual consistency settle before re-reading and verifying the claim. Optional; defaults to `PT5S`."
+        }
+      },
+      "description": "Container for claim-verification timing (`verifySettleDelay`). Optional; omitting it keeps the distributed default."
+    },
+    "critiqueLoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cPhaseLowSeveritySkipAfter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Loop-count threshold after which C4 may skip remaining Low-severity Accepted findings, once the objective diff validation floor has also passed. Optional; defaults to `2`."
+        },
+        "e10NoProgressHoldAfter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of consecutive E10 review-fix critique passes without meaningful progress, counted from finding fingerprints by the `e10-recurrence` helper, before the auto-loop leaves the fix loop. A recurring Medium or High family stops it with a hold for a maintainer decision; when only Low families recur, they take the per-issue cap's defer route into a follow-up issue instead, once no High or Medium Accepted finding is open and fix-validate has passed on the current HEAD. Optional; defaults to `3`."
+        },
+        "e10MaxPasses": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-issue cap on E10 review-fix critique passes, counted across E9 fix batches. Once this many passes have run, no High or Medium Accepted finding is open, and fix-validate has passed on the current HEAD, the loop stops and files the remaining Low findings into a follow-up issue instead of fixing them in the loop. An unestablished count does not count as reached. Optional; defaults to `2`."
+        },
+        "e10SkipOnAdvisoryConvergence": {
+          "type": "boolean",
+          "description": "When true, the standard profile skips E10 only for an eligible advisory-only Accepted PATH A batch after advisory convergence matches the current E1 pull-request head. Optional; defaults to `false`. The lite profile always runs E10."
+        },
+        "deferAfterRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Review-fix loop round-count threshold (counted from the pull request's total, paginated `copilot-pull-request-reviewer[bot]` review-submission count, PR-wide, not scoped to one claim-id lineage) at or above which E4/E5 dispositions a still-undispositioned wording-only Low-severity PATH A item (a change to wording or formatting only, changing no behavior) `Reject (defer)` into a bundled follow-up issue instead of accepting it when neither adopt-now clause (a) nor (b) holds. Factual and correctness findings are not subject to this mandatory rule and keep their existing eligibility and judgment, as do other Low-severity items. Never affects Medium/High-severity items or an item already Accepted and mid-fix from an earlier round (see `e10NoProgressHoldAfter` above). Optional; defaults to `12` — recalibrated from `15` using a month of real review-fix-loop data; see `docs/idd-design-rationale.md`."
+        },
+        "deferByUrgency": {
+          "type": "string",
+          "enum": ["off", "low", "low-and-medium", "severity-tiered"],
+          "description": "Independent E4/E5 defer trigger, active from round 1, that disposes a PATH A item `Reject (defer)` and is not gated by round count. Default: `severity-tiered`. `off`: the trigger is disabled and E4/E5 behavior is unchanged. `low` and `low-and-medium`: a PATH A item that is not adopt-now (see `idd-review-triage.instructions.md`'s Defer rule) defers when its defer-eligibility severity is within the mode's ceiling. `low`: Low-severity items only. `low-and-medium`: Low or Medium. High is never eligible under either. `severity-tiered`: it replaces the binary adopt-now gate, except clause (d) below, with the severity-and-urgency matrix, whose `high` urgency still reads adopt-now conditions (a)-(c). At relax step 0 (the whole matrix while `deferRelaxAtRounds` below is `null` or invalid, or the review count is below its first entry) that includes High only at urgency `very-low`. Under `low`, `low-and-medium`, and `severity-tiered`, clause (d) of the adopt-now test cascades: once one finding of a pass is Accepted, another finding of that pass whose fix stays within that push's files is adopt-now and is not deferred. Under `severity-tiered` the agent reports (d) with `resolve-review-thread --adopt-now`, which turns a `defer` verdict into `keep`. Independent of, and does not change, `deferAfterRounds` above. Under `severity-tiered`, at or above `deferAllAfterRounds`, the cap takes precedence: every finding except a safety-class one defers whatever the relax step or urgency, except that PATH B, `--scope-fence`, `--protected-authority`, `--accepted-mid-fix`, and an awaiting-maintainer-decision hold keep their own verdicts, and condition (d) and `--adopt-now` keep none. Optional; defaults to `severity-tiered`."
+        },
+        "triageRecord": {
+          "type": "string",
+          "enum": ["off", "record", "enforce"],
+          "description": "Triage recording for PATH A replies made through the `resolve-review-thread` helper. `off`: the helper records no tier or urgency. `record` (default): the helper requires the tier and urgency on every applied (`--apply`) Accepted or Rejected PATH A reply, except `--path-b` replies and `**Rejection confirmed by maintainer**` thread replies, and records the tier and urgency with the relax step in a `Triage:` line on any reply that carries both. `enforce`: like `record`, and the helper also refuses an Accepted reply that the defer matrix says to defer, unless a reason is given; it takes effect only when `deferByUrgency` is `severity-tiered`, and otherwise behaves as `record`. `resolve-review-thread` reads `triageRecord`: with `record` or `enforce`, an applied (`--apply`) Accepted or Rejected PATH A disposition requires `--tier` and `--urgency`; `--path-b` replies and `**Rejection confirmed by maintainer**` thread replies are exempt. Optional; defaults to `record`."
+        },
+        "deferAllAfterRounds": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Review-count cap for `deferByUrgency: \"severity-tiered\"` (#4750). An integer of at least 1, compared with the same pull-request-wide, paginated `copilot-pull-request-reviewer[bot]` review count that `deferRelaxAtRounds` uses. Default: 5. JSON `null` turns the cap off; `0` is rejected. The cap is reached at or above the value: every PATH A finding defers at any relax step, except a safety-class finding, which is kept. The existing exclusions keep their verdicts: PATH B, `--scope-fence`, `--protected-authority`, `--accepted-mid-fix`, and an awaiting-maintainer-decision hold (which this helper never sets). Adopt-now condition (d) and `--adopt-now` then turn no defer into keep. The cap acts only under `severity-tiered` and never with `--lite`, which reads no review count. Optional."
+        },
+        "deferRelaxAtRounds": {
+          "type": ["array", "null"],
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Wave gradient for `deferByUrgency: \"severity-tiered\"`: one or two strictly ascending positive integers (default `[4]`; JSON `null` turns the gradient off), the pull request's PR-wide, paginated `copilot-pull-request-reviewer[bot]` review counts (the same count `deferAfterRounds` uses) at which the rule relaxes. A pull request's relax step is the number of thresholds less than or equal to its review count, so `[4, 7]` gives step 1 at counts 4 to 6 and step 2 at 7 and above. Each step raises the highest urgency at which a tier may still defer, and from step 1 a High-tier finding of `high` urgency and a safety-class finding never defer under `deferByUrgency` (`deferAfterRounds` is unchanged); see `docs/idd-review-policy-profiles.md`. The cap takes precedence over this gradient at or above `deferAllAfterRounds` (see `deferByUrgency`). Has no effect unless `deferByUrgency` is `severity-tiered`. Optional; defaults to `[4]`. JSON `null` turns the gradient off, and the helper treats an invalid value, such as more than two entries or entries that are not strictly ascending, the same way (the schema cannot express that length and order, so the helper enforces it)."
+        },
+        "deferNeedsDecision": {
+          "type": "string",
+          "enum": ["on", "off"],
+          "description": "Whether the review loop may defer a finding that needs a person's judgment to a `needs-decision` follow-up issue when merging is safe. `off` restores the stop-for-a-person behavior. Among other holds, never changes the CODEOWNER and required-reviewer `Awaiting maintainer decision` hold, `CHANGES_REQUESTED`, the F3 merge holds, or the lite profile's stops. Optional; defaults to \"on\"."
+        },
+        "subagentWaitCeiling": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "Positive ISO 8601 duration ceiling for a delegated per-agent critique pass. Optional; defaults to `PT20M`."
+        },
+        "delegate": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["command"],
+          "properties": {
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "Shell command C1 or E10 runs against the branch's current diff, in place of or alongside the per-agent Critique pass invocation table, depending on `mode`. Required within this object; must contain a non-whitespace character (the `\\S` pattern rejects a whitespace-only value the same way `worktreeGuard.branchPatterns` does, instead of silently accepting a non-actionable command)."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["fallback", "combined", "on-success", "never"],
+              "description": "Selects when the per-agent Critique pass invocation table also runs. `fallback` (default): only when the delegate fails. `combined`: always, without consulting the delegate's outcome — the one value that does not observe it — unioning both mechanisms' reported issues every pass. `on-success`: only when the delegate succeeded, unioning both the same way. `never`: not at all. \"Delegate failed\" means the same set of conditions in every value — the command is absent, exits non-zero, times out, or its output cannot be read as a findings list — and is never narrowed to the process exit status alone. Under `on-success` and `never` a failed delegate can leave the calling pass (C1 or E10) with no findings at all; it then records a hold rather than a clean zero-issues verdict. See `docs/idd-workflow.md`'s Critique pass invocation section for the full table and the fail-closed hold."
+            }
+          },
+          "description": "Repository-configurable C1/E10 critique delegate. Optional; a repo-local key genuinely absent (not this explicit-null case) keeps per-agent-only behavior unless a local runtime inherits a user-global delegate instead. An explicit JSON `null` is the local disable sentinel: it prevents inheriting a user-global delegate without installing a local command. `required` and `properties` apply only when the value is an object."
+        },
+        "telemetryHook": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["command"],
+          "properties": {
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "Shell command for a per-round C-phase critique telemetry notification. Required within this object; must contain a non-whitespace character (the `\\S` pattern rejects a whitespace-only value, matching `delegate.command`'s own validation)."
+            }
+          },
+          "description": "Repository-configurable per-round C-phase critique telemetry hook declaration. Optional; resolved and invoked fire-and-forget from the C-phase loop (C2's zero-issue exit and C4's Accept/Reject decision) — see `docs/idd-workflow.md`'s \"Repository-configurable critique telemetry hook\" section for the resolution order and JSON payload shape. Unlike `delegate` above, it never supplies critique findings or gates C-phase control flow. An explicit JSON `null` is the local disable sentinel: it prevents inheriting a user-global hook without installing a local one. `required` and `properties` apply only when the value is an object."
+        }
+      },
+      "description": "Container for the C-phase and E10 critique-loop convergence guardrails. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "reviewEscalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "changesRequestedFirstEscalation": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration of reviewer silence, after posting a rejection reply, before escalating to a maintainer. Optional; defaults to `PT24H`."
+        },
+        "changesRequestedSecondEscalation": {
+          "type": "string",
+          "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration of continued silence after the first escalation before applying the needs-decision label and releasing the claim. Optional; defaults to `PT48H`."
+        }
+      },
+      "description": "Container for the rejected-`CHANGES_REQUESTED` reviewer escalation timers. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "approvalSignals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "readyLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name that satisfies the issue-author approval gate when applied by a maintainer approval actor. Optional; defaults to `idd:ready`."
+        },
+        "labelFreshnessMode": {
+          "type": "string",
+          "enum": ["presence-only", "event-freshness"],
+          "description": "Freshness rule applied to the configured ready label. Optional; defaults to accepting label presence alone, without checking the labeling event against later issue or plan edits."
+        }
+      },
+      "description": "Container for the issue-author approval gate's ready-label name and freshness rule. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "issueAuthoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxClarificationRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of clarification rounds the issue-authoring skill runs before drafting must converge. Optional; defaults to `3`; keep any increase finite so drafting still converges."
+        },
+        "authoringLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name marking an issue as currently being authored, excluding it from Discover's candidate selection. Optional; defaults to `status:authoring`."
+        },
+        "authoringStaleAge": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration after which a lingering authoring label triggers a stalled-authoring warning. Optional; defaults to `PT4H`; keep it below `claimTiming.staleAge`."
+        },
+        "heartbeatCoalesceWindow": {
+          "type": "string",
+          "pattern": "^P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+          "description": "ISO 8601 duration within which a heartbeat append may be skipped in favor of reusing the target's most recent trusted acquire, bootstrap, resume, or heartbeat marker for the same owner, set, and session, when its body-sha256 still matches the freshly fetched target body (#2768) -- the replay and ownership-verification steps still run exactly as for a freshly posted marker; only the redundant POST is skipped. This window never applies to acquire, bootstrap, resume, release, release-guard, or release-complete appends themselves -- only a heartbeat append may be skipped. Optional; defaults to `PT2M`; keep it below `authoringStaleAge`."
+        },
+        "journalIssue": {
+          "type": "string",
+          "pattern": "^[\\w.-]+/[\\w.-]+#[1-9][0-9]*$",
+          "description": "Pre-existing repository-level authoring journal target (`owner/repo#number`) used as the publication-intent record location for a standalone authoring set with no existing issue or anchor. The issue number must be a positive integer with no leading zero (GitHub issue numbers start at 1). Optional; no default -- when absent, the issue-authoring skill stops with `blocked-by-human` before creating a standalone target rather than guessing a journal."
+        },
+        "retiredJournalIssues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[\\w.-]+/[\\w.-]+#[1-9][0-9]*$"
+          },
+          "description": "Journals that no longer receive publication-intent records but still hold the records of existing authoring sets, each as `owner/repo#number` with the same format as `journalIssue`. An anchor's records are read from `journalIssue` and every listed journal, so an existing set still verifies after `journalIssue` moves. Must not repeat an entry or name the `journalIssue` issue. Optional; no default -- when absent, only `journalIssue` is read."
+        },
+        "adversarialReview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "waitCeiling": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "Positive ISO 8601 duration ceiling for a delegated issue-authoring adversarial draft review. Optional; defaults to `PT20M`. Independent of `critiqueLoop.subagentWaitCeiling`. A user-global document's ceiling is never read."
+            },
+            "delegate": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "description": "Shell command the issue-authoring caller runs against the issue draft. The caller writes the draft to its stdin as one UTF-8 JSON object (`title`, `body`, and a bounded `packet`) described by `issue-authoring-review-input.schema.json`, then closes stdin. Required within this object; must contain a non-whitespace character. This command is trusted executable configuration and can transmit the issue-draft data it receives. It does not read or inherit `critiqueLoop.delegate`."
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": ["fallback", "combined", "on-success", "never"],
+                  "description": "Selects when the native issue-authoring reviewer also runs. `fallback` (default): only when the delegate fails. `combined`: always, without consulting the delegate's outcome. `on-success`: only when the delegate succeeded. `never`: not at all."
+                }
+              },
+              "description": "Dedicated issue-authoring adversarial-review delegate. Optional; a key genuinely absent keeps the native reviewer unless a local runtime inherits a user-global delegate. An explicit JSON `null` disables inheritance without installing a local command. `required` and `properties` apply only when the value is an object."
+            }
+          },
+          "description": "Issue-authoring adversarial draft review. Optional; omitting it keeps the native reviewer and the `PT20M` wait ceiling. Unknown keys are rejected."
+        }
+      },
+      "description": "Container for issue-authoring guard settings: authoring label, staleness window, heartbeat-coalesce window, clarification-round bound, and the adversarial-review delegate. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "autopilotSuitability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "floor": {
+          "type": "integer",
+          "enum": [1, 2, 3, 4, 5],
+          "description": "Discovery skip floor (default 3 when absent). Autopilot considers issues whose authored autopilot-suitability score is >= floor; scores below the floor are routed to humans. Advisory ranking/routing hint only; never bypasses the A4.5/A5 safety gates."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "When false, discovery ignores the score entirely and evaluates every candidate the legacy way (default true)."
+        },
+        "effortL": {
+          "type": "string",
+          "enum": ["allow", "refuse"],
+          "description": "Effort `L` policy. `allow` keeps an issue whose effort footer is `L` eligible for `ready` authoring and autopilot Discover. `refuse` stops such an issue from being authored as `ready`, and autopilot Discover routes it to humans. Optional; defaults to \"allow\"."
+        }
+      },
+      "description": "Container for the discovery autopilot-suitability score floor, its enable switch, and the effort `L` policy. Optional; omitting it keeps the distributed defaults for every nested key."
+    },
+    "worktreeGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Opt-in toggle for the disposable-worktree guard (default false; absent means false). When enabled, `idd-doctor` treats a primary-worktree implementation-branch HEAD as a blocking error instead of an advisory warning (the same effect as its `--strict` flag), and the optional local `core.hooksPath` hook rejects the commit or push once wired. Worktree enforcement stays local by design: a primary-worktree violation leaves no trace in pushed history, so no CI step enforces it. Absent or false preserves the historical advisory-only behavior."
+        },
+        "branchPatterns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "Each entry must contain a non-whitespace character. This mirrors the runtime, which trims each glob and ignores blank entries (falling back to the defaults), so a whitespace-only pattern is rejected at validation time instead of silently never matching."
+          },
+          "description": "Branch globs the guard treats as implementation branches that must not live in the primary worktree (default [\"issue/*\", \"roadmap-audit/*\"] when absent)."
+        },
+        "refuseBaseBranchCommits": {
+          "type": "boolean",
+          "description": "Opt-in stricter mode (default false; absent means false; #2801): also refuses a commit/push made from the primary worktree while HEAD is on the configured `developmentBranch` itself, catching a session that skips B1 entirely and commits directly on the base branch -- a gap the `branchPatterns` check above does not cover, since the base branch never matches an implementation-branch glob. For a push, refuses unless every pushed ref is a deletion of a ref other than `developmentBranch` (#3854), so a merged feature branch can be deleted from the primary worktree while a push that creates or updates a ref is still refused. Compares against `developmentBranch` only; the pure-POSIX-sh hook has no network access to resolve the live GitHub default branch, so an absent `developmentBranch` leaves this check a no-op even when enabled. A direct base-branch commit from the primary worktree is also legitimate routine action for a human maintainer working outside an IDD session, so this stays opt-in rather than becoming the default."
+        }
+      },
+      "description": "Container for the disposable-worktree guard's enablement and protected branch-name patterns. Optional; omitting it keeps the guard's historical advisory-only behavior."
+    },
+    "upstreamEscalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Opt-in toggle governing whether a session may flag a high-confidence idd-skill upstream defect discovered in an adopter repository as a local `status:upstream-candidate` issue (default false; absent means false). Absent or false reproduces today's behavior exactly: no new marker, label, or local issue is ever produced. Never applies to the `kurone-kito/idd-skill` source repository itself, where the triggering condition cannot occur. See `docs/customization.md` for current implementation status."
+        }
+      },
+      "description": "Container for the opt-in upstream-defect-escalation toggle. Optional; omitting it keeps the feature disabled."
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "roadmapLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name applied to roadmap issues. Root discovery ignores it: the `<prefix>-roadmap-id` marker alone identifies a roadmap root. Discover and idd-doctor still read it. Optional; defaults to `roadmap`."
+        },
+        "blockedByHumanLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name marking an issue as blocked on human coordination, excluding it from Discover's ready-to-start set. Optional; defaults to `status:blocked-by-human`."
+        },
+        "needsDecisionLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name marking an issue as needing a maintainer decision, excluding it from Discover's ready-to-start set. Optional; defaults to `status:needs-decision`."
+        },
+        "authoringOnlyLabelName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "GitHub label name marking an issue whose deliverable is other issues, with no commit, branch, or pull request, excluding it from Discover's ready-to-start set, so Discover's candidate scans never offer it. Optional; defaults to `status:authoring-only`."
+        },
+        "untrustedLabelerLogins": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "Each entry must contain a non-whitespace character. A GitHub login can never be whitespace-only; rejecting one at validation time instead of silently accepting it prevents a validated configuration from covering no actual actor once a consuming guard reads this list. The runtime also trims each entry, so a value like \"triage-bot \" is accepted and resolves to \"triage-bot\"."
+          },
+          "description": "Logins of semantic issue auto-labelers that this repository does not trust to apply IDD's reserved labels. Optional; omit this key for the empty-list case -- `minItems: 1` rejects an explicit `[]`. `idd-onboard --substitute` reads this list to generate the `strip-untrusted-labels.yml` guard workflow; when the key is absent, no guard is generated."
+        }
+      },
+      "description": "Container for the four IDD-role label names (roadmap, blocked-by-human, needs-decision, and authoring-only) plus the untrusted-labeler login list. Optional; omitting any nested key keeps that key's own distributed default."
+    },
+    "mergeGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "soloCodeownerAdminFallback": {
+          "type": "string",
+          "enum": ["auto-admin-retry", "hold-and-report"],
+          "description": "Distributed default `auto-admin-retry`: F3 retries once with `gh pr merge --admin` when the Gate checklist is fully green, the only merge-command failure is the self-CODEOWNER \"base branch policy prohibits the merge\" error, and the PR author is proven to be the sole eligible codeowner. `hold-and-report` opts into the pre-#1521 behavior: F3 always stops and posts a hold comment on this error instead of retrying."
+        }
+      },
+      "description": "Container for the F3 solo-CODEOWNER admin-fallback policy (`soloCodeownerAdminFallback`). Optional; omitting it keeps the distributed default."
+    },
+    "standingApprovals": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Operator-approved standing classes (issue #4883). Each class is off unless its enabled flag is explicitly true. An absent or malformed class behaves as disabled, so every approval waits for a reply as today. This key changes no behavior by itself; later children read it. Repository-owned: a user-global value is ignored and rejected by the user-global schema.",
+      "properties": {
+        "budgetRaise": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Standing approval to raise the budget by a bounded percent. Default: disabled.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enables the budgetRaise class only when true. Default: false."
+            },
+            "maxRaisePct": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Ceiling on the raise, as a whole percent. Default: 10. Out-of-range values disable the class."
+            }
+          }
+        },
+        "split": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Standing approval to split work into bounded candidate-file sets. Default: disabled.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enables the split class only when true. Default: false."
+            },
+            "maxCandidateFiles": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Ceiling on candidate files per split child, a positive integer. Default: 8, the effort M candidate-file limit. Non-positive values disable the class."
+            }
+          }
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Standing approval to release a held set after its checklist passes. Default: disabled.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enables the release class only when true. Default: false."
+            },
+            "requireChecklistPass": {
+              "enum": [true],
+              "description": "Must be true. The only accepted value, so a false value is rejected and disables the class."
+            }
+          }
+        }
+      }
+    },
+    "autoDecide": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-class switches, caps, and the confirmation label for auto-decided IDD stops (roadmap #4955). Repository-only: a user-global value is ignored and rejected by the user-global schema. A class acts only when its own `enabled` flag and `dangerouslyAutoDecide` are both `true`. An absent or malformed class stays off, and a malformed cap or label name turns every class off. This key changes no behavior by itself; later children read it. Default: every class off.",
+      "properties": {
+        "decisionIssue": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auto-decide class for picking up a needs-decision issue. Default: off.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turns the decisionIssue class on only when true. Default: false."
+            }
+          }
+        },
+        "runtimeQuestion": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auto-decide class for a product, technical, or scope question while implementing a claimed issue. Default: off.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turns the runtimeQuestion class on only when true. Default: false."
+            }
+          }
+        },
+        "authoringChoice": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auto-decide class for an issue-authoring choice when nobody asked for a hearing. Default: off.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turns the authoringChoice class on only when true. Default: false."
+            }
+          }
+        },
+        "worktreeRemnant": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auto-decide class for another session's worktree left on this host. Default: off.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turns the worktreeRemnant class on only when true. Default: false."
+            },
+            "quietWindow": {
+              "type": "string",
+              "pattern": "^(?=.*[1-9])P(?=\\d|T\\d)(?:\\d+D)?(?:T(?=\\d)(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+              "description": "How long another session's worktree must have gone unmodified before this class may act, as a positive ISO 8601 duration. Default: PT2H. A zero or malformed value turns only this class off."
+            }
+          }
+        },
+        "b1Leftover": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Auto-decide class for B1 leftovers found before a claim: an unmerged local branch with no remote branch or pull request, or a worktree path that is not a registered worktree. Default: off.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Turns the b1Leftover class on only when true. Default: false."
+            }
+          }
+        },
+        "maxPendingConfirmations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "No new auto-decision is made while this many confirmations are pending. An integer from 1 to 100. Default: 10. An out-of-range value turns every class off."
+        },
+        "maxDecisionsPerClaim": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Most auto-decisions under one claim. For the authoring class the unit is one authoring set; for classes that act before a claim exists, it is one source issue. An integer from 1 to 20. Default: 3. An out-of-range value turns every class off."
+        },
+        "confirmationLabelName": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "GitHub label name of an auto-decide confirmation issue. Must contain a non-whitespace character; a blank name turns every class off. Discover's exclusion of this label comes in a later child of roadmap #4955. Default: status:needs-confirmation."
+        }
+      }
+    }
+  },
+  "patternProperties": {
+    "^x-": {}
+  },
+  "additionalProperties": false
+}
