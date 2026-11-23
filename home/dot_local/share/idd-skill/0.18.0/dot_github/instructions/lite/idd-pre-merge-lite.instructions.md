@@ -1,0 +1,117 @@
+# IDD — Pre-Merge Conditions Phase (Lite) (F1-F2)
+
+Lite profile for helper-enabled weak/local models. Covers only the
+in-scope subset of `idd-pre-merge.instructions.md`: F1's read-only
+branch-state check, and F2 as a single pre-merge-readiness helper read.
+The standard F2's written prose fallback (discarding helper output and
+judging live-fetched evidence directly) is out of scope for this file —
+a broken helper is a stop-and-ask condition here, never a prompt to
+reason about raw GitHub state yourself. If the repository is
+`instructions-only`, use `idd-pre-merge.instructions.md` instead; this
+lite file depends entirely on helper runtime and has no written,
+non-helper alternative of its own for that case.
+
+## Helper runtime contract
+
+- This file's entire scope depends on two helpers. If either is
+  missing, fails, returns invalid or incomplete JSON, or disagrees with
+  directly-observable live GitHub state, stop and ask — do not fall
+  back to prose judgment or hand-derive the missing evidence yourself.
+- Any mismatch between this file and the standard Pre-Merge phase,
+  **within this file's in-scope subset** (F1's read-only check and F2's
+  helper-read verdict), is a bug in this file. The standard file's
+  prose fallback and per-blocker remediation are deliberately excluded,
+  not a mismatch to fix.
+
+## Stop-and-ask conditions
+
+- The active claim is ambiguous, disputed, or lost.
+- The branch-conflict-state helper reports `callSiteRouting.f1` other than
+  `"proceed-to-f2"` (after the `retry` budget in F1 step 1, if applicable),
+  or is unavailable, fails, or disagrees with live state.
+- The pre-merge-readiness helper is missing, fails, returns invalid or
+  incomplete JSON (missing any of the required top-level fields listed
+  in `schemas/pre-merge-readiness.schema.json` — this file directly
+  consumes `prHeadSha`, `ready`, and `blockers`, but any other missing
+  required field equally signals a broken or contract-violating
+  report), or disagrees with live GitHub state.
+- The repository is `instructions-only` — this is not a stop-and-wait
+  case: switch to `idd-pre-merge.instructions.md` instead, per the
+  introduction above.
+
+## F1 — Branch-state check (read-only)
+
+This check never rebases, merges, or pushes. The push-free trial-merge audit
+is standard-profile evidence and is not run here.
+
+1. Run the profile-selected branch-conflict-state helper: `node
+   scripts/branch-conflict-state.mjs --pr <pr-number>`, or the
+   package-manager-profile `idd:branch-conflict-state` command, or the
+   profile-selected equivalent (resolve the exact command from
+   `docs/idd-helper-scripts.md` if unsure). Read `callSiteRouting.f1`:
+   - `"proceed-to-f2"`: the branch is conflict-free and, if branch protection
+     requires an up-to-date head, already current — proceed to F2.
+     `syncRecommendation` is detail only, so `"merge-base"` does not stop.
+     An UNSTABLE `clean` branch takes this route only when the helper lists at
+     least one non-passing head run or check suite and every such entry is
+     non-required and `action_required` or `pending` (issues `#4209`,
+     `#4309`); otherwise it holds.
+   - `"retry"` (mergeability still computing, a transient state): re-run the
+     helper after a short wait, up to 3 attempts; only a result still
+     `"retry"` after that budget falls through to stop per the condition above.
+   - Any other value (`"return-to-e-phase-branch-sync"` or `"hold"`), or the
+     helper is unavailable, fails, or disagrees with live state: stop per the
+     condition above — the merge-based resync and any content-conflict
+     resolution are out of this lite file's scope; that path resumes through
+     the E-phase branch-sync check in `idd-review-triage.instructions.md`.
+
+## F2 — Pre-merge readiness (helper-read only)
+
+1. Use the direct Node invocation below for a source checkout or the
+   `vendored-node` profile. The `package-manager` profile uses its
+   profile-selected `idd:pre-merge-readiness` command as the alternative;
+   `ephemeral-npx` and `user-global` use their own profile-selected
+   commands. See `docs/idd-helper-scripts.md` for the exact forms.
+
+   ```sh
+   node scripts/pre-merge-readiness.mjs \
+     --pr <pr-number> \
+     --claim-issue <issue-number> \
+     --claim-id <claim-id> \
+     --agent-id <agent-id> \
+     --trusted-marker-logins <trusted-login-1>,<trusted-login-2>
+   ```
+
+   For claim-bound readiness, pass `--agent-id` with the real
+   `--claim-id`; omitting it returns a `stale-request-recovery` blocker.
+   Add `--nonce <nonce>` when this session recorded a local activation
+   nonce at claim time; omitting it silently skips the merge-time
+   activation-nonce comparison. This is the same helper the standard F2
+   treats as the authoritative source for the merge decision.
+
+   When D3 step 6 ("Multiple closes") closed more than one issue, also
+   add
+   `--closing-issues <n>,<m>` with the full deliberate set — otherwise
+   the helper's `closing-set` gate reports the extra issue as a mismatch.
+2. If the helper fails, returns invalid or incomplete JSON (missing any
+   of the required top-level fields listed in
+   `schemas/pre-merge-readiness.schema.json`), or its evidence disagrees
+   with directly-observable live GitHub state: stop per the condition above.
+   Do not fall back to prose judgment on the helper output.
+3. Stop per the condition above if the current full 40-character head
+   (`gh pr view <pr-number> --json headRefOid --jq .headRefOid`) differs from
+   the helper's `prHeadSha`, or if `claim.scopeOverrun` has a `status` of
+   `missing` or `invalid`, or a `scope-overrun` blocker is reported. Keep the
+   claim and report one next action; the scope-overrun route is prose in the
+   standard file.
+4. Otherwise, record the verdict exactly as the helper reports it:
+   `prHeadSha` (F2.5 needs this exact value for its merge command
+   candidate — never re-derive it locally), `ready`, and, if `ready` is
+   `false`, every entry in `blockers[]` — each a `gate` name plus a
+   `detail` string. Do not interpret, re-route, or remedy individual blockers
+   yourself, even for a `review-currency` blocker; the standard file holds
+   that prose.
+5. Proceed to `idd-merge-handoff-lite.instructions.md` (F2.5) with this
+   recorded verdict, regardless of whether `ready` is `true` or
+   `false`. Both outcomes hand off there — this file never runs
+   `gh pr merge` or any other mutating merge action itself.
