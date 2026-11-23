@@ -57,6 +57,7 @@ words:
   - cuda
   - curlrc
   - cygheap
+  - DACL
   - dataenvdeploylabel
   - datamkcertinstall
   - datapueueparallelism
@@ -116,8 +117,11 @@ words:
   - Ngrok
   - Nlcjpw
   - nnoremap
+  - ntdll
   - Nukesor
   - nvmrc
+  - OGDS
+  - OICIID
   - ollama
   - onlogon
   - ONNX
@@ -135,6 +139,7 @@ words:
   - rerere
   - resynced
   - rollup
+  - SDDL
   - sheerun
   - SLSA
   - sycl
