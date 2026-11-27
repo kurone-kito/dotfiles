@@ -943,7 +943,7 @@ upstream `v0.18.0` user-global payload. Issue
 issue [#745](https://github.com/kurone-kito/dotfiles/issues/745) records the
 result on this page.
 
-Under `fully_autonomous_merge`, a lite session continues into merge.
+Under fully_autonomous_merge, a lite session continues into merge.
 A signing failure no longer stops the IDD loop, and no setting restores that stop.
 
 | Key | Status | Notes |
