@@ -30,7 +30,7 @@
 #   severity-tiered critique deferral, and GitHub API read caching/load
 #   control (issue #563, roadmap #540): schema-aligned adoption while
 #   keeping the repository's established overlays.
-# - IDD v0.17.0 package pin and config version (issue #678, roadmap
+# - IDD v0.18.0 package pin and config version (issue #678, roadmap
 #   #674): schema-aligned helper and policy version update while keeping
 #   the repository's established overlays.
 # - issueAuthoring.journalIssue against docs/idd-policy.md (issue #638):
@@ -85,7 +85,7 @@ assert delegate.get('mode') == 'combined', delegate
 " "$CONFIG_PATH"
 }
 
-@test ".github/idd/config.json declares the v0.17.0 iddVersion and its adopted schema keys" {
+@test ".github/idd/config.json declares the v0.18.0 iddVersion and its adopted schema keys" {
   assert_file_exists "$CONFIG_PATH"
 
   python3 -c "
@@ -94,7 +94,7 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as f:
     config = json.load(f)
 
-assert config.get('iddVersion') == '0.17.0', config.get('iddVersion')
+assert config.get('iddVersion') == '0.18.0', config.get('iddVersion')
 
 helper_runtime = config.get('helperRuntime', {})
 # helperRuntime.profile determines how packageSpec is actually consumed
@@ -105,7 +105,7 @@ assert helper_runtime.get('profile') == 'ephemeral-npx', helper_runtime
 package_spec = helper_runtime.get('packageSpec')
 assert package_spec == (
     'https://codeload.github.com/kurone-kito/idd-skill/tar.gz/'
-    '77befdd4030757464bed7f31c7dfe6d0a404a18b'
+    'b2752028e7ca3c1397138b58556cfc5883364164'
 ), package_spec
 
 claim_timing = config.get('claimTiming', {})
@@ -121,6 +121,11 @@ assert config.get('critiqueLoop', {}).get('deferAfterRounds') == 5, \
     config.get('critiqueLoop')
 assert config.get('critiqueLoop', {}).get('deferByUrgency') == 'severity-tiered', \
     config.get('critiqueLoop')
+assert config.get('critiqueLoop', {}).get('triageRecord') == 'off', \
+    config.get('critiqueLoop')
+for key in ('deferRelaxAtRounds', 'deferAllAfterRounds'):
+    assert key in config.get('critiqueLoop', {}), config.get('critiqueLoop')
+    assert config['critiqueLoop'][key] is None, config.get('critiqueLoop')
 
 telemetry_hook = config.get('critiqueLoop', {}).get('telemetryHook')
 assert telemetry_hook is not None, 'critiqueLoop.telemetryHook is missing'
