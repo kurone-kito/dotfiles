@@ -1,6 +1,6 @@
 {
   "$schema": "https://kurone-kito.github.io/idd-skill/schemas/policy.schema.json",
-  "iddVersion": "0.17.0",
+  "iddVersion": "0.18.0",
   "markerPrefix": "dotfiles",
   "developmentBranch": "master",
   "mergePolicy": "fully_autonomous_merge",
@@ -35,7 +35,7 @@
   },
   "helperRuntime": {
     "profile": "ephemeral-npx",
-    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b"
+    "packageSpec": "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b2752028e7ca3c1397138b58556cfc5883364164"
   },
   "issueScope": "roadmap-first",
   "orphanFirstPolicy": "none",
@@ -77,6 +77,9 @@
   "critiqueLoop": {
     "deferAfterRounds": 5,
     "deferByUrgency": "severity-tiered",
+    "triageRecord": "off",
+    "deferRelaxAtRounds": null,
+    "deferAllAfterRounds": null,
     "delegate": {
       "command": "coderabbit-critique",
       "mode": "combined"

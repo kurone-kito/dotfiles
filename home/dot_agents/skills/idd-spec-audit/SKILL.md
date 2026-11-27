@@ -3,187 +3,94 @@ name: idd-spec-audit
 description: Semantic audit of the IDD instruction corpus for leaked session context, cross-file contradictions, fresh-memory completability gaps, automation blockers, and restatement-discipline drift. Use on request to audit .github/instructions, the issue-authoring skill bundle, and the installed agent entry files (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md). Read-only — never edits files or mutates issues.
 ---
 
-# IDD Spec Audit
+# Installed skill dispatcher
 
-<!-- cspell:words soloscrum -->
+This is a stable entry point. Its `name` frontmatter selects the skill; the
+full contract lives only in the immutable distribution selected for this
+repository and session. Resolve that selection before reading any skill
+contract or reference.
 
-`scripts/audit-docs.mjs` catches byte-level drift — sync-pair mismatches,
-budgets, config-vs-instruction agreement — but not semantic drift: prose
-that contradicts a sibling file, leaked session context, passages that
-are not completable from a cold read, or wording that stalls an
-autonomous step. This skill runs that check as N parallel LLM read
-passes, adapted from `mew-ton/soloscrum`'s `define-pr-lifecycle` audit
-model.
+## Resolve the route
 
-## Scope
+1. Honor a repository-local skill copy first. If the current host already
+   selected this skill from the repository, use that local copy and stop here.
+2. Use the stable session ID supplied by the host wrapper. The wrapper owns
+   creating and persisting it; never mint a new ID for an invocation.
+3. In a Git repository, run `idd-activation --session-id <stable-id>` and
+   read its JSON on POSIX and PowerShell. On Command Prompt, or when the
+   command is not on `PATH`, use the platform-specific command in the
+   installed `user-global/entry.md` instead. When
+   `active` is `false`, use step 4. When `active` is `true`, this route
+   applies to every skill invocation in that repository, issue authoring
+   included:
+   - Continue only when `selection.status` is `ready`. Use the exact
+     `instructionsRoot` and `selection.report.selected` from that response.
+   - For `binding-required`, `not-ready`, or a missing selection, follow
+     `user-global/entry.md`'s bind or recovery route and stop until activation
+     returns `ready`. Never load a global copy as a fallback.
+4. Outside a Git repository, or when activation reports `active: false`, run
+   the host's read-only
+   `idd-onboard --distribution inspect --session-id <stable-id>` wrapper.
+   Continue only when the report has a non-null `selected.sourceCommit`,
+   `receipt.status: verified`, `preparation: prepared`,
+   `compatibility: compatible`, and a `verdict` of `coherent-candidate`,
+   `pin-preserved`, or `session-bound`. Any `source` value can pass; do not
+   require a particular one. Issue authoring must still follow its selected
+   contract's activation, publication, and applicability rules. A standalone
+   spec audit remains read-only.
 
-- **Audit targets** (findings may cite these): `.github/instructions/**/*.md`
-  (including `lite/`), the issue-authoring skill bundle at its
-  installed location, and every agent entry file present in this
-  installation (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, and
-  `.github/copilot-instructions.md`). All but the first are
-  conditional on the adopter's own setup: onboarding creates each
-  entry file unless the operator explicitly opted out of it, the
-  issue-authoring companion is opt-in, and
-  `.github/copilot-instructions.md` is touched only if it already
-  existed — skip an audit target that does not exist in the current
-  installation rather than fail the run over it. Cover every present
-  entry file, not just `CLAUDE.md`: onboarding requires `CLAUDE.md`,
-  `AGENTS.md`, and `GEMINI.md` to agree on repository-specific
-  guidance, so a cross-file contradiction (R2) or a restatement-scope
-  drift (R5) can land in any of them. Audit every target that does
-  exist regardless of whether this installation happens to regenerate
-  it from an upstream source (for example, this source repository
-  regenerates `.github/instructions/**` from `idd-template/` via
-  `audit/sync-manifest.json`) — this skill audits the corpus a worker
-  session actually reads, not any upstream source, so being a
-  regenerated target never exempts a file here.
-- **Reference-only inputs** (read for R2/R4, never a finding target):
-  `docs/idd-concept-ownership.md` (R2's closed concept-index seed) and
-  `docs/idd-autonomy-contract.md` (R4's reversible/irreversible
-  classification baseline), both at `docs/` in an installed repository.
-  Both are read in full every pass.
-- **Out of scope as an audit target / finding source**: this skill's
-  own bundle wherever it is installed (`skills/idd-spec-audit/**` — the
-  skill necessarily reads its own bundle, this `SKILL.md` and
-  `references/report-template.md`, to run at all, but no finding ever
-  cites a file there); any generated mirror tree in this installation,
-  if one exists (for example, in this source repository, `.claude/**`,
-  since every file there mirrors a canonical source elsewhere); and
-  every other file under `docs/**` besides the two reference-only
-  inputs above (summary docs rely on the files they cite by design, so
-  they are not audited as if they were the primary spec).
+If the route is missing, ambiguous, incompatible, or unverified, stop and
+report the `verdict` and `recovery` from the report; keep any last verified
+selection. The only preparation or binding allowed is the explicit step that
+`user-global/entry.md` names for `binding-required` or recovery `prepare`;
+after it, start again at step 3 or 4. Never prepare, bind, change the global
+default, or load another version on your own as an automatic fallback.
 
-## Rule sets
+## Verify and load one bundle
 
-Run all five rule sets on every pass; do not skip one to save time. A
-finding names the rule set, the file, the line or section, and a short
-quote of the offending text.
+For both routes, resolve the qualified data root the same way as the host
+wrapper (`XDG_DATA_HOME/idd-skill` when `XDG_DATA_HOME` is qualified,
+otherwise `HOME/.local/share/idd-skill`) and use
+`prepared/<selected.sourceCommit>` beneath it. `instructionsRoot` confirms the
+active route; for repository-local instructions it can name the checkout root
+instead of the prepared set.
 
-### R1 — leaked session context
+Before opening the skill contract, verify all of these facts:
 
-Flag prose that reads as belonging to one session's transcript rather
-than a durable spec: time-relative phrasing without an absolute anchor
-("recently", "the issue we just fixed"), first-person session voice
-("I noticed", "we decided earlier"), narration of an edit instead of a
-stated rule ("changed this to require X"), or a workaround described in
-prose with no tracking link back to the issue that motivated it.
+- `manifest.json` is directly in that prepared-set root and its
+  `sourceCommit` equals the selected report's `sourceCommit`.
+- Each component's `digest` in `manifest.json` equals the same component's
+  `digest` in the report's `selected.components`, and equals the digest
+  recomputed from that component's `files` list: `sha256:` followed by the
+  hex SHA-256 of one `<sha256> <path>` line per file, each ending in a line
+  feed, sorted by path in UTF-8 byte order.
+- `components.skillBundles.<name>.provenance.commit` equals that same commit.
+- The component's `files` list contains `SKILL.md`; its SHA-256 matches the
+  bytes at `skills/<name>/SKILL.md` in this prepared set.
+- The skill name is the `name` in this dispatch entry's frontmatter.
 
-### R2 — cross-file contradictions (closed v1 concept index)
+Then read only `skills/<name>/SKILL.md` from that exact prepared set. Resolve
+its relative references inside the same set, and verify each one against the
+SHA-256 that `components.skillBundles.<name>.files` lists for it before
+reading it. Never read a contract or reference from `~/.claude/skills/` or
+`~/.agents/skills/` after dispatch.
 
-Compare every in-scope file against every other in-scope file for a
-direct contradiction over the same concept. Check only the concepts
-below — this is a **closed v1 index**; do not add concepts to it while
-auditing. Expanding the index is a spec change, not an in-audit
-decision — file an issue instead of widening scope mid-run. The index
-is finalized against IDD — Concept Ownership Matrix
-(`docs/idd-concept-ownership.md`, `#1593`):
+`components.helper.invocation` records the set's entry helper; for a set that
+`idd-onboard --distribution prepare` creates, that is the activation command.
+The dispatcher does not run that helper and does not pass it to the contract,
+so this build only records it. Do not reconstruct the command from the current
+package. Every helper the contract names resolves through the repository's own
+`helperRuntime` profile, as the contract says; the dispatcher does not
+substitute another one.
 
-- claim-marker and activation-nonce semantics;
-- advisory-convergence satisfaction;
-- merge-gate order (F2/F2.5/F3);
-- the "ready = absence of `status:*` labels" definition;
-- phase-digest rules;
-- forced-handoff marker semantics;
-- the suitability/effort footer contracts.
+## Host wrapper contract
 
-### R3 — fresh-memory completability
+The host-owned wrapper supplies a stable session ID and the invocation's
+repository/worktree, preserves repository-local precedence, runs the supported
+activation or inspection command, verifies the selected bundle, and loads
+only its contract. External harness wrappers remain operator-owned: the
+installer does not rewrite files outside its receipt-managed payload and the
+two global skill roots. Diagnose an incompatible external wrapper and leave it
+unchanged.
 
-Flag a passage that a worker session starting from a cold read (no
-prior conversation, no memory of another file) could not complete:
-an unresolved reference ("as described above" with no anchor), an
-implied prerequisite never stated as a precondition, a missing exit
-condition (a loop or wait with no stated end state), or a half-named
-cross-reference (a phase or marker name used before it is defined).
-
-### R4 — automation blockers (autonomy cross-check)
-
-Cross-check every instruction that asks an agent to pause, confirm, or
-escalate against IDD Autonomy Contract (`docs/idd-autonomy-contract.md`,
-`#1592`)'s reversible/irreversible classification, using that table as
-a comparison baseline rather than re-deriving it from prose — but not
-as unconditionally authoritative: the contract's own derivation
-disclaimer states that on any disagreement with an instruction file,
-the instruction file wins and the contract is the one that needs
-correcting:
-
-- an instruction to "confirm with the user" (or equivalent) attached to
-  a mutation the contract classifies **Reversible** is a finding only
-  once the instruction's own described undo path confirms the mutation
-  really is reversible — its named undo path means no confirmation
-  gate is needed there;
-- the same phrase attached to a mutation the contract classifies
-  **Irreversible** is expected behavior and must never be flagged;
-- when the table's classification looks wrong against the
-  instruction's actual described behavior, do not flag the
-  instruction as defective — `docs/idd-autonomy-contract.md` is out of
-  scope as a finding target, so note the suspected contract drift
-  outside this skill's normal finding flow instead (preventive; no
-  observed incident yet — #2782).
-
-A mutation with no row in the contract falls back to the contract's own
-default (irreversible); that default governs the contract itself; do
-not extend R4 to independently police no-row mutations beyond the two
-cases above.
-
-### R5 — restatement discipline (closed v1 concept index)
-
-Flag a passage that restates a rule defined canonically elsewhere in
-the corpus when the restatement's scope does not match the canonical
-rule's scope: broader than the canonical rule, narrower than it, or
-phrased as unconditional where the canonical rule is conditional (has
-stated exceptions, applies only under a named runtime profile, or only
-within a bounded phase range).
-
-**Scope is the same closed v1 concept index R2 uses** — reuse the
-exact list in [R2](#r2--cross-file-contradictions-closed-v1-concept-index)
-above rather than introduce a second, open-ended index. A restatement
-of a concept outside that index is out of R5's scope; do not flag it,
-no matter how sloppily it is worded. This keeps R5 from treating every
-emphatic sentence in the corpus as a finding — the rule exists to
-catch a scope drift on the seven concepts already load-bearing enough
-to have a closed index, not to police prose style generally.
-
-**Preferred remedy**: cite the canonical section instead of restating
-it inline. Prefer `See [<section>](<path>#<anchor>)` (or an equivalent
-plain-text pointer to the file/section) over reproducing a
-multi-clause rule's conditions in a second location — inline
-restatement of a multi-clause rule is the exact failure mode this rule
-set exists to catch, and the instruction bundles are already close to
-their byte budgets, so citing is also the cheaper fix. Note the
-preferred remedy in the finding so the reader does not have to
-re-derive it.
-
-## Execution model
-
-- Run **N parallel, independent, read-only** passes over the scope
-  above, skipping any Audit target absent from this installation (see
-  the Scope section's conditional-target note). Default `N = 3`;
-  accept a `--passes N`-style argument to adjust it.
-- **Aggregate by union**, deduplicating findings that describe the same
-  file/section/issue across passes. Annotate each surviving finding
-  with `Appeared in: K/N` (how many of the N passes independently
-  raised it) as **informational context only**.
-- **Never apply a quorum filter.** A finding raised by only one pass is
-  reported exactly like one raised by all N — sampling variance is not
-  evidence of invalidity, and dropping low-`K` findings would silently
-  discard true positives that one pass framed differently from the
-  others.
-- **Read-only, always.** This skill never edits an in-scope file and
-  never opens, closes, comments on, or labels a GitHub issue. Route
-  every finding back through the normal issue-authoring flow (see the
-  `issue-authoring` skill) for a human or a later session to act on;
-  when the issue-authoring companion is not installed (Scope's
-  conditional-target note), route findings through this
-  installation's normal manual issue-filing process instead.
-- Write the aggregated result using
-  [references/report-template.md](references/report-template.md).
-
-## See also
-
-- [references/report-template.md](references/report-template.md) for
-  the report shape.
-- IDD Autonomy Contract (`docs/idd-autonomy-contract.md`) — R4's
-  comparison baseline; instruction files win on disagreement.
-- IDD — Concept Ownership Matrix (`docs/idd-concept-ownership.md`) —
-  R2's concept-index seed.
+<!-- idd-skill-bundle: sha256:35c96bdb09d81f944c7daa88f7633f6a32450b0b7066ae9afcbd2be2e406ae60 -->

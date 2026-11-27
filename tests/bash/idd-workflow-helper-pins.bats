@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Regression guards for issues #566 and #678: every live IDD workflow
-# helper invocation uses the expected v0.17.0 archive pin, and the CI
+# helper invocation uses the expected v0.18.0 archive pin, and the CI
 # running timeout exceeds the verdict job's bounded review poll window.
 
 bats_require_minimum_version 1.5.0
@@ -22,14 +22,14 @@ import sys
 root = sys.argv[1]
 with open(os.path.join(root, ".github/idd/config.json"), encoding="utf-8") as f:
     config = json.load(f)
-expected_version = "0.17.0"
-expected_package_spec = "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b"
+expected_version = "0.18.0"
+expected_package_spec = "https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b2752028e7ca3c1397138b58556cfc5883364164"
 assert config["iddVersion"] == expected_version, (
     f"expected iddVersion {expected_version!r}, found {config['iddVersion']!r}"
 )
 expected_pin = config["helperRuntime"]["packageSpec"]
 assert expected_pin == expected_package_spec, (
-    f"expected v0.17.0 package pin, found {expected_pin!r}"
+    f"expected v0.18.0 package pin, found {expected_pin!r}"
 )
 
 expected_counts = {
@@ -359,13 +359,13 @@ assert actual_self_waiver_permissions == expected_self_waiver_permissions, (
 )
 print(
     "all six active helper URLs, workflow timeouts, CI wait margin, and "
-    "job permissions match the v0.17.0 contract"
+    "job permissions match the v0.18.0 contract"
 )
 PY
 }
 
-@test "active helper pins, workflow timeouts, CI wait margin, and job permissions match the v0.17.0 contract" {
+@test "active helper pins, workflow timeouts, CI wait margin, and job permissions match the v0.18.0 contract" {
   run check_workflow_helper_pins
   assert_success
-  assert_output "all six active helper URLs, workflow timeouts, CI wait margin, and job permissions match the v0.17.0 contract"
+  assert_output "all six active helper URLs, workflow timeouts, CI wait margin, and job permissions match the v0.18.0 contract"
 }

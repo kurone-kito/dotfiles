@@ -33,7 +33,7 @@ $ignoreCase = if ($onWindows) {
 }
 # The payload version the `current` pointer names. It must match the content of
 # home/dot_local/share/idd-skill/symlink_current; a Pester case checks that.
-$version = '0.17.0'
+$version = '0.18.0'
 
 # The physical form of a path, as the OS resolves it: each symbolic link or
 # junction on the way is followed, and the rest of the path is appended to its

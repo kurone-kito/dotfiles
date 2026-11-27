@@ -14,11 +14,11 @@ BeforeDiscovery {
 BeforeAll {
   $script:BinDir = Join-Path $PSScriptRoot '../../home/dot_local/bin'
   $script:PwshExe = (Get-Process -Id $PID).Path
-  $script:UpstreamCommit = '77befdd4030757464bed7f31c7dfe6d0a404a18b'
+  $script:UpstreamCommit = 'b2752028e7ca3c1397138b58556cfc5883364164'
 }
 
 Describe 'user-global IDD activation helper twins' {
-  It '<_> invokes the v0.17.0 release commit' -ForEach $script:Twins {
+  It '<_> invokes the v0.18.0 release commit' -ForEach $script:Twins {
     $helper = ($_ -replace '^executable_', '') -replace '\.ps1$', ''
     $wrapper = Join-Path $script:BinDir $_
     $invocationLines = @(Get-Content -LiteralPath $wrapper | Where-Object { $_ -match '^& npx --yes --package ' })
