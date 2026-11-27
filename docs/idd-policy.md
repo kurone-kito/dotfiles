@@ -21,17 +21,20 @@ re-import (roadmap #419), the 0.12.0 re-import
 sync when the policy changes.
 
 The schema name for each field below comes from the upstream
-[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/docs/onboarding/policy-decisions.md)
+[`idd-template/docs/onboarding/policy-decisions.md`](https://github.com/kurone-kito/idd-skill/blob/b2752028e7ca3c1397138b58556cfc5883364164/idd-template/docs/onboarding/policy-decisions.md)
 so future IDD sessions can navigate between the human-readable record
 and the upstream template without surprises.
 
-**Current pinned upstream commit**: `77befdd4030757464bed7f31c7dfe6d0a404a18b`
-(tag `v0.17.0`), selected by roadmap #674's re-import, starting with
-issue #678. Sibling imports and final lockstep verification are sequenced by
-the same roadmap.
+**Current pinned upstream commit**: `b2752028e7ca3c1397138b58556cfc5883364164`
+(tag `v0.18.0`, annotated tag object `2842fd970d5b30c3a2d33153d8009870af575cb2`),
+selected by issue #741 under roadmap #738. That issue moves the pin from the
+previous release. The v0.18.0 re-import and its lockstep verification are
+sequenced by roadmap #738.
 
-**Previous pinned upstream commit**: `ae16f497434a5023dfaa28f965fc2af92ebf055d`
-(abbreviated `ae16f49`; tag `v0.14.0`), selected by roadmap #540's
+**Previous pinned upstream commit**: `77befdd4030757464bed7f31c7dfe6d0a404a18b`
+(tag `v0.17.0`), selected by roadmap #674's re-import, starting with
+issue #678. Before that, `ae16f497434a5023dfaa28f965fc2af92ebf055d`
+(abbreviated `ae16f49`; tag `v0.14.0`) was selected by roadmap #540's
 re-import, starting with config track #563. Immediately before that,
 the `v0.12.2` pin (`c11c3642319b3283293e4e681861bf7899c32ed3`,
 abbreviated `c11c364`) was confirmed as the latest tag and audited by
@@ -254,7 +257,7 @@ The discover, suitability, review-snapshot, advisory-wait, and
 pre-merge phases may invoke the helper manifest via:
 
 ```sh
-npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/77befdd4030757464bed7f31c7dfe6d0a404a18b \
+npx --yes --package https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b2752028e7ca3c1397138b58556cfc5883364164 \
   idd-helper-bundle-manifest --profile ephemeral-npx
 ```
 
@@ -931,6 +934,30 @@ window could not fail `additionalProperties` (no new keys). Issues
 Track D left out of scope was closed by
 [`#459`](https://github.com/kurone-kito/dotfiles/issues/459) -- not an
 active Track A transition.
+
+## New 0.18.0 Policy Alignment
+
+Roadmap [#738](https://github.com/kurone-kito/dotfiles/issues/738) adopts the
+upstream `v0.18.0` user-global payload. Issue
+[#741](https://github.com/kurone-kito/dotfiles/issues/741) moves the pin, and
+issue [#745](https://github.com/kurone-kito/dotfiles/issues/745) records the
+result on this page.
+
+Under fully_autonomous_merge, a lite session continues into merge.
+A signing failure no longer stops the IDD loop, and no setting restores that stop.
+
+| Key | Status | Notes |
+| --- | --- | --- |
+| `iddVersion` | **explicit: `"0.18.0"`** | Pinned by issue #741. |
+| `helperRuntime.packageSpec` | **explicit: v0.18.0 commit archive** | Pinned to `https://codeload.github.com/kurone-kito/idd-skill/tar.gz/b2752028e7ca3c1397138b58556cfc5883364164`; `helperRuntime.profile` remains `ephemeral-npx`. |
+| `critiqueLoop.triageRecord` | **explicit: `"off"`** | Added by issue #741. |
+| `critiqueLoop.deferRelaxAtRounds` | **explicit: `null`** | Added by issue #741. |
+| `critiqueLoop.deferAllAfterRounds` | **explicit: `null`** | Added by issue #741. |
+
+The existing critique-loop values do not change.
+`critiqueLoop.deferAfterRounds` stays at `5`.
+`critiqueLoop.deferByUrgency` stays at `severity-tiered`.
+`mergePolicy` stays the string `fully_autonomous_merge`.
 
 ## New 0.17.0 Policy Alignment
 

@@ -15,14 +15,14 @@ must not overwrite.
 The page complements the upstream installation guides and does not restate
 their install steps. Read these at the pinned commit first:
 
-- [User-global installation](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/docs/user-global-install.md)
-- [IDD onboarding](https://github.com/kurone-kito/idd-skill/blob/77befdd4030757464bed7f31c7dfe6d0a404a18b/idd-template/ONBOARDING.md)
+- [User-global installation](https://github.com/kurone-kito/idd-skill/blob/b2752028e7ca3c1397138b58556cfc5883364164/docs/user-global-install.md)
+- [IDD onboarding](https://github.com/kurone-kito/idd-skill/blob/b2752028e7ca3c1397138b58556cfc5883364164/idd-template/ONBOARDING.md)
 
 ## Pinned upstream commit
 
-The payload is pinned to idd-skill commit `77befdd4030757464bed7f31c7dfe6d0a404a18b`
-(tag `v0.17.0`, annotated tag object `1f91a0d13397dbcbf94f44c8201a2b5618bb1060`).
-The package version at that commit is `0.17.0`, which is the `<version>` used
+The payload is pinned to idd-skill commit `b2752028e7ca3c1397138b58556cfc5883364164`
+(tag `v0.18.0`, annotated tag object `2842fd970d5b30c3a2d33153d8009870af575cb2`).
+The package version at that commit is `0.18.0`, which is the `<version>` used
 below. A re-import changes that pin on purpose, and updates this page in the
 same change.
 
@@ -541,6 +541,8 @@ upstream to `kurone-kito/idd-skill` and not to change the worktree layout.
 That choice does not make the F4 helper complete and does not
 accept the manual fallback as the criterion 7 result.
 The status stays `partially verified`.
+The open wait is #740, which covers an F4 worktree removal that finishes after v0.18.0.
+The manual `git worktree remove --force` route is not helper completion.
 
 The status reads `verified` only when all three of these hold: the readiness at
 the final head is `ready: true` before cleanup (item 1), the F4 outcome is present
