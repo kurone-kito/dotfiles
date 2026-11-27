@@ -268,6 +268,14 @@ Windows.
   The v0.18.0 installer writes a dispatcher in place of the full skill bundle,
   so no `references/` directory is created. The previous pinned release wrote
   12 skill files per run instead.
+  The four `references/` files are retained, not installer output. They are
+  `issue-authoring/references/contract.md`,
+  `issue-authoring/references/draft-patterns.md`,
+  `issue-authoring/references/workflow-boundary.md`, and
+  `idd-spec-audit/references/report-template.md`. Each remains under both
+  `.claude/skills/` and `.agents/skills/` in the chezmoi source
+  (`home/dot_claude/skills/` and `home/dot_agents/skills/`). The run starts
+  with no skill files, so the run list does not contain them.
 - Other files: `CLAUDE.md`, `AGENTS.md`, and `opencode.json` in their harness
   directories, the `current` link, and `receipt.json` in the data root. That
   is 5 entries.
