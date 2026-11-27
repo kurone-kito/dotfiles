@@ -12,3 +12,10 @@ ignores:
   - home/dot_copilot/copilot-instructions.md.tmpl
   - home/dot_gemini/GEMINI.md.tmpl
   - home/dot_config/opencode/AGENTS.md.tmpl
+  # Dispatcher SKILL.md files rendered byte-for-byte by the upstream installer
+  # from the prepared skill bundle. Their bundle-digest comment line must not
+  # be reflowed, or the bytes would no longer match the installer output.
+  - home/dot_claude/skills/idd-spec-audit/SKILL.md
+  - home/dot_claude/skills/issue-authoring/SKILL.md
+  - home/dot_agents/skills/idd-spec-audit/SKILL.md
+  - home/dot_agents/skills/issue-authoring/SKILL.md
